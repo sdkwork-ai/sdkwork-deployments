@@ -1,0 +1,9 @@
+environment = "demo"
+
+[http]
+
+[[http.server]]
+listen = ["80"]
+serverName = ["deploy-demo.sdkwork.com", "deploy-demo.birdcoder.com", "deploy-demo.dtupay.com", "deploy-demo.noaper.com", "deploy-demo.sdkwork.cn", "deploy-demo.birdcoder.cn", "deploy-demo.dtupay.cn", "deploy-demo.noaper.cn", "deploy-demo.skubc.com", "deploy-demo.skubc.cn", "deploy-demo.zowalk.com", "deploy-demo.zowalk.cn", "deploy-demo.offer86.com", "deploy-demo.offer86.cn", "deploy-demo.86offer.com", "deploy-demo.86offer.cn", "deploy-app-demo.sdkwork.com", "deploy-app-demo.birdcoder.com", "deploy-app-demo.dtupay.com", "deploy-app-demo.noaper.com", "deploy-app-demo.sdkwork.cn", "deploy-app-demo.birdcoder.cn", "deploy-app-demo.dtupay.cn", "deploy-app-demo.noaper.cn", "deploy-app-demo.skubc.com", "deploy-app-demo.skubc.cn", "deploy-app-demo.zowalk.com", "deploy-app-demo.zowalk.cn", "deploy-app-demo.offer86.com", "deploy-app-demo.offer86.cn", "deploy-app-demo.86offer.com", "deploy-app-demo.86offer.cn", "deploy-admin-demo.sdkwork.com", "deploy-admin-demo.birdcoder.com", "deploy-admin-demo.dtupay.com", "deploy-admin-demo.noaper.com", "deploy-admin-demo.sdkwork.cn", "deploy-admin-demo.birdcoder.cn", "deploy-admin-demo.dtupay.cn", "deploy-admin-demo.noaper.cn", "deploy-admin-demo.skubc.com", "deploy-admin-demo.skubc.cn", "deploy-admin-demo.zowalk.com", "deploy-admin-demo.zowalk.cn", "deploy-admin-demo.offer86.com", "deploy-admin-demo.offer86.cn", "deploy-admin-demo.86offer.com", "deploy-admin-demo.86offer.cn"]
+include = ["snippets/gateway-locations.nonproduction.conf"]
+
