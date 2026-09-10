@@ -1,4 +1,4 @@
-export type DeploymentsEnvironment = "development" | "test" | "staging" | "production";
+export type DeploymentsEnvironment = "development" | "test" | "staging" | "demo" | "production";
 export type DeploymentsLocale = "en-US" | "zh-CN";
 
 export interface DeploymentsRuntimeConfig {
@@ -22,7 +22,7 @@ export async function loadDeploymentsRuntimeConfig(fetcher: typeof fetch = fetch
 
 export function parseDeploymentsRuntimeConfig(value: unknown): DeploymentsRuntimeConfig {
   if (!record(value)) throw new Error("Runtime configuration must be an object");
-  const environment = enumValue(value.environment, ["development", "test", "staging", "production"] as const, "environment");
+  const environment = enumValue(value.environment, ["development", "test", "staging", "demo", "production"] as const, "environment");
   const supportedLocales = locales(value.supportedLocales, "supportedLocales");
   const activeLocales = locales(value.activeLocales, "activeLocales");
   const defaultLocale = enumValue(value.defaultLocale, ["en-US", "zh-CN"] as const, "defaultLocale");

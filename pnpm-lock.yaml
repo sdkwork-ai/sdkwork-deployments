@@ -102,6 +102,12 @@ importers:
       '@sdkwork/ui-pc-react':
         specifier: workspace:*
         version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -123,6 +129,13 @@ importers:
       react-i18next:
         specifier: ^17.0.7
         version: 17.0.10(i18next@26.3.6(typescript@6.0.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@6.0.3)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
 
   ../sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript:
     dependencies:
@@ -451,6 +464,12 @@ importers:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 6.9.1
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -470,16 +489,31 @@ importers:
         specifier: '>=18.2.0 <20.0.0'
         version: 19.2.4(react@19.2.4)
     devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
 
   ../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-user-center-core-pc-react:
     dependencies:
+      '@sdkwork/sdk-common':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
       '@sdkwork/utils':
         specifier: workspace:*
         version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
     devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ^6.0.2
         version: 6.0.3
@@ -819,6 +853,10 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-infrastructure:
     dependencies:
@@ -858,6 +896,10 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons:
     dependencies:
@@ -870,6 +912,10 @@ importers:
       react-router-dom:
         specifier: ^7.15.0
         version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-core:
     dependencies:
@@ -891,6 +937,10 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-delivery:
     dependencies:
@@ -909,6 +959,10 @@ importers:
       react-router-dom:
         specifier: ^7.15.0
         version: 7.18.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-monitoring:
     dependencies:
@@ -933,6 +987,10 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-shell:
     dependencies:
@@ -942,6 +1000,10 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-site-configuration:
     dependencies:
@@ -973,8 +1035,8 @@ importers:
         specifier: ^4.0.0
         version: 4.62.2
       typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
+        specifier: ^5.0.0
+        version: 5.9.3
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@types/node@25.9.5)(jsdom@29.1.1)(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.9.0))
@@ -992,8 +1054,8 @@ importers:
         specifier: ^4.0.0
         version: 4.62.2
       typescript:
-        specifier: 'catalog:'
-        version: 6.0.3
+        specifier: ^5.0.0
+        version: 5.9.3
 
 packages:
 

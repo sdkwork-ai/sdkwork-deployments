@@ -8,7 +8,7 @@ use sdkwork_deploy_contract::{
 
 use crate::DeployService;
 
-const SUPPORTED_ENVIRONMENTS: [&str; 4] = ["development", "test", "staging", "production"];
+const SUPPORTED_ENVIRONMENTS: [&str; 5] = ["development", "test", "staging", "demo", "production"];
 
 impl DeployService {
     /// Idempotently provision an app's default publishing domains for one
@@ -24,7 +24,7 @@ impl DeployService {
     ) -> DeployServiceResult<ProvisionAppDomainsResult> {
         if !SUPPORTED_ENVIRONMENTS.contains(&environment) {
             return Err(DeployServiceError::validation(
-                "environment must be development, test, staging, or production",
+                "environment must be development, test, staging, demo, or production",
             ));
         }
         let tenant_id = DeployService::require_tenant(context)?;
@@ -67,7 +67,7 @@ impl DeployService {
     ) -> DeployServiceResult<Option<ResolvedDeployServer>> {
         if !SUPPORTED_ENVIRONMENTS.contains(&environment) {
             return Err(DeployServiceError::validation(
-                "environment must be development, test, staging, or production",
+                "environment must be development, test, staging, demo, or production",
             ));
         }
         self.repository

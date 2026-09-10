@@ -9,7 +9,7 @@
   distinct host ports, domain lists, and database identities.
 
 .PARAMETER Environment
-  Target environment: development, test, staging, production, or all
+  Target environment: development, test, staging, demo, production, or all
 
 .PARAMETER ModuleName
   Target module name (auto-detected from current directory if omitted)
@@ -40,7 +40,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('development', 'test', 'staging', 'production', 'all')]
+  [ValidateSet('development', 'test', 'staging', 'demo', 'production', 'all')]
   [string]$Environment,
 
   [string]$ModuleName,
@@ -189,7 +189,7 @@ Write-Host "  -> Compose dir: $ComposeDir" -ForegroundColor Cyan
 
 switch ($Environment) {
   'all' {
-    foreach ($env in @('development', 'test', 'staging', 'production')) {
+    foreach ($env in @('development', 'test', 'staging', 'demo', 'production')) {
       Deploy-Environment $env
     }
   }
