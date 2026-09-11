@@ -1,26 +1,34 @@
 /**
  * Unit tests for the sdkwork-specs project auto-detection used by the
- * create-deploy-app dialog v2: surface discovery from `apps/` children,
- * deployable-root conformance markers, and canonical environment helpers.
- * Pure functions only — no clients or filesystem access.
+ * create-deploy-app dialog: the reusable {@link SdkworkProject} class, the
+ * dialog-side surface mapping, deployable-root conformance markers, and the
+ * canonical environment helpers. Pure functions only — no clients, no IO.
  */
 import { describe, expect, it } from "vitest";
 import {
+  APP_SURFACE_DIRECTORY_CAPABILITIES,
   APP_SURFACE_DIRECTORY_SUFFIX,
   browserDistOutputPath,
   buildOutputExists,
   canonicalEnvironment,
   deriveSurfaceDirectory,
   detectBuildOutputCandidates,
+  detectedSurfaceIds,
   DEPLOY_DEPLOYMENT_MODES,
   DEPLOY_ENVIRONMENT_IDS,
   deployProfileId,
   detectSdkworkProject,
+  findDetectedSurface,
   joinPath,
+  projectProfile,
   resolveSourceDirectory,
-  surfaceOfDirectoryName,
+  surfacesOfDirectoryName,
   type DeployProjectInspection,
 } from "../src/service/project-detection.ts";
+import {
+  SDKWORK_SURFACE_ARCHITECTURES,
+  SdkworkProject,
+} from "../src/service/sdkwork-project.ts";
 
 const conformantInspection: DeployProjectInspection = {
   rootPath: "/workspace/store",
@@ -35,38 +43,194 @@ const conformantInspection: DeployProjectInspection = {
   ],
 };
 
-describe("surfaceOfDirectoryName", () => {
+describe("surfacesOfDirectoryName", () => {
   it("maps sdkwork surface directories onto dialog surface ids", () => {
-    expect(surfaceOfDirectoryName("sdkwork-store-pc")).toEqual({ surface: "pc", applicationCode: "store" });
-    expect(surfaceOfDirectoryName("sdkwork-store-h5")).toEqual({ surface: "h5", applicationCode: "store" });
-    expect(surfaceOfDirectoryName("sdkwork-store-mini-program")).toEqual({
-      surface: "mini-program",
+    expect(surfacesOfDirectoryName("sdkwork-store-pc"))
+      .toEqual({ surfaces: ["pc"], directorySuffix: "pc", applicationCode: "store" });
+    expect(surfacesOfDirectoryName("sdkwork-store-h5"))
+      .toEqual({ surfaces: ["h5"], directorySuffix: "h5", applicationCode: "store" });
+    expect(surfacesOfDirectoryName("sdkwork-store-mini-program")).toEqual({
+      surfaces: ["mini-program"],
+      directorySuffix: "mini-program",
       applicationCode: "store",
     });
-    expect(surfaceOfDirectoryName("sdkwork-store-android-mobile")).toEqual({
-      surface: "android",
+    expect(surfacesOfDirectoryName("sdkwork-store-android-mobile")).toEqual({
+      surfaces: ["android"],
+      directorySuffix: "android-mobile",
       applicationCode: "store",
     });
-    expect(surfaceOfDirectoryName("sdkwork-store-ios-mobile")).toEqual({ surface: "ios", applicationCode: "store" });
-    expect(surfaceOfDirectoryName("sdkwork-app-store-desktop")).toEqual({
-      surface: "desktop",
+    expect(surfacesOfDirectoryName("sdkwork-store-ios-mobile"))
+      .toEqual({ surfaces: ["ios"], directorySuffix: "ios-mobile", applicationCode: "store" });
+    expect(surfacesOfDirectoryName("sdkwork-app-store-desktop")).toEqual({
+      surfaces: ["desktop"],
+      directorySuffix: "desktop",
       applicationCode: "app-store",
     });
-    expect(surfaceOfDirectoryName("sdkwork-app-store-harmony-mobile")).toEqual({
-      surface: "harmony",
+    expect(surfacesOfDirectoryName("sdkwork-app-store-harmony-mobile")).toEqual({
+      surfaces: ["harmony"],
+      directorySuffix: "harmony-mobile",
       applicationCode: "app-store",
     });
   });
 
   it("keeps multi-segment application codes via a greedy code capture", () => {
-    expect(surfaceOfDirectoryName("sdkwork-app-store-pc")?.applicationCode).toBe("app-store");
+    expect(surfacesOfDirectoryName("sdkwork-app-store-pc")?.applicationCode).toBe("app-store");
+  });
+
+  it("expands cross-platform roots onto every publish target they deliver", () => {
+    // APPLICATION_SPEC §2 的完整架构表：一个表面根可交付多个发布目标。
+    expect(surfacesOfDirectoryName("sdkwork-im-flutter-mobile")?.surfaces).toEqual(["android", "ios"]);
+    expect(surfacesOfDirectoryName("sdkwork-im-uniapp")?.surfaces)
+      .toEqual(["h5", "mini-program", "android", "ios", "harmony"]);
+    expect(surfacesOfDirectoryName("sdkwork-store-static-web")?.surfaces).toEqual(["static"]);
+    expect(surfacesOfDirectoryName("sdkwork-game-unity")?.surfaces).toEqual(["android", "ios"]);
+    expect(surfacesOfDirectoryName("sdkwork-store-pad")?.surfaces).toEqual(["android", "ios", "harmony"]);
+  });
+
+  it("never treats the shared package-family root as a publishable surface", () => {
+    expect(surfacesOfDirectoryName("sdkwork-im-common")).toBeUndefined();
   });
 
   it("rejects non-surface and malformed names", () => {
-    expect(surfaceOfDirectoryName("sdkwork-store")).toBeUndefined();
-    expect(surfaceOfDirectoryName("not-sdkwork")).toBeUndefined();
-    expect(surfaceOfDirectoryName("sdkwork-store-web")).toBeUndefined();
-    expect(surfaceOfDirectoryName("")).toBeUndefined();
+    expect(surfacesOfDirectoryName("sdkwork-store")).toBeUndefined();
+    expect(surfacesOfDirectoryName("not-sdkwork")).toBeUndefined();
+    expect(surfacesOfDirectoryName("sdkwork-store-web")).toBeUndefined();
+    expect(surfacesOfDirectoryName("")).toBeUndefined();
+  });
+
+  it("covers every canonical architecture suffix in the dialog table", () => {
+    for (const architecture of SDKWORK_SURFACE_ARCHITECTURES) {
+      expect(APP_SURFACE_DIRECTORY_CAPABILITIES[architecture]?.length ?? 0).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("SdkworkProject (reusable spec detector)", () => {
+  it("answers the path-only question without any directory listing", () => {
+    expect(SdkworkProject.isSdkworkDirectory("E:\\ws\\sdkwork-im")).toBe(true);
+    expect(SdkworkProject.isSdkworkDirectory("/ws/sdkwork-im/apps/sdkwork-im-pc")).toBe(true);
+    expect(SdkworkProject.isSdkworkDirectory("E:\\ws\\my-vite-app")).toBe(false);
+    expect(SdkworkProject.isSdkworkDirectory(undefined)).toBe(false);
+    expect(SdkworkProject.isSdkworkDirectory("E:\\ws\\sdkwork-im\\apps")).toBe(false);
+  });
+
+  it("derives the application code from either a repo root or a surface root", () => {
+    expect(SdkworkProject.applicationCodeOfDirectory("E:\\ws\\sdkwork-im")).toBe("im");
+    expect(SdkworkProject.applicationCodeOfDirectory("/ws/sdkwork-im/apps/sdkwork-im-flutter-mobile")).toBe("im");
+    expect(SdkworkProject.applicationCodeOfDirectory("/ws/my-app")).toBeUndefined();
+  });
+
+  it("parses the surface grammar and rejects the shared package family", () => {
+    expect(SdkworkProject.parseSurfaceDirectoryName("sdkwork-im-flutter-mobile")).toEqual({
+      directory: "sdkwork-im-flutter-mobile",
+      applicationCode: "im",
+      architecture: "flutter-mobile",
+    });
+    expect(SdkworkProject.parseSurfaceDirectoryName("sdkwork-im-common")).toBeUndefined();
+    expect(SdkworkProject.parseSurfaceDirectoryName("sdkwork-im")).toBeUndefined();
+  });
+
+  it("models an inspected repository into architecture queries", () => {
+    const project = SdkworkProject.inspect({
+      rootPath: "E:\\ws\\sdkwork-im",
+      childDirectories: ["apps", "deployments", "etc", "specs", ".sdkwork", "crates"],
+      appsChildDirectories: ["sdkwork-im-pc", "sdkwork-im-h5", "sdkwork-im-flutter-mobile", "sdkwork-im-common"],
+      surfaceChildDirectories: { "sdkwork-im-h5": ["src", "dist"] },
+    });
+
+    expect(project.isSdkworkProject).toBe(true);
+    expect(project.conformance).toBe("conformant");
+    expect(project.hasSurfaceListing).toBe(true);
+    expect(project.applicationCode).toBe("im");
+    // 架构后缀是规范词汇（surface 根的目录后缀），不是对话框卡片 id。
+    expect(project.architectures).toEqual(["pc", "h5", "flutter-mobile"]);
+    expect(project.has("pc")).toBe(true);
+    expect(project.has("harmony-mobile")).toBe(false);
+    // 一个表面根对应一个架构；「一个架构可以由哪些根交付」是对话框层的映射
+    // （APP_SURFACE_DIRECTORY_CAPABILITIES），通用类不掺入该词汇。
+    expect(project.find("flutter-mobile")?.directory).toBe("sdkwork-im-flutter-mobile");
+    expect(project.find("android-mobile")).toBeUndefined();
+    expect(project.childDirectoriesOf("h5")).toEqual(["src", "dist"]);
+    expect(project.childDirectoriesOf("pc")).toBeUndefined();
+    expect(project.sourceDirectoryFor("h5")).toBe("E:\\ws\\sdkwork-im\\apps\\sdkwork-im-h5");
+    // 无表面架构（API 服务 / 静态资源）发布仓库根目录，框架判定回退根目录列举。
+    expect(project.sourceDirectoryFor(undefined)).toBe("E:\\ws\\sdkwork-im");
+    expect(project.childDirectoriesOf(undefined)).toContain("crates");
+  });
+
+  it("stays honest when the host cannot list apps/", () => {
+    const project = SdkworkProject.inspect({
+      rootPath: "E:\\ws\\sdkwork-im\\apps\\sdkwork-im-h5",
+      childDirectories: ["src", "public", "node_modules"],
+    });
+    // 目录名证明是 sdkwork 项目，但没有表面清单 —— 上层不得据此判「不支持」。
+    expect(project.isSdkworkProject).toBe(true);
+    expect(project.hasSurfaceListing).toBe(false);
+    expect(project.surfaces).toEqual([]);
+    expect(project.applicationCode).toBe("im");
+    expect(project.conformance).toBe("unknown");
+  });
+
+  it("does not mistake a plain project for a sdkwork repository", () => {
+    const project = SdkworkProject.inspect({
+      rootPath: "E:\\ws\\my-vite-app",
+      childDirectories: ["src", "public", "node_modules"],
+    });
+    expect(project.isSdkworkProject).toBe(false);
+    expect(project.applicationCode).toBeUndefined();
+  });
+
+  it("degrades to a directory-name-only model without any input", () => {
+    const project = SdkworkProject.ofDirectory("/ws/sdkwork-store");
+    expect(project.isSdkworkProject).toBe(true);
+    expect(project.applicationCode).toBe("store");
+    expect(project.surfaces).toEqual([]);
+  });
+
+  it("resolves the owning repository root from inside an apps/ surface root", () => {
+    // 站在表面根内部时，宿主列举看不到同级表面 —— 需要回到仓库根再列举一次。
+    expect(SdkworkProject.repositoryRootOfDirectory("E:\\ws\\sdkwork-im\\apps\\sdkwork-im-h5"))
+      .toBe("E:\\ws\\sdkwork-im");
+    expect(SdkworkProject.repositoryRootOfDirectory("/ws/sdkwork-im/apps/sdkwork-im-flutter-mobile"))
+      .toBe("/ws/sdkwork-im");
+    expect(SdkworkProject.repositoryRootOfDirectory("sdkwork-im/apps/sdkwork-im-pc")).toBe("sdkwork-im");
+  });
+
+  it("reports no repository root for non-conforming paths", () => {
+    // 已在仓库根：没有可回退的上级。
+    expect(SdkworkProject.repositoryRootOfDirectory("E:\\ws\\sdkwork-im")).toBeUndefined();
+    // 表面目录但父级不是 apps/（不符规范布局）→ 不猜。
+    expect(SdkworkProject.repositoryRootOfDirectory("E:\\other\\sdkwork-im-h5")).toBeUndefined();
+    expect(SdkworkProject.repositoryRootOfDirectory("E:\\other\\apps\\my-app")).toBeUndefined();
+    expect(SdkworkProject.repositoryRootOfDirectory(undefined)).toBeUndefined();
+    expect(SdkworkProject.repositoryRootOfDirectory("")).toBeUndefined();
+  });
+});
+
+describe("projectProfile (dialog gating input)", () => {
+  it("gates types only for a sdkwork project with a readable apps/ listing", () => {
+    const detection = detectSdkworkProject(conformantInspection);
+    const profile = projectProfile(detection, conformantInspection.rootPath);
+    expect(profile.sdkwork).toBe(true);
+    expect(profile.surfaces).toEqual(["pc", "h5", "mini-program", "android", "ios"]);
+    expect(profile.applicationCode).toBe("store");
+  });
+
+  it("recognizes a sdkwork project even when the listing is unavailable", () => {
+    const profile = projectProfile(undefined, "E:\\ws\\sdkwork-im\\apps\\sdkwork-im-h5");
+    expect(profile.sdkwork).toBe(true);
+    expect(profile.surfaces).toEqual([]);
+    expect(profile.applicationCode).toBe("im");
+  });
+
+  it("reports a generic project so every application type stays selectable", () => {
+    const detection = detectSdkworkProject({
+      rootPath: "/workspace/random",
+      childDirectories: ["src", "public"],
+    });
+    const profile = projectProfile(detection, "/workspace/random");
+    expect(profile.sdkwork).toBe(false);
+    expect(profile.surfaces).toEqual([]);
   });
 });
 
@@ -76,18 +240,25 @@ describe("detectSdkworkProject", () => {
     expect(detection.conformance).toBe("conformant");
     expect(detection.missingMarkers).toEqual([]);
     expect(detection.applicationCode).toBe("store");
+    expect(detection.project.isSdkworkProject).toBe(true);
   });
 
   it("detects surfaces in canonical order with joined paths", () => {
     const detection = detectSdkworkProject(conformantInspection);
-    expect(detection.surfaces.map((surface) => surface.surface)).toEqual([
-      "pc",
-      "h5",
-      "mini-program",
-      "android",
-      "ios",
+    expect(detection.surfaces.map((surface) => surface.directory)).toEqual([
+      "sdkwork-store-pc",
+      "sdkwork-store-h5",
+      "sdkwork-store-mini-program",
+      "sdkwork-store-android-mobile",
+      "sdkwork-store-ios-mobile",
     ]);
+    expect(detectedSurfaceIds(detection)).toEqual(["pc", "h5", "mini-program", "android", "ios"]);
     expect(detection.surfaces[0]?.path).toBe("/workspace/store/apps/sdkwork-store-pc");
+  });
+
+  it("carries the inspected root children for root-publishing types", () => {
+    const detection = detectSdkworkProject(conformantInspection);
+    expect(detection.rootChildDirectories).toContain("crates");
   });
 
   it("degrades to partial when only some markers exist", () => {
@@ -135,6 +306,20 @@ describe("resolveSourceDirectory", () => {
     expect(resolveSourceDirectory(detection, "api", conformantInspection.rootPath)).toBe("/workspace/store");
     expect(resolveSourceDirectory(detection, "harmony", conformantInspection.rootPath)).toBe("/workspace/store");
     expect(resolveSourceDirectory(detection, undefined, conformantInspection.rootPath)).toBe("/workspace/store");
+  });
+
+  it("prefers a dedicated apps/ root over a cross-platform root", () => {
+    const detection = detectSdkworkProject({
+      rootPath: "/workspace/im",
+      childDirectories: ["apps", "etc", "specs"],
+      appsChildDirectories: ["sdkwork-im-flutter-mobile", "sdkwork-im-android-mobile"],
+    });
+    expect(findDetectedSurface(detection, "android")?.directory).toBe("sdkwork-im-android-mobile");
+    expect(resolveSourceDirectory(detection, "android", "/workspace/im"))
+      .toBe("/workspace/im/apps/sdkwork-im-android-mobile");
+    // iOS 只有跨端根可承载 → 回退到 flutter-mobile。
+    expect(resolveSourceDirectory(detection, "ios", "/workspace/im"))
+      .toBe("/workspace/im/apps/sdkwork-im-flutter-mobile");
   });
 });
 

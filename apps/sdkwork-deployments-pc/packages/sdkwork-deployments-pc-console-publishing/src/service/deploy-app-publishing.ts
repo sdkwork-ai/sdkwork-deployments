@@ -31,10 +31,12 @@ import type {
   SdkworkDriveAppClient,
 } from "@sdkwork/drive-app-sdk";
 import { uuid } from "@sdkwork/utils/id";
-import type {
-  AppSurfaceId,
-  DeployDeploymentMode,
-  DeployEnvironmentId,
+import {
+  APP_SURFACE_DIRECTORY_SUFFIX,
+  type AppSurfaceId,
+  type DeployDeploymentMode,
+  type DeployEnvironmentId,
+  type DeployProjectProfile,
 } from "./project-detection.ts";
 
 /**
@@ -378,6 +380,105 @@ export function resolveDeployAppType(cardId: string | undefined, frameworkId?: s
   const framework = card.frameworks.find((candidate) => candidate.id === (frameworkId ?? card.defaultFrameworkId));
   if (framework === undefined) return undefined;
   return DEPLOY_APP_TYPE_OPTIONS.find((option) => option.id === framework.optionId);
+}
+
+/* ------------------------------------------------------------------ *
+ * v4：项目规范驱动的可选性（发布对话框「支持 / 不支持」判定）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 一个应用类型卡片在当前项目下的可选性。
+ *
+ * 判定只做「可证伪」的排除：只有当我们确实读到了项目的 `apps/` 表面清单、
+ * 且清单里没有该卡片需要的表面根时才判为不支持。清单不可读（例如目录已
+ * 深入到某个表面根内部、或宿主无列举能力）时不判不支持，避免把用户锁死。
+ */
+export interface DeployAppTypeAvailability {
+  readonly cardId: string
+  /** 当前项目下该应用类型是否可发布。 */
+  readonly supported: boolean
+  /** 不支持原因（i18n 键）。 */
+  readonly reasonKey?: import("../i18n.ts").PublishingMessageKey | undefined
+  /** 不支持时缺失的规范 `apps/` 目录名，例如 `apps/sdkwork-im-pc`。 */
+  readonly requiredDirectory?: string | undefined
+}
+
+/** 卡片需要的规范表面目录名（`apps/sdkwork-<code>-<suffix>`）。 */
+export function requiredSurfaceDirectory(
+  surface: AppSurfaceId,
+  applicationCode: string | undefined,
+): string | undefined {
+  const suffix = APP_SURFACE_DIRECTORY_SUFFIX[surface];
+  if (suffix === "") return undefined;
+  return `apps/sdkwork-${applicationCode ?? "<code>"}-${suffix}`;
+}
+
+/**
+ * 依据项目画像判定每张应用类型卡片的可选性。
+ *
+ * 非 sdkwork 项目、或尚未读到 `apps/` 表面清单的 sdkwork 项目：全部类型可选，
+ * 由用户自行选择。sdkwork 项目且清单可读时，只放开项目实际提供表面所对应的
+ * 卡片；无表面要求的卡片（API 服务 / 静态资源，发布仓库根目录）始终可选。
+ */
+export function classifyAppTypeCards(
+  cards: readonly DeployAppTypeCard[],
+  profile: DeployProjectProfile,
+): readonly DeployAppTypeAvailability[] {
+  const gate = profile.sdkwork && profile.surfaces.length > 0;
+  return cards.map((card) => {
+    if (!gate || card.surface === undefined || profile.surfaces.includes(card.surface)) {
+      return { cardId: card.id, supported: true };
+    }
+    return {
+      cardId: card.id,
+      supported: false,
+      reasonKey: "typeUnsupportedRequires",
+      requiredDirectory: requiredSurfaceDirectory(card.surface, profile.applicationCode),
+    };
+  });
+}
+
+/**
+ * 一个框架 / 架构选项与当前项目架构的关系。
+ */
+export interface DeployFrameworkAvailability {
+  readonly frameworkId: string
+  /** 项目表面的目录标记决定性命中该框架（对话框会自动选中）。 */
+  readonly detected: boolean
+  /**
+   * 项目目录已经表明是别的架构：该框架自带标识目录，但它们在本项目中缺席。
+   * 这类选项与项目架构不符，对话框禁止选择。
+   */
+  readonly conflicting: boolean
+}
+
+/**
+ * v4：依据所选表面根的目录列举判定各框架是否与项目架构相符。
+ *
+ * 只有「另一个框架的决定性标记出现、而本框架的标识目录缺席」时才判冲突，
+ * 因此无标识目录的兜底框架（Kotlin / Swift / React 等）永远不会被禁用，
+ * 多架构共存（如 React Native 工程同时含 `android/`）也不会被误判。
+ */
+export function classifyFrameworks(
+  frameworks: readonly DeployFrameworkOption[],
+  childDirectories: readonly string[] | undefined,
+): readonly DeployFrameworkAvailability[] {
+  const children = childDirectories === undefined ? undefined : new Set(childDirectories);
+  const decisive = detectFrameworkId(frameworks, childDirectories);
+  return frameworks.map((framework) => {
+    const markers = framework.detectDirectories ?? [];
+    const matches = children !== undefined
+      && markers.length > 0
+      && markers.every((name) => children.has(name));
+    return {
+      frameworkId: framework.id,
+      detected: decisive === framework.id,
+      conflicting: decisive !== undefined
+        && decisive !== framework.id
+        && markers.length > 0
+        && !matches,
+    };
+  });
 }
 
 /** Category selection stored in metadata. */

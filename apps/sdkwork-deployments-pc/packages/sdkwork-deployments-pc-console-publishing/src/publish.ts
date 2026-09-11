@@ -15,16 +15,21 @@ export { DeployAppTypeSelect } from "./components/DeployAppTypeSelect.tsx";
 export { DeployAppTypeGrid } from "./components/DeployAppTypeGrid.tsx";
 export { DeployAppTypeIcon } from "./components/DeployAppTypeIcon.tsx";
 export { DeployFrameworkSelect } from "./components/DeployFrameworkSelect.tsx";
+export { DeployProjectPathBar } from "./components/DeployProjectPathBar.tsx";
+export type { DeployProjectPathBarProps } from "./components/DeployProjectPathBar.tsx";
 export { DeployProjectDirectoryFields } from "./components/DeployProjectDirectoryFields.tsx";
 export { DeployEnvironmentSelect } from "./components/DeployEnvironmentSelect.tsx";
 export { DeployAppMediaFields, screenshotTargets } from "./components/DeployAppMediaFields.tsx";
 export type { DeployAppMediaFiles, DeployAppMediaFieldsProps } from "./components/DeployAppMediaFields.tsx";
 export {
+  classifyAppTypeCards,
+  classifyFrameworks,
   createDeployAppPublishingService,
   detectFrameworkId,
   deriveAppSlug,
   frameworksOfCard,
   isValidSemver,
+  requiredSurfaceDirectory,
   resolveDeployAppType,
   toDeployAppMediaRef,
   DEPLOY_APP_TYPE_CARDS,
@@ -38,12 +43,15 @@ export type {
   DeployAppMediaUpload,
   DeployAppPublishingService,
   DeployAppPublishingServiceOptions,
+  DeployAppTypeAvailability,
   DeployAppTypeCard,
   DeployAppTypeIconId,
   DeployAppTypeOption,
+  DeployFrameworkAvailability,
   DeployFrameworkOption,
 } from "./service/deploy-app-publishing.ts";
 export {
+  APP_SURFACE_DIRECTORY_CAPABILITIES,
   APP_SURFACE_DIRECTORY_SUFFIX,
   browserDistOutputPath,
   BROWSER_DIST_ENV_ALIASES,
@@ -51,16 +59,20 @@ export {
   canonicalEnvironment,
   deriveSurfaceDirectory,
   detectBuildOutputCandidates,
+  detectSdkworkProject,
+  detectedSurfaceIds,
+  findDetectedSurface,
   DEPLOY_DEPLOYMENT_MODES,
   DEPLOY_ENVIRONMENT_ALIASES,
   DEPLOY_ENVIRONMENT_IDS,
   deployProfileId,
-  detectSdkworkProject,
   joinPath,
   KNOWN_BUILD_OUTPUT_DIRECTORY_NAMES,
+  projectProfile,
+  repositoryRootOf,
   resolveSourceDirectory,
   shouldSyncEnvironmentBuildOutput,
-  surfaceOfDirectoryName,
+  surfacesOfDirectoryName,
 } from "./service/project-detection.ts";
 export type {
   AppSurfaceId,
@@ -70,7 +82,22 @@ export type {
   DeployProjectConformance,
   DeployProjectDetection,
   DeployProjectInspection,
+  DeployProjectProfile,
 } from "./service/project-detection.ts";
+// 通用类（零依赖，可被控制台 / BirdCoder / CLI / 服务端直接复用）。
+export {
+  SDKWORK_LAYOUT_MARKERS,
+  SDKWORK_NON_SURFACE_SUFFIXES,
+  SDKWORK_SURFACE_ARCHITECTURES,
+  SdkworkProject,
+} from "./service/sdkwork-project.ts";
+export type {
+  SdkworkAppSurface,
+  SdkworkProjectConformance,
+  SdkworkProjectInput,
+  SdkworkSurfaceArchitecture,
+  SdkworkSurfaceDirectoryName,
+} from "./service/sdkwork-project.ts";
 export {
   DEPLOY_APP_CATEGORY_TREE,
   categoriesForAppKind,
@@ -89,5 +116,11 @@ export {
   validatePreviewSize,
 } from "./service/app-store-preview-spec.ts";
 export type { PreviewSizeTarget, PreviewValidationResult } from "./service/app-store-preview-spec.ts";
-export { publishingText, publishingTranslator, APP_KIND_LABEL_KEYS, APP_STATUS_LABEL_KEYS } from "./i18n.ts";
+export {
+  publishingText,
+  publishingTranslator,
+  APP_KIND_LABEL_KEYS,
+  APP_STATUS_LABEL_KEYS,
+  APP_SURFACE_LABEL_KEYS,
+} from "./i18n.ts";
 export type { PublishingMessageKey, PublishingTranslator } from "./i18n.ts";

@@ -12,11 +12,16 @@
  * application code, and the detected `apps/sdkwork-<code>-<surface>` roots —
  * highlighting the surface matching the selected application type and
  * auto-deriving its publish source directory.
+ *
+ * 该面板只在 sdkwork 项目下渲染：非 sdkwork 目录没有规范可言，输出「未识别为
+ * sdkwork 规范目录」+ 一列全红的规范标记既无信息量也干扰发布操作。
  */
 import type { PublishingTranslator } from "../i18n.ts";
-import type {
-  AppSurfaceId,
-  DeployProjectDetection,
+import { APP_SURFACE_LABEL_KEYS } from "../i18n.ts";
+import {
+  findDetectedSurface,
+  type AppSurfaceId,
+  type DeployProjectDetection,
 } from "../service/project-detection.ts";
 import css from "./create-deploy-app.module.css";
 
@@ -46,16 +51,6 @@ export interface DeployProjectDirectoryFieldsProps {
   readonly onReinspect: () => void
 }
 
-const SURFACE_LABEL_KEYS = {
-  pc: "surfacePc",
-  h5: "surfaceH5",
-  desktop: "surfaceDesktop",
-  "mini-program": "surfaceMiniProgram",
-  android: "surfaceAndroid",
-  ios: "surfaceIos",
-  harmony: "surfaceHarmony",
-} as const;
-
 export function DeployProjectDirectoryFields({
   directory,
   buildOutputPath,
@@ -78,7 +73,10 @@ export function DeployProjectDirectoryFields({
       : detection.conformance === "partial"
         ? "detectionPartial"
         : "detectionUnknown";
-  const matchedSurface = detection?.surfaces.find((surface) => surface.surface === selectedSurface);
+  const matchedSurface = findDetectedSurface(detection, selectedSurface);
+  // 规范检测面板只服务 sdkwork 项目：非 sdkwork 目录下它只会输出「未识别为
+  // sdkwork 规范目录」「规范目录标记（全红）」这类与发布无关的判定文案。
+  const sdkworkProject = detection?.project.isSdkworkProject === true;
 
   return (
     <>
@@ -139,7 +137,7 @@ export function DeployProjectDirectoryFields({
 
       {inspecting && <div className={css.detectPanel} aria-busy="true">{t("directoryInspecting")}</div>}
 
-      {!inspecting && detection !== undefined && (
+      {!inspecting && detection !== undefined && sdkworkProject && (
         <div className={css.detectPanel} data-conformance={detection.conformance}>
           <div className={css.detectHead}>
             <span className={css.detectBadge} data-conformance={detection.conformance}>
@@ -156,16 +154,16 @@ export function DeployProjectDirectoryFields({
             <div className={css.detectSection}>
               <span className={css.detectSectionLabel}>{t("detectionSurfaces")}</span>
               <div className={css.surfaceBadges}>
+                {/* 一个 apps/ 表面根可承载多个发布目标（如 -flutter-mobile →
+                    Android + iOS，-uniapp → 跨端），因此徽标按根聚合展示。 */}
                 {detection.surfaces.map((surface) => (
                   <span
                     key={surface.directory}
                     className={css.surfaceBadge}
-                    data-matched={surface.surface === selectedSurface}
+                    data-matched={selectedSurface !== undefined && surface.surfaces.includes(selectedSurface)}
                     title={surface.path}
                   >
-                    {SURFACE_LABEL_KEYS[surface.surface as keyof typeof SURFACE_LABEL_KEYS] !== undefined
-                      ? t(SURFACE_LABEL_KEYS[surface.surface as keyof typeof SURFACE_LABEL_KEYS])
-                      : surface.surface}
+                    {surface.surfaces.map((id) => t(APP_SURFACE_LABEL_KEYS[id])).join(" · ")}
                   </span>
                 ))}
               </div>

@@ -21,6 +21,14 @@
 #     (3910 development, 3911 test, 3912 staging, 3913 production).
 # =============================================================================
 
+# Shared log rotation policy (OPERATIONS_SPEC.md §2.3): every service rotates
+# at 10MB, keeping 3 files, so container logs cannot fill the host disk.
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   gateway:
     image: ${GATEWAY_IMAGE:-sdkwork-api-deployments-standalone-gateway:local}
@@ -37,6 +45,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    logging: *default-logging
 
   worker:
     image: ${GATEWAY_IMAGE:-sdkwork-api-deployments-standalone-gateway:local}
@@ -44,3 +53,4 @@ services:
     command: ["sdkwork-deploy-runtime-assignment-worker"]
     restart: unless-stopped
     stop_grace_period: 30s
+    logging: *default-logging

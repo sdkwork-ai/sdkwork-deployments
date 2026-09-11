@@ -1,21 +1,60 @@
 /**
  * Unit tests for the create-deploy-app publishing service: slug derivation,
- * semver validation, metadata assembly (JSONB shape), and Drive upload
- * result mapping. Pure functions only — no clients are exercised here.
+ * semver validation, metadata assembly (JSONB shape), Drive upload result
+ * mapping, and the v4 project-conformance availability classifiers
+ * (supported / unsupported application types, architecture-compatible
+ * frameworks). Pure functions only — no clients are exercised here.
  */
 import { describe, expect, it } from "vitest";
 import {
+  classifyAppTypeCards,
+  classifyFrameworks,
   createDeployAppPublishingService,
   detectFrameworkId,
+  DEPLOY_APP_TYPE_CARDS,
   DEPLOY_APP_TYPE_OPTIONS,
   deriveAppSlug,
   frameworksOfCard,
   isValidSemver,
+  requiredSurfaceDirectory,
   resolveDeployAppType,
   toDeployAppMediaRef,
   type CreateDeployAppInput,
   type DeployAppTypeOption,
 } from "../src/service/deploy-app-publishing.ts";
+import {
+  APP_SURFACE_DIRECTORY_SUFFIX,
+  detectSdkworkProject,
+  projectProfile,
+  resolveSourceDirectory,
+  type AppSurfaceId,
+  type DeployProjectProfile,
+} from "../src/service/project-detection.ts";
+
+/** 一个 sdkwork 项目的对话框侧画像（用规范后缀构造 apps/ 表面目录）。 */
+function sdkworkProfile(
+  surfaces: readonly AppSurfaceId[],
+  applicationCode: string,
+): DeployProjectProfile {
+  const detection = detectSdkworkProject({
+    rootPath: `E:\\ws\\sdkwork-${applicationCode}`,
+    childDirectories: ["apps", "deployments", "etc", "specs", ".sdkwork"],
+    appsChildDirectories: surfaces.map(
+      (surface) => `sdkwork-${applicationCode}-${APP_SURFACE_DIRECTORY_SUFFIX[surface]}`,
+    ),
+  });
+  return projectProfile(detection, `E:\\ws\\sdkwork-${applicationCode}`);
+}
+
+/** 直接按 apps/ 目录名构造画像（用于跨端表面根等需要精确目录名的场景）。 */
+function profileOfDirectories(directories: readonly string[], applicationCode = "im"): DeployProjectProfile {
+  const detection = detectSdkworkProject({
+    rootPath: `E:\\ws\\sdkwork-${applicationCode}`,
+    childDirectories: ["apps", "deployments", "etc", "specs", ".sdkwork"],
+    appsChildDirectories: directories,
+  });
+  return projectProfile(detection, `E:\\ws\\sdkwork-${applicationCode}`);
+}
 
 const flutterIos = DEPLOY_APP_TYPE_OPTIONS.find((option) => option.id === "flutter-ios");
 const staticWeb = DEPLOY_APP_TYPE_OPTIONS.find((option) => option.id === "static-web");
@@ -253,5 +292,200 @@ describe("detectFrameworkId (v3.2 directory-signal detection)", () => {
     expect(detectFrameworkId(frameworksOfCard("android"), undefined)).toBeUndefined();
     // 未知卡片无注册表。
     expect(detectFrameworkId(frameworksOfCard("unknown-card"), ["unpackage"])).toBeUndefined();
+  });
+});
+
+describe("requiredSurfaceDirectory (v4 spec path for a missing surface)", () => {
+  it("composes apps/sdkwork-<code>-<suffix> per APPLICATION_SPEC", () => {
+    expect(requiredSurfaceDirectory("pc", "im")).toBe("apps/sdkwork-im-pc");
+    expect(requiredSurfaceDirectory("android", "im")).toBe("apps/sdkwork-im-android-mobile");
+    expect(requiredSurfaceDirectory("harmony", "im")).toBe("apps/sdkwork-im-harmony-mobile");
+    expect(requiredSurfaceDirectory("mini-program", "app-store")).toBe("apps/sdkwork-app-store-mini-program");
+  });
+
+  it("falls back to a placeholder code and skips root-publishing surfaces", () => {
+    expect(requiredSurfaceDirectory("h5", undefined)).toBe("apps/sdkwork-<code>-h5");
+    // api/static 发布仓库根目录，没有专有 apps/ 目录。
+    expect(requiredSurfaceDirectory("api", "im")).toBeUndefined();
+    expect(requiredSurfaceDirectory("static", "im")).toBeUndefined();
+  });
+});
+
+describe("classifyAppTypeCards (v4 supported / unsupported gating)", () => {
+  it("limits a sdkwork project to the surfaces under apps/", () => {
+    const availability = classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, sdkworkProfile(["pc", "h5"], "im"));
+    const byId = new Map(availability.map((entry) => [entry.cardId, entry]));
+
+    expect(byId.get("h5")?.supported).toBe(true);
+    expect(byId.get("pc-web")?.supported).toBe(true);
+    // 项目没有这些表面 → 不支持，并给出缺失的规范目录。
+    for (const cardId of ["desktop", "mini-program", "android", "ios", "harmonyos"]) {
+      expect(byId.get(cardId)?.supported).toBe(false);
+      expect(byId.get(cardId)?.reasonKey).toBe("typeUnsupportedRequires");
+      expect(byId.get(cardId)?.requiredDirectory).toMatch(/^apps\/sdkwork-im-/);
+    }
+    expect(byId.get("android")?.requiredDirectory).toBe("apps/sdkwork-im-android-mobile");
+    // 无表面要求的类型（发布仓库根目录）始终可选。
+    expect(byId.get("api-service")?.supported).toBe(true);
+    expect(byId.get("static-web")?.supported).toBe(true);
+  });
+
+  it("accepts a cross-platform surface root as proof for every target it delivers", () => {
+    // -flutter-mobile 一个表面根同时交付 Android 与 iOS（APPLICATION_SPEC §2）。
+    const profile = profileOfDirectories(["sdkwork-im-flutter-mobile"]);
+    expect(profile.surfaces).toEqual(["android", "ios"]);
+    const byId = new Map(
+      classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile).map((entry) => [entry.cardId, entry]),
+    );
+    expect(byId.get("android")?.supported).toBe(true);
+    expect(byId.get("ios")?.supported).toBe(true);
+    expect(byId.get("pc-web")?.supported).toBe(false);
+  });
+
+  it("ignores the shared package-family root when deciding what is supported", () => {
+    const profile = profileOfDirectories(["sdkwork-im-pc", "sdkwork-im-common"]);
+    expect(profile.surfaces).toEqual(["pc"]);
+    const byId = new Map(
+      classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile).map((entry) => [entry.cardId, entry]),
+    );
+    expect(byId.get("pc-web")?.supported).toBe(true);
+    expect(byId.get("h5")?.supported).toBe(false);
+  });
+
+  it("leaves every type selectable for non-sdkwork projects", () => {
+    const detection = detectSdkworkProject({
+      rootPath: "E:\\ws\\my-vite-app",
+      childDirectories: ["src", "public"],
+    });
+    const profile = projectProfile(detection, "E:\\ws\\my-vite-app");
+    expect(profile.sdkwork).toBe(false);
+    const availability = classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile);
+    expect(availability.every((entry) => entry.supported)).toBe(true);
+  });
+
+  it("stays permissive when the apps/ listing is unavailable", () => {
+    // 用户走进表面根内部：目录名证明是 sdkwork 项目，但读不到 apps/ 清单 ——
+    // 不得据此把其他类型误判为不支持。
+    const profile = projectProfile(undefined, "E:\\ws\\sdkwork-im\\apps\\sdkwork-im-h5");
+    expect(profile.sdkwork).toBe(true);
+    expect(profile.surfaces).toEqual([]);
+    const availability = classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile);
+    expect(availability.every((entry) => entry.supported)).toBe(true);
+  });
+});
+
+describe("classifyFrameworks (v4 project-architecture alignment)", () => {
+  const conflictsOf = (cardId: string, children: readonly string[] | undefined): readonly string[] =>
+    classifyFrameworks(frameworksOfCard(cardId), children)
+      .filter((entry) => entry.conflicting)
+      .map((entry) => entry.frameworkId);
+
+  it("flags frameworks whose markers are provably absent while another architecture matched", () => {
+    // uni-app 工程（unpackage 决定性命中）→ Next/Nuxt/Capacitor 与项目架构不符。
+    expect(conflictsOf("h5", ["src", "unpackage"])).toEqual(["next", "nuxt", "capacitor"]);
+    // Flutter 移动工程 → 未使用跨端/RN 路径的框架与项目架构不符。
+    expect(conflictsOf("android", [".dart_tool", "lib"])).toEqual(["react-native", "uniapp"]);
+  });
+
+  it("keeps marker-less fallback frameworks selectable on purpose", () => {
+    // React / Vue（无标识目录）不会被判冲突，用户可以自行选择。
+    expect(conflictsOf("h5", ["src", "unpackage"])).not.toContain("react");
+    expect(conflictsOf("h5", ["src", "unpackage"])).not.toContain("vue");
+    // Kotlin / Java 是 Android 的兜底默认项，不参与冲突判定。
+    expect(conflictsOf("android", ["android", "ios", "src"])).toEqual(["flutter", "uniapp"]);
+  });
+
+  it("finds no conflict when the directory yields no decisive architecture", () => {
+    expect(conflictsOf("h5", ["src", "public", "node_modules"])).toEqual([]);
+    expect(conflictsOf("h5", [])).toEqual([]);
+    expect(conflictsOf("h5", undefined)).toEqual([]);
+  });
+
+  it("marks the decisive framework as detected exactly once", () => {
+    const detected = classifyFrameworks(frameworksOfCard("desktop"), ["src", "src-tauri"])
+      .filter((entry) => entry.detected)
+      .map((entry) => entry.frameworkId);
+    expect(detected).toEqual(["tauri"]);
+  });
+});
+
+/**
+ * 验收用例：真实工程 sdkwork-im 的目录（E:\sdkwork-space\sdkwork-im，2026-09 实际
+ * 结构）—— 根含 apps/deployments/etc/specs/.sdkwork，apps/ 下只有
+ * `-pc`、`-h5`、`-flutter-mobile` 三个表面根，其中 flutter-mobile 含 `.dart_tool`。
+ *
+ * 期望：对话框只放开 PC 网页 / H5 / Android / iOS（+ 发布仓库根目录的 API 服务与
+ * 静态资源），PC 桌面 / 小程序 / 鸿蒙置灰并标出缺失目录；Android 类型下 Flutter
+ * 被判定为项目架构（uni-app 置灰）。
+ */
+describe("acceptance: real sdkwork-im layout", () => {
+  const listing = {
+    rootPath: "E:\\sdkwork-space\\sdkwork-im",
+    childDirectories: [
+      "adapters", "apis", "apps", "artifacts", "bin", "config", "crates", "data", "database",
+      "deployments", "docs", "etc", "examples", "generated", "jobs", "plugins", "scripts",
+      "sdks", "services", "specs", "target", "tests", "tools", "vendor", ".sdkwork",
+    ],
+    appsChildDirectories: ["sdkwork-im-flutter-mobile", "sdkwork-im-h5", "sdkwork-im-pc"],
+    surfaceChildDirectories: {
+      "sdkwork-im-flutter-mobile": [
+        "android", "build", "config", "env", "etc", "ios", "lib", "linux", "macos",
+        "packages", "scripts", "specs", "test", "web", "windows", ".dart_tool",
+      ],
+      "sdkwork-im-h5": ["bin", "config", "dist", "docs", "etc", "packages", "public", "scripts", "src", "tests"],
+      "sdkwork-im-pc": ["dist", "docs", "e2e", "etc", "packages", "public", "scripts", "src", "test-results"],
+    },
+  };
+
+  it("recognizes the repository as a conformant sdkwork project", () => {
+    const detection = detectSdkworkProject(listing);
+    const profile = projectProfile(detection, listing.rootPath);
+    expect(profile.sdkwork).toBe(true);
+    expect(profile.applicationCode).toBe("im");
+    expect(profile.surfaces).toEqual(["pc", "h5", "android", "ios"]);
+  });
+
+  it("exposes exactly the supported application types and disables the rest", () => {
+    const profile = projectProfile(detectSdkworkProject(listing), listing.rootPath);
+    const byId = new Map(
+      classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile).map((entry) => [entry.cardId, entry]),
+    );
+
+    for (const cardId of ["pc-web", "h5", "android", "ios", "api-service", "static-web"]) {
+      expect(byId.get(cardId)?.supported, `${cardId} should be selectable`).toBe(true);
+    }
+    for (const cardId of ["desktop", "mini-program", "harmonyos"]) {
+      expect(byId.get(cardId)?.supported, `${cardId} should be disabled`).toBe(false);
+    }
+    expect(byId.get("desktop")?.requiredDirectory).toBe("apps/sdkwork-im-desktop");
+    expect(byId.get("mini-program")?.requiredDirectory).toBe("apps/sdkwork-im-mini-program");
+    expect(byId.get("harmonyos")?.requiredDirectory).toBe("apps/sdkwork-im-harmony-mobile");
+  });
+
+  it("keeps the Android choice aligned with the project's Flutter architecture", () => {
+    const flutterMobile = listing.surfaceChildDirectories["sdkwork-im-flutter-mobile"];
+    const availability = classifyFrameworks(frameworksOfCard("android"), flutterMobile);
+    const byId = new Map(availability.map((entry) => [entry.frameworkId, entry]));
+
+    // .dart_tool → Flutter 即项目架构，自动选中。
+    expect(byId.get("flutter")?.detected).toBe(true);
+    expect(byId.get("flutter")?.conflicting).toBe(false);
+    // 项目未使用 uni-app → 该选项与架构不符。
+    expect(byId.get("uniapp")?.conflicting).toBe(true);
+    // React Native 的 android/ 目录确实存在 → 不判冲突（只做可证伪的排除）。
+    expect(byId.get("react-native")?.conflicting).toBe(false);
+  });
+
+  it("prefers the dedicated h5/pc roots over the cross-platform mobile root", () => {
+    const detection = detectSdkworkProject(listing);
+    expect(resolveSourceDirectory(detection, "h5", listing.rootPath))
+      .toBe("E:\\sdkwork-space\\sdkwork-im\\apps\\sdkwork-im-h5");
+    expect(resolveSourceDirectory(detection, "pc", listing.rootPath))
+      .toBe("E:\\sdkwork-space\\sdkwork-im\\apps\\sdkwork-im-pc");
+    // Android / iOS 没有专有根 → 落到 flutter-mobile。
+    expect(resolveSourceDirectory(detection, "android", listing.rootPath))
+      .toBe("E:\\sdkwork-space\\sdkwork-im\\apps\\sdkwork-im-flutter-mobile");
+    expect(resolveSourceDirectory(detection, "ios", listing.rootPath))
+      .toBe("E:\\sdkwork-space\\sdkwork-im\\apps\\sdkwork-im-flutter-mobile");
   });
 });

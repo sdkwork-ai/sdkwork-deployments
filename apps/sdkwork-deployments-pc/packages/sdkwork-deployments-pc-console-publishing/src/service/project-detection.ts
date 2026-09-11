@@ -1,22 +1,26 @@
 /**
- * sdkwork-specs project auto-detection (发布对话框 v2: 应用自动检测能力).
+ * 发布对话框的项目目录检测适配层（v2 自动检测 / v3 双路径 / v3.4 环境联动 /
+ * v4 应用类型支持度）。
  *
- * Pure, UI-free detection over a host-provided directory inspection. The
- * dialog stays decoupled from the filesystem: a host port (BirdCoder desktop
- * via uiWorkspace.listDirectory, or any future bridge) hands over the child
- * directory names, and this module maps them onto the sdkwork-specs layout.
+ * 分工（高内聚低耦合）：
+ * - 「这个目录是不是 sdkwork 项目、提供哪些应用表面」的**规范判定**统一收敛
+ *   到零依赖通用类 {@link SdkworkProject}（`./sdkwork-project.ts`），本文件
+ *   不再自己实现正则与标记表；
+ * - 本文件只做**对话框适配**：把通用类的结论翻译成对话框词汇——部署环境
+ *   profile、`dist/<mode>/<env>` 产物布局、对话框应用表面 `AppSurfaceId`
+ *   （与上层应用类型卡片一一对应），以及宿主列举载荷的解析。
  *
- * Authorities (sdkwork-specs):
- * - `APPLICATION_SPEC.md` — `apps/` surface roots:
- *   `apps/sdkwork-<application-code>-{pc,h5,mini-program,android-mobile,ios-mobile,harmony-mobile}`.
- * - `APPLICATION_DEPLOY_LAYOUT_SPEC.md` §2 — deployable root markers:
- *   `specs/`, `etc/`, `deployments/` (+ `apps/` for client surfaces).
- * - `APP_MANIFEST_SPEC.md` — `sdkwork.app.config.json` + source-controlled
- *   `.sdkwork/` workspace on the same root.
- * - `ENVIRONMENT_SPEC.md` §2/§5.1 — canonical environments
- *   (`development|test|staging|demo|production`, aliases `dev|prod`) and the
- *   `<standalone|cloud>.<environment>` profile id grammar.
+ * Host contract: the dialog stays decoupled from the filesystem — a host port
+ * hands over child directory names (BirdCoder desktop via
+ * uiWorkspace.listDirectory, or any future bridge) and this module maps them
+ * onto the sdkwork-specs layout.
  */
+
+import {
+  SdkworkProject,
+  type SdkworkProjectConformance,
+  type SdkworkSurfaceArchitecture,
+} from "./sdkwork-project.ts";
 
 /** Canonical publish environment (ENVIRONMENT_SPEC.md §2; no aliases). */
 export type DeployEnvironmentId = "development" | "test" | "staging" | "demo" | "production";
@@ -112,7 +116,11 @@ export type AppSurfaceId =
   | "api"
   | "static";
 
-/** `apps/` child directory suffix per surface (APPLICATION_SPEC.md §2). */
+/**
+ * 对话框表面 → 该表面在 `apps/` 下使用的规范架构后缀
+ * （APPLICATION_SPEC §2）。空串表示该表面没有专有 `apps/` 根：API 服务与
+ * 静态资源发布仓库根目录本身。
+ */
 export const APP_SURFACE_DIRECTORY_SUFFIX: Readonly<Record<AppSurfaceId, string>> = {
   pc: "pc",
   h5: "h5",
@@ -121,20 +129,55 @@ export const APP_SURFACE_DIRECTORY_SUFFIX: Readonly<Record<AppSurfaceId, string>
   android: "android-mobile",
   ios: "ios-mobile",
   harmony: "harmony-mobile",
-  // Non-client surfaces have no dedicated apps/ root: they publish the repo root.
   api: "",
   static: "",
 };
 
-/** Surfaces that own an `apps/sdkwork-<code>-<suffix>/` root. */
-const SURFACED: readonly AppSurfaceId[] = ["pc", "h5", "desktop", "mini-program", "android", "ios", "harmony"];
+/**
+ * `apps/` 表面架构后缀 → 该表面根可承载的对话框应用表面。
+ *
+ * 一个表面根可以交付多个发布目标：`-flutter-mobile` 同时产出 Android 与 iOS；
+ * `-uniapp` 是跨端根；`-unity` / `-pad` 按移动端类型发布。`-common` 与其它
+ * 共享包族根不在表中（它们不是可发布表面，由 `SdkworkProject` 过滤）。
+ *
+ * 注意方向性差异：`-static-web` 是规范里真实的表面根，因此它会「点亮」对话框
+ * 的「静态资源」类型；但该类型自身的规范发布目录仍是仓库根（见
+ * {@link APP_SURFACE_DIRECTORY_SUFFIX} 中 `static` 为空串），二者不矛盾。
+ */
+export const APP_SURFACE_DIRECTORY_CAPABILITIES: Readonly<Record<string, readonly AppSurfaceId[]>> = {
+  pc: ["pc"],
+  h5: ["h5"],
+  desktop: ["desktop"],
+  "mini-program": ["mini-program"],
+  "android-mobile": ["android"],
+  "ios-mobile": ["ios"],
+  "harmony-mobile": ["harmony"],
+  "flutter-mobile": ["android", "ios"],
+  uniapp: ["h5", "mini-program", "android", "ios", "harmony"],
+  unity: ["android", "ios"],
+  pad: ["android", "ios", "harmony"],
+  "static-web": ["static"],
+};
 
-/** Root child directory markers checked for layout conformance. */
-const ROOT_MARKERS: readonly string[] = ["apps", "deployments", "etc", "specs", ".sdkwork"];
+/** 对话框表面的规范展示顺序（表面徽标 / 摘要共用）。 */
+const DIALOG_SURFACE_ORDER: readonly AppSurfaceId[] = [
+  "pc", "h5", "desktop", "mini-program", "android", "ios", "harmony", "static", "api",
+];
 
-/** Match `sdkwork-<code>-<suffix>` and capture the kebab application code. */
-const SURFACE_DIRECTORY_PATTERN =
-  /^sdkwork-(?<code>[a-z0-9][a-z0-9-]*?)-(?<suffix>pc|h5|desktop|mini-program|android-mobile|ios-mobile|harmony-mobile)$/;
+/**
+ * 对话框表面 → 用于**推导**规范表面根时使用的架构后缀。只有拥有专有
+ * `apps/` 根的表面在表中：API 服务与静态资源发布仓库根目录本身
+ * （`APP_SURFACE_DIRECTORY_SUFFIX` 为空串），因此推导结果恒为 undefined。
+ */
+const SURFACE_ARCHITECTURE: Readonly<Record<"pc" | "h5" | "desktop" | "mini-program" | "android" | "ios" | "harmony", SdkworkSurfaceArchitecture>> = {
+  pc: "pc",
+  h5: "h5",
+  desktop: "desktop",
+  "mini-program": "mini-program",
+  android: "android-mobile",
+  ios: "ios-mobile",
+  harmony: "harmony-mobile",
+};
 
 /** Host inspection payload: names only, no file contents required. */
 export interface DeployProjectInspection {
@@ -154,10 +197,16 @@ export interface DeployProjectInspection {
 
 /** One detected `apps/sdkwork-<code>-<suffix>/` surface root. */
 export interface DeployDetectedSurface {
-  /** Canonical dialog surface id. */
-  readonly surface: AppSurfaceId
-  /** Matched directory name under `apps/`. */
+  /**
+   * Dialog surfaces this app root can publish, in canonical order. Usually a
+   * single surface; cross-platform roots list several (`-flutter-mobile` →
+   * `android` + `ios`).
+   */
+  readonly surfaces: readonly AppSurfaceId[]
+  /** Matched `apps/` directory name. */
   readonly directory: string
+  /** Spec architecture suffix of {@link directory} (`pc`, `flutter-mobile`, …). */
+  readonly directorySuffix: SdkworkSurfaceArchitecture
   /** Absolute surface root (`<rootPath>/apps/<directory>`). */
   readonly path: string
   /** v3: child directory names of this surface root, when the host listed them. */
@@ -165,77 +214,87 @@ export interface DeployDetectedSurface {
 }
 
 /** Layout conformance level reported to the dialog. */
-export type DeployProjectConformance = "conformant" | "partial" | "unknown";
+export type DeployProjectConformance = SdkworkProjectConformance;
 
 /** Detection result consumed by the directory step. */
 export interface DeployProjectDetection {
   /** `sdkwork-<code>` application code derived from the matched surfaces. */
   readonly applicationCode?: string | undefined
-  /** Detected surface roots, ordered by {@link SURFACED}. */
+  /** Detected surface roots, ordered by architecture. */
   readonly surfaces: readonly DeployDetectedSurface[]
   readonly conformance: DeployProjectConformance
   /** Spec markers present at the root. */
   readonly presentMarkers: readonly string[]
   /** Spec markers missing at the root. */
   readonly missingMarkers: readonly string[]
+  /**
+   * v4: child directory names of the inspected root itself. Root-publishing
+   * types (`api` / `static`) use this to detect their framework and build
+   * output, since they own no `apps/` surface root.
+   */
+  readonly rootChildDirectories: readonly string[]
+  /** v4: 规范判定实例（通用类），供上层直接复用。 */
+  readonly project: SdkworkProject
 }
 
-/** @returns the surface id for an `apps/` child name, or undefined. */
-export function surfaceOfDirectoryName(name: string): { surface: AppSurfaceId; applicationCode: string } | undefined {
-  const match = SURFACE_DIRECTORY_PATTERN.exec(name);
-  if (!match?.groups) return undefined;
-  const suffix = match.groups.suffix as string;
-  const surface = (Object.entries(APP_SURFACE_DIRECTORY_SUFFIX) as readonly [AppSurfaceId, string][])
-    .find(([, dirSuffix]) => dirSuffix === suffix)?.[0];
-  if (surface === undefined) return undefined;
-  return { surface, applicationCode: match.groups.code as string };
+/** @returns the dialog surfaces an `apps/` child name can publish, or undefined. */
+export function surfacesOfDirectoryName(
+  name: string,
+): { surfaces: readonly AppSurfaceId[]; directorySuffix: SdkworkSurfaceArchitecture; applicationCode: string } | undefined {
+  const parsed = SdkworkProject.parseSurfaceDirectoryName(name);
+  if (parsed === undefined) return undefined;
+  const surfaces = APP_SURFACE_DIRECTORY_CAPABILITIES[parsed.architecture];
+  if (surfaces === undefined || surfaces.length === 0) return undefined;
+  return { surfaces, directorySuffix: parsed.architecture, applicationCode: parsed.applicationCode };
 }
 
 /**
- * Detect the sdkwork project shape behind an inspection.
+ * 把宿主列举载荷翻译成对话框检测结果。规范判定（标记、表面、应用代码）
+ * 全部委托给 {@link SdkworkProject}，这里只负责映射到对话框表面词汇。
  *
- * Conformance follows `APPLICATION_DEPLOY_LAYOUT_SPEC.md` §2: every marker
- * present is `conformant`, at least two is `partial`, otherwise the directory
- * is not recognized as a sdkwork deployable root. `sdkwork.app.config.json`
- * is a file and intentionally not required here — directory-only listings
- * (the current host bridge) cannot observe it, and the manifest check stays a
- * backend concern at publish time.
+ * `sdkwork.app.config.json` 是文件且刻意不在此校验 —— 只看目录名的宿主桥
+ * 观察不到它，该清单校验留给发布时的后端。
  */
 export function detectSdkworkProject(inspection: DeployProjectInspection): DeployProjectDetection {
-  const children = new Set(inspection.childDirectories);
-  const presentMarkers = ROOT_MARKERS.filter((marker) => children.has(marker));
-  const missingMarkers = ROOT_MARKERS.filter((marker) => !children.has(marker));
+  const project = SdkworkProject.inspect({
+    rootPath: inspection.rootPath,
+    childDirectories: inspection.childDirectories,
+    appsChildDirectories: inspection.appsChildDirectories,
+    surfaceChildDirectories: inspection.surfaceChildDirectories,
+  });
 
-  const surfaces: DeployDetectedSurface[] = [];
-  const applicationCodes = new Set<string>();
-  for (const name of inspection.appsChildDirectories ?? []) {
-    const detected = surfaceOfDirectoryName(name);
-    if (detected === undefined) continue;
-    applicationCodes.add(detected.applicationCode);
-    surfaces.push({
-      surface: detected.surface,
-      directory: name,
-      path: joinPath(inspection.rootPath, "apps", name),
-      childDirectories: inspection.surfaceChildDirectories?.[name],
-    });
-  }
-  surfaces.sort(
-    (left, right) => SURFACED.indexOf(left.surface) - SURFACED.indexOf(right.surface),
-  );
-
-  const conformance: DeployProjectConformance = presentMarkers.length === ROOT_MARKERS.length
-    ? "conformant"
-    : presentMarkers.length >= 2
-      ? "partial"
-      : "unknown";
+  const surfaces: DeployDetectedSurface[] = project.surfaces.map((surface) => ({
+    surfaces: APP_SURFACE_DIRECTORY_CAPABILITIES[surface.architecture] ?? [],
+    directory: surface.directory,
+    directorySuffix: surface.architecture,
+    path: surface.path,
+    childDirectories: surface.childDirectories,
+  }));
 
   return {
-    applicationCode: applicationCodes.size === 1 ? applicationCodes.values().next().value : undefined,
+    applicationCode: project.applicationCode,
     surfaces,
-    conformance,
-    presentMarkers,
-    missingMarkers,
+    conformance: project.conformance,
+    presentMarkers: project.presentMarkers,
+    missingMarkers: project.missingMarkers,
+    rootChildDirectories: [...inspection.childDirectories],
+    project,
   };
+}
+
+/**
+ * The detected surface root serving one publish surface, if any. A dedicated
+ * root always wins over a cross-platform root (`-android-mobile` beats
+ * `-flutter-mobile` for Android) so the dialog never points at a broader root
+ * when the spec-compliant one exists.
+ */
+export function findDetectedSurface(
+  detection: DeployProjectDetection | undefined,
+  surface: AppSurfaceId | undefined,
+): DeployDetectedSurface | undefined {
+  if (detection === undefined || surface === undefined) return undefined;
+  const candidates = detection.surfaces.filter((candidate) => candidate.surfaces.includes(surface));
+  return candidates.find((candidate) => candidate.surfaces.length === 1) ?? candidates[0];
 }
 
 /**
@@ -248,56 +307,86 @@ export function resolveSourceDirectory(
   rootPath: string,
 ): string {
   if (surface === undefined) return rootPath;
-  return detection.surfaces.find((candidate) => candidate.surface === surface)?.path ?? rootPath;
+  return findDetectedSurface(detection, surface)?.path ?? rootPath;
 }
 
 /**
- * Sdkwork repository root directory name: `sdkwork-<code>` without a surface
- * suffix (APPLICATION_SPEC.md §2 — surface directories always end in one of
- * the known suffixes, which the surface pattern above already strips first).
+ * v4: 项目实际提供的对话框表面（由检测到的 `apps/` 表面根展开、去重、按
+ * 规范顺序）。清单未读到时为 empty —— 调用方不得据此判定「不支持」。
  */
-const REPO_ROOT_DIRECTORY_PATTERN = /^sdkwork-[a-z0-9][a-z0-9-]*$/;
+export function detectedSurfaceIds(
+  detection: DeployProjectDetection | undefined,
+): readonly AppSurfaceId[] {
+  if (detection === undefined) return [];
+  const found = new Set<AppSurfaceId>();
+  for (const surface of detection.surfaces) {
+    for (const id of surface.surfaces) found.add(id);
+  }
+  return DIALOG_SURFACE_ORDER.filter((id) => found.has(id));
+}
 
 /**
- * v3.3: derive the spec-compliant surface root from the directory path alone
- * (no host listing required) — `E:\...\sdkwork-<code>` →
- * `E:\...\sdkwork-<code>\apps\sdkwork-<code>-<suffix>` per APPLICATION_SPEC.
+ * v4: 目录位于 `apps/<surface>/` 内部时，其所属仓库根路径。
  *
- * Rules:
- * - `api`/`static` surfaces publish the repo root itself → undefined.
- * - basename is already the requested surface root → undefined (nothing to do).
- * - basename is a *sibling* surface root under `apps/` (user switched app
- *   type while sitting in another surface root) → derive the sibling surface
- *   directory next to it.
- * - basename is a repo root `sdkwork-<code>` → `<dir>/apps/sdkwork-<code>-<suffix>`.
- * - anything else (not a sdkwork name) → undefined; never invents paths.
+ * 宿主对表面根本身的列举看不到同级表面（那里没有 `apps/` 子目录），因此对话框
+ * 需要补一次仓库根列举，才能正确回答「本项目支持哪些应用类型」。非 `apps/` 下
+ * 的表面目录返回 undefined。委派给 {@link SdkworkProject.repositoryRootOfDirectory}。
+ */
+export function repositoryRootOf(directory: string | undefined): string | undefined {
+  return SdkworkProject.repositoryRootOfDirectory(directory);
+}
+
+/**
+ * v4: 项目规范画像 —— 驱动对话框「支持 / 不支持」判定的唯一输入。
  *
- * The original path separator (Windows `\` vs POSIX `/`) is preserved.
+ * 由通用类 {@link SdkworkProject} 派生：`sdkwork` 表示这个是 sdkwork 项目，
+ * `surfaces` 只列出宿主**观察到的**表面。`surfaces` 为空时上层必须保持全部
+ * 应用类型可选（只做可证伪的排除）。
+ */
+export interface DeployProjectProfile {
+  /** 底层规范判定实例（零依赖通用类）。 */
+  readonly project: SdkworkProject
+  /** 识别为 sdkwork 应用仓库（应用类型按 `apps/` 表面约束的前提）。 */
+  readonly sdkwork: boolean
+  /** 观察到的对话框表面，按规范顺序（可能为空）。 */
+  readonly surfaces: readonly AppSurfaceId[]
+  /** `sdkwork-<code>` 应用代码，已知时给出。 */
+  readonly applicationCode?: string | undefined
+}
+
+/**
+ * 由检测结果 + 当前目录构造项目画像。
+ *
+ * `directory` 单独传入是必要的：当用户走进某个表面根内部时，`apps/` 清单
+ * 不可读（表面为空），但目录名本身仍然能证明「这是 sdkwork 项目」。
+ */
+export function projectProfile(
+  detection: DeployProjectDetection | undefined,
+  directory: string | undefined,
+): DeployProjectProfile {
+  const project = detection?.project ?? SdkworkProject.ofDirectory(directory);
+  return {
+    project,
+    sdkwork: project.isSdkworkProject,
+    surfaces: detectedSurfaceIds(detection),
+    applicationCode: project.applicationCode,
+  };
+}
+
+/**
+ * v4.3: derive the spec-compliant surface root from the directory path alone
+ * (no host listing required), in dialog surface vocabulary. Pure path
+ * derivation is delegated to {@link SdkworkProject.deriveSurfaceDirectory};
+ * `api`/`static` publish the repository root and therefore have no surface
+ * directory → undefined.
  */
 export function deriveSurfaceDirectory(
   directory: string,
   surface: AppSurfaceId,
 ): string | undefined {
-  const suffix = APP_SURFACE_DIRECTORY_SUFFIX[surface];
-  if (suffix === "") return undefined;
-  const segments = directory.split(/[\\/]/).filter((segment) => segment !== "");
-  const basename = segments[segments.length - 1];
-  if (basename === undefined) return undefined;
-  const separator = directory.includes("\\") ? "\\" : "/";
-
-  const surfaceMatch = SURFACE_DIRECTORY_PATTERN.exec(basename);
-  if (surfaceMatch?.groups !== undefined) {
-    if (surfaceMatch.groups.suffix === suffix) return undefined;
-    // 同级表面目录切换：仅当父目录是 apps/（规范布局）时推导兄弟表面根。
-    if (segments[segments.length - 2] !== "apps") return undefined;
-    return [...segments.slice(0, -1), `sdkwork-${surfaceMatch.groups.code}-${suffix}`].join(separator);
-  }
-
-  if (REPO_ROOT_DIRECTORY_PATTERN.test(basename) === false) return undefined;
-  const applicationCode = basename.slice("sdkwork-".length);
-  // POSIX/UNC 绝对路径保留前导分隔符（split+filter 会吃掉空首段）。
-  const prefix = /^[\\/]/.test(directory) ? separator : "";
-  return prefix + [...segments, "apps", `sdkwork-${applicationCode}-${suffix}`].join(separator);
+  const architecture = SURFACE_ARCHITECTURE[surface as keyof typeof SURFACE_ARCHITECTURE];
+  if (architecture === undefined) return undefined;
+  return SdkworkProject.deriveSurfaceDirectory(directory, architecture);
 }
 
 /**

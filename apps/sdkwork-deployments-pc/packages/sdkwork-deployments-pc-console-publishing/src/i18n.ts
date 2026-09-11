@@ -1,5 +1,6 @@
 import type { AppKind, AppStatus } from "@sdkwork/deployments-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
+import type { AppSurfaceId } from "./service/project-detection.ts";
 
 /**
  * Create-deploy-app dialog copy (zh-CN / en).
@@ -45,6 +46,7 @@ const en = {
 
   // Step 1 — application type grid (icon + name)
   appTypeGridHint: "Pick what you are publishing; the framework and project directory come next.",
+  appTypeGridGatedHint: "Unavailable types are disabled and list the directory they need.",
   typeH5: "H5 app",
   typePcWeb: "PC web app",
   typeDesktop: "PC desktop app",
@@ -61,10 +63,22 @@ const en = {
   typeApiServiceHint: "Backend API service",
   typeStaticWebHint: "Static asset directory",
   typeSuggested: "Detected",
+  typeSupported: "Supported",
+  typeUnsupported: "Not supported",
+  typeUnsupportedRequires: "Missing {directory}",
+
+  // Step 1 — project path bar (v4)
+  projectPath: "Project path",
+  projectKindSdkworkGate: "sdkwork project — application types are limited to the surfaces detected under apps/.",
+  projectKindSdkworkUnlisted: "sdkwork project — the apps/ surface list is unavailable, so every application type stays selectable.",
+  projectSurfacesDetected: "App surfaces: {surfaces}",
+  projectSurfacesNone: "No application surface found under apps/.",
 
   // Step 2 — framework & architecture (v3)
   frameworkLabel: "Framework / architecture",
   frameworkStepHint: "Auto-detected from your project directory; pick another framework to override.",
+  frameworkStepConstrainedHint: "Auto-detected from your project directory. Options that contradict the project's architecture are disabled.",
+  fwArchitectureMismatch: "Not this project's architecture",
   frameworkBuildOutputPrefix: "Build output: ",
   fwReact: "React",
   fwVue: "Vue 3",
@@ -350,6 +364,7 @@ const zh: Record<keyof typeof en, string> = {
 
   // 第 1 步 — 应用类型 grid（icon + 名称）
   appTypeGridHint: "先选择要发布的应用类型，下一步选择框架架构并自动检测项目目录。",
+  appTypeGridGatedHint: "不支持的类型已置灰，并标出缺失的规范目录。",
   typeH5: "H5 应用",
   typePcWeb: "PC 网页应用",
   typeDesktop: "PC 桌面应用",
@@ -366,10 +381,22 @@ const zh: Record<keyof typeof en, string> = {
   typeApiServiceHint: "后端 API 服务",
   typeStaticWebHint: "静态资源目录",
   typeSuggested: "检测到",
+  typeSupported: "支持",
+  typeUnsupported: "不支持",
+  typeUnsupportedRequires: "缺少 {directory}",
+
+  // 第 1 步 — 项目路径栏（v4）
+  projectPath: "项目路径",
+  projectKindSdkworkGate: "sdkwork 规范项目 —— 应用类型仅限 apps/ 下检测到的应用表面。",
+  projectKindSdkworkUnlisted: "sdkwork 项目 —— 未读到 apps/ 表面列表，全部应用类型仍可选。",
+  projectSurfacesDetected: "应用表面：{surfaces}",
+  projectSurfacesNone: "apps/ 下未检测到应用表面。",
 
   // 第 2 步 — 框架与架构（v3）
   frameworkLabel: "框架 / 架构",
   frameworkStepHint: "已根据所选目录自动检测构建框架，也可点击其他框架手动切换。",
+  frameworkStepConstrainedHint: "已根据所选目录自动检测构建框架；与项目架构不符的选项已置灰。",
+  fwArchitectureMismatch: "与本项目架构不符",
   frameworkBuildOutputPrefix: "构建产物：",
   fwReact: "React",
   fwVue: "Vue 3",
@@ -633,6 +660,22 @@ export type PublishingTranslator = (
 export function publishingTranslator(locale: DeploymentsLocale): PublishingTranslator {
   return (key, values = {}) => publishingText(locale, key, values);
 }
+
+/**
+ * 对话框应用表面 → 文案键映射（项目路径栏摘要、表面徽标共用）。`api`/`static`
+ * 是发布仓库根目录的类型，复用其应用类型名称，避免出现第二套叫法。
+ */
+export const APP_SURFACE_LABEL_KEYS: Readonly<Record<AppSurfaceId, PublishingMessageKey>> = {
+  pc: "surfacePc",
+  h5: "surfaceH5",
+  desktop: "surfaceDesktop",
+  "mini-program": "surfaceMiniProgram",
+  android: "surfaceAndroid",
+  ios: "surfaceIos",
+  harmony: "surfaceHarmony",
+  static: "typeStaticWeb",
+  api: "typeApiService",
+};
 
 /**
  * deploy_app.app_kind 枚举 → 文案键映射（关联列表与控制台表格共用，避免

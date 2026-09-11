@@ -22,13 +22,15 @@
  * 组件为纯 props 输入（两个生成式 client + locale + 宿主端口），不依赖
  * console context，deployments 控制台与 BirdCoder 插件均可复用（高内聚低耦合）。
  */
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AppKind, AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, APP_KIND_LABEL_KEYS, type PublishingMessageKey, type PublishingTranslator } from "../i18n.ts";
 import {
   createDeployAppPublishingService,
+  classifyAppTypeCards,
+  classifyFrameworks,
   detectFrameworkId,
   deriveAppSlug,
   frameworksOfCard,
@@ -45,6 +47,9 @@ import {
   deriveSurfaceDirectory,
   detectBuildOutputCandidates,
   detectSdkworkProject,
+  findDetectedSurface,
+  projectProfile,
+  repositoryRootOf,
   resolveSourceDirectory,
   shouldSyncEnvironmentBuildOutput,
   type DeployDeploymentMode,
@@ -59,6 +64,7 @@ import {
   DeployAppMediaFields,
   type DeployAppMediaFiles,
 } from "./DeployAppMediaFields.tsx";
+import { DeployProjectPathBar } from "./DeployProjectPathBar.tsx";
 import { DeployProjectDirectoryFields } from "./DeployProjectDirectoryFields.tsx";
 import { DeployEnvironmentSelect } from "./DeployEnvironmentSelect.tsx";
 import { BuildProgressDialog, type DeployDialogBuildPort } from "./BuildProgressDialog.tsx";
@@ -158,12 +164,33 @@ export function CreateDeployAppDialog({
     [cardId, frameworkId],
   )
   const frameworks = useMemo(() => frameworksOfCard(cardId), [cardId])
+  // v4 需求 2：项目画像 + 每张类型卡片的可选性。项目符合 sdkwork 规范且
+  // apps/ 表面清单可读时，只放开项目实际提供表面所对应的应用类型；否则全部
+  // 放开，由用户自行选择（判定逻辑见 classifyAppTypeCards）。
+  const profile = useMemo(() => projectProfile(detection, directory), [detection, directory])
+  const cardAvailability = useMemo(
+    () => classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile),
+    [profile],
+  )
+  const gatedTypes = profile.sdkwork && profile.surfaces.length > 0
+  const cardSupported = useCallback(
+    (id: string | undefined) => id === undefined
+      ? true
+      : cardAvailability.find((entry) => entry.cardId === id)?.supported !== false,
+    [cardAvailability],
+  )
   const suggestedCardId = useMemo(() => {
-    if (detection === undefined || type === undefined || type.surface === undefined) return undefined
-    return detection.surfaces.some((surface) => surface.surface === type.surface)
-      ? cardId
-      : undefined
-  }, [detection, type, cardId])
+    if (detection === undefined) return undefined
+    const detected = new Set(profile.surfaces)
+    const isDetected = (id: string | undefined) => {
+      const surface = DEPLOY_APP_TYPE_CARDS.find((candidate) => candidate.id === id)?.surface
+      return surface !== undefined && detected.has(surface)
+    }
+    // 已选卡片且其表面已被检测到 → 保留「检测到」徽标；尚未选择时推荐第一个
+    // 被检测到的表面，让用户一眼看出项目实际提供哪些应用。
+    if (cardId !== undefined) return isDetected(cardId) ? cardId : undefined
+    return DEPLOY_APP_TYPE_CARDS.find((card) => isDetected(card.id))?.id
+  }, [detection, profile, cardId])
   const matchedSurfacePath = useMemo(() => {
     if (detection === undefined || type?.surface === undefined || directory === undefined) return undefined
     return resolveSourceDirectory(detection, type.surface, detectionRoot ?? directory)
@@ -177,9 +204,13 @@ export function CreateDeployAppDialog({
       : deriveSurfaceDirectory(directory, type.surface)),
     [directory, type],
   )
-  // v3: 构建产物路径验证与候选 —— 依据选中表面目录的子目录列举。
+  // v3: 构建产物路径验证与候选 —— 依据选中表面目录的子目录列举。v4：
+  // 无表面的类型（API 服务 / 静态资源）发布仓库根目录，改用根目录列举，
+  // 使其框架与产物检测同样可用。
   const matchedSurfaceChildren = useMemo(
-    () => detection?.surfaces.find((surface) => surface.surface === type?.surface)?.childDirectories,
+    () => type?.surface === undefined
+      ? detection?.rootChildDirectories
+      : findDetectedSurface(detection, type.surface)?.childDirectories,
     [detection, type],
   )
   const buildOutputDetected = useMemo(
@@ -194,6 +225,14 @@ export function CreateDeployAppDialog({
   // src-tauri→Tauri、android/ios→RN 等，见 detectDirectories 注册表）。
   const autoDetectedId = useMemo(
     () => detectFrameworkId(frameworks, matchedSurfaceChildren),
+    [frameworks, matchedSurfaceChildren],
+  )
+  // v4 需求 4：所选项目必须符合项目自身的应用架构 —— 项目表面目录已给出
+  // 决定性架构信号时，标识目录缺席的框架判为架构冲突并禁止选择。
+  const frameworkConflicts = useMemo(
+    () => classifyFrameworks(frameworks, matchedSurfaceChildren)
+      .filter((entry) => entry.conflicting)
+      .map((entry) => entry.frameworkId),
     [frameworks, matchedSurfaceChildren],
   )
   // v3.4: 浏览器类表面（pc/h5/static）的构建产物目录随 `<mode>.<environment>`
@@ -254,6 +293,8 @@ export function CreateDeployAppDialog({
   }
 
   // v2: 目录自动检测 —— 目录变化（含初始默认目录）后防抖触发宿主 inspection。
+  // v4: 目录位于 apps/<surface>/ 内部时补一次所属仓库根列举 —— 否则同级表面
+  // 不可见，「本项目支持哪些应用类型」会退化成「无法证明」而全部放开。
   useEffect(() => {
     const path = directory?.trim()
     if (inspectDirectory === undefined || path === undefined || path === "") {
@@ -262,27 +303,36 @@ export function CreateDeployAppDialog({
       return
     }
     const sequence = ++inspectSequenceRef.current
+    const live = () => inspectSequenceRef.current === sequence
     setInspecting(true)
     const timer = window.setTimeout(() => {
-      void inspectDirectory(path)
-        .then((inspection) => {
-          if (inspectSequenceRef.current !== sequence) return
-          if (inspection === undefined) {
+      void (async () => {
+        try {
+          const inspection = await inspectDirectory(path)
+          if (!live()) return
+          const hasSurfaces = (inspection?.appsChildDirectories?.length ?? 0) > 0
+          const repositoryRoot = hasSurfaces ? undefined : repositoryRootOf(path)
+          const rootInspection = repositoryRoot === undefined
+            ? undefined
+            : await inspectDirectory(repositoryRoot)
+          if (!live()) return
+          // 仓库根列举成功时以它为准：它同时给出同级表面清单与各表面的子目录。
+          const resolved = rootInspection ?? inspection
+          if (resolved === undefined) {
             setDetection(undefined)
             setDetectionRoot(undefined)
             return
           }
-          setDetection(detectSdkworkProject(inspection))
-          setDetectionRoot(inspection.rootPath)
-        })
-        .catch(() => {
-          if (inspectSequenceRef.current !== sequence) return
+          setDetection(detectSdkworkProject(resolved))
+          setDetectionRoot(resolved.rootPath)
+        } catch {
+          if (!live()) return
           setDetection(undefined)
           setDetectionRoot(undefined)
-        })
-        .finally(() => {
-          if (inspectSequenceRef.current === sequence) setInspecting(false)
-        })
+        } finally {
+          if (live()) setInspecting(false)
+        }
+      })()
     }, INSPECT_DEBOUNCE_MS)
     return () => { window.clearTimeout(timer) }
   }, [directory, inspectDirectory])
@@ -345,8 +395,18 @@ export function CreateDeployAppDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoDetectedId, cardId])
 
+  // v4：目录换成另一个项目后，原先选中的应用类型可能已不在新项目的 apps/
+  // 表面之内 —— 这会直接违反「必须符合项目规范」，因此清空类型与框架选择，
+  // 让用户重新选一个受支持的。（检测中 detection 为 undefined，不会误清。）
+  useEffect(() => {
+    if (cardId === undefined || cardSupported(cardId)) return
+    setCardId(undefined)
+    setFrameworkId(undefined)
+    setBuildOutputPath("")
+  }, [cardId, cardSupported])
+
   const canNext = (): boolean => {
-    if (step === 1) return cardId !== undefined
+    if (step === 1) return cardId !== undefined && cardSupported(cardId)
     if (step === 2) return Boolean(directory?.trim()) && frameworkId !== undefined
     if (step === 3) {
       if (mode === "associate") return Boolean(associateId)
@@ -506,11 +566,24 @@ export function CreateDeployAppDialog({
           ))}
         </div>
 
+        {/* v4 需求 1：当前选中的项目路径常驻显示（5 个步骤都在），并给出该
+            目录的规范判定与应用表面摘要。 */}
+        <DeployProjectPathBar
+          directory={directory}
+          inspecting={inspecting}
+          detection={detection}
+          profile={profile}
+          t={t}
+          onChangeDirectory={() => { void changeDirectory() }}
+        />
+
         <div className={css.body}>
           {step === 1 && (
             <DeployAppTypeGrid
               cardId={cardId}
               suggestedCardId={suggestedCardId}
+              availability={cardAvailability}
+              gated={gatedTypes}
               t={t}
               onChange={selectCard}
             />
@@ -549,11 +622,13 @@ export function CreateDeployAppDialog({
                   window.setTimeout(() => { setDirectory(current) }, 0)
                 }}
               />
-              {/* v3.2: 框架选择并入目录步骤（路径下方），依据目录信号自动检测。 */}
+              {/* v3.2: 框架选择并入目录步骤（路径下方），依据目录信号自动检测。
+                  v4：与项目架构不符的框架由 conflictingIds 置灰。 */}
               <DeployFrameworkSelect
                 frameworks={frameworks}
                 frameworkId={frameworkId}
                 autoDetectedId={autoDetectedId}
+                conflictingIds={frameworkConflicts}
                 t={t}
                 onChange={selectFramework}
               />
