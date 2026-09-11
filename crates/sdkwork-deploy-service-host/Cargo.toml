@@ -1,8 +1,12 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-deploy-service-host"
 version.workspace = true
 edition.workspace = true
 
+
+[lints]
+workspace = true
 [dependencies]
 async-trait.workspace = true
 hickory-resolver.workspace = true

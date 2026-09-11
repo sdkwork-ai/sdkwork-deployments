@@ -1,9 +1,13 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-deploy-build-runner"
 version.workspace = true
 edition.workspace = true
 description = "Governed build executor boundary and runner for the unified app delivery platform"
 
+
+[lints]
+workspace = true
 [lib]
 name = "sdkwork_deploy_build_runner"
 path = "src/lib.rs"

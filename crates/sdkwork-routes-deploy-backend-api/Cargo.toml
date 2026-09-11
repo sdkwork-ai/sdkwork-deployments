@@ -1,8 +1,12 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-routes-deploy-backend-api"
 version.workspace = true
 edition.workspace = true
 
+
+[lints]
+workspace = true
 [dependencies]
 axum.workspace = true
 serde.workspace = true

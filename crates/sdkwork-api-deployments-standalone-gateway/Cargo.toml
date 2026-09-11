@@ -1,8 +1,12 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-api-deployments-standalone-gateway"
 version.workspace = true
 edition.workspace = true
 
+
+[lints]
+workspace = true
 [lib]
 name = "sdkwork_api_deployments_standalone_gateway"
 path = "src/lib.rs"

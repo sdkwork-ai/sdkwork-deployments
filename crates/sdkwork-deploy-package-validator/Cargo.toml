@@ -1,9 +1,13 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-deploy-package-validator"
 version.workspace = true
 edition.workspace = true
 description = "Byte-boundary validator for the sdkwork.deploy-package.v1 deployment package standard"
 
+
+[lints]
+workspace = true
 [dependencies]
 chrono.workspace = true
 flate2.workspace = true

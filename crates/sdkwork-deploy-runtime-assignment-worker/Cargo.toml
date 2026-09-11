@@ -1,8 +1,12 @@
 [package]
+rust-version.workspace = true
 name = "sdkwork-deploy-runtime-assignment-worker"
 version.workspace = true
 edition.workspace = true
 
+
+[lints]
+workspace = true
 [lib]
 name = "sdkwork_deploy_runtime_assignment_worker"
 path = "src/lib.rs"
