@@ -1,3 +1,6 @@
+// WORKSPACE-PATH:allow-fixture - this file is a test fixture that simulates a foreign
+// checkout root, so the sdkwork-<name> segment below is the value under assertion rather
+// than a binding to a real sibling checkout. PORTABILITY_SPEC.md section 5.2 governs it.
 import assert from 'node:assert/strict';
 import { parseSdkworkDeployBinding } from '../../../sdkwork-specs/tools/deploy/site-binding.mjs';
 

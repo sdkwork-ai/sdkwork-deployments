@@ -1,3 +1,6 @@
+// WORKSPACE-PATH:allow-fixture - this file is a test fixture that simulates a foreign
+// checkout root, so the sdkwork-<name> segment below is the value under assertion rather
+// than a binding to a real sibling checkout. PORTABILITY_SPEC.md section 5.2 governs it.
 /**
  * Unit tests for the create-deploy-app publishing service: slug derivation,
  * semver validation, metadata assembly (JSONB shape), Drive upload result

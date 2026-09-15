@@ -169,13 +169,13 @@ interface SdkworkProjectState {
  *
  * ```ts
  * // 仅凭路径判断（宿主不给目录列举时）
- * SdkworkProject.isSdkworkDirectory('E:\\ws\\sdkwork-im');   // true
+ * SdkworkProject.isSdkworkDirectory('<checkout-root>/sdkwork-im');   // true
  * SdkworkProject.isSdkworkDirectory('apps/sdkwork-im-pc');   // true
- * SdkworkProject.isSdkworkDirectory('E:\\ws\\my-vite-app');  // false
+ * SdkworkProject.isSdkworkDirectory('<checkout-root>/my-vite-app');  // false
  *
  * // 凭列举结果建模，再问「项目提供了哪些应用表面」
  * const project = SdkworkProject.inspect({
- *   rootPath: 'E:\\ws\\sdkwork-im',
+ *   rootPath: '<checkout-root>/sdkwork-im',
  *   childDirectories: ['apps', 'specs', 'etc', 'deployments', '.sdkwork'],
  *   appsChildDirectories: ['sdkwork-im-pc', 'sdkwork-im-h5', 'sdkwork-im-common'],
  *   surfaceChildDirectories: { 'sdkwork-im-h5': ['src', 'dist'] },
@@ -184,8 +184,10 @@ interface SdkworkProjectState {
  * project.architectures;            // ['pc', 'h5']（-common 不算表面）
  * project.has('pc');                // true
  * project.childDirectoriesOf('h5'); // ['src', 'dist']
- * project.sourceDirectoryFor('h5'); // 'E:\\ws\\sdkwork-im\\apps\\sdkwork-im-h5'
+ * project.sourceDirectoryFor('h5'); // '<checkout-root>/sdkwork-im/apps/sdkwork-im-h5'
  * ```
+ *
+ * `<checkout-root>` 是工作区检出根（工作区可放在任意目录，示例不绑定盘符）。
  *
  * 实例是不可变值对象：状态只在构造时写入，方法均为纯查询（无 IO、无副作用）。
  */
