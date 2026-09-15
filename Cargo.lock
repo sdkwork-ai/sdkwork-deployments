@@ -3298,6 +3298,7 @@ dependencies = [
  "md-5 0.10.6",
  "rcgen",
  "regex",
+ "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "sdkwork-webserver-resolver-cache",
  "serde",
@@ -3354,6 +3355,7 @@ name = "sdkwork-webserver-resolver-cache"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "hashlink 0.12.1",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

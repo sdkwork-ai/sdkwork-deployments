@@ -28,14 +28,6 @@ cert = "dtupay.com"
 
 [[http.server]]
 listen = ["443 ssl", "80"]
-serverName = ["deploy.noaper.com", "deploy-app.noaper.com", "deploy-admin.noaper.com"]
-include = ["snippets/gateway-locations.production.conf"]
-
-[http.server.tls]
-cert = "noaper.com"
-
-[[http.server]]
-listen = ["443 ssl", "80"]
 serverName = ["deploy.sdkwork.cn", "deploy-app.sdkwork.cn", "deploy-admin.sdkwork.cn"]
 include = ["snippets/gateway-locations.production.conf"]
 
@@ -57,14 +49,6 @@ include = ["snippets/gateway-locations.production.conf"]
 
 [http.server.tls]
 cert = "dtupay.cn"
-
-[[http.server]]
-listen = ["443 ssl", "80"]
-serverName = ["deploy.noaper.cn", "deploy-app.noaper.cn", "deploy-admin.noaper.cn"]
-include = ["snippets/gateway-locations.production.conf"]
-
-[http.server.tls]
-cert = "noaper.cn"
 
 [[http.server]]
 listen = ["443 ssl", "80"]

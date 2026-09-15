@@ -49,9 +49,33 @@ pub struct ResolvedDeployServer {
     /// The descriptor's revision number in the app's revision chain.
     #[serde(rename = "revisionNo")]
     pub revision_no: i64,
-    /// Lifecycle environment of the binding (`development|test|staging|production`).
+    /// Lifecycle environment of the binding
+    /// (`development|test|staging|demo|production`).
     #[serde(rename = "environment")]
     pub environment: String,
+    /// The app's nginx-compatible configuration document for this hostname,
+    /// resolved from `deploy_nginx_config` (environment-scoped row first, then
+    /// the app-level `deploy_app.nginx_conf` base). `None` when the app has no
+    /// managed nginx configuration, in which case the Web Server keeps serving
+    /// through the compiled descriptor alone.
+    #[serde(
+        rename = "nginxConf",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub nginx_conf: Option<String>,
+    /// SHA-256 of [`Self::nginx_conf`] when present.
+    #[serde(
+        rename = "nginxConfSha256",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub nginx_conf_sha256: Option<String>,
+    /// The app-domain prefix this app publishes under
+    /// (`<appDomainLabel>.app[-<env>].<suffix>`); the slug unless the app
+    /// declares a custom prefix.
+    #[serde(rename = "appDomainLabel")]
+    pub app_domain_label: String,
 }
 
 /// Result of idempotently provisioning an app's default publishing domains:

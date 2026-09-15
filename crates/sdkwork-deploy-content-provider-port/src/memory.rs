@@ -1,6 +1,10 @@
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{ContentProviderResourceSource, DeployServiceError};
-use sdkwork_deploy_runtime_compiler::{RuntimeProviderType, RuntimeResourceCapabilities};
+use sdkwork_deploy_runtime_compiler::{
+    RuntimeProviderType, RuntimeResourceCapabilities,
+    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+    KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION,
+};
 
 use crate::{
     ContentProviderPort, ProviderRequestCredentials, ValidateContentProviderResourceCommand,
@@ -24,7 +28,7 @@ impl ContentProviderPort for MemoryContentProviderPort {
                 ContentProviderResourceSource::DriveDirectory { .. } => (
                     RuntimeProviderType::Drive,
                     stable_memory_id("drive", command.tenant_id, &command.app_uuid, &key),
-                    "sdkwork.drive.website-root.v1".to_owned(),
+                    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION.to_owned(),
                     RuntimeResourceCapabilities {
                         static_content: true,
                         wiki_routes: false,
@@ -35,7 +39,7 @@ impl ContentProviderPort for MemoryContentProviderPort {
                 ContentProviderResourceSource::KnowledgebaseWiki { publication_uuid } => (
                     RuntimeProviderType::Knowledgebase,
                     publication_uuid.clone(),
-                    "sdkwork.knowledgebase.wiki-publication.v1".to_owned(),
+                    KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION.to_owned(),
                     RuntimeResourceCapabilities {
                         static_content: false,
                         wiki_routes: true,

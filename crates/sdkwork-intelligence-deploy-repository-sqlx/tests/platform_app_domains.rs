@@ -2,6 +2,7 @@ mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
+use sdkwork_intelligence_deploy_service::app_domains::platform_app_domain_suffixes;
 use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
 use sqlx::{PgPool, Row};
 
@@ -21,29 +22,25 @@ async fn test_repository() -> (DeployRepository, PgPool) {
 async fn seed_control_plane(pool: &PgPool) {
     sqlx::query(
         "INSERT INTO deploy_app (
-            id,uuid,tenant_id,organization_id,name,slug,site_type,status,runtime_config,
-            metadata,created_at,updated_at,version
-         ) VALUES (10,'site-10',7,9,'Shop','shop',1,1,'{}','{}',
-                   '2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',0)",
-    )
-    .execute(pool)
-    .await
-    .expect("seed deploy_app");
-    sqlx::query(
-        "INSERT INTO deploy_app (
-            id,uuid,tenant_id,organization_id,name,slug,app_kind,app_status,app_id,
+            id,uuid,tenant_id,organization_id,name,slug,app_kind,app_status,
             default_environment,created_at,updated_at,version
-         ) VALUES (20,'app-20',7,9,'Shop','shop','WEB','ACTIVE',10,'production',
-                   '2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',0)",
+         ) VALUES (10,'site-10',7,9,'Shop','shop','WEB','ACTIVE','production',
+                   '2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',1)",
     )
     .execute(pool)
     .await
     .expect("seed deploy_app");
 }
 
-/// Inserts a compiled site revision and points the site's current revision
-/// at it so hostname resolution can serve the descriptor.
-async fn seed_revision(pool: &PgPool, revision_no: i64, descriptor: &serde_json::Value) -> String {
+/// Inserts a compiled revision for one lifecycle environment. Version
+/// resolution is per `(app, environment)` and reads the newest `VALID`
+/// revision, so no app-level pointer is written.
+async fn seed_revision(
+    pool: &PgPool,
+    revision_no: i64,
+    environment: &str,
+    descriptor: &serde_json::Value,
+) -> String {
     let sha256 = sdkwork_utils_rust::crypto::sha256_hash(&serde_json::to_vec(descriptor).unwrap());
     sqlx::query(
         "INSERT INTO deploy_app_revision (
@@ -51,37 +48,36 @@ async fn seed_revision(pool: &PgPool, revision_no: i64, descriptor: &serde_json:
             descriptor_schema_version,descriptor_json,descriptor_sha256,compiler_version,
             source_config_version,idempotency_key,request_sha256,validation_status,created_by,
             created_at
-         ) VALUES ($1,$2,7,9,10,$3,'production',
-            'sdkwork.website-runtime.v1',$4,$5,'test-compiler/1',1,'key','req','VALID',NULL,
+         ) VALUES ($1,$2,7,9,10,$3,$4,
+            'sdkwork.website-runtime.v1',$5,$6,'test-compiler/1',1,$7,$8,'VALID',NULL,
             '2026-07-22T00:00:00Z')",
     )
     .bind(revision_no)
-    .bind(format!("revision-{revision_no}"))
+    .bind(format!("revision-{environment}-{revision_no}"))
     .bind(revision_no)
+    .bind(environment)
     .bind(descriptor)
     .bind(&sha256)
+    .bind(format!("key-{environment}-{revision_no}"))
+    .bind(format!("req-{environment}-{revision_no}"))
     .execute(pool)
     .await
     .expect("seed deploy_app_revision");
-    sqlx::query("UPDATE deploy_app SET current_revision_id = $1 WHERE id = 10")
-        .bind(revision_no)
-        .execute(pool)
-        .await
-        .expect("point current revision");
     sha256
 }
 
-fn descriptor() -> serde_json::Value {
+fn descriptor(app_uuid: &str, marker: &str) -> serde_json::Value {
     serde_json::json!({
         "schemaVersion": "sdkwork.website-runtime.v1",
         "kind": "sdkwork.website-runtime.descriptor",
         "revisionUuid": "revision-0001",
-        "appUuid": "site-10",
+        "appUuid": app_uuid,
         "tenantScopeHash": "1111111111111111111111111111111111111111111111111111111111111111",
         "environment": "production",
         "compilerVersion": "test-compiler/1",
         "descriptorSha256": "0".repeat(64),
         "appDefaultVariantUuid": "variant-desktop",
+        "marker": marker,
         "bindings": [],
         "variants": [],
         "variantRules": [],
@@ -98,19 +94,19 @@ fn descriptor() -> serde_json::Value {
 async fn provisions_default_domains_and_bindings_idempotently() {
     let (repository, pool) = test_repository().await;
     let zones = repository
-        .ensure_platform_app_zones(7, 9, Some(1))
+        .ensure_platform_app_zones(7, 9, Some(1), &platform_app_domain_suffixes())
         .await
         .expect("ensure zones");
     assert_eq!(zones, 14, "one platform zone per suffix");
     // Idempotent zone ensure.
     let zones_again = repository
-        .ensure_platform_app_zones(7, 9, Some(1))
+        .ensure_platform_app_zones(7, 9, Some(1), &platform_app_domain_suffixes())
         .await
         .expect("ensure zones again");
     assert_eq!(zones_again, 0);
 
     let first = repository
-        .provision_app_default_domains(7, 9, Some(1), "site-10", "shop", "production")
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
         .await
         .expect("provision");
     assert_eq!(first.created_zones, 0);
@@ -124,7 +120,7 @@ async fn provisions_default_domains_and_bindings_idempotently() {
 
     // Idempotent second pass: nothing new, everything reported as existing.
     let second = repository
-        .provision_app_default_domains(7, 9, Some(1), "site-10", "shop", "production")
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
         .await
         .expect("re-provision");
     assert_eq!(second.created_domains, 0);
@@ -151,37 +147,170 @@ async fn provisions_default_domains_and_bindings_idempotently() {
 }
 
 #[tokio::test]
-async fn resolves_active_binding_to_latest_valid_revision() {
+async fn every_environment_gets_its_own_publishable_hostname() {
     let (repository, _) = test_repository().await;
-    let _ = repository
-        .ensure_platform_app_zones(7, 9, Some(1))
+    for environment in ["development", "test", "staging", "demo", "production"] {
+        repository
+            .provision_app_default_domains(7, 9, Some(1), "site-10", environment)
+            .await
+            .unwrap_or_else(|error| panic!("provision {environment}: {error}"));
+    }
+    let hostnames: Vec<String> = sqlx::query_scalar(
+        "SELECT hostname_ascii FROM deploy_app_binding
+         WHERE app_id = 10 AND deleted_at IS NULL ORDER BY hostname_ascii",
+    )
+    .fetch_all(repository.pool())
+    .await
+    .expect("list hostnames");
+    // 14 suffixes x 5 environments, all distinct.
+    assert_eq!(hostnames.len(), 70);
+    for expected in [
+        "shop.app.sdkwork.com",
+        "shop.app-dev.sdkwork.com",
+        "shop.app-test.sdkwork.com",
+        "shop.app-staging.sdkwork.com",
+        "shop.app-demo.sdkwork.com",
+    ] {
+        assert!(
+            hostnames.contains(&expected.to_owned()),
+            "missing hostname {expected}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn custom_app_domain_label_replaces_the_app_id_prefix() {
+    let (repository, _) = test_repository().await;
+    sqlx::query("UPDATE deploy_app SET app_domain_label = $1 WHERE id = 10")
+        .bind("shop-front")
+        .execute(repository.pool())
         .await
-        .expect("ensure zones");
-    let _ = repository
-        .provision_app_default_domains(7, 9, Some(1), "site-10", "shop", "production")
+        .expect("set app domain label");
+    let provisioned = repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
         .await
         .expect("provision");
-    let sha256 = seed_revision(&repository.pool().clone(), 1, &descriptor()).await;
+    assert!(provisioned
+        .hostnames
+        .contains(&"shop-front.app.sdkwork.com".to_owned()));
+    assert!(!provisioned
+        .hostnames
+        .contains(&"shop.app.sdkwork.com".to_owned()));
 
-    let resolved = repository
+    // The app's own uuid is a legal prefix (the "appId" reading of the spec).
+    sqlx::query("UPDATE deploy_app SET app_domain_label = $1 WHERE id = 10")
+        .bind("site-10")
+        .execute(repository.pool())
+        .await
+        .expect("set uuid prefix");
+    let renamed = repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
+        .await
+        .expect("re-provision");
+    assert!(renamed
+        .hostnames
+        .contains(&"site-10.app.sdkwork.com".to_owned()));
+
+    // The previous prefix is retired, not left behind as a second publishing
+    // surface.
+    let stale: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM deploy_app_binding
+         WHERE app_id = 10 AND environment = 'production' AND deleted_at IS NULL
+           AND hostname_ascii IN ('shop.app.sdkwork.com', 'shop-front.app.sdkwork.com')",
+    )
+    .fetch_one(repository.pool())
+    .await
+    .expect("count stale bindings");
+    assert_eq!(stale, 0);
+}
+
+#[tokio::test]
+async fn per_app_suffix_override_replaces_the_platform_catalog() {
+    let (repository, _) = test_repository().await;
+    sqlx::query("UPDATE deploy_app SET app_domain_suffixes = $1 WHERE id = 10")
+        .bind(serde_json::json!(["example.com", "example.cn"]))
+        .execute(repository.pool())
+        .await
+        .expect("set suffix override");
+    let provisioned = repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
+        .await
+        .expect("provision");
+    assert_eq!(provisioned.hostnames.len(), 2);
+    assert!(provisioned
+        .hostnames
+        .contains(&"shop.app.example.com".to_owned()));
+    assert!(provisioned
+        .hostnames
+        .contains(&"shop.app.example.cn".to_owned()));
+    // The override suffix zone is created on demand rather than failing.
+    let zones: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM deploy_dns_zone
+         WHERE tenant_id = 7 AND apex_hostname IN ('app.example.com', 'app.example.cn')
+           AND deleted_at IS NULL",
+    )
+    .fetch_one(repository.pool())
+    .await
+    .expect("count override zones");
+    assert_eq!(zones, 2);
+}
+
+#[tokio::test]
+async fn resolves_the_newest_valid_revision_of_the_matching_environment() {
+    let (repository, pool) = test_repository().await;
+    for environment in ["production", "development"] {
+        repository
+            .provision_app_default_domains(7, 9, Some(1), "site-10", environment)
+            .await
+            .expect("provision");
+    }
+    // development publishes twice; production once.
+    seed_revision(&pool, 1, "development", &descriptor("site-10", "dev-1")).await;
+    seed_revision(&pool, 2, "development", &descriptor("site-10", "dev-2")).await;
+    let production_sha =
+        seed_revision(&pool, 3, "production", &descriptor("site-10", "prod-1")).await;
+
+    let production = repository
         .resolve_server_by_hostname("shop.app.sdkwork.com", "production")
         .await
-        .expect("resolve")
-        .expect("default app domain must resolve");
-    assert_eq!(resolved.app_uuid, "site-10");
-    assert_eq!(resolved.app_slug, "shop");
-    assert_eq!(resolved.hostname, "shop.app.sdkwork.com");
-    assert_eq!(resolved.path_prefix, "/");
-    assert_eq!(resolved.action_type, "SERVE");
-    assert_eq!(resolved.environment, "production");
-    assert_eq!(resolved.revision_no, 1);
-    assert_eq!(resolved.descriptor_sha256, sha256);
+        .expect("resolve production")
+        .expect("production host must resolve");
+    assert_eq!(production.app_uuid, "site-10");
+    assert_eq!(production.app_slug, "shop");
+    assert_eq!(production.environment, "production");
+    assert_eq!(production.revision_no, 3);
+    assert_eq!(production.descriptor_sha256, production_sha);
     assert_eq!(
-        resolved.descriptor_json["appUuid"],
-        serde_json::json!("site-10")
+        production.descriptor_json["marker"],
+        serde_json::json!("prod-1"),
+        "the production host must serve the production revision, not the newest app-global one"
     );
 
-    // Case-insensitive lookup and other suffixes resolve too.
+    let development = repository
+        .resolve_server_by_hostname("shop.app-dev.sdkwork.com", "development")
+        .await
+        .expect("resolve development")
+        .expect("development host must resolve");
+    assert_eq!(development.environment, "development");
+    assert_eq!(development.revision_no, 2);
+    assert_eq!(
+        development.descriptor_json["marker"],
+        serde_json::json!("dev-2"),
+        "the development host must serve the newest development revision"
+    );
+
+    // An environment with no revision of its own must not fall back to another
+    // environment's descriptor.
+    let staging = repository
+        .resolve_server_by_hostname("shop.app-staging.sdkwork.com", "staging")
+        .await
+        .expect("resolve staging");
+    assert!(
+        staging.is_none(),
+        "an environment with no VALID revision must not resolve"
+    );
+
+    // Case-insensitive lookup of an unknown suffix still resolves to None.
     let other = repository
         .resolve_server_by_hostname("SHOP.APP.BIRDBODER.COM", "production")
         .await
@@ -197,14 +326,115 @@ async fn resolves_active_binding_to_latest_valid_revision() {
 }
 
 #[tokio::test]
+async fn paused_and_archived_apps_stop_resolving() {
+    let (repository, pool) = test_repository().await;
+    repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
+        .await
+        .expect("provision");
+    seed_revision(&pool, 1, "production", &descriptor("site-10", "prod-1")).await;
+    assert!(repository
+        .resolve_server_by_hostname("shop.app.sdkwork.com", "production")
+        .await
+        .expect("resolve")
+        .is_some());
+    sqlx::query("UPDATE deploy_app SET app_status = 'PAUSED' WHERE id = 10")
+        .execute(&pool)
+        .await
+        .expect("pause app");
+    assert!(
+        repository
+            .resolve_server_by_hostname("shop.app.sdkwork.com", "production")
+            .await
+            .expect("resolve paused")
+            .is_none(),
+        "a PAUSED app must not be served through the fallback"
+    );
+}
+
+#[tokio::test]
+async fn app_nginx_conf_and_environment_override_are_resolved() {
+    let (repository, pool) = test_repository().await;
+    repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
+        .await
+        .expect("provision");
+    seed_revision(&pool, 1, "production", &descriptor("site-10", "prod-1")).await;
+    let app_conf = "server {\n  listen 80;\n  server_name shop.app.sdkwork.com;\n}\n";
+    sqlx::query(
+        "UPDATE deploy_app SET nginx_conf = $1, nginx_conf_sha256 = $2,
+            nginx_conf_updated_at = NOW() WHERE id = 10",
+    )
+    .bind(app_conf)
+    .bind(sdkwork_utils_rust::crypto::sha256_hash(app_conf.as_bytes()))
+    .execute(&pool)
+    .await
+    .expect("set app nginx conf");
+
+    // No override: the app-level conf is the answer.
+    let resolved = repository
+        .resolve_server_by_hostname("shop.app.sdkwork.com", "production")
+        .await
+        .expect("resolve")
+        .expect("must resolve");
+    assert_eq!(resolved.nginx_conf.as_deref(), Some(app_conf));
+    assert!(resolved.nginx_conf_sha256.is_some());
+    assert_eq!(resolved.app_domain_label, "shop");
+
+    // An environment-scoped override wins over the app-level base.
+    let override_conf = "server {\n  listen 80;\n  return 418;\n}\n";
+    sqlx::query(
+        "INSERT INTO deploy_nginx_config (
+            id,uuid,tenant_id,app_id,environment,hostname_ascii,config_type,config_name,
+            config_content,config_hash,is_active,version_no,status,metadata,created_at,
+            updated_at,version
+         ) VALUES (700,'nginx-700',7,10,'production',NULL,1,'shop production override',
+            $1,$2,TRUE,1,1,'{}',NOW(),NOW(),1)",
+    )
+    .bind(override_conf)
+    .bind(sdkwork_utils_rust::crypto::sha256_hash(override_conf.as_bytes()))
+    .execute(&pool)
+    .await
+    .expect("insert nginx override");
+    let overridden = repository
+        .resolve_server_by_hostname("shop.app.sdkwork.com", "production")
+        .await
+        .expect("resolve")
+        .expect("must resolve");
+    assert_eq!(overridden.nginx_conf.as_deref(), Some(override_conf));
+
+    // A hostname-scoped override wins over the environment-scoped one.
+    let host_conf = "server {\n  listen 80;\n  return 410;\n}\n";
+    sqlx::query(
+        "INSERT INTO deploy_nginx_config (
+            id,uuid,tenant_id,app_id,environment,hostname_ascii,config_type,config_name,
+            config_content,config_hash,is_active,version_no,status,metadata,created_at,
+            updated_at,version
+         ) VALUES (701,'nginx-701',7,10,'production','shop.app.sdkwork.com',1,
+            'shop host override',$1,$2,TRUE,1,1,'{}',NOW(),NOW(),1)",
+    )
+    .bind(host_conf)
+    .bind(sdkwork_utils_rust::crypto::sha256_hash(host_conf.as_bytes()))
+    .execute(&pool)
+    .await
+    .expect("insert hostname nginx override");
+    let host_scoped = repository
+        .resolve_server_by_hostname("shop.app.sdkwork.com", "production")
+        .await
+        .expect("resolve")
+        .expect("must resolve");
+    assert_eq!(host_scoped.nginx_conf.as_deref(), Some(host_conf));
+}
+
+#[tokio::test]
 async fn resolves_custom_domains_and_respects_environment() {
     let (repository, pool) = test_repository().await;
-    let _ = repository
-        .ensure_platform_app_zones(7, 9, Some(1))
+    repository
+        .ensure_platform_app_zones(7, 9, Some(1), &platform_app_domain_suffixes())
         .await
         .expect("ensure zones");
-    let _ = repository
-        .provision_app_default_domains(7, 9, Some(1), "site-10", "shop", "production")
+    repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
         .await
         .expect("provision");
     // A user custom domain binding (VERIFIED domain + SERVE binding).
@@ -235,7 +465,7 @@ async fn resolves_custom_domains_and_respects_environment() {
     .execute(&pool)
     .await
     .expect("insert custom binding");
-    let _ = seed_revision(&pool, 2, &descriptor()).await;
+    let sha256 = seed_revision(&pool, 2, "production", &descriptor("site-10", "prod-1")).await;
 
     let resolved = repository
         .resolve_server_by_hostname("mysite.example.com", "production")
@@ -244,6 +474,7 @@ async fn resolves_custom_domains_and_respects_environment() {
         .expect("custom domain must resolve");
     assert_eq!(resolved.hostname, "mysite.example.com");
     assert_eq!(resolved.action_type, "SERVE");
+    assert_eq!(resolved.descriptor_sha256, sha256);
 
     // The same hostname in another environment must not resolve.
     let other_env = repository

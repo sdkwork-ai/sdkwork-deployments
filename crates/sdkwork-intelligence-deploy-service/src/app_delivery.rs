@@ -126,9 +126,12 @@ impl DeployService {
             .await?;
         self.audit_app_action(context, "app.create", &app.id)
             .await?;
-        // Every app is a publishable surface: auto-apply the app's default
-        // publishing domains (`<slug>.app[-<env>].<suffix>`).
-        self.provision_app_default_domains(context, &app.id, &app.default_environment)
+        // Every app is a publishable surface: reconcile the app's default
+        // publishing domains (`<appDomainLabel>.app[-<env>].<suffix>`) for
+        // **all** lifecycle environments so `*.app-dev.*`, `*.app-test.*`,
+        // `*.app-staging.*` and `*.app-demo.*` resolve from the moment the app
+        // exists — not only the app's `defaultEnvironment`.
+        self.provision_app_default_domains_all_environments(context, &app.id)
             .await?;
         Ok(app)
     }

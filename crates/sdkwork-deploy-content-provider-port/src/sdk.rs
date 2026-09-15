@@ -6,7 +6,11 @@ use sdkwork_deploy_contract::{
     ContentProviderResourceSource, DeployServiceError, DeployServiceResult,
     DriveWebsiteRootSelector,
 };
-use sdkwork_deploy_runtime_compiler::{RuntimeProviderType, RuntimeResourceCapabilities};
+use sdkwork_deploy_runtime_compiler::{
+    RuntimeProviderType, RuntimeResourceCapabilities,
+    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+    KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION,
+};
 use sdkwork_drive_app_sdk_generated_rust::{
     CreateWebsiteRootRequest, SdkworkAppClient, WebsiteRootFolderSelector, WebsiteRootSelector,
     WebsiteRootSpaceSelector,
@@ -164,7 +168,8 @@ impl ContentProviderPort for SdkContentProviderPort {
                     source,
                     provider_type: RuntimeProviderType::Drive,
                     provider_resource_uuid: observed.uuid,
-                    provider_contract_version: "sdkwork.drive.website-root.v1".to_owned(),
+                    provider_contract_version: DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION
+                        .to_owned(),
                     capabilities: RuntimeResourceCapabilities {
                         static_content: true,
                         wiki_routes: false,
@@ -206,7 +211,8 @@ fn validated_knowledgebase_resource(
         source,
         provider_type: RuntimeProviderType::Knowledgebase,
         provider_resource_uuid: publication.publication_uuid,
-        provider_contract_version: "sdkwork.knowledgebase.wiki-publication.v1".to_owned(),
+        provider_contract_version: KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION
+            .to_owned(),
         capabilities: RuntimeResourceCapabilities {
             static_content: false,
             wiki_routes: true,

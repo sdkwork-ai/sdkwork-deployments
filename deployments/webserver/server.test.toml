@@ -2,8 +2,3 @@ environment = "test"
 
 [http]
 
-[[http.server]]
-listen = ["80"]
-serverName = ["deploy-test.sdkwork.com", "deploy-test.birdcoder.com", "deploy-test.dtupay.com", "deploy-test.noaper.com", "deploy-test.sdkwork.cn", "deploy-test.birdcoder.cn", "deploy-test.dtupay.cn", "deploy-test.noaper.cn", "deploy-test.skubc.com", "deploy-test.skubc.cn", "deploy-test.zowalk.com", "deploy-test.zowalk.cn", "deploy-test.offer86.com", "deploy-test.offer86.cn", "deploy-test.86offer.com", "deploy-test.86offer.cn", "deploy-app-test.sdkwork.com", "deploy-app-test.birdcoder.com", "deploy-app-test.dtupay.com", "deploy-app-test.noaper.com", "deploy-app-test.sdkwork.cn", "deploy-app-test.birdcoder.cn", "deploy-app-test.dtupay.cn", "deploy-app-test.noaper.cn", "deploy-app-test.skubc.com", "deploy-app-test.skubc.cn", "deploy-app-test.zowalk.com", "deploy-app-test.zowalk.cn", "deploy-app-test.offer86.com", "deploy-app-test.offer86.cn", "deploy-app-test.86offer.com", "deploy-app-test.86offer.cn", "deploy-admin-test.sdkwork.com", "deploy-admin-test.birdcoder.com", "deploy-admin-test.dtupay.com", "deploy-admin-test.noaper.com", "deploy-admin-test.sdkwork.cn", "deploy-admin-test.birdcoder.cn", "deploy-admin-test.dtupay.cn", "deploy-admin-test.noaper.cn", "deploy-admin-test.skubc.com", "deploy-admin-test.skubc.cn", "deploy-admin-test.zowalk.com", "deploy-admin-test.zowalk.cn", "deploy-admin-test.offer86.com", "deploy-admin-test.offer86.cn", "deploy-admin-test.86offer.com", "deploy-admin-test.86offer.cn"]
-include = ["snippets/gateway-locations.nonproduction.conf"]
-

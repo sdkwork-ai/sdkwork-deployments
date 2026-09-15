@@ -9,10 +9,13 @@ use sdkwork_deploy_contract::{
     AppVariantRuleDefinition, AppVariantRuleMatcher, ContentProviderResourceSource,
     DriveWebsiteContentMode, DriveWebsiteRootSelector, UpdateAppCompositionRequest,
 };
-use sdkwork_deploy_runtime_compiler::{RuntimeProviderType, RuntimeResourceCapabilities};
+use sdkwork_deploy_runtime_compiler::{
+    RuntimeProviderType, RuntimeResourceCapabilities,
+    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+};
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{
-    AppCompositionRepositoryPort, ReplaceAppCompositionCommand,
+    AppCompositionRepositoryPort, DeployRepositoryPort, ReplaceAppCompositionCommand,
 };
 use sqlx::{PgPool, Row};
 
@@ -32,10 +35,10 @@ async fn test_repository() -> (DeployRepository, PgPool) {
 async fn seed_control_plane(pool: &PgPool) {
     sqlx::query(
         "INSERT INTO deploy_app (
-            id,uuid,tenant_id,organization_id,name,slug,site_type,status,runtime_config,
-            metadata,created_at,updated_at,version
-         ) VALUES (10,'site-1',7,9,'Docs','docs',1,1,'{}','{}',
-                   '2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',0)",
+            id,uuid,tenant_id,organization_id,name,slug,app_kind,app_status,runtime_config,
+            metadata,default_environment,created_at,updated_at,version
+         ) VALUES (10,'site-1',7,9,'Docs','docs','WEB','ACTIVE','{}','{}',
+                   'production','2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',0)",
     )
     .execute(pool)
     .await
@@ -142,7 +145,7 @@ fn command(
             source: request.resources[0].source.clone(),
             provider_type: RuntimeProviderType::Drive,
             provider_resource_uuid: "website-root-1".to_owned(),
-            provider_contract_version: "sdkwork.drive.website-root.v1".to_owned(),
+            provider_contract_version: DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION.to_owned(),
             capabilities: RuntimeResourceCapabilities {
                 static_content: true,
                 wiki_routes: false,
@@ -285,7 +288,15 @@ async fn composition_persists_tv_client_class_and_compiles_the_runtime_rule() {
          FROM deploy_app_variant v
          INNER JOIN deploy_app_variant_rule r ON r.app_id = v.app_id
          INNER JOIN deploy_app app ON app.id = v.app_id
-         INNER JOIN deploy_app_revision revision ON revision.id = site.desired_revision_id
+         INNER JOIN LATERAL (
+             SELECT revision.descriptor_json
+             FROM deploy_app_revision revision
+             WHERE revision.app_id = app.id
+               AND revision.environment = 'production'
+               AND revision.validation_status = 'VALID'
+             ORDER BY revision.revision_no DESC
+             LIMIT 1
+         ) revision ON TRUE
          WHERE v.app_id = 10",
     )
     .fetch_one(&pool)
@@ -336,7 +347,7 @@ async fn composition_rejects_a_domain_owned_by_another_tenant() {
         .replace_app_composition(command)
         .await
         .expect_err("cross-tenant domain must not bind");
-    assert!(error.to_string().contains("domain not found for site"));
+    assert!(error.to_string().contains("domain not found for app"));
     assert_composition_was_not_committed(&pool).await;
 }
 
@@ -456,4 +467,91 @@ async fn postgres_composition_is_atomic_and_idempotent() {
         .try_get::<String, _>("result_json")
         .unwrap()
         .contains(&first.revision.id));
+}
+
+/// P0 regression: replacing one environment's composition must not destroy
+/// another environment's publishable hostnames.
+///
+/// Before the environment-scoped reconcile, `delete_current_composition`
+/// deleted every `deploy_app_binding` of the app — including the 14
+/// auto-provisioned platform publishing domains — whatever environment the
+/// request targeted, so any composition update silently made
+/// `<appId>.app.<suffix>` stop resolving.
+#[tokio::test]
+async fn composition_replace_preserves_other_environments_and_default_domains() {
+    let (repository, pool) = test_repository().await;
+    // A Web Node target is required for every environment that publishes.
+    sqlx::query(
+        "INSERT INTO deploy_web_node_target (
+            id,uuid,tenant_id,node_uuid,environment,tenant_scope_hash,status,
+            created_at,updated_at,version
+         ) VALUES (31,'target-dev',7,'node-dev','development',$1,'ACTIVE',
+                   '2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',1)",
+    )
+    .bind("b".repeat(64))
+    .execute(&pool)
+    .await
+    .expect("insert development target");
+
+    let production = repository
+        .replace_app_composition(command(
+            0,
+            "composition-prod-1",
+            &"6".repeat(64),
+            AppMountHandler::Static,
+        ))
+        .await
+        .expect("publish production composition");
+    assert_eq!(production.app_version, "1");
+
+    let count = |pool: PgPool, environment: &'static str| async move {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM deploy_app_binding
+             WHERE app_id = 10 AND environment = $1 AND deleted_at IS NULL
+               AND status = 'ACTIVE'",
+        )
+        .bind(environment)
+        .fetch_one(&pool)
+        .await
+        .expect("count bindings")
+    };
+    let production_before = count(pool.clone(), "production").await;
+    assert_eq!(
+        production_before, 15,
+        "14 platform publishing domains + 1 declared binding"
+    );
+
+    let mut development_request = request(AppMountHandler::Static);
+    development_request.environment = AppPublishEnvironment::Development;
+    let mut development_command =
+        tv_command(1, "composition-dev-1", &"7".repeat(64));
+    development_command.request = development_request;
+    repository
+        .replace_app_composition(development_command)
+        .await
+        .expect("publish development composition");
+
+    let production_after = count(pool.clone(), "production").await;
+    assert_eq!(
+        production_after, production_before,
+        "a development publish must not delete production bindings"
+    );
+    let production_revisions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM deploy_app_revision WHERE app_id = 10 AND environment = 'production'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count production revisions");
+    assert_eq!(production_revisions, 1);
+    let development_bindings = count(pool.clone(), "development").await;
+    assert_eq!(development_bindings, 15);
+
+    // The production descriptor still carries the production hostnames, and the
+    // platform publishing domains resolve for production.
+    let resolved = repository
+        .resolve_server_by_hostname("docs.app.sdkwork.com", "production")
+        .await
+        .expect("resolve")
+        .expect("the platform publishing domain must keep resolving");
+    assert_eq!(resolved.environment, "production");
 }

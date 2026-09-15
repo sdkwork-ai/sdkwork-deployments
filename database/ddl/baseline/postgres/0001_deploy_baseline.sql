@@ -149,6 +149,8 @@ CREATE TABLE IF NOT EXISTS deploy_nginx_config (
     tenant_id       BIGINT       NOT NULL DEFAULT 0,
     app_id         BIGINT       NOT NULL,
     domain_id       BIGINT,
+    environment     VARCHAR(16),
+    hostname_ascii  VARCHAR(255),
     config_type     INTEGER      NOT NULL DEFAULT 1,
     config_name     VARCHAR(200) NOT NULL,
     config_content  TEXT         NOT NULL,
@@ -162,13 +164,19 @@ CREATE TABLE IF NOT EXISTS deploy_nginx_config (
     updated_at      TIMESTAMPTZ  NOT NULL,
     version         BIGINT       NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_nginx_config_uuid UNIQUE (uuid)
+    CONSTRAINT uk_deploy_nginx_config_uuid UNIQUE (uuid),
+    CONSTRAINT chk_deploy_nginx_config_environment CHECK (
+        environment IS NULL
+        OR environment IN ('development', 'test', 'staging', 'demo', 'production')
+    )
 );
 
-COMMENT ON TABLE deploy_nginx_config IS 'Nginx配置版本表';
+COMMENT ON TABLE deploy_nginx_config IS 'Nginx配置版本表（应用级或按环境/主机名覆盖）';
 COMMENT ON COLUMN deploy_nginx_config.config_type IS '配置类型：1=站点，2=上游，3=SSL，4=自定义';
 COMMENT ON COLUMN deploy_nginx_config.config_content IS 'Nginx配置内容';
 COMMENT ON COLUMN deploy_nginx_config.config_hash IS '配置内容SHA-256哈希';
+COMMENT ON COLUMN deploy_nginx_config.environment IS '覆盖作用域：NULL=应用级（所有环境），否则仅该生命周期环境';
+COMMENT ON COLUMN deploy_nginx_config.hostname_ascii IS '覆盖作用域：NULL=该环境所有主机名，否则仅该主机名（小写ASCII）';
 COMMENT ON COLUMN deploy_nginx_config.is_active IS '是否为当前活跃配置';
 COMMENT ON COLUMN deploy_nginx_config.version_no IS '配置版本号';
 COMMENT ON COLUMN deploy_nginx_config.deployed_at IS '部署时间';
@@ -179,6 +187,16 @@ CREATE INDEX IF NOT EXISTS idx_deploy_nginx_config_app_active
 
 CREATE INDEX IF NOT EXISTS idx_deploy_nginx_config_type_status
     ON deploy_nginx_config (config_type, status);
+
+-- Resolution path for the app-domain fallback: the app's active conf, scoped
+-- by environment and hostname.
+CREATE INDEX IF NOT EXISTS idx_deploy_nginx_config_app_scope
+    ON deploy_nginx_config (app_id, environment, hostname_ascii)
+    WHERE is_active = TRUE AND status = 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_nginx_config_active_scope
+    ON deploy_nginx_config (app_id, COALESCE(environment, ''), COALESCE(hostname_ascii, ''))
+    WHERE is_active = TRUE AND status = 1;
 
 -- source: migrations/004_create_deploy_certificate.sql
 -- Migration: 004_create_deploy_certificate
@@ -703,6 +721,7 @@ CREATE TABLE IF NOT EXISTS deploy_app_resource (
     tenant_id                 BIGINT NOT NULL,
     organization_id           BIGINT NOT NULL DEFAULT 0,
     app_id                   BIGINT NOT NULL,
+    environment               VARCHAR(16) NOT NULL,
     resource_key              VARCHAR(64) NOT NULL,
     provider_type             VARCHAR(32) NOT NULL,
     provider_resource_uuid    VARCHAR(128) NOT NULL,
@@ -719,13 +738,17 @@ CREATE TABLE IF NOT EXISTS deploy_app_resource (
     version                   BIGINT NOT NULL DEFAULT 1,
     deleted_at                TIMESTAMPTZ NULL,
     CONSTRAINT uk_deploy_app_resource_uuid UNIQUE (uuid),
-    CONSTRAINT uk_deploy_app_resource_key UNIQUE (app_id, resource_key),
+    CONSTRAINT uk_deploy_app_resource_key UNIQUE (app_id, environment, resource_key),
     CONSTRAINT chk_deploy_app_resource_provider CHECK (provider_type IN ('DRIVE', 'KNOWLEDGEBASE')),
-    CONSTRAINT chk_deploy_app_resource_status CHECK (status IN ('PENDING', 'VALID', 'INVALID', 'UNAVAILABLE', 'REVOKED'))
+    CONSTRAINT chk_deploy_app_resource_status CHECK (status IN ('PENDING', 'VALID', 'INVALID', 'UNAVAILABLE', 'REVOKED')),
+    CONSTRAINT chk_deploy_app_resource_environment CHECK (environment IN ('development', 'test', 'staging', 'demo', 'production'))
 );
 
+COMMENT ON COLUMN deploy_app_resource.environment IS
+    '生命周期环境：组合为每环境独立编辑面，编译结果按环境固定为 deploy_app_revision';
+
 CREATE INDEX IF NOT EXISTS idx_deploy_app_resource_app_status
-    ON deploy_app_resource (tenant_id, app_id, status)
+    ON deploy_app_resource (tenant_id, app_id, environment, status)
     WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_deploy_app_resource_provider
@@ -737,6 +760,7 @@ CREATE TABLE IF NOT EXISTS deploy_app_variant (
     uuid            VARCHAR(36) NOT NULL,
     tenant_id       BIGINT NOT NULL,
     app_id         BIGINT NOT NULL,
+    environment     VARCHAR(16) NOT NULL,
     variant_key     VARCHAR(64) NOT NULL,
     label           VARCHAR(64) NOT NULL,
     client_class    VARCHAR(16) NOT NULL DEFAULT 'OTHER',
@@ -751,17 +775,18 @@ CREATE TABLE IF NOT EXISTS deploy_app_variant (
     version         BIGINT NOT NULL DEFAULT 1,
     deleted_at      TIMESTAMPTZ NULL,
     CONSTRAINT uk_deploy_app_variant_uuid UNIQUE (uuid),
-    CONSTRAINT uk_deploy_app_variant_key UNIQUE (app_id, variant_key),
+    CONSTRAINT uk_deploy_app_variant_key UNIQUE (app_id, environment, variant_key),
     CONSTRAINT chk_deploy_app_variant_client CHECK (client_class IN ('DESKTOP', 'MOBILE', 'TABLET', 'TV', 'BOT', 'OTHER')),
-    CONSTRAINT chk_deploy_app_variant_status CHECK (status IN ('ACTIVE', 'DISABLED'))
+    CONSTRAINT chk_deploy_app_variant_status CHECK (status IN ('ACTIVE', 'DISABLED')),
+    CONSTRAINT chk_deploy_app_variant_environment CHECK (environment IN ('development', 'test', 'staging', 'demo', 'production'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_variant_default
-    ON deploy_app_variant (app_id)
+    ON deploy_app_variant (app_id, environment)
     WHERE is_default = TRUE AND status = 'ACTIVE' AND deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_deploy_app_variant_app_priority
-    ON deploy_app_variant (tenant_id, app_id, status, priority, uuid)
+    ON deploy_app_variant (tenant_id, app_id, environment, status, priority, uuid)
     WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS deploy_app_variant_rule (
@@ -769,6 +794,7 @@ CREATE TABLE IF NOT EXISTS deploy_app_variant_rule (
     uuid              VARCHAR(36) NOT NULL,
     tenant_id         BIGINT NOT NULL,
     app_id           BIGINT NOT NULL,
+    environment       VARCHAR(16) NOT NULL,
     rule_key          VARCHAR(64) NOT NULL,
     target_variant_id BIGINT NOT NULL,
     rule_type         VARCHAR(16) NOT NULL,
@@ -782,15 +808,16 @@ CREATE TABLE IF NOT EXISTS deploy_app_variant_rule (
     version           BIGINT NOT NULL DEFAULT 1,
     deleted_at        TIMESTAMPTZ NULL,
     CONSTRAINT uk_deploy_app_variant_rule_uuid UNIQUE (uuid),
-    CONSTRAINT uk_deploy_app_variant_rule_key UNIQUE (app_id, rule_key),
+    CONSTRAINT uk_deploy_app_variant_rule_key UNIQUE (app_id, environment, rule_key),
     CONSTRAINT fk_deploy_app_variant_rule_variant FOREIGN KEY (target_variant_id) REFERENCES deploy_app_variant(id),
     CONSTRAINT chk_deploy_app_variant_rule_type CHECK (rule_type IN ('PATH_PREFIX', 'CLIENT_CLASS')),
     CONSTRAINT chk_deploy_app_variant_rule_status CHECK (status IN ('ACTIVE', 'DISABLED')),
-    CONSTRAINT chk_deploy_app_variant_rule_priority CHECK (priority BETWEEN 0 AND 65535)
+    CONSTRAINT chk_deploy_app_variant_rule_priority CHECK (priority BETWEEN 0 AND 65535),
+    CONSTRAINT chk_deploy_app_variant_rule_environment CHECK (environment IN ('development', 'test', 'staging', 'demo', 'production'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deploy_app_variant_rule_order
-    ON deploy_app_variant_rule (tenant_id, app_id, status, priority, uuid)
+    ON deploy_app_variant_rule (tenant_id, app_id, environment, status, priority, uuid)
     WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS deploy_app_mount (
@@ -798,6 +825,7 @@ CREATE TABLE IF NOT EXISTS deploy_app_mount (
     uuid              VARCHAR(36) NOT NULL,
     tenant_id         BIGINT NOT NULL,
     app_id           BIGINT NOT NULL,
+    environment       VARCHAR(16) NOT NULL,
     mount_key         VARCHAR(64) NOT NULL,
     variant_id        BIGINT NOT NULL,
     resource_id       BIGINT NOT NULL,
@@ -816,14 +844,19 @@ CREATE TABLE IF NOT EXISTS deploy_app_mount (
     version           BIGINT NOT NULL DEFAULT 1,
     deleted_at        TIMESTAMPTZ NULL,
     CONSTRAINT uk_deploy_app_mount_uuid UNIQUE (uuid),
-    CONSTRAINT uk_deploy_app_mount_key UNIQUE (app_id, mount_key),
+    CONSTRAINT uk_deploy_app_mount_key UNIQUE (app_id, environment, mount_key),
     CONSTRAINT uk_deploy_app_mount_prefix UNIQUE (variant_id, path_prefix),
     CONSTRAINT fk_deploy_app_mount_variant FOREIGN KEY (variant_id) REFERENCES deploy_app_variant(id),
     CONSTRAINT fk_deploy_app_mount_resource FOREIGN KEY (resource_id) REFERENCES deploy_app_resource(id),
     CONSTRAINT chk_deploy_app_mount_mode CHECK (mount_mode IN ('ROOT', 'ALIAS')),
     CONSTRAINT chk_deploy_app_mount_handler CHECK (handler_type IN ('STATIC', 'SPA', 'WIKI')),
-    CONSTRAINT chk_deploy_app_mount_status CHECK (status IN ('ACTIVE', 'DISABLED', 'INVALID'))
+    CONSTRAINT chk_deploy_app_mount_status CHECK (status IN ('ACTIVE', 'DISABLED', 'INVALID')),
+    CONSTRAINT chk_deploy_app_mount_environment CHECK (environment IN ('development', 'test', 'staging', 'demo', 'production'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_deploy_app_mount_env
+    ON deploy_app_mount (app_id, environment)
+    WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_deploy_app_mount_route
     ON deploy_app_mount (tenant_id, app_id, variant_id, status, path_prefix)
@@ -863,7 +896,7 @@ CREATE TABLE IF NOT EXISTS deploy_app_binding (
     CONSTRAINT fk_deploy_app_binding_domain FOREIGN KEY (domain_id) REFERENCES deploy_domain(id),
     CONSTRAINT fk_deploy_app_binding_default_variant FOREIGN KEY (default_variant_id) REFERENCES deploy_app_variant(id),
     CONSTRAINT fk_deploy_app_binding_forced_variant FOREIGN KEY (forced_variant_id) REFERENCES deploy_app_variant(id),
-    CONSTRAINT chk_deploy_app_binding_environment CHECK (environment IN ('development', 'test', 'staging', 'production')),
+    CONSTRAINT chk_deploy_app_binding_environment CHECK (environment IN ('development', 'test', 'staging', 'demo', 'production')),
     CONSTRAINT chk_deploy_app_binding_action CHECK (action_type IN ('SERVE', 'REDIRECT')),
     CONSTRAINT chk_deploy_app_binding_status CHECK (status IN ('PENDING', 'VERIFIED', 'ACTIVE', 'PAUSED', 'FAILED', 'ARCHIVED')),
     CONSTRAINT chk_deploy_app_binding_redirect_status CHECK (redirect_status_code IS NULL OR redirect_status_code IN (301, 302, 307, 308))
@@ -874,7 +907,7 @@ CREATE INDEX IF NOT EXISTS idx_deploy_app_binding_app_status
     WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_binding_active_key
-    ON deploy_app_binding (app_id, binding_key)
+    ON deploy_app_binding (app_id, environment, binding_key)
     WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_binding_active_route
@@ -987,12 +1020,20 @@ CREATE TABLE IF NOT EXISTS deploy_app_revision (
     CONSTRAINT uk_deploy_app_revision_hash UNIQUE (app_id, descriptor_sha256),
     CONSTRAINT uk_deploy_app_revision_idempotency UNIQUE (tenant_id, app_id, idempotency_key),
     CONSTRAINT fk_deploy_app_revision_supersedes FOREIGN KEY (supersedes_revision_id) REFERENCES deploy_app_revision(id),
-    CONSTRAINT chk_deploy_app_revision_environment CHECK (environment IN ('development', 'test', 'staging', 'production')),
+    CONSTRAINT chk_deploy_app_revision_environment CHECK (environment IN ('development', 'test', 'staging', 'demo', 'production')),
     CONSTRAINT chk_deploy_app_revision_validation CHECK (validation_status IN ('VALID', 'INVALID'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deploy_app_revision_app_created
     ON deploy_app_revision (tenant_id, app_id, revision_no DESC);
+
+-- Per-environment "current published version" lookup used by the app-domain
+-- fallback (`(app, environment)` → newest VALID descriptor). This replaces the
+-- app-global `deploy_app.current_revision_id` pointer, which cannot express
+-- five environments at once.
+CREATE INDEX IF NOT EXISTS idx_deploy_app_revision_env_current
+    ON deploy_app_revision (app_id, environment, revision_no DESC)
+    WHERE validation_status = 'VALID';
 
 CREATE TABLE IF NOT EXISTS deploy_web_node_target (
     id                BIGINT PRIMARY KEY NOT NULL,
@@ -1359,6 +1400,23 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     current_revision_id BIGINT,
     desired_revision_id BIGINT,
     default_environment VARCHAR(16) NOT NULL DEFAULT 'production',
+    -- App publishing domain configuration.
+    --
+    -- `app_domain_label` is the `<appId>` prefix of the default hostnames
+    -- (`<app_domain_label>.app[-<env>].<suffix>`). NULL falls back to `slug`,
+    -- which keeps the historical catalog working; setting it replaces the
+    -- prefix with any DNS label — including the app's own uuid — which is the
+    -- supported way to publish on `<appId>.app.<suffix>`.
+    app_domain_label    VARCHAR(63),
+    -- Per-app suffix override for the default hostnames. NULL (or an empty
+    -- array) means the platform catalog (`PLATFORM_APP_DOMAIN_SUFFIXES`).
+    app_domain_suffixes JSONB,
+    -- The app's nginx-compatible configuration (app-level base, applied to
+    -- every environment unless `deploy_nginx_config` carries an
+    -- environment- or hostname-scoped override).
+    nginx_conf          TEXT,
+    nginx_conf_sha256   VARCHAR(64),
+    nginx_conf_updated_at TIMESTAMPTZ,
     activated_at    TIMESTAMPTZ,
     paused_at       TIMESTAMPTZ,
     archived_at     TIMESTAMPTZ,
@@ -1370,8 +1428,42 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     version         BIGINT       NOT NULL DEFAULT 1,
     CONSTRAINT pk_deploy_app PRIMARY KEY (id),
     CONSTRAINT chk_deploy_app_type CHECK (type BETWEEN 1 AND 6),
-    CONSTRAINT chk_deploy_app_status CHECK (app_status IN ('DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED'))
+    CONSTRAINT chk_deploy_app_status CHECK (app_status IN ('DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED')),
+    CONSTRAINT chk_deploy_app_default_environment CHECK (
+        default_environment IN ('development', 'test', 'staging', 'demo', 'production')
+    ),
+    CONSTRAINT chk_deploy_app_domain_label CHECK (
+        app_domain_label IS NULL
+        OR (
+            char_length(app_domain_label) BETWEEN 1 AND 63
+            AND app_domain_label = lower(app_domain_label)
+            AND app_domain_label !~ '[^a-z0-9-]'
+            AND app_domain_label !~ '^-'
+            AND app_domain_label !~ '-$'
+        )
+    ),
+    CONSTRAINT chk_deploy_app_domain_suffixes CHECK (
+        app_domain_suffixes IS NULL
+        OR (jsonb_typeof(app_domain_suffixes) = 'array'
+            AND jsonb_array_length(app_domain_suffixes) > 0)
+    ),
+    CONSTRAINT chk_deploy_app_nginx_conf_hash CHECK (
+        nginx_conf_sha256 IS NULL OR nginx_conf IS NOT NULL
+    )
 );
+
+COMMENT ON COLUMN deploy_app.app_domain_label IS
+    '默认发布域名的 <appId> 前缀；NULL 回退为 slug，可自定义（含应用 uuid）';
+COMMENT ON COLUMN deploy_app.app_domain_suffixes IS
+    '默认发布域名的后缀目录覆盖；NULL 使用平台目录';
+COMMENT ON COLUMN deploy_app.nginx_conf IS
+    '应用级 nginx 兼容配置（所有环境的基础配置，可被 deploy_nginx_config 按环境/主机名覆盖）';
+COMMENT ON COLUMN deploy_app.nginx_conf_sha256 IS '应用级 nginx 配置内容 SHA-256';
+COMMENT ON COLUMN deploy_app.nginx_conf_updated_at IS '应用级 nginx 配置最后更新时间';
+COMMENT ON COLUMN deploy_app.current_revision_id IS
+    '最近在任一环境收敛到 Web 节点的修订（收敛遥测）。服务端"当前版本"按 (app, environment) 从 deploy_app_revision 解析，不读该指针。';
+COMMENT ON COLUMN deploy_app.desired_revision_id IS
+    '最近一次发布写入的修订（跨环境单指针，仅遥测/展示）。按环境解析版本请用 deploy_app_revision(environment, revision_no)。';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_uuid
     ON deploy_app (uuid);

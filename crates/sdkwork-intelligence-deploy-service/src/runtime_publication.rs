@@ -725,15 +725,8 @@ fn parse_generation(value: &str) -> DeployServiceResult<u64> {
 }
 
 fn parse_runtime_environment(value: &str) -> DeployServiceResult<RuntimeEnvironment> {
-    match value {
-        "development" => Ok(RuntimeEnvironment::Development),
-        "test" => Ok(RuntimeEnvironment::Test),
-        "staging" => Ok(RuntimeEnvironment::Staging),
-        "production" => Ok(RuntimeEnvironment::Production),
-        _ => Err(DeployServiceError::validation(
-            "Web runtime observation environment is invalid",
-        )),
-    }
+    RuntimeEnvironment::parse(value)
+        .map_err(|_| DeployServiceError::validation("Web runtime observation environment is invalid"))
 }
 
 fn parse_observation_state(value: &str) -> DeployServiceResult<RuntimeObservationState> {

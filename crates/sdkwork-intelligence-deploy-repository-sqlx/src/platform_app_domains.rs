@@ -1,15 +1,30 @@
 ﻿//! Platform app publishing domains: idempotent provisioning of every app's
-//! default publishable hostnames (`<slug>.app[-<env>].<suffix>`) and the
-//! hostname → app resolution the Web Server fallback uses.
+//! default publishable hostnames (`<appDomainLabel>.app[-<env>].<suffix>`) and
+//! the hostname → app resolution the Web Server fallback uses.
 //!
 //! The platform owns the apex domains (`app.<suffix>`), so provisioned
 //! hostnames are automatically `VERIFIED`; custom domains keep the regular
 //! DNS verification flow (`domain_zones.rs`).
+//!
+//! Two configuration facts live on `deploy_app` and drive everything here:
+//!
+//! - `app_domain_label` — the `<appId>` prefix of the default hostnames. It
+//!   defaults to the slug and may be replaced by any DNS label (including the
+//!   app's own uuid), which is the "custom prefix replaces the app id"
+//!   capability. `slug` remains the fallback so the historical catalog keeps
+//!   working unchanged.
+//! - `app_domain_suffixes` — an optional per-app suffix override. `NULL`
+//!   means the platform catalog (`PLATFORM_APP_DOMAIN_SUFFIXES`).
+//!
+//! The nginx configuration is `deploy_app.nginx_conf` (app-level base) with an
+//! optional environment- or hostname-scoped override in `deploy_nginx_config`
+//! (`environment`/`hostname_ascii`). The resolution below applies the
+//! precedence hostname+environment → environment → app base.
 
 use sdkwork_deploy_contract::{
     DeployServiceError, DeployServiceResult, ProvisionAppDomainsResult, ResolvedDeployServer,
 };
-use sdkwork_deploy_core::{app_domain_label, default_app_hostname, PLATFORM_APP_DOMAIN_SUFFIXES};
+use sdkwork_deploy_core::{app_domain_label, default_app_hostname};
 use sqlx::Row;
 
 use crate::support::{new_uuid, next_id, now_rfc3339, store_error};
@@ -47,16 +62,143 @@ fn platform_zone_apex(suffix: &str) -> String {
     format!("app.{suffix}")
 }
 
+/// Ensure the platform zone (`app.<suffix>`) and its auto-verified apex domain
+/// exist for the tenant. Returns the zone id and whether it was created.
+///
+/// Self-healing on purpose: provisioning an app whose `appDomainSuffixes`
+/// names a suffix outside the platform catalog must create the zone it needs
+/// rather than fail with a not-found error, so this is shared by the explicit
+/// tenant pre-provisioning entry point and by the per-app reconcile path.
+async fn ensure_platform_zone_in_tx(
+    id_generator: &sdkwork_database_id::SnowflakeIdGenerator,
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: i64,
+    organization_id: i64,
+    actor_id: Option<i64>,
+    suffix: &str,
+) -> DeployServiceResult<(i64, bool)> {
+    let apex = platform_zone_apex(suffix);
+    let exists: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM deploy_dns_zone
+         WHERE tenant_id = $1 AND apex_hostname = $2 AND deleted_at IS NULL",
+    )
+    .bind(tenant_id)
+    .bind(&apex)
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(|error| store_error("lookup platform app zone", error))?;
+    if let Some(zone_id) = exists {
+        return Ok((zone_id, false));
+    }
+    let zone_id = next_id(id_generator)?;
+    sqlx::query(
+        "INSERT INTO deploy_dns_zone (
+            id, uuid, tenant_id, organization_id, apex_hostname, display_name,
+            dns_provider, provider_zone_ref, status, created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'platform', $7, 'ACTIVE', $8, $8)",
+    )
+    .bind(zone_id)
+    .bind(new_uuid())
+    .bind(tenant_id)
+    .bind(organization_id)
+    .bind(&apex)
+    .bind(format!("Platform app domain zone {suffix}"))
+    .bind(format!("app.*.{suffix}"))
+    .bind(actor_id)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|error| store_error("insert platform app zone", error))?;
+    // The zone apex is platform-owned and therefore auto-verified.
+    let now = now_rfc3339();
+    sqlx::query(
+        "INSERT INTO deploy_domain (
+            id, uuid, tenant_id, organization_id, zone_id, hostname_ascii, hostname_type,
+            verification_status, verified_at, status, created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'EXACT', 'VERIFIED', CAST($7 AS TIMESTAMPTZ),
+            'ACTIVE', $8, $8)",
+    )
+    .bind(next_id(id_generator)?)
+    .bind(new_uuid())
+    .bind(tenant_id)
+    .bind(organization_id)
+    .bind(zone_id)
+    .bind(&apex)
+    .bind(&now)
+    .bind(actor_id)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|error| store_error("insert platform app zone apex domain", error))?;
+    Ok((zone_id, true))
+}
+
+/// The binding keyspace reserved for auto-provisioned default publishing
+/// domains. Reconciliation only ever retires rows in this namespace, so a
+/// composition-declared binding on a platform hostname is never touched.
+pub(crate) const DEFAULT_BINDING_KEY_PREFIX: &str = "appd-";
+
 impl DeployRepository {
-    /// Create the platform app-domain DNS zones for a tenant (one per
-    /// platform suffix, apex `app.<suffix>`) and their apex hostname rows.
-    /// Idempotent: existing zones are kept and not counted. Returns the
-    /// number of newly created zones.
+    /// The app's effective publishing configuration: the `<appId>` prefix and
+    /// the suffix catalog. Read in one round trip because both provisioning
+    /// and the Web Server lookup depend on them.
+    pub(super) async fn app_domain_config_repo(
+        &self,
+        app_id: i64,
+    ) -> DeployServiceResult<AppDomainConfig> {
+        let row = sqlx::query(
+            "SELECT slug, app_domain_label, app_domain_suffixes
+             FROM deploy_app WHERE id = $1 AND deleted_at IS NULL",
+        )
+        .bind(app_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read app domain config", error))?;
+        let Some(row) = row else {
+            return Err(DeployServiceError::not_found("app not found"));
+        };
+        let slug: String = row
+            .try_get("slug")
+            .map_err(|error| DeployServiceError::Internal(format!("read app slug: {error}")))?;
+        let app_domain_label: Option<String> = row.try_get("app_domain_label").ok().flatten();
+        let override_suffixes: Option<serde_json::Value> =
+            row.try_get("app_domain_suffixes").ok().flatten();
+        let override_suffixes = match override_suffixes {
+            Some(serde_json::Value::Array(entries)) => {
+                let parsed = entries
+                    .into_iter()
+                    .filter_map(|entry| entry.as_str().map(str::to_owned))
+                    .collect::<Vec<_>>();
+                if parsed.is_empty() {
+                    None
+                } else {
+                    Some(parsed)
+                }
+            }
+            _ => None,
+        };
+        Ok(AppDomainConfig {
+            label: sdkwork_deploy_core::effective_app_domain_label(
+                app_domain_label.as_deref(),
+                &slug,
+            )
+            .to_owned(),
+            slug,
+            suffixes: sdkwork_deploy_core::effective_app_domain_suffixes(
+                override_suffixes.as_deref(),
+            ),
+            override_suffixes,
+        })
+    }
+
+    /// Create the platform app-domain DNS zones for a tenant for the supplied
+    /// suffix catalog (apex `app.<suffix>`) and their apex hostname rows.
+    /// Idempotent: existing zones are kept and not counted. Returns the number
+    /// of newly created zones.
     pub(super) async fn ensure_platform_app_zones_repo(
         &self,
         tenant_id: i64,
         organization_id: i64,
         actor_id: Option<i64>,
+        suffixes: &[String],
     ) -> DeployServiceResult<usize> {
         let mut created = 0;
         let mut transaction = self
@@ -64,60 +206,19 @@ impl DeployRepository {
             .begin()
             .await
             .map_err(|error| store_error("begin platform app zones", error))?;
-        for suffix in PLATFORM_APP_DOMAIN_SUFFIXES {
-            let apex = platform_zone_apex(suffix);
-            let exists: Option<i64> = sqlx::query_scalar(
-                "SELECT id FROM deploy_dns_zone
-                 WHERE tenant_id = $1 AND apex_hostname = $2 AND deleted_at IS NULL",
+        for suffix in suffixes {
+            let (_, zone_created) = ensure_platform_zone_in_tx(
+                self.id_generator(),
+                &mut transaction,
+                tenant_id,
+                organization_id,
+                actor_id,
+                suffix,
             )
-            .bind(tenant_id)
-            .bind(&apex)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| store_error("lookup platform app zone", error))?;
-            if exists.is_some() {
-                continue;
+            .await?;
+            if zone_created {
+                created += 1;
             }
-            let zone_id = next_id(self.id_generator())?;
-            let zone_uuid = new_uuid();
-            let apex_domain_id = next_id(self.id_generator())?;
-            sqlx::query(
-                "INSERT INTO deploy_dns_zone (
-                    id, uuid, tenant_id, organization_id, apex_hostname, display_name,
-                    dns_provider, provider_zone_ref, status, created_by, updated_by
-                 ) VALUES ($1, $2, $3, $4, $5, $6, 'platform', $7, 'ACTIVE', $8, $8)",
-            )
-            .bind(zone_id)
-            .bind(&zone_uuid)
-            .bind(tenant_id)
-            .bind(organization_id)
-            .bind(&apex)
-            .bind(format!("Platform app domain zone {}", suffix))
-            .bind(format!("app.*.{suffix}"))
-            .bind(actor_id)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|error| store_error("insert platform app zone", error))?;
-            // The zone apex is platform-owned and therefore auto-verified.
-            let now = now_rfc3339();
-            sqlx::query(
-                "INSERT INTO deploy_domain (
-                    id, uuid, tenant_id, organization_id, zone_id, hostname_ascii, hostname_type,
-                    verification_status, verified_at, status, created_by, updated_by
-                 ) VALUES ($1, $2, $3, $4, $5, $6, 'EXACT', 'VERIFIED', $7, 'ACTIVE', $8, $8)",
-            )
-            .bind(apex_domain_id)
-            .bind(new_uuid())
-            .bind(tenant_id)
-            .bind(organization_id)
-            .bind(zone_id)
-            .bind(&apex)
-            .bind(&now)
-            .bind(actor_id)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|error| store_error("insert platform app zone apex domain", error))?;
-            created += 1;
         }
         transaction
             .commit()
@@ -127,153 +228,252 @@ impl DeployRepository {
     }
 
     /// Idempotently provision an app's default publishing domains for one
-    /// lifecycle environment: for every platform suffix, an EXACT
-    /// `deploy_domain` (`<slug>.app[-<env>].<suffix>`, auto-verified) and a
-    /// `SERVE` binding on the app's binding. The first suffix (`sdkwork.com`)
+    /// lifecycle environment: for every effective suffix, an EXACT
+    /// `deploy_domain` (`<appDomainLabel>.app[-<env>].<suffix>`,
+    /// auto-verified) and a `SERVE` binding on the app. The first suffix
     /// binding is the canonical one.
+    ///
+    /// The operation is a **reconcile**: rows in the auto-provisioned
+    /// keyspace (`appd-*`) whose hostname is no longer part of the effective
+    /// catalog are retired (soft-deleted) in the same transaction, so renaming
+    /// an app or changing its `appDomainLabel`/`appDomainSuffixes` never leaves
+    /// a stale publishable hostname behind. User-declared bindings are never
+    /// touched.
     pub(super) async fn provision_app_default_domains_repo(
         &self,
         tenant_id: i64,
         organization_id: i64,
         actor_id: Option<i64>,
         app_id: &str,
-        app_slug: &str,
         environment: &str,
     ) -> DeployServiceResult<ProvisionAppDomainsResult> {
         let app_id = crate::support::resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
-        let mut result = ProvisionAppDomainsResult::default();
-        let label = app_domain_label(environment);
         let mut transaction = self
             .pool
             .begin()
             .await
             .map_err(|error| store_error("begin provision app default domains", error))?;
-        for (index, suffix) in PLATFORM_APP_DOMAIN_SUFFIXES.iter().enumerate() {
-            let hostname = default_app_hostname(app_slug, suffix, environment);
-            let zone_id: i64 = sqlx::query_scalar(
-                "SELECT id FROM deploy_dns_zone
-                 WHERE tenant_id = $1 AND apex_hostname = $2 AND deleted_at IS NULL",
-            )
-            .bind(tenant_id)
-            .bind(platform_zone_apex(suffix))
-            .fetch_one(&mut *transaction)
-            .await
-            .map_err(|error| store_error("lookup platform app zone", error))?;
-            let domain_id: Option<i64> = sqlx::query_scalar(
-                "SELECT id FROM deploy_domain
-                 WHERE tenant_id = $1 AND hostname_ascii = $2 AND deleted_at IS NULL",
-            )
-            .bind(tenant_id)
-            .bind(&hostname)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| store_error("lookup app default domain", error))?;
-            // `hostname_ascii` is unique across all active domains, so a
-            // default publishing hostname claimed by another tenant must
-            // fail with a clear conflict instead of a generic constraint
-            // violation (the app slug must be unique platform-wide for the
-            // default `<slug>.app[-<env>].<suffix>` catalog).
-            let cross_tenant: Option<i64> = sqlx::query_scalar(
-                "SELECT id FROM deploy_domain
-                 WHERE hostname_ascii = $1 AND deleted_at IS NULL AND tenant_id <> $2
-                 LIMIT 1",
-            )
-            .bind(&hostname)
-            .bind(tenant_id)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| store_error("lookup cross-tenant app default domain", error))?;
-            if domain_id.is_none() && cross_tenant.is_some() {
-                return Err(DeployServiceError::conflict(format!(
-                    "default publishing hostname {hostname} is already registered by another tenant; choose a different app slug"
-                )));
-            }
-            let domain_id = match domain_id {
-                Some(existing) => {
-                    result.existing_domains += 1;
-                    existing
-                }
-                None => {
-                    let id = next_id(self.id_generator())?;
-                    let now = now_rfc3339();
-                    sqlx::query(
-                        "INSERT INTO deploy_domain (
-                            id, uuid, tenant_id, organization_id, zone_id, hostname_ascii,
-                            hostname_type, verification_status, verified_at, status,
-                            created_by, updated_by
-                         ) VALUES ($1, $2, $3, $4, $5, $6, 'EXACT', 'VERIFIED', $7, 'ACTIVE', $8, $8)",
-                    )
-                    .bind(id)
-                    .bind(new_uuid())
-                    .bind(tenant_id)
-                    .bind(organization_id)
-                    .bind(zone_id)
-                    .bind(&hostname)
-                    .bind(&now)
-                    .bind(actor_id)
-                    .execute(&mut *transaction)
-                    .await
-                    .map_err(|error| store_error("insert app default domain", error))?;
-                    result.created_domains += 1;
-                    id
-                }
-            };
-            let binding_exists: Option<i64> = sqlx::query_scalar(
-                "SELECT id FROM deploy_app_binding
-                 WHERE app_id = $1 AND hostname_ascii = $2 AND deleted_at IS NULL",
-            )
-            .bind(app_id)
-            .bind(&hostname)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| store_error("lookup app default binding", error))?;
-            if binding_exists.is_some() {
-                result.existing_bindings += 1;
-                result.hostnames.push(hostname);
-                continue;
-            }
-            let binding_id = next_id(self.id_generator())?;
-            let now = now_rfc3339();
-            let binding_key = format!("appd-{label}-{index}");
-            sqlx::query(
-                "INSERT INTO deploy_app_binding (
-                    id, uuid, tenant_id, organization_id, app_id, binding_key, domain_id,
-                    hostname_ascii, environment, path_prefix, action_type, is_canonical,
-                    status, verified_at, activated_at, created_by, updated_by,
-                    created_at, updated_at, version
-                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '/', 'SERVE', $10,
-                    'ACTIVE', $11, $11, $12, $12, $11, $11, 1)",
-            )
-            .bind(binding_id)
-            .bind(new_uuid())
-            .bind(tenant_id)
-            .bind(organization_id)
-            .bind(app_id)
-            .bind(&binding_key)
-            .bind(domain_id)
-            .bind(&hostname)
-            .bind(environment)
-            .bind(index == 0)
-            .bind(&now)
-            .bind(actor_id)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|error| store_error("insert app default binding", error))?;
-            result.created_bindings += 1;
-            result.hostnames.push(hostname);
-        }
+        let result = reconcile_app_default_domains_tx(
+            self,
+            &mut transaction,
+            tenant_id,
+            organization_id,
+            actor_id,
+            app_id,
+            environment,
+        )
+        .await?;
         transaction
             .commit()
             .await
             .map_err(|error| store_error("commit provision app default domains", error))?;
         Ok(result)
     }
+}
 
+/// In-transaction reconcile of an app's default publishing domains for one
+/// environment. Shared by the standalone provisioning entry point and by the
+/// composition replace path, which must create the platform publishing domains
+/// inside the same transaction that rewrites the app's bindings.
+pub(crate) async fn reconcile_app_default_domains_tx(
+    repository: &DeployRepository,
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: i64,
+    organization_id: i64,
+    actor_id: Option<i64>,
+    app_internal_id: i64,
+    environment: &str,
+) -> DeployServiceResult<ProvisionAppDomainsResult> {
+    let config = repository.app_domain_config_repo(app_internal_id).await?;
+    let app_id = app_internal_id;
+    let mut result = ProvisionAppDomainsResult::default();
+    let label = app_domain_label(environment);
+    let expected_hostnames = config
+        .suffixes
+        .iter()
+        .map(|suffix| default_app_hostname(&config.label, suffix, environment))
+        .collect::<Vec<_>>();
+    // Retire the environment's outdated auto-provisioned bindings *before*
+    // inserting the current ones. A changed `appDomainLabel` reuses the same
+    // `appd-<environmentLabel>-<index>` binding keys, so the stale rows must
+    // release the key first (the unique index only covers live rows).
+    retire_stale_default_bindings_tx(transaction, app_id, environment, &expected_hostnames)
+        .await?;
+    for (index, suffix) in config.suffixes.iter().enumerate() {
+        let hostname = expected_hostnames[index].clone();
+        let (zone_id, zone_created) = ensure_platform_zone_in_tx(
+            repository.id_generator(),
+            transaction,
+            tenant_id,
+            organization_id,
+            actor_id,
+            suffix,
+        )
+        .await?;
+        if zone_created {
+            result.created_zones += 1;
+        }
+        let domain_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM deploy_domain
+             WHERE tenant_id = $1 AND hostname_ascii = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(&hostname)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(|error| store_error("lookup app default domain", error))?;
+        // `hostname_ascii` is unique across all active domains, so a
+        // default publishing hostname claimed by another tenant must
+        // fail with a clear conflict instead of a generic constraint
+        // violation (the app-domain label must be unique platform-wide for
+        // the default `<label>.app[-<env>].<suffix>` catalog).
+        let cross_tenant: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM deploy_domain
+             WHERE hostname_ascii = $1 AND deleted_at IS NULL AND tenant_id <> $2
+             LIMIT 1",
+        )
+        .bind(&hostname)
+        .bind(tenant_id)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(|error| store_error("lookup cross-tenant app default domain", error))?;
+        if domain_id.is_none() && cross_tenant.is_some() {
+            return Err(DeployServiceError::conflict(format!(
+                "default publishing hostname {hostname} is already registered by another tenant; choose a different app slug or appDomainLabel"
+            )));
+        }
+        let domain_id = match domain_id {
+            Some(existing) => {
+                result.existing_domains += 1;
+                existing
+            }
+            None => {
+                let id = next_id(repository.id_generator())?;
+                let now = now_rfc3339();
+                sqlx::query(
+                    "INSERT INTO deploy_domain (
+                        id, uuid, tenant_id, organization_id, zone_id, hostname_ascii,
+                        hostname_type, verification_status, verified_at, status,
+                        created_by, updated_by
+                     ) VALUES ($1, $2, $3, $4, $5, $6, 'EXACT', 'VERIFIED',
+                        CAST($7 AS TIMESTAMPTZ), 'ACTIVE', $8, $8)",
+                )
+                .bind(id)
+                .bind(new_uuid())
+                .bind(tenant_id)
+                .bind(organization_id)
+                .bind(zone_id)
+                .bind(&hostname)
+                .bind(&now)
+                .bind(actor_id)
+                .execute(&mut **transaction)
+                .await
+                .map_err(|error| store_error("insert app default domain", error))?;
+                result.created_domains += 1;
+                id
+            }
+        };
+        let binding_exists: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM deploy_app_binding
+             WHERE app_id = $1 AND hostname_ascii = $2 AND environment = $3
+               AND deleted_at IS NULL",
+        )
+        .bind(app_id)
+        .bind(&hostname)
+        .bind(environment)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(|error| store_error("lookup app default binding", error))?;
+        if binding_exists.is_some() {
+            result.existing_bindings += 1;
+            result.hostnames.push(hostname);
+            continue;
+        }
+        let binding_id = next_id(repository.id_generator())?;
+        let now = now_rfc3339();
+        let binding_key = format!("{DEFAULT_BINDING_KEY_PREFIX}{label}-{index}");
+        sqlx::query(
+            "INSERT INTO deploy_app_binding (
+                id, uuid, tenant_id, organization_id, app_id, binding_key, domain_id,
+                hostname_ascii, environment, path_prefix, action_type, is_canonical,
+                status, verified_at, activated_at, created_by, updated_by,
+                created_at, updated_at, version
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, '/', 'SERVE', $10,
+                'ACTIVE', CAST($11 AS TIMESTAMPTZ), CAST($11 AS TIMESTAMPTZ), $12, $12,
+                CAST($11 AS TIMESTAMPTZ), CAST($11 AS TIMESTAMPTZ), 1)",
+        )
+        .bind(binding_id)
+        .bind(new_uuid())
+        .bind(tenant_id)
+        .bind(organization_id)
+        .bind(app_id)
+        .bind(&binding_key)
+        .bind(domain_id)
+        .bind(&hostname)
+        .bind(environment)
+        .bind(index == 0)
+        .bind(&now)
+        .bind(actor_id)
+        .execute(&mut **transaction)
+        .await
+        .map_err(|error| store_error("insert app default binding", error))?;
+        result.created_bindings += 1;
+        result.hostnames.push(hostname);
+    }
+    Ok(result)
+}
+
+/// Soft-delete this environment's auto-provisioned publishing bindings whose
+/// hostname is no longer part of the effective catalog. Only the `appd-*`
+/// keyspace is ever touched, so a composition-declared binding on a platform
+/// hostname survives.
+async fn retire_stale_default_bindings_tx(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    app_id: i64,
+    environment: &str,
+    expected_hostnames: &[String],
+) -> DeployServiceResult<u64> {
+    let retired = sqlx::query(
+        "UPDATE deploy_app_binding
+         SET deleted_at = NOW(), status = 'ARCHIVED', updated_at = NOW(), version = version + 1
+         WHERE app_id = $1 AND environment = $2
+           AND binding_key LIKE $3
+           AND deleted_at IS NULL
+           AND NOT (hostname_ascii = ANY($4))",
+    )
+    .bind(app_id)
+    .bind(environment)
+    .bind(format!("{DEFAULT_BINDING_KEY_PREFIX}%"))
+    .bind(expected_hostnames)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|error| store_error("retire stale app default bindings", error))?
+    .rows_affected();
+    if retired > 0 {
+        tracing::info!(
+            app_id,
+            environment,
+            retired,
+            "retired stale auto-provisioned app publishing bindings"
+        );
+    }
+    Ok(retired)
+}
+
+impl DeployRepository {
     /// Resolve an active app binding by its exact hostname in one lifecycle
-    /// environment and return the site's latest compiled website runtime
-    /// descriptor (`deploy_app_revision.descriptor_json`). This is the Web
-    /// Server fallback lookup: custom domains and default app domains both
-    /// land here (default app bindings are explicit rows).
+    /// environment and return the *environment-scoped* compiled website
+    /// runtime descriptor (`deploy_app_revision.descriptor_json`) together
+    /// with the app's nginx configuration. This is the Web Server fallback
+    /// lookup: custom domains and default app domains both land here (default
+    /// app bindings are explicit rows).
+    ///
+    /// Version selection is per `(app, environment)`: the newest `VALID`
+    /// revision **of that environment**. The app-level
+    /// `deploy_app.current_revision_id` pointer is deliberately not used —
+    /// it is written by whichever environment last converged its runtime
+    /// assignments, so it would serve one environment's composition on
+    /// another environment's hostname.
     pub(super) async fn resolve_active_app_by_hostname_repo(
         &self,
         hostname: &str,
@@ -286,16 +486,46 @@ impl DeployRepository {
             ));
         }
         let row = sqlx::query(
-            "SELECT s.uuid AS app_uuid, s.slug AS app_slug, b.tenant_id,
-                    b.hostname_ascii, b.path_prefix, b.action_type, b.uuid AS binding_uuid,
-                    r.descriptor_json, r.descriptor_sha256, r.revision_no, b.environment
+            "SELECT s.uuid AS app_uuid,
+                    s.slug AS app_slug,
+                    COALESCE(s.app_domain_label, s.slug) AS app_domain_label,
+                    b.tenant_id, b.hostname_ascii, b.path_prefix, b.action_type,
+                    b.uuid AS binding_uuid, b.environment,
+                    r.descriptor_json, r.descriptor_sha256, r.revision_no,
+                    COALESCE(n.config_content, s.nginx_conf) AS nginx_conf,
+                    COALESCE(n.config_hash, s.nginx_conf_sha256) AS nginx_conf_sha256
              FROM deploy_app_binding b
-             JOIN deploy_app s ON s.id = b.app_id AND s.deleted_at IS NULL
-             JOIN deploy_app_revision r ON r.id = s.current_revision_id
+             JOIN deploy_app s
+               ON s.id = b.app_id
+              AND s.deleted_at IS NULL
+              AND s.app_status = 'ACTIVE'
+             JOIN LATERAL (
+                 SELECT revision.descriptor_json, revision.descriptor_sha256,
+                        revision.revision_no
+                 FROM deploy_app_revision revision
+                 WHERE revision.app_id = b.app_id
+                   AND revision.environment = b.environment
+                   AND revision.validation_status = 'VALID'
+                 ORDER BY revision.revision_no DESC
+                 LIMIT 1
+             ) r ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT config.config_content, config.config_hash
+                 FROM deploy_nginx_config config
+                 WHERE config.app_id = b.app_id
+                   AND config.is_active = TRUE
+                   AND config.status = 1
+                   AND (config.environment IS NULL OR config.environment = b.environment)
+                   AND (config.hostname_ascii IS NULL
+                        OR config.hostname_ascii = b.hostname_ascii)
+                 ORDER BY (config.hostname_ascii IS NOT NULL) DESC,
+                          (config.environment IS NOT NULL) DESC,
+                          config.version_no DESC, config.id DESC
+                 LIMIT 1
+             ) n ON TRUE
              WHERE b.hostname_ascii = $1 AND b.environment = $2
                AND b.status = 'ACTIVE' AND b.deleted_at IS NULL
-               AND r.validation_status = 'VALID'
-             ORDER BY b.id DESC
+             ORDER BY (b.path_prefix = '/') DESC, b.path_prefix DESC, b.id DESC
              LIMIT 1",
         )
         .bind(&hostname)
@@ -312,6 +542,9 @@ impl DeployRepository {
         let app_slug: String = row
             .try_get("app_slug")
             .map_err(|error| DeployServiceError::Internal(format!("read app slug: {error}")))?;
+        let app_domain_label: String = row.try_get("app_domain_label").map_err(|error| {
+            DeployServiceError::Internal(format!("read app domain label: {error}"))
+        })?;
         let tenant_id: i64 = row
             .try_get("tenant_id")
             .map_err(|error| DeployServiceError::Internal(format!("read tenant id: {error}")))?;
@@ -337,6 +570,8 @@ impl DeployRepository {
         let environment: String = row
             .try_get("environment")
             .map_err(|error| DeployServiceError::Internal(format!("read environment: {error}")))?;
+        let nginx_conf: Option<String> = row.try_get("nginx_conf").ok().flatten();
+        let nginx_conf_sha256: Option<String> = row.try_get("nginx_conf_sha256").ok().flatten();
         Ok(Some(ResolvedDeployServer {
             app_uuid: app_uuid.clone(),
             app_slug,
@@ -350,6 +585,29 @@ impl DeployRepository {
             descriptor_sha256,
             revision_no,
             environment,
+            nginx_conf,
+            nginx_conf_sha256,
+            app_domain_label,
         }))
     }
+}
+
+/// Effective publishing configuration of one app.
+#[derive(Clone, Debug)]
+pub struct AppDomainConfig {
+    /// The `<appId>` prefix used in default hostnames.
+    pub label: String,
+    pub slug: String,
+    /// The catalog actually used (`override_suffixes` or the platform
+    /// catalog).
+    pub suffixes: Vec<String>,
+    /// The raw `appDomainSuffixes` override, when the app declares one.
+    pub override_suffixes: Option<Vec<String>>,
+}
+
+fn platform_suffixes() -> Vec<String> {
+    sdkwork_deploy_core::PLATFORM_APP_DOMAIN_SUFFIXES
+        .iter()
+        .map(|suffix| (*suffix).to_owned())
+        .collect()
 }

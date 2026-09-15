@@ -973,31 +973,44 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
 
     // -- app publishing domains -------------------------------------------------
 
+    /// The app's `appDomainSuffixes` override, or `None` when the app uses the
+    /// platform catalog.
+    async fn app_domain_suffix_override(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<Option<Vec<String>>>;
+
     /// Create the platform app-domain DNS zones for a tenant (idempotent);
-    /// returns the number of newly created zones.
+    /// returns the number of newly created zones. `suffixes` selects the
+    /// catalog to cover (the app's effective suffix set).
     async fn ensure_platform_app_zones(
         &self,
         tenant_id: i64,
         organization_id: i64,
         actor_id: Option<i64>,
+        suffixes: &[String],
     ) -> DeployServiceResult<usize>;
 
-    /// Idempotently provision an app's default publishing domains
-    /// (`<slug>.app[-<env>].<suffix>` domains + site bindings) for one
-    /// lifecycle environment. `app_id` is the site's public uuid.
+    /// Reconcile an app's default publishing domains
+    /// (`<appDomainLabel>.app[-<env>].<suffix>` domains + bindings) for one
+    /// lifecycle environment. `app_id` is the app's public uuid; the label and
+    /// suffix catalog are read from the app row. Auto-provisioned bindings
+    /// that fall outside the effective catalog are retired in the same
+    /// transaction.
     async fn provision_app_default_domains(
         &self,
         tenant_id: i64,
         organization_id: i64,
         actor_id: Option<i64>,
         app_id: &str,
-        app_slug: &str,
         environment: &str,
     ) -> DeployServiceResult<ProvisionAppDomainsResult>;
 
-    /// Resolve an active site binding by its exact hostname in one lifecycle
-    /// environment and return the site's latest compiled runtime descriptor
-    /// (Web Server fallback lookup).
+    /// Resolve an active app binding by its exact hostname in one lifecycle
+    /// environment and return that environment's newest VALID compiled runtime
+    /// descriptor together with the app's nginx configuration (Web Server
+    /// fallback lookup).
     async fn resolve_server_by_hostname(
         &self,
         hostname: &str,

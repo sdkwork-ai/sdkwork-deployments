@@ -22,6 +22,7 @@ use sdkwork_intelligence_deploy_service::{
 };
 use sqlx::{AssertSqlSafe, PgPool, Postgres, Row, Transaction};
 
+use crate::platform_app_domains::{reconcile_app_default_domains_tx, DEFAULT_BINDING_KEY_PREFIX};
 use crate::support::{new_uuid, next_id};
 use crate::DeployRepository;
 
@@ -33,7 +34,6 @@ struct StoredApp {
     id: i64,
     organization_id: i64,
     version: i64,
-    desired_revision_id: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -96,8 +96,37 @@ impl DeployRepository {
         )
         .await?;
         let tenant_scope_hash = consistent_tenant_scope_hash(&targets)?;
+        let environment = command.request.environment.as_str();
 
-        delete_current_composition(&mut transaction, app.id).await?;
+        // 1. Platform publishing domains first, so the request never has to
+        //    re-declare `<appDomainLabel>.app[-<env>].<suffix>` and an update
+        //    can never leave the app unreachable.
+        reconcile_app_default_domains_tx(
+            self,
+            &mut transaction,
+            command.tenant_id,
+            app.organization_id,
+            Some(command.actor_id),
+            app.id,
+            environment,
+        )
+        .await?;
+        // 2. Reconcile the app's live composition **for this environment only**.
+        //    Other environments' bindings, variants, mounts and resources -- and
+        //    every already-published revision snapshot -- are untouched.
+        let declared_binding_keys = command
+            .request
+            .bindings
+            .iter()
+            .map(|binding| binding.key.clone())
+            .collect::<Vec<_>>();
+        delete_current_composition(
+            &mut transaction,
+            app.id,
+            environment,
+            &declared_binding_keys,
+        )
+        .await?;
         let resources = insert_resources(self, &mut transaction, &command, &app).await?;
         let variants = insert_variants(self, &mut transaction, &command, &app).await?;
         let default_variant = variants
@@ -115,8 +144,11 @@ impl DeployRepository {
             &resources,
         )
         .await?;
+        reconcile_bindings(self, &mut transaction, &command, &app, &variants).await?;
+        // The descriptor's binding set is read back from the DB so the lookup
+        // rows and the routing rows are the same rows.
         let runtime_bindings =
-            insert_bindings(self, &mut transaction, &command, &app, &variants).await?;
+            load_environment_bindings(&mut transaction, app.id, environment).await?;
 
         let revision_id = next_id(self.id_generator())?;
         let revision_uuid = new_uuid();
@@ -294,7 +326,7 @@ async fn lock_app(
     command: &ReplaceAppCompositionCommand,
 ) -> DeployServiceResult<StoredApp> {
     let row = sqlx::query(
-        "SELECT id, organization_id, version, desired_revision_id
+        "SELECT id, organization_id, version
          FROM deploy_app
          WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
          FOR UPDATE",
@@ -313,7 +345,6 @@ async fn lock_app(
         version: row
             .try_get("version")
             .map_err(|_| DeployServiceError::Internal("invalid app version".to_owned()))?,
-        desired_revision_id: row.try_get("desired_revision_id").ok(),
     };
     if app.version != command.expected_app_version {
         return Err(DeployServiceError::conflict(
@@ -404,20 +435,77 @@ fn consistent_tenant_scope_hash(targets: &[StoredTarget]) -> DeployServiceResult
     Ok(scope)
 }
 
+/// Reconcile the app's live composition for **one** lifecycle environment.
+///
+/// The four composition tables (`deploy_app_resource`, `deploy_app_variant`,
+/// `deploy_app_variant_rule`, `deploy_app_mount`) and `deploy_app_binding` are
+/// all environment-scoped, so replacing the `development` composition leaves
+/// every other environment -- and its already-published `deploy_app_revision`
+/// snapshots -- untouched.
+///
+/// Bindings in the auto-provisioned keyspace (`appd-*`, written by
+/// `provision_app_default_domains_repo`) are never deleted here: the platform
+/// publishing domains are managed by their own reconciler and are re-created in
+/// the same transaction by the caller. Deleting them was the defect that made
+/// `<appId>.app.<suffix>` stop resolving after any composition update.
+///
+/// Deletion order follows the foreign keys: bindings and mounts first (they
+/// reference variants and resources), then variant rules, then variants, then
+/// resources.
 async fn delete_current_composition(
     transaction: &mut Transaction<'static, Postgres>,
     app_id: i64,
+    environment: &str,
+    declared_binding_keys: &[String],
 ) -> DeployServiceResult<()> {
     for (table, context) in [
-        ("deploy_app_binding", "delete app bindings"),
-        ("deploy_app_variant_rule", "delete app variant rules"),
         ("deploy_app_mount", "delete app mounts"),
+        ("deploy_app_variant_rule", "delete app variant rules"),
+    ] {
+        let query = format!("DELETE FROM {table} WHERE app_id = $1 AND environment = $2");
+        sqlx::query(AssertSqlSafe(&*query))
+            .bind(app_id)
+            .bind(environment)
+            .execute(&mut **transaction)
+            .await
+            .map_err(|error| composition_store_error(context, error))?;
+    }
+    // Bindings: only the ones the request no longer declares, and never the
+    // auto-provisioned platform publishing domains.
+    sqlx::query(
+        "DELETE FROM deploy_app_binding
+         WHERE app_id = $1 AND environment = $2
+           AND binding_key NOT LIKE $3
+           AND binding_key <> ALL($4)",
+    )
+    .bind(app_id)
+    .bind(environment)
+    .bind(format!("{DEFAULT_BINDING_KEY_PREFIX}%"))
+    .bind(declared_binding_keys)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|error| composition_store_error("delete app bindings", error))?;
+    // Surviving bindings may still reference variants that are about to be
+    // replaced; the pointers are re-established by `reconcile_bindings` after
+    // the new variants exist, so clear them here to keep the FK satisfied.
+    sqlx::query(
+        "UPDATE deploy_app_binding
+         SET default_variant_id = NULL, forced_variant_id = NULL
+         WHERE app_id = $1 AND environment = $2 AND deleted_at IS NULL",
+    )
+    .bind(app_id)
+    .bind(environment)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|error| composition_store_error("clear binding variant pointers", error))?;
+    for (table, context) in [
         ("deploy_app_variant", "delete app variants"),
         ("deploy_app_resource", "delete app resources"),
     ] {
-        let query = format!("DELETE FROM {table} WHERE app_id = $1");
+        let query = format!("DELETE FROM {table} WHERE app_id = $1 AND environment = $2");
         sqlx::query(AssertSqlSafe(&*query))
             .bind(app_id)
+            .bind(environment)
             .execute(&mut **transaction)
             .await
             .map_err(|error| composition_store_error(context, error))?;
@@ -440,19 +528,21 @@ async fn insert_resources(
         })?;
         sqlx::query(
             "INSERT INTO deploy_app_resource (
-                id, uuid, tenant_id, organization_id, app_id, resource_key, provider_type,
-                provider_resource_uuid, provider_contract_version, capabilities_json, status,
-                last_validated_at, metadata, created_by, updated_by, created_at, updated_at, version
+                id, uuid, tenant_id, organization_id, app_id, environment, resource_key,
+                provider_type, provider_resource_uuid, provider_contract_version,
+                capabilities_json, status, last_validated_at, metadata, created_by, updated_by,
+                created_at, updated_at, version
              ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,CAST($10 AS JSONB),'VALID',
-                CAST($11 AS TIMESTAMPTZ),'{}',$12,$12,CAST($11 AS TIMESTAMPTZ),
-                CAST($11 AS TIMESTAMPTZ),1)",
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CAST($11 AS JSONB),'VALID',
+                CAST($12 AS TIMESTAMPTZ),'{}',$13,$13,CAST($12 AS TIMESTAMPTZ),
+                CAST($12 AS TIMESTAMPTZ),1)",
         )
         .bind(id)
         .bind(&uuid)
         .bind(command.tenant_id)
         .bind(app.organization_id)
         .bind(app.id)
+        .bind(command.request.environment.as_str())
         .bind(&resource.key)
         .bind(provider_type_name(resource.provider_type))
         .bind(&resource.provider_resource_uuid)
@@ -480,15 +570,16 @@ async fn insert_variants(
         let uuid = new_uuid();
         sqlx::query(
             "INSERT INTO deploy_app_variant (
-                id,uuid,tenant_id,app_id,variant_key,label,client_class,is_default,priority,
-                status,metadata,created_by,updated_by,created_at,updated_at,version
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE','{}',$10,$10,
-                CAST($11 AS TIMESTAMPTZ),CAST($11 AS TIMESTAMPTZ),1)",
+                id,uuid,tenant_id,app_id,environment,variant_key,label,client_class,is_default,
+                priority,status,metadata,created_by,updated_by,created_at,updated_at,version
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ACTIVE','{}',$11,$11,
+                CAST($12 AS TIMESTAMPTZ),CAST($12 AS TIMESTAMPTZ),1)",
         )
         .bind(id)
         .bind(&uuid)
         .bind(command.tenant_id)
         .bind(app.id)
+        .bind(command.request.environment.as_str())
         .bind(&variant.key)
         .bind(&variant.label)
         .bind(client_class_name(variant.client_class))
@@ -536,15 +627,16 @@ async fn insert_variant_rules(
         };
         sqlx::query(
             "INSERT INTO deploy_app_variant_rule (
-                id,uuid,tenant_id,app_id,rule_key,target_variant_id,rule_type,match_value,
-                priority,status,created_by,updated_by,created_at,updated_at,version
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE',$10,$10,
-                CAST($11 AS TIMESTAMPTZ),CAST($11 AS TIMESTAMPTZ),1)",
+                id,uuid,tenant_id,app_id,environment,rule_key,target_variant_id,rule_type,
+                match_value,priority,status,created_by,updated_by,created_at,updated_at,version
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ACTIVE',$11,$11,
+                CAST($12 AS TIMESTAMPTZ),CAST($12 AS TIMESTAMPTZ),1)",
         )
         .bind(id)
         .bind(&uuid)
         .bind(command.tenant_id)
         .bind(app.id)
+        .bind(command.request.environment.as_str())
         .bind(&rule.key)
         .bind(variant.id)
         .bind(rule_type)
@@ -587,16 +679,17 @@ async fn insert_mounts(
             .map_err(|_| DeployServiceError::Internal("serialize index files failed".to_owned()))?;
         sqlx::query(
             "INSERT INTO deploy_app_mount (
-                id,uuid,tenant_id,app_id,mount_key,variant_id,resource_id,path_prefix,
+                id,uuid,tenant_id,app_id,environment,mount_key,variant_id,resource_id,path_prefix,
                 resource_subpath,mount_mode,handler_type,index_files_json,spa_fallback_path,
                 priority,status,created_by,updated_by,created_at,updated_at,version
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,CAST($12 AS JSONB),$13,$14,
-                'ACTIVE',$15,$15,CAST($16 AS TIMESTAMPTZ),CAST($16 AS TIMESTAMPTZ),1)",
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CAST($13 AS JSONB),$14,$15,
+                'ACTIVE',$16,$16,CAST($17 AS TIMESTAMPTZ),CAST($17 AS TIMESTAMPTZ),1)",
         )
         .bind(id)
         .bind(&uuid)
         .bind(command.tenant_id)
         .bind(app.id)
+        .bind(command.request.environment.as_str())
         .bind(&mount.key)
         .bind(variant.id)
         .bind(resource.id)
@@ -629,15 +722,24 @@ async fn insert_mounts(
     Ok(runtime)
 }
 
-async fn insert_bindings(
+/// Reconcile the bindings the request declares for one environment.
+///
+/// Each declared binding is matched by `binding_key` first; if the app has no
+/// row with that key, an existing ACTIVE row on the same
+/// `(hostname_ascii, path_prefix, environment)` route is **adopted** (its
+/// `binding_key` is claimed) instead of inserting a second row. That is what
+/// lets a composition declare a binding on an auto-provisioned platform
+/// hostname without tripping `uk_deploy_app_binding_active_route`, and it is
+/// the reason the DB -- not the request -- is the single binding truth source.
+async fn reconcile_bindings(
     repository: &DeployRepository,
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
     app: &StoredApp,
     variants: &BTreeMap<String, StoredVariant>,
-) -> DeployServiceResult<Vec<RuntimeBinding>> {
+) -> DeployServiceResult<()> {
+    let environment = command.request.environment.as_str();
     let mut domains: BTreeMap<String, StoredDomain> = BTreeMap::new();
-    let mut runtime = Vec::with_capacity(command.request.bindings.len());
     for binding in &command.request.bindings {
         let domain = if let Some(domain) = domains.get(&binding.domain_id) {
             domain.clone()
@@ -647,9 +749,59 @@ async fn insert_bindings(
             domains.insert(binding.domain_id.clone(), domain.clone());
             domain
         };
-        let id = next_id(repository.id_generator())?;
-        let uuid = new_uuid();
         let persisted = binding_action(&binding.action, variants)?;
+        let existing: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM deploy_app_binding
+             WHERE app_id = $1 AND environment = $2 AND deleted_at IS NULL
+               AND (binding_key = $3
+                    OR (hostname_ascii = $4 AND path_prefix = $5))
+             ORDER BY (binding_key = $3) DESC, id DESC
+             LIMIT 1",
+        )
+        .bind(app.id)
+        .bind(environment)
+        .bind(&binding.key)
+        .bind(&domain.hostname)
+        .bind(&binding.path_prefix)
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(|error| composition_store_error("lookup app binding", error))?;
+        if let Some(existing_id) = existing {
+            sqlx::query(
+                "UPDATE deploy_app_binding SET
+                    binding_key = $2, domain_id = $3, hostname_ascii = $4, environment = $5,
+                    path_prefix = $6, action_type = $7, default_variant_id = $8,
+                    forced_variant_id = $9, redirect_scheme = $10, redirect_hostname = $11,
+                    redirect_path_prefix = $12, redirect_status_code = $13, preserve_path = $14,
+                    preserve_query = $15, status = 'ACTIVE',
+                    activated_at = COALESCE(activated_at, CAST($16 AS TIMESTAMPTZ)),
+                    updated_by = $17, updated_at = CAST($16 AS TIMESTAMPTZ),
+                    version = version + 1
+                 WHERE id = $1",
+            )
+            .bind(existing_id)
+            .bind(&binding.key)
+            .bind(domain.id)
+            .bind(&domain.hostname)
+            .bind(environment)
+            .bind(&binding.path_prefix)
+            .bind(persisted.action_type)
+            .bind(persisted.default_variant_id)
+            .bind(persisted.forced_variant_id)
+            .bind(persisted.redirect_scheme)
+            .bind(persisted.redirect_hostname.clone())
+            .bind(persisted.redirect_path_prefix.clone())
+            .bind(persisted.redirect_status_code)
+            .bind(persisted.preserve_path)
+            .bind(persisted.preserve_query)
+            .bind(&command.generated_at)
+            .bind(command.actor_id)
+            .execute(&mut **transaction)
+            .await
+            .map_err(|error| composition_store_error("update app binding", error))?;
+            continue;
+        }
+        let id = next_id(repository.id_generator())?;
         sqlx::query(
             "INSERT INTO deploy_app_binding (
                 id,uuid,tenant_id,organization_id,app_id,binding_key,domain_id,hostname_ascii,
@@ -662,14 +814,14 @@ async fn insert_bindings(
                 CAST($20 AS TIMESTAMPTZ),CAST($20 AS TIMESTAMPTZ),1)",
         )
         .bind(id)
-        .bind(&uuid)
+        .bind(new_uuid())
         .bind(command.tenant_id)
         .bind(app.organization_id)
         .bind(app.id)
         .bind(&binding.key)
         .bind(domain.id)
         .bind(&domain.hostname)
-        .bind(command.request.environment.as_str())
+        .bind(environment)
         .bind(&binding.path_prefix)
         .bind(persisted.action_type)
         .bind(persisted.default_variant_id)
@@ -685,14 +837,123 @@ async fn insert_bindings(
         .execute(&mut **transaction)
         .await
         .map_err(|error| composition_store_error("insert app binding", error))?;
+    }
+    Ok(())
+}
+
+/// Read back **every** ACTIVE binding of the app for one environment and turn
+/// it into the descriptor's binding set.
+///
+/// This is the single-source-of-truth step for hostname routing: the same
+/// `deploy_app_binding` rows the Web Server lookup matches on are the rows the
+/// compiled descriptor routes on, so an auto-provisioned platform publishing
+/// domain is routable without the client re-declaring it.
+async fn load_environment_bindings(
+    transaction: &mut Transaction<'static, Postgres>,
+    app_id: i64,
+    environment: &str,
+) -> DeployServiceResult<Vec<RuntimeBinding>> {
+    let rows = sqlx::query(
+        "SELECT uuid, hostname_ascii, path_prefix, action_type,
+                default_variant_id, forced_variant_id,
+                redirect_scheme, redirect_hostname, redirect_path_prefix, redirect_status_code,
+                preserve_path, preserve_query
+         FROM deploy_app_binding
+         WHERE app_id = $1 AND environment = $2 AND deleted_at IS NULL AND status = 'ACTIVE'
+         ORDER BY hostname_ascii, path_prefix, uuid",
+    )
+    .bind(app_id)
+    .bind(environment)
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(|error| composition_store_error("load environment bindings", error))?;
+    let mut variant_uuids: BTreeMap<i64, String> = BTreeMap::new();
+    let mut runtime = Vec::with_capacity(rows.len());
+    for row in rows {
+        let action_type: String = row
+            .try_get("action_type")
+            .map_err(|error| composition_store_error("read binding action", error))?;
+        let action = if action_type == "REDIRECT" {
+            let scheme: Option<String> = row.try_get("redirect_scheme").ok().flatten();
+            RuntimeBindingAction::Redirect {
+                status_code: row
+                    .try_get::<i32, _>("redirect_status_code")
+                    .unwrap_or(302)
+                    .clamp(0, i32::from(u16::MAX)) as u16,
+                scheme: match scheme.as_deref() {
+                    Some("http") => RuntimeRedirectScheme::Http,
+                    _ => RuntimeRedirectScheme::Https,
+                },
+                hostname: row
+                    .try_get::<Option<String>, _>("redirect_hostname")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+                path_prefix: row
+                    .try_get::<Option<String>, _>("redirect_path_prefix")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "/".to_owned()),
+                preserve_path: row.try_get("preserve_path").unwrap_or(true),
+                preserve_query: row.try_get("preserve_query").unwrap_or(true),
+            }
+        } else {
+            let default_variant_id: Option<i64> =
+                row.try_get("default_variant_id").ok().flatten();
+            let forced_variant_id: Option<i64> = row.try_get("forced_variant_id").ok().flatten();
+            let default = resolve_variant_uuid(transaction, &mut variant_uuids, default_variant_id)
+                .await?;
+            let forced =
+                resolve_variant_uuid(transaction, &mut variant_uuids, forced_variant_id).await?;
+            RuntimeBindingAction::serve(default, forced)
+        };
         runtime.push(RuntimeBinding {
-            binding_uuid: uuid,
-            hostname: domain.hostname,
-            path_prefix: binding.path_prefix.clone(),
-            action: persisted.runtime_action,
+            binding_uuid: row
+                .try_get("uuid")
+                .map_err(|error| composition_store_error("read binding uuid", error))?,
+            hostname: row
+                .try_get("hostname_ascii")
+                .map_err(|error| composition_store_error("read binding hostname", error))?,
+            path_prefix: row
+                .try_get("path_prefix")
+                .map_err(|error| composition_store_error("read binding path prefix", error))?,
+            action,
         });
     }
     Ok(runtime)
+}
+
+/// Resolve a variant's public uuid, memoized per call.
+async fn resolve_variant_uuid(
+    transaction: &mut Transaction<'static, Postgres>,
+    cache: &mut BTreeMap<i64, String>,
+    variant_id: Option<i64>,
+) -> DeployServiceResult<Option<String>> {
+    let Some(variant_id) = variant_id else {
+        return Ok(None);
+    };
+    if let Some(uuid) = cache.get(&variant_id) {
+        return Ok(Some(uuid.clone()));
+    }
+    let uuid: Option<String> = sqlx::query_scalar(
+        "SELECT uuid FROM deploy_app_variant WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(variant_id)
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(|error| composition_store_error("resolve binding variant", error))?;
+    if let Some(uuid) = uuid {
+        cache.insert(variant_id, uuid.clone());
+        Ok(Some(uuid))
+    } else {
+        // The variant was removed by a later composition update. A binding that
+        // can no longer resolve its variant must not silently fall through to
+        // the app default; surfacing it as a validation error is the safe
+        // behaviour for a published composition.
+        Err(DeployServiceError::validation(
+            "binding references a variant that no longer exists in this environment",
+        ))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -706,7 +967,6 @@ struct PersistedBindingAction {
     redirect_status_code: Option<i32>,
     preserve_path: bool,
     preserve_query: bool,
-    runtime_action: RuntimeBindingAction,
 }
 
 fn binding_action(
@@ -730,10 +990,6 @@ fn binding_action(
                 redirect_status_code: None,
                 preserve_path: true,
                 preserve_query: true,
-                runtime_action: RuntimeBindingAction::serve(
-                    default.map(|variant| variant.uuid.clone()),
-                    forced.map(|variant| variant.uuid.clone()),
-                ),
             })
         }
         AppBindingAction::Redirect {
@@ -753,17 +1009,6 @@ fn binding_action(
             redirect_status_code: Some(i32::from(*status_code)),
             preserve_path: *preserve_path,
             preserve_query: *preserve_query,
-            runtime_action: RuntimeBindingAction::Redirect {
-                status_code: *status_code,
-                scheme: match scheme {
-                    AppRedirectScheme::Http => RuntimeRedirectScheme::Http,
-                    AppRedirectScheme::Https => RuntimeRedirectScheme::Https,
-                },
-                hostname: hostname.clone(),
-                path_prefix: path_prefix.clone(),
-                preserve_path: *preserve_path,
-                preserve_query: *preserve_query,
-            },
         }),
     }
 }
@@ -855,6 +1100,19 @@ async fn insert_revision(
 ) -> DeployServiceResult<()> {
     let descriptor_json = serde_json::to_string(descriptor)
         .map_err(|_| DeployServiceError::Internal("serialize app revision failed".to_owned()))?;
+    // Supersede the newest VALID revision of the *same environment*, not
+    // whichever revision the app-global `desired_revision_id` happens to hold.
+    let supersedes_revision_id: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM deploy_app_revision
+         WHERE app_id = $1 AND environment = $2 AND validation_status = 'VALID'
+         ORDER BY revision_no DESC
+         LIMIT 1",
+    )
+    .bind(app.id)
+    .bind(command.request.environment.as_str())
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(|error| composition_store_error("load superseded app revision", error))?;
     sqlx::query(
         "INSERT INTO deploy_app_revision (
             id,uuid,tenant_id,organization_id,app_id,revision_no,environment,
@@ -878,7 +1136,7 @@ async fn insert_revision(
     .bind(source_config_version)
     .bind(&command.idempotency_key)
     .bind(&command.request_sha256)
-    .bind(app.desired_revision_id)
+    .bind(supersedes_revision_id)
     .bind(command.actor_id)
     .bind(&command.generated_at)
     .execute(&mut **transaction)
@@ -908,6 +1166,14 @@ async fn update_site_revision_pointers(
     Ok(())
 }
 
+/// The other ACTIVE apps' current descriptor **for this environment**, used to
+/// build the multi-site runtime set.
+///
+/// Selection is `(app, environment)` scoped -- the newest `VALID` revision of
+/// that environment. The app-level `deploy_app.desired_revision_id` pointer is
+/// deliberately not used: it holds whichever environment converged last, so a
+/// runtime set published for `development` could carry another environment's
+/// composition for the sibling apps.
 async fn load_other_descriptors(
     transaction: &mut Transaction<'static, Postgres>,
     tenant_id: i64,
@@ -917,9 +1183,17 @@ async fn load_other_descriptors(
     let rows = sqlx::query(
         "SELECT CAST(r.descriptor_json AS TEXT) AS descriptor_json
          FROM deploy_app s
-         INNER JOIN deploy_app_revision r ON r.id = s.desired_revision_id
+         INNER JOIN LATERAL (
+             SELECT revision.descriptor_json
+             FROM deploy_app_revision revision
+             WHERE revision.app_id = s.id
+               AND revision.environment = $3
+               AND revision.validation_status = 'VALID'
+             ORDER BY revision.revision_no DESC
+             LIMIT 1
+         ) r ON TRUE
          WHERE s.tenant_id = $1 AND s.id <> $2 AND s.app_status = 'ACTIVE'
-           AND s.deleted_at IS NULL AND r.environment = $3
+           AND s.deleted_at IS NULL
          ORDER BY s.uuid",
     )
     .bind(tenant_id)
@@ -1105,6 +1379,7 @@ fn runtime_environment(
         }
         sdkwork_deploy_contract::AppPublishEnvironment::Test => RuntimeEnvironment::Test,
         sdkwork_deploy_contract::AppPublishEnvironment::Staging => RuntimeEnvironment::Staging,
+        sdkwork_deploy_contract::AppPublishEnvironment::Demo => RuntimeEnvironment::Demo,
         sdkwork_deploy_contract::AppPublishEnvironment::Production => {
             RuntimeEnvironment::Production
         }

@@ -34,12 +34,6 @@ profiles:
         aliases:
           - deploy-app.dtupay.com
           - deploy.dtupay.com
-      - domain: deploy-admin.noaper.com
-        tls: noaper.com
-        mode: api
-        aliases:
-          - deploy-app.noaper.com
-          - deploy.noaper.com
       - domain: deploy-admin.sdkwork.cn
         tls: sdkwork.cn
         mode: api
@@ -58,12 +52,6 @@ profiles:
         aliases:
           - deploy-app.dtupay.cn
           - deploy.dtupay.cn
-      - domain: deploy-admin.noaper.cn
-        tls: noaper.cn
-        mode: api
-        aliases:
-          - deploy-app.noaper.cn
-          - deploy.noaper.cn
       - domain: deploy-admin.skubc.com
         tls: skubc.com
         mode: api

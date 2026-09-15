@@ -14,6 +14,79 @@ pub const WEBSITE_RUNTIME_SET_KIND: &str = "sdkwork.website-runtime-set.snapshot
 pub const DESCRIPTOR_COMPILER_VERSION: &str = "sdkwork-deploy-runtime-compiler/1";
 pub const RUNTIME_SET_COMPILER_VERSION: &str = "sdkwork-deploy-runtime-set-compiler/1";
 
+/// Canonical provider contract versions carried by compiled descriptors.
+///
+/// These values are the *consumer* contract: the Web Server provider
+/// adapters (`sdkwork-webserver-drive-provider`,
+/// `sdkwork-webserver-knowledgebase-provider`) reject any other value with a
+/// `CONTRACT_MISMATCH`, so a producer that emits a different string ships a
+/// descriptor that can only fail at serve time. The compiler therefore
+/// validates every resource against this catalog at compile time, which turns
+/// that runtime failure into a build failure.
+///
+/// Keep byte-identical with `DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION`
+/// and `KNOWLEDGEBASE_WIKI_PROVIDER_CONTRACT_VERSION` in sdkwork-webserver
+/// (`crates/sdkwork-webserver-drive-provider/src/adapter.rs`,
+/// `crates/sdkwork-webserver-knowledgebase-provider/src/adapter.rs`); the Web
+/// Server also has a cross-repository contract test that reads this file.
+pub const DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION: &str = "drive.website-root.v1";
+pub const KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION: &str =
+    "knowledgebase.wiki-publication.v1";
+
+/// Legacy producer-side spellings accepted on the compile path only so that
+/// descriptors authored against the pre-unification names do not hard-fail.
+/// They are normalized to the canonical catalog above before validation and
+/// are never emitted.
+const LEGACY_PROVIDER_CONTRACT_VERSIONS: [(&str, &str); 2] = [
+    (
+        "sdkwork.drive.website-root.v1",
+        DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+    ),
+    (
+        "sdkwork.knowledgebase.wiki-publication.v1",
+        KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION,
+    ),
+];
+
+/// The canonical contract version for a provider type.
+pub fn canonical_provider_contract_version(provider_type: RuntimeProviderType) -> &'static str {
+    match provider_type {
+        RuntimeProviderType::Drive => DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+        RuntimeProviderType::Knowledgebase => {
+            KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION
+        }
+    }
+}
+
+/// Normalize a producer-supplied contract version to the canonical catalog
+/// value, accepting the legacy spellings. Returns `Err` with the reason when
+/// the value is unknown.
+pub fn normalize_provider_contract_version(
+    provider_type: RuntimeProviderType,
+    value: &str,
+) -> Result<&'static str, String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err("providerContractVersion must not be blank".into());
+    }
+    if value.len() > 64 {
+        return Err(format!("providerContractVersion is longer than 64 bytes: {value}"));
+    }
+    let canonical = canonical_provider_contract_version(provider_type);
+    if value == canonical {
+        return Ok(canonical);
+    }
+    if let Some((_, target)) = LEGACY_PROVIDER_CONTRACT_VERSIONS
+        .iter()
+        .find(|(legacy, _)| *legacy == value)
+    {
+        return Ok(target);
+    }
+    Err(format!(
+        "providerContractVersion {value} is not supported for {provider_type:?}; expected {canonical}"
+    ))
+}
+
 const MAXIMUM_BINDINGS: usize = 1_024;
 const MAXIMUM_VARIANTS: usize = 64;
 const MAXIMUM_VARIANT_RULES: usize = 1_024;
@@ -28,6 +101,7 @@ pub enum RuntimeEnvironment {
     Development,
     Test,
     Staging,
+    Demo,
     Production,
 }
 
@@ -37,7 +111,24 @@ impl RuntimeEnvironment {
             Self::Development => "development",
             Self::Test => "test",
             Self::Staging => "staging",
+            Self::Demo => "demo",
             Self::Production => "production",
+        }
+    }
+
+    /// Parse a lifecycle environment key. Mirrors
+    /// `sdkwork-deploy-contract::AppPublishEnvironment` and the Web Server
+    /// `WebsiteRuntimeEnvironment` catalogs (five environments).
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "development" => Ok(Self::Development),
+            "test" => Ok(Self::Test),
+            "staging" => Ok(Self::Staging),
+            "demo" => Ok(Self::Demo),
+            "production" => Ok(Self::Production),
+            other => Err(format!(
+                "environment must be development, test, staging, demo, or production: {other}"
+            )),
         }
     }
 }
@@ -500,6 +591,22 @@ fn normalize_app_input(input: &mut AppRuntimeCompilationInput) {
         .mounts
         .sort_by(|left, right| left.mount_uuid.cmp(&right.mount_uuid));
     input.security_policy.denied_path_prefixes.sort();
+    // Canonicalize provider contract versions so the emitted descriptor
+    // always carries the value the Web Server providers accept. Unknown
+    // values are preserved here and rejected by `validate_app_input`, which
+    // keeps the "empty or too long" and "unsupported" diagnostics distinct.
+    for resource in &mut input.resources {
+        let canonical = canonical_provider_contract_version(resource.provider.provider_type);
+        let current = resource.provider.provider_contract_version.trim();
+        if current == canonical {
+            continue;
+        }
+        resource.provider.provider_contract_version = LEGACY_PROVIDER_CONTRACT_VERSIONS
+            .iter()
+            .find(|(legacy, _)| *legacy == current)
+            .map(|(_, canonical)| (*canonical).to_owned())
+            .unwrap_or_else(|| current.to_owned());
+    }
 }
 
 fn validate_app_input(input: &AppRuntimeCompilationInput) -> Result<(), RuntimeCompilationError> {
@@ -582,13 +689,11 @@ fn validate_app_input(input: &AppRuntimeCompilationInput) -> Result<(), RuntimeC
             &resource.provider.provider_resource_uuid,
             "providerResourceUuid",
         )?;
-        if resource.provider.provider_contract_version.is_empty()
-            || resource.provider.provider_contract_version.len() > 64
-        {
-            return Err(RuntimeCompilationError::Validation(
-                "providerContractVersion is empty or too long".into(),
-            ));
-        }
+        normalize_provider_contract_version(
+            resource.provider.provider_type,
+            &resource.provider.provider_contract_version,
+        )
+        .map_err(RuntimeCompilationError::Validation)?;
     }
     for mount in &input.mounts {
         if !variants.contains(mount.variant_uuid.as_str())
@@ -863,7 +968,8 @@ mod tests {
                 provider: RuntimeProviderReference {
                     provider_type: RuntimeProviderType::Drive,
                     provider_resource_uuid: "website-root-1".to_owned(),
-                    provider_contract_version: "sdkwork.drive.website.v1".to_owned(),
+                    provider_contract_version: DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION
+                        .to_owned(),
                 },
                 capabilities: RuntimeResourceCapabilities {
                     static_content: true,

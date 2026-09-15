@@ -1333,13 +1333,25 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn app_domain_suffix_override(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<Option<Vec<String>>> {
+        let app_id =
+            crate::support::resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
+        let config = self.app_domain_config_repo(app_id).await?;
+        Ok(config.override_suffixes)
+    }
+
     async fn ensure_platform_app_zones(
         &self,
         tenant_id: i64,
         organization_id: i64,
         actor_id: Option<i64>,
+        suffixes: &[String],
     ) -> DeployServiceResult<usize> {
-        self.ensure_platform_app_zones_repo(tenant_id, organization_id, actor_id)
+        self.ensure_platform_app_zones_repo(tenant_id, organization_id, actor_id, suffixes)
             .await
     }
 
@@ -1349,7 +1361,6 @@ impl DeployRepositoryPort for DeployRepository {
         organization_id: i64,
         actor_id: Option<i64>,
         app_id: &str,
-        app_slug: &str,
         environment: &str,
     ) -> DeployServiceResult<ProvisionAppDomainsResult> {
         self.provision_app_default_domains_repo(
@@ -1357,7 +1368,6 @@ impl DeployRepositoryPort for DeployRepository {
             organization_id,
             actor_id,
             app_id,
-            app_slug,
             environment,
         )
         .await

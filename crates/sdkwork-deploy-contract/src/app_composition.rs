@@ -6,8 +6,18 @@ pub enum AppPublishEnvironment {
     Development,
     Test,
     Staging,
+    Demo,
     Production,
 }
+
+/// The five lifecycle environments of the SDKWork fleet, in promotion order.
+pub const APP_PUBLISH_ENVIRONMENTS: [AppPublishEnvironment; 5] = [
+    AppPublishEnvironment::Development,
+    AppPublishEnvironment::Test,
+    AppPublishEnvironment::Staging,
+    AppPublishEnvironment::Demo,
+    AppPublishEnvironment::Production,
+];
 
 impl AppPublishEnvironment {
     pub fn as_str(self) -> &'static str {
@@ -15,7 +25,20 @@ impl AppPublishEnvironment {
             Self::Development => "development",
             Self::Test => "test",
             Self::Staging => "staging",
+            Self::Demo => "demo",
             Self::Production => "production",
+        }
+    }
+
+    /// Parse a lifecycle environment key (case-insensitive).
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "development" => Some(Self::Development),
+            "test" => Some(Self::Test),
+            "staging" => Some(Self::Staging),
+            "demo" => Some(Self::Demo),
+            "production" => Some(Self::Production),
+            _ => None,
         }
     }
 }

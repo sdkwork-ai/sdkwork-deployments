@@ -730,15 +730,6 @@ fn parse_publish_status(value: &str) -> DeployServiceResult<RuntimeAssignmentPub
 fn parse_runtime_environment(
     value: &str,
 ) -> DeployServiceResult<sdkwork_deploy_runtime_compiler::RuntimeEnvironment> {
-    use sdkwork_deploy_runtime_compiler::RuntimeEnvironment;
-
-    match value {
-        "development" => Ok(RuntimeEnvironment::Development),
-        "test" => Ok(RuntimeEnvironment::Test),
-        "staging" => Ok(RuntimeEnvironment::Staging),
-        "production" => Ok(RuntimeEnvironment::Production),
-        _ => Err(DeployServiceError::Internal(format!(
-            "unknown runtime assignment environment {value}"
-        ))),
-    }
+    sdkwork_deploy_runtime_compiler::RuntimeEnvironment::parse(value)
+        .map_err(DeployServiceError::Internal)
 }
