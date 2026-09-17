@@ -1,12 +1,15 @@
 mod common;
 
+use std::sync::Arc;
+
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    CreateDomainHostnameRequest, CreateDomainZoneRequest, ListDomainZonesQuery,
-    UpdateDomainHostnameRequest,
+    CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployAppApi, DeployAppRequestContext,
+    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
 };
+use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
-use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
+use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
 
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
@@ -32,6 +35,9 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
                 display_name: Some("Production zone".to_owned()),
                 dns_provider: Some("manual".to_owned()),
                 provider_zone_ref: None,
+                // Left unset: `dns_provider = manual` means an operator publishes the
+                // record by hand, so there is no account for the zone to name.
+                provider_account_id: None,
             },
         )
         .await
@@ -42,6 +48,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     let listed = repository
         .list_domain_zones(
             7,
+            Some(11),
             &ListDomainZonesQuery {
                 page: 1,
                 page_size: 20,
@@ -67,12 +74,12 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     assert_eq!(hostname.hostname, format!("docs.{apex}"));
 
     let first_challenge = repository
-        .domain_hostname_verification_challenge(7, &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("create verification challenge");
     assert!(first_challenge.token.is_some());
     let repeated_challenge = repository
-        .domain_hostname_verification_challenge(7, &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("reload verification challenge");
     assert!(repeated_challenge.token.is_none());
@@ -101,7 +108,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     assert_eq!(renamed.verification_status, "PENDING");
     assert!(renamed.verified_at.is_none());
     let renamed_challenge = repository
-        .domain_hostname_verification_challenge(7, &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("challenge after rename");
     assert_ne!(
@@ -119,7 +126,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     // The apex hostname is owned by the zone and cannot be renamed, and a
     // hostname cannot be renamed back onto the apex.
     let apex_hostname = repository
-        .list_domain_hostnames(7, &zone.id, 1, 20)
+        .list_domain_hostnames(7, Some(11), &zone.id, 1, 20)
         .await
         .expect("list apex hostname")
         .items
@@ -157,13 +164,16 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         "hostname must not be renamed onto the zone apex"
     );
 
-    assert!(repository.delete_domain_zone(7, &zone.id).await.is_err());
+    assert!(repository
+        .delete_domain_zone(7, Some(11), &zone.id)
+        .await
+        .is_err());
     repository
-        .delete_domain_hostname(7, &zone.id, &hostname.id)
+        .delete_domain_hostname(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("delete unbound child hostname");
     let apex_hostname = repository
-        .list_domain_hostnames(7, &zone.id, 1, 20)
+        .list_domain_hostnames(7, Some(11), &zone.id, 1, 20)
         .await
         .expect("list apex hostname")
         .items
@@ -172,13 +182,13 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .expect("apex hostname");
     assert!(
         repository
-            .delete_domain_hostname(7, &zone.id, &apex_hostname.id)
+            .delete_domain_hostname(7, Some(11), &zone.id, &apex_hostname.id)
             .await
             .is_err(),
         "the apex hostname belongs to the zone and cannot be deleted independently"
     );
     repository
-        .delete_domain_zone(7, &zone.id)
+        .delete_domain_zone(7, Some(11), &zone.id)
         .await
         .expect("delete root domain zone with its apex hostname");
 
@@ -192,12 +202,13 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
                 display_name: None,
                 dns_provider: None,
                 provider_zone_ref: None,
+                provider_account_id: None,
             },
         )
         .await
         .expect("reuse soft-deleted apex");
     let recreated_apex = repository
-        .list_domain_hostnames(7, &recreated.id, 1, 20)
+        .list_domain_hostnames(7, Some(11), &recreated.id, 1, 20)
         .await
         .expect("list recreated apex")
         .items
@@ -206,13 +217,372 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .expect("recreated apex hostname");
     assert!(
         repository
-            .delete_domain_hostname(7, &recreated.id, &recreated_apex.id)
+            .delete_domain_hostname(7, Some(11), &recreated.id, &recreated_apex.id)
             .await
             .is_err(),
         "the recreated apex hostname belongs to the zone and cannot be deleted independently"
     );
     repository
-        .delete_domain_zone(7, &recreated.id)
+        .delete_domain_zone(7, Some(11), &recreated.id)
         .await
         .expect("delete recreated zone");
+}
+
+/// The console's domain inventory is user-private.
+///
+/// A zone belongs to the user who created it, so a second user in the same
+/// tenant reaches neither the listing nor the by-id read, rename, pause or
+/// delete paths — that is the whole point of the page being "my domains". A
+/// tenant-level zone (no owner; the platform provisions `app.<suffix>` that way
+/// for every member) stays visible to all of them, and a caller with no user
+/// subject reaches exactly those.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_domain_inventory_is_private_to_its_owner() {
+    fn ids(page: sdkwork_deploy_contract::DomainZonePage) -> Vec<String> {
+        page.items.into_iter().map(|item| item.id).collect()
+    }
+
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let request = |apex: &str| CreateDomainZoneRequest {
+        apex_hostname: apex.to_owned(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    let listing = || ListDomainZonesQuery {
+        page: 1,
+        page_size: 50,
+        status: None,
+        keyword: None,
+    };
+
+    // User 11 owns one zone, user 12 owns another in the same tenant, and the
+    // tenant-level zone is created without a user subject at all.
+    let owner_zone = repository
+        .create_domain_zone(
+            7,
+            Some(9),
+            Some(11),
+            &request(&format!("owned{suffix}.dev")),
+        )
+        .await
+        .expect("create the owner's zone");
+    let neighbour_zone = repository
+        .create_domain_zone(
+            7,
+            Some(9),
+            Some(12),
+            &request(&format!("neighbour{suffix}.dev")),
+        )
+        .await
+        .expect("create the neighbour's zone");
+    let shared_zone = repository
+        .create_domain_zone(7, Some(9), None, &request(&format!("app{suffix}.dev")))
+        .await
+        .expect("create a tenant-level zone");
+
+    let owner_ids = ids(repository
+        .list_domain_zones(7, Some(11), &listing())
+        .await
+        .expect("list as the owner"));
+    assert!(
+        owner_ids.contains(&owner_zone.id),
+        "the owner must see the zone they created"
+    );
+    assert!(
+        !owner_ids.contains(&neighbour_zone.id),
+        "another user's zone must not appear in this user's inventory"
+    );
+    assert!(
+        owner_ids.contains(&shared_zone.id),
+        "a tenant-level zone is visible to every member"
+    );
+
+    let neighbour_ids = ids(repository
+        .list_domain_zones(7, Some(12), &listing())
+        .await
+        .expect("list as the neighbour"));
+    assert!(
+        !neighbour_ids.contains(&owner_zone.id),
+        "the neighbour must not see the owner's zone"
+    );
+    assert!(neighbour_ids.contains(&neighbour_zone.id));
+
+    let unowned_ids = ids(repository
+        .list_domain_zones(7, None, &listing())
+        .await
+        .expect("list without a user subject"));
+    assert_eq!(
+        unowned_ids,
+        vec![shared_zone.id.clone()],
+        "a caller with no user subject reaches the tenant-level zone and nothing else"
+    );
+
+    // Every by-id path is refused for a zone the caller does not own. Filtering
+    // only the listing would leave a deep link into the hostname page open.
+    assert!(
+        repository
+            .retrieve_domain_zone(7, Some(12), &owner_zone.id)
+            .await
+            .is_err(),
+        "reading another user's zone must be refused"
+    );
+    assert!(
+        repository
+            .list_domain_hostnames(7, Some(12), &owner_zone.id, 1, 20)
+            .await
+            .is_err(),
+        "listing another user's hostnames must be refused"
+    );
+    assert!(
+        repository
+            .delete_domain_zone(7, Some(12), &owner_zone.id)
+            .await
+            .is_err(),
+        "deleting another user's zone must be refused"
+    );
+    assert!(
+        repository
+            .update_domain_zone(
+                7,
+                Some(12),
+                &owner_zone.id,
+                &UpdateDomainZoneRequest {
+                    display_name: None,
+                    dns_provider: None,
+                    provider_zone_ref: None,
+                    provider_account_id: None,
+                    status: Some("PAUSED".to_owned()),
+                },
+            )
+            .await
+            .is_err(),
+        "pausing another user's root domain must be refused"
+    );
+    assert!(
+        repository
+            .create_domain_hostname(
+                7,
+                Some(12),
+                &owner_zone.id,
+                &CreateDomainHostnameRequest {
+                    relative_name: "docs".to_owned(),
+                },
+            )
+            .await
+            .is_err(),
+        "adding a hostname under another user's zone must be refused"
+    );
+    assert!(
+        repository
+            .ensure_domain_hostname(7, Some(12), &owner_zone.id, "docs")
+            .await
+            .is_err(),
+        "claiming a hostname under another user's zone must be refused"
+    );
+    assert_eq!(
+        repository
+            .retrieve_domain_zone(7, Some(11), &owner_zone.id)
+            .await
+            .expect("the owner still reaches it")
+            .status,
+        "ACTIVE",
+        "a refused write must leave the zone untouched"
+    );
+
+    // The owner's hostname and proof paths keep working, and stay closed to the
+    // neighbour at the hostname level too.
+    let hostname = repository
+        .create_domain_hostname(
+            7,
+            Some(11),
+            &owner_zone.id,
+            &CreateDomainHostnameRequest {
+                relative_name: "docs".to_owned(),
+            },
+        )
+        .await
+        .expect("create the owner's hostname");
+    assert!(
+        repository
+            .domain_hostname_verification_challenge(7, Some(12), &owner_zone.id, &hostname.id)
+            .await
+            .is_err(),
+        "starting another user's ownership proof must be refused"
+    );
+    assert!(
+        repository
+            .retrieve_domain_hostname(7, Some(12), &owner_zone.id, &hostname.id)
+            .await
+            .is_err(),
+        "reading another user's hostname must be refused"
+    );
+    assert!(
+        repository
+            .delete_domain_hostname(7, Some(12), &owner_zone.id, &hostname.id)
+            .await
+            .is_err(),
+        "deleting another user's hostname must be refused"
+    );
+    assert!(
+        repository
+            .domain_hostname_verification_challenge(7, Some(11), &owner_zone.id, &hostname.id)
+            .await
+            .is_ok(),
+        "the owner's own proof path stays open"
+    );
+
+    // The tenant-level zone is reachable from both members and from a caller
+    // with no user subject, which is what keeps the platform inventory usable.
+    assert!(repository
+        .retrieve_domain_zone(7, Some(12), &shared_zone.id)
+        .await
+        .is_ok());
+    assert!(repository
+        .retrieve_domain_zone(7, None, &shared_zone.id)
+        .await
+        .is_ok());
+}
+
+/// The console reaches the owner gate through the service, not through the
+/// repository, so the gate only protects anyone if the service actually hands
+/// the caller's subject down. Asserting on `DeployRepository` alone proves the
+/// gate exists but not that production goes through it: the service could pass
+/// `None` for every caller and each user would once again see the whole tenant.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
+    let pool = common::postgres_pool().await;
+    let repository = Arc::new(DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    ));
+    let service = DeployService::new(repository, Arc::new(MemoryDeployDrivePort));
+
+    let caller = |actor_id: Option<i64>| DeployAppRequestContext {
+        tenant_id: 7,
+        actor_id,
+        organization_id: Some(9),
+        ..DeployAppRequestContext::default()
+    };
+    // A fresh apex per zone: active apexes are globally exclusive, so a literal
+    // name would collide with the other tests sharing this database.
+    let request = |label: &str| CreateDomainZoneRequest {
+        apex_hostname: format!(
+            "{label}{}.dev",
+            sdkwork_database_id::uuid_v4().replace('-', "")
+        ),
+        display_name: Some(format!("{label} zone")),
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    let query = ListDomainZonesQuery {
+        page: 1,
+        page_size: 50,
+        status: None,
+        keyword: None,
+    };
+
+    let alice = service
+        .create_domain_zone(&caller(Some(11)), &request("alice"))
+        .await
+        .expect("alice claims her own root domain");
+    let bob = service
+        .create_domain_zone(&caller(Some(12)), &request("bob"))
+        .await
+        .expect("bob claims his own root domain");
+    // No user subject: this is the platform-owned tenant-level zone the
+    // deployment provisions for the whole tenant (`app.<suffix>`).
+    let platform = service
+        .create_domain_zone(&caller(None), &request("platform"))
+        .await
+        .expect("the deployment provisions a tenant-level zone");
+
+    let ids = |page: &sdkwork_deploy_contract::DomainZonePage| {
+        page.items
+            .iter()
+            .map(|zone| zone.id.clone())
+            .collect::<Vec<_>>()
+    };
+
+    let alice_ids = ids(&service
+        .list_domain_zones(&caller(Some(11)), &query)
+        .await
+        .expect("alice lists the domains she maintains"));
+    assert!(
+        alice_ids.contains(&alice.id),
+        "alice keeps the zone she claimed"
+    );
+    assert!(
+        alice_ids.contains(&platform.id),
+        "the tenant-level zone stays visible to every member"
+    );
+    assert!(
+        !alice_ids.contains(&bob.id),
+        "alice must not see the zone bob maintains"
+    );
+
+    let bob_ids = ids(&service
+        .list_domain_zones(&caller(Some(12)), &query)
+        .await
+        .expect("bob lists the domains he maintains"));
+    assert!(bob_ids.contains(&bob.id), "bob keeps the zone he claimed");
+    assert!(
+        !bob_ids.contains(&alice.id),
+        "bob must not see the zone alice maintains"
+    );
+
+    // A caller with no user subject gets the platform inventory and nothing
+    // else — never the whole tenant by accident.
+    let anonymous_ids = ids(&service
+        .list_domain_zones(&caller(None), &query)
+        .await
+        .expect("a subjectless caller reads the tenant-level inventory"));
+    assert_eq!(
+        anonymous_ids,
+        vec![platform.id.clone()],
+        "the subjectless inventory is exactly the tenant-level zone"
+    );
+
+    // Every console action on a zone runs through the service too, so one
+    // foreign zone has to stay closed for reads and for writes alike.
+    assert!(
+        service
+            .retrieve_domain_zone(&caller(Some(12)), &alice.id)
+            .await
+            .is_err(),
+        "reading another user's zone must be refused"
+    );
+    assert!(
+        service
+            .list_domain_hostnames(&caller(Some(12)), &alice.id, 1, 20)
+            .await
+            .is_err(),
+        "listing another user's hostnames must be refused"
+    );
+    assert!(
+        service
+            .delete_domain_zone(&caller(Some(12)), &alice.id)
+            .await
+            .is_err(),
+        "deleting another user's zone must be refused"
+    );
+    // The refusals above must be refusals, not silent successes: alice's zone is
+    // still there and still hers.
+    let alice_still_there = service
+        .retrieve_domain_zone(&caller(Some(11)), &alice.id)
+        .await
+        .expect("the owner's own zone is untouched");
+    assert_eq!(alice_still_there.id, alice.id);
+    assert_eq!(alice_still_there.status, "ACTIVE");
 }

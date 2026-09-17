@@ -10,8 +10,7 @@ use sdkwork_deploy_contract::{
     DriveWebsiteContentMode, DriveWebsiteRootSelector, UpdateAppCompositionRequest,
 };
 use sdkwork_deploy_runtime_compiler::{
-    RuntimeProviderType, RuntimeResourceCapabilities,
-    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+    RuntimeProviderType, RuntimeResourceCapabilities, DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{
@@ -523,8 +522,7 @@ async fn composition_replace_preserves_other_environments_and_default_domains() 
 
     let mut development_request = request(AppMountHandler::Static);
     development_request.environment = AppPublishEnvironment::Development;
-    let mut development_command =
-        tv_command(1, "composition-dev-1", &"7".repeat(64));
+    let mut development_command = tv_command(1, "composition-dev-1", &"7".repeat(64));
     development_command.request = development_request;
     repository
         .replace_app_composition(development_command)

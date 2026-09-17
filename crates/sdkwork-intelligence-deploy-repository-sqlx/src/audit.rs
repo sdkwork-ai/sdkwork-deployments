@@ -31,10 +31,15 @@ impl DeployRepository {
             }
             let (cursor_created_at, cursor_id) = crate::support::decode_keyset_cursor(cursor)
                 .ok_or_else(|| DeployServiceError::validation("cursor is invalid"))?;
+            // The cursor instant is declared as TEXT on the wire, so the cast is
+            // what makes the row comparison legal: without it PostgreSQL
+            // resolves the operator against the parameter's declared type and
+            // reports `timestamp with time zone < text`.
             let rows = sqlx::query(
                 "SELECT id, uuid, action, target_type, created_at
                  FROM deploy_audit_log
-                 WHERE tenant_id = $1 AND (created_at, id) < ($2, $3)
+                 WHERE tenant_id = $1
+                   AND (created_at, id) < (CAST($2 AS TIMESTAMPTZ), $3)
                  ORDER BY created_at DESC, id DESC LIMIT $4",
             )
             .bind(tenant_id)
@@ -58,7 +63,11 @@ impl DeployRepository {
             let next_cursor = has_more
                 .then(|| {
                     let last = page_rows.last().expect("non-empty page when has_more");
-                    let created_at: String = last.try_get("created_at").map_err(|error| {
+                    // `created_at` is TIMESTAMPTZ. Decoding it as `String` asks
+                    // sqlx for TEXT and is rejected at the wire level, so read it
+                    // through the shared helper that takes a `DateTime<Utc>` and
+                    // renders RFC3339 — the shape the cursor payload expects.
+                    let created_at = datetime_from_row(last, "created_at").map_err(|error| {
                         store_error("map deploy_audit_log cursor instant", error)
                     })?;
                     let id: i64 = last
@@ -136,8 +145,11 @@ impl DeployRepository {
 
         let limit_index = bind_index;
         let offset_index = bind_index + 1;
+        // `id` is selected because the keyset cursor is `(created_at, id)` and
+        // this page hands one out; one extra row is fetched so the page can
+        // prove a further window exists without a second round trip.
         let list_sql = format!(
-            "SELECT uuid, action, target_type, created_at
+            "SELECT id, uuid, action, target_type, created_at
              FROM deploy_audit_log
              WHERE {where_clause}
              ORDER BY created_at DESC, id DESC LIMIT ${limit_index} OFFSET ${offset_index}"
@@ -159,26 +171,48 @@ impl DeployRepository {
             list_query = list_query.bind(end_date);
         }
         let rows = list_query
-            .bind(page_size)
+            .bind(page_size + 1)
             .bind(offset)
             .fetch_all(&self.pool)
             .await
             .map_err(|error| store_error("list deploy_audit_log", error))?;
 
-        let mut items = Vec::with_capacity(rows.len());
-        for row in &rows {
+        let has_more = rows.len() > page_size as usize;
+        let page_rows = rows
+            .into_iter()
+            .take(page_size as usize)
+            .collect::<Vec<_>>();
+        let mut items = Vec::with_capacity(page_rows.len());
+        for row in &page_rows {
             items.push(map_audit_log_row(row).map_err(|error| {
                 DeployServiceError::Internal(format!("map deploy_audit_log row: {error}"))
             })?);
         }
+
+        // An offset page still hands out the keyset continuation. Without it a
+        // client could never enter cursor mode — it would have no first cursor —
+        // and every page after the first would have to walk a deeper OFFSET,
+        // which is exactly what PAGINATION_SPEC §6 rules out for a growing table
+        // like the audit log.
+        let next_cursor = has_more
+            .then(|| {
+                let last = page_rows.last().expect("non-empty page when has_more");
+                let created_at = datetime_from_row(last, "created_at")
+                    .map_err(|error| store_error("map deploy_audit_log cursor instant", error))?;
+                let id: i64 = last
+                    .try_get("id")
+                    .map_err(|error| store_error("map deploy_audit_log cursor id", error))?;
+                Ok::<_, DeployServiceError>(crate::support::encode_keyset_cursor(&created_at, id))
+            })
+            .transpose()?;
 
         Ok(AuditLogPage {
             items,
             total,
             page,
             page_size,
-            next_cursor: None,
-            has_more: None,
+            next_cursor,
+            has_more: Some(has_more),
         })
     }
 

@@ -16,10 +16,11 @@ use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_database_lifecycle::LifecycleOrchestrator;
 use sdkwork_database_spi::DefaultDatabaseModule;
 use sdkwork_database_sqlx::DatabasePool;
-use sdkwork_deploy_contract::{CreateAppRequest, DeployServiceErrorKind};
+use sdkwork_deploy_contract::{CreateAppRequest, DeployAppRequestContext, DeployServiceErrorKind};
 use sdkwork_deploy_core::env_test_lock;
+use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
-use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
+use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
 use sqlx::PgPool;
 
 /// The deploy module lives at the sdkwork-deployments repository root.
@@ -29,10 +30,20 @@ fn deploy_module() -> Arc<DefaultDatabaseModule> {
 }
 
 fn database_pool(pool: PgPool) -> DatabasePool {
+    // The migration lock opens its own connection from this config, so it has to
+    // describe the pool that is actually in use. `DatabaseConfig::default()` is a
+    // SQLite configuration with an empty URL, which made every test in this file
+    // fail with `migration_lock_open_failed (postgres): relative URL without a
+    // base` before reaching a single assertion.
+    let url = std::env::var("SDKWORK_DATABASE_TEST_POSTGRES_URL").unwrap_or_default();
     DatabasePool::Postgres(
         pool,
         sdkwork_database_sqlx::PoolContext {
-            config: DatabaseConfig::default(),
+            config: DatabaseConfig {
+                engine: sdkwork_database_config::DatabaseEngine::Postgres,
+                url,
+                ..DatabaseConfig::default()
+            },
         },
     )
 }
@@ -76,73 +87,59 @@ async fn insert_entitlement_projection(
     .expect("insert entitlement projection");
 }
 
+fn app_request(name: &str) -> CreateAppRequest {
+    CreateAppRequest {
+        name: name.to_owned(),
+        slug: Some(name.to_owned()),
+        app_kind: sdkwork_deploy_contract::AppKind::ApiService,
+        app_type: Some(2),
+        runtime_config: None,
+        description: None,
+        default_environment: None,
+        idempotency_key: None,
+    }
+}
+
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn entitlement_enforcement_blocks_capacity_over_the_limit() {
     let _lock = env_test_lock();
     std::env::set_var("SDKWORK_DEPLOY_ENTITLEMENT_ENFORCEMENT", "on");
-    let repository = migrated_repository().await;
+    let repository = Arc::new(migrated_repository().await);
+
+    // Capacity enforcement is a service-layer gate. `DeployService::create_app`
+    // is the only entry point production code uses, and it consults the
+    // Commerce-backed projection before delegating to the repository; the
+    // repository itself never gates. Asserting against `DeployRepository`
+    // directly would therefore test a layer that is not supposed to enforce,
+    // and would pass vacuously no matter how broken the gate is.
+    let service = DeployService::new(repository.clone(), Arc::new(MemoryDeployDrivePort));
+
+    let context = |tenant_id: i64| DeployAppRequestContext {
+        tenant_id,
+        actor_id: Some(11),
+        organization_id: Some(9),
+        ..DeployAppRequestContext::default()
+    };
 
     // Tenant 7 has a plan limiting it to one active app; the first app fits.
     insert_entitlement_projection(&repository, 7, r#"{"active_apps": 1}"#).await;
-    let first = repository
-        .create_app(
-            7,
-            Some(9),
-            Some(11),
-            &CreateAppRequest {
-                name: "first-app".to_owned(),
-                slug: Some("first-app".to_owned()),
-                app_kind: sdkwork_deploy_contract::AppKind::ApiService,
-                app_type: Some(2),
-                runtime_config: None,
-                description: None,
-                default_environment: None,
-                idempotency_key: None,
-            },
-        )
+    let first = service
+        .create_app(&context(7), &app_request("first-app"))
         .await
         .expect("first app within the plan limit");
 
     // The second app exceeds the plan: quota exceeded (429 semantics).
-    let second = repository
-        .create_app(
-            7,
-            Some(9),
-            Some(11),
-            &CreateAppRequest {
-                name: "second-app".to_owned(),
-                slug: Some("second-app".to_owned()),
-                app_kind: sdkwork_deploy_contract::AppKind::ApiService,
-                app_type: Some(2),
-                runtime_config: None,
-                description: None,
-                default_environment: None,
-                idempotency_key: None,
-            },
-        )
+    let second = service
+        .create_app(&context(7), &app_request("second-app"))
         .await;
     let error = second.expect_err("second app must exceed the plan limit");
     assert_eq!(error.kind(), DeployServiceErrorKind::QuotaExceeded);
     assert!(error.to_string().contains("active_apps"));
 
     // A tenant without any projection fails closed when enforcement is on.
-    let unplanned = repository
-        .create_app(
-            8,
-            Some(9),
-            Some(11),
-            &CreateAppRequest {
-                name: "unplanned-app".to_owned(),
-                slug: Some("unplanned-app".to_owned()),
-                app_kind: sdkwork_deploy_contract::AppKind::ApiService,
-                app_type: Some(2),
-                runtime_config: None,
-                description: None,
-                default_environment: None,
-                idempotency_key: None,
-            },
-        )
+    let unplanned = service
+        .create_app(&context(8), &app_request("unplanned-app"))
         .await;
     let error = unplanned.expect_err("unplanned tenant must fail closed");
     assert_eq!(error.kind(), DeployServiceErrorKind::Forbidden);

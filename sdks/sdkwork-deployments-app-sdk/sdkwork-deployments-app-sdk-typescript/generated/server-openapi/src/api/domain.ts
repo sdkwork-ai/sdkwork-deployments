@@ -1,8 +1,78 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, PageInfo, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
+import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
 
+
+export interface DomainCloudAccountsListParams {
+  page?: number;
+  pageSize?: number;
+  dnsProvider?: 'ALIYUN_DNS' | 'DNSPOD' | 'CLOUDFLARE';
+  scopeType?: 'platform' | 'tenant' | 'user';
+  mine?: boolean;
+  keyword?: string;
+}
+
+export interface DomainCloudAccountsCreateParams {
+  idempotencyKey: string;
+}
+
+export class DomainCloudAccountsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List cloud accounts usable for DNS automation */
+  async list(params?: DomainCloudAccountsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: CloudAccountResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'dnsProvider', value: params?.dnsProvider, style: 'form', explode: true, allowReserved: false },
+      { name: 'scopeType', value: params?.scopeType, style: 'form', explode: true, allowReserved: false },
+      { name: 'mine', value: params?.mine, style: 'form', explode: true, allowReserved: false },
+      { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: CloudAccountResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/cloud_accounts`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Register a cloud account for DNS automation */
+  async create(body: CreateCloudAccountRequest, params: DomainCloudAccountsCreateParams, requestOptions?: ApiRequestOptions): Promise<CloudAccountRegistrationResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<CloudAccountRegistrationResponse>(appApiPath(`/cloud_accounts`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface DomainDomainZonesHostnameClaimsEnsureParams {
+  idempotencyKey: string;
+}
+
+export class DomainDomainZonesHostnameClaimsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Ensure ownership of a set of hostnames */
+  async ensure(zoneId: string, body: EnsureDomainHostnameClaimsRequest, params: DomainDomainZonesHostnameClaimsEnsureParams, requestOptions?: ApiRequestOptions): Promise<{ items: DomainHostnameClaimResponse[]; }> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<{ items: DomainHostnameClaimResponse[]; }>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/hostname_claims`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'data' });
+  }
+}
 
 export interface DomainDomainZonesHostnamesListParams {
   page?: number;
@@ -86,10 +156,12 @@ export interface DomainDomainZonesCreateParams {
 export class DomainDomainZonesApi {
   private client: HttpClient;
   public readonly hostnames: DomainDomainZonesHostnamesApi;
+  public readonly hostnameClaims: DomainDomainZonesHostnameClaimsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.hostnames = new DomainDomainZonesHostnamesApi(client);
+    this.hostnameClaims = new DomainDomainZonesHostnameClaimsApi(client);
   }
 
 
@@ -133,9 +205,11 @@ export class DomainDomainZonesApi {
 
 export class DomainApi {
   public readonly domainZones: DomainDomainZonesApi;
+  public readonly cloudAccounts: DomainCloudAccountsApi;
 
   constructor(client: HttpClient) {
     this.domainZones = new DomainDomainZonesApi(client);
+    this.cloudAccounts = new DomainCloudAccountsApi(client);
   }
 
 }

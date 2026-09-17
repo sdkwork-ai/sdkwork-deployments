@@ -1,12 +1,18 @@
 import {
   createClient as createDeployClient,
+  type CertificateRenewalResponse,
   type CertificateResponse,
+  type CloudAccountRegistrationResponse,
+  type CloudAccountResponse,
   type CreateCertificateRequest,
+  type CreateCloudAccountRequest,
   type CreateDomainHostnameRequest,
   type CreateDomainZoneRequest,
+  type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
   type DomainVerifyResponse,
   type DomainZoneResponse,
+  type EnsureDomainHostnameClaimsRequest,
   type PageInfo,
   type SdkworkDeployAppClient,
   type UpdateDomainHostnameRequest,
@@ -25,13 +31,19 @@ import { uuid } from "@sdkwork/utils/id";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 export type {
+  CertificateRenewalResponse,
   CertificateResponse,
+  CloudAccountRegistrationResponse,
+  CloudAccountResponse,
   CreateCertificateRequest,
+  CreateCloudAccountRequest,
   CreateDomainHostnameRequest,
   CreateDomainZoneRequest,
+  DomainHostnameClaimResponse,
   DomainHostnameResponse,
   DomainVerifyResponse,
   DomainZoneResponse,
+  EnsureDomainHostnameClaimsRequest,
   PageInfo,
   UpdateDomainHostnameRequest,
   UpdateDomainZoneRequest,
@@ -57,12 +69,51 @@ export interface DeploymentsDeliveryService {
   createDomainHostname(zoneId: string, body: CreateDomainHostnameRequest): Promise<DomainHostnameResponse>;
   updateDomainHostname(zoneId: string, hostnameId: string, body: UpdateDomainHostnameRequest): Promise<DomainHostnameResponse>;
   verifyDomainHostname(zoneId: string, hostnameId: string): Promise<DomainVerifyResponse>;
+  ensureDomainHostnameClaims(zoneId: string, body: EnsureDomainHostnameClaimsRequest): Promise<{ items: DomainHostnameClaimResponse[] }>;
   deleteDomainHostname(zoneId: string, hostnameId: string): Promise<void>;
   listCertificates(params?: { page?: number; pageSize?: number }): Promise<{ items: CertificateResponse[]; pageInfo: PageInfo }>;
   createCertificate(body: CreateCertificateRequest): Promise<CertificateResponse>;
   renewCertificate(certificateId: string): Promise<CertificateResponse>;
+  /** The renewal ledger for one certificate: every attempt, oldest first. */
+  listCertificateRenewals(certificateId: string, params?: { page?: number; pageSize?: number }): Promise<{ items: CertificateRenewalResponse[]; pageInfo: PageInfo }>;
   deleteCertificate(certificateId: string): Promise<void>;
+  /**
+   * Cloud accounts the caller may bind a root domain or certificate to.
+   *
+   * Ordered narrowest scope first — the caller's own accounts, then the tenant's
+   * shared ones, then platform ones — which is the order the server itself
+   * resolves in. `items[0]` is therefore the account a registration would reuse.
+   */
+  listCloudAccounts(params?: {
+    page?: number | undefined
+    pageSize?: number | undefined
+    dnsProvider?: CloudAccountDnsProvider | undefined
+    scopeType?: CloudAccountScopeType | undefined
+    mine?: boolean | undefined
+    keyword?: string | undefined
+  }): Promise<{ items: CloudAccountResponse[]; pageInfo: PageInfo }>;
+  /**
+   * Registers a DNS cloud account, or reuses the caller's existing one.
+   *
+   * `reused` distinguishes "已创建" from "已存在，直接复用"; `credentialApplied` is
+   * `false` when an existing account was found with a credential already, because
+   * silently rotating one another module may be using is not this call's decision.
+   */
+  createCloudAccount(body: CreateCloudAccountRequest): Promise<CloudAccountRegistrationResponse>;
 }
+
+/**
+ * Canonical DNS families the account center can be asked for.
+ *
+ * Derived from the response DTO rather than the generated `*ListParams` interface:
+ * the generator exports API classes only, so param interfaces are not part of the
+ * package's public surface (every other list method here inlines its params too).
+ * The response is the contract both sides agree on, so deriving from it keeps the
+ * picker's vocabulary pinned to the server's.
+ */
+export type CloudAccountDnsProvider = NonNullable<CloudAccountResponse["dnsProvider"]>;
+/** Visibility levels the picker offers. `organization` is deliberately absent. */
+export type CloudAccountScopeType = CloudAccountResponse["scopeType"];
 
 const Context = createContext<DeploymentsConsoleClients | null>(null);
 
@@ -112,11 +163,29 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
     createDomainHostname: (zoneId, body) => zones.hostnames.create(zoneId, body, idempotencyParams()),
     updateDomainHostname: (zoneId, hostnameId, body) => zones.hostnames.update(zoneId, hostnameId, body),
     verifyDomainHostname: (zoneId, hostnameId) => zones.hostnames.verify(zoneId, hostnameId, idempotencyParams()),
+    ensureDomainHostnameClaims: (zoneId, body) => zones.hostnameClaims.ensure(zoneId, body, idempotencyParams()),
     deleteDomainHostname: (zoneId, hostnameId) => zones.hostnames.delete(zoneId, hostnameId),
     listCertificates: (params) => client.certificate.list(params),
     createCertificate: (body) => client.certificate.create(body, idempotencyParams()),
     renewCertificate: (certificateId) => client.certificate.renew(certificateId, idempotencyParams()),
+    listCertificateRenewals: (certificateId, params) => client.certificate.renewals.list(certificateId, params),
     deleteCertificate: (certificateId) => client.certificate.delete(certificateId),
+    // Generated query params declare their optionals as `field?: T`, so an
+    // explicit `undefined` is rejected under `exactOptionalPropertyTypes`; the
+    // spread keeps unset members out of the request entirely.
+    listCloudAccounts: (params) =>
+      client.domain.cloudAccounts.list(
+        params && {
+          ...(params.page === undefined ? {} : { page: params.page }),
+          ...(params.pageSize === undefined ? {} : { pageSize: params.pageSize }),
+          ...(params.dnsProvider === undefined ? {} : { dnsProvider: params.dnsProvider }),
+          ...(params.scopeType === undefined ? {} : { scopeType: params.scopeType }),
+          ...(params.mine === undefined ? {} : { mine: params.mine }),
+          ...(params.keyword === undefined ? {} : { keyword: params.keyword }),
+        },
+      ),
+    createCloudAccount: (body) =>
+      client.domain.cloudAccounts.create(body, idempotencyParams()),
   };
 }
 

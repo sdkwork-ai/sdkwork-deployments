@@ -4,6 +4,7 @@ members = [
   "crates/sdkwork-api-deployments-assembly",
   "crates/sdkwork-deploy-database-host",
   "crates/sdkwork-deploy-drive-port",
+  "crates/sdkwork-deploy-cloud-account-port",
   "crates/sdkwork-deploy-content-provider-port",
   "crates/sdkwork-deploy-runtime-compiler",
   "crates/sdkwork-deploy-runtime-assignment-worker",
@@ -19,6 +20,9 @@ members = [
   "crates/sdkwork-api-deployments-standalone-gateway",
   "crates/sdkwork-deploy-build-runner",
   "crates/sdkwork-deploy-package-validator",
+  "crates/sdkwork-deploy-certificate-material",
+  "crates/sdkwork-deploy-certificate-renewal-worker",
+  "crates/sdkwork-deploy-certificate-worker",
 ]
 
 [workspace.package]
@@ -67,10 +71,18 @@ flate2 = "1"
 tar = "0.4"
 zip = "2"
 zeroize = "1"
+# Certificate material custody: envelope encryption (AES-256-GCM) plus the PKI
+# parsing needed to prove a bundle is internally consistent before it is stored.
+aes-gcm = "0.10"
+sha2 = "0.10"
+x509-parser = { version = "0.18", features = ["verify"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "aws_lc_rs"] }
+rustls-pki-types = "1.14"
 
 sdkwork-deploy-contract = { path = "crates/sdkwork-deploy-contract" }
 sdkwork-deploy-core = { path = "crates/sdkwork-deploy-core" }
 sdkwork-deploy-drive-port = { path = "crates/sdkwork-deploy-drive-port" }
+sdkwork-deploy-cloud-account-port = { path = "crates/sdkwork-deploy-cloud-account-port" }
 sdkwork-deploy-content-provider-port = { path = "crates/sdkwork-deploy-content-provider-port" }
 sdkwork-deploy-runtime-compiler = { path = "crates/sdkwork-deploy-runtime-compiler" }
 sdkwork-deploy-service-host = { path = "crates/sdkwork-deploy-service-host" }
@@ -85,8 +97,10 @@ sdkwork-api-deployments-standalone-gateway = { path = "crates/sdkwork-api-deploy
 sdkwork-api-deployments-assembly = { path = "crates/sdkwork-api-deployments-assembly" }
 sdkwork-deploy-build-runner = { path = "crates/sdkwork-deploy-build-runner" }
 sdkwork-deploy-package-validator = { path = "crates/sdkwork-deploy-package-validator" }
+sdkwork-deploy-certificate-material = { path = "crates/sdkwork-deploy-certificate-material" }
 
 sdkwork-iam-web-adapter = { path = "../sdkwork-iam/crates/sdkwork-iam-web-adapter" }
+sdkwork-iam-provider-account-service = { path = "../sdkwork-iam/crates/sdkwork-iam-provider-account-service" }
 sdkwork-web-core = { path = "../sdkwork-web-framework/crates/sdkwork-web-core" }
 sdkwork-web-axum = { path = "../sdkwork-web-framework/crates/sdkwork-web-axum" }
 sdkwork-web-bootstrap = { path = "../sdkwork-web-framework/crates/sdkwork-web-bootstrap" }
@@ -102,6 +116,7 @@ sdkwork_drive_app_sdk_generated_rust = { package = "sdkwork-drive-app-sdk-genera
 sdkwork-drive-internal-sdk-generated-rust = { package = "sdkwork-drive-internal-sdk-generated-rust", path = "../sdkwork-drive/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-rust/generated/server-openapi" }
 sdkwork-knowledgebase-internal-sdk = { package = "sdkwork-knowledgebase-internal-sdk-generated-rust", path = "../sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-rust/generated/server-openapi" }
 sdkwork-webserver-internal-sdk = { path = "../sdkwork-webserver/sdks/sdkwork-webserver-internal-sdk/sdkwork-webserver-internal-sdk-rust/generated/server-openapi", package = "sdkwork-webserver-internal-sdk-generated-rust" }
+sdkwork-webserver-acme-service = { path = "../sdkwork-webserver/crates/sdkwork-webserver-acme-service" }
 sdkwork-webserver-core = { path = "../sdkwork-webserver/crates/sdkwork-webserver-core" }
 sdkwork-webserver-contract = { path = "../sdkwork-webserver/crates/sdkwork-webserver-contract" }
 sdkwork-webserver-delivery-runtime = { path = "../sdkwork-webserver/crates/sdkwork-webserver-delivery-runtime" }

@@ -30,10 +30,20 @@ fn deploy_module() -> Arc<DefaultDatabaseModule> {
 }
 
 fn database_pool(pool: PgPool) -> DatabasePool {
+    // The migration lock opens its own connection from this config, so it has to
+    // describe the pool that is actually in use. `DatabaseConfig::default()` is a
+    // SQLite configuration with an empty URL, which made every test in this file
+    // fail with `migration_lock_open_failed (postgres): relative URL without a
+    // base` before reaching a single assertion.
+    let url = std::env::var("SDKWORK_DATABASE_TEST_POSTGRES_URL").unwrap_or_default();
     DatabasePool::Postgres(
         pool,
         sdkwork_database_sqlx::PoolContext {
-            config: DatabaseConfig::default(),
+            config: DatabaseConfig {
+                engine: sdkwork_database_config::DatabaseEngine::Postgres,
+                url,
+                ..DatabaseConfig::default()
+            },
         },
     )
 }

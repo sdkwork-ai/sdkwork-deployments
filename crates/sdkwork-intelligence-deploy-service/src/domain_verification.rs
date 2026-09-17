@@ -111,6 +111,30 @@ pub fn normalize_zone_apex(value: &str) -> DeployServiceResult<String> {
     Ok(hostname)
 }
 
+/// Folds a fully-qualified hostname back into the relative name that
+/// [`crate::DeployAppApi::create_domain_hostname`] expects inside `apex`.
+///
+/// This is the exact inverse of the repository's
+/// `hostname_from_relative_name`: `*.shop` in `example.com` round-trips through
+/// `*.shop.example.com` and back. Keeping the fold here — next to the
+/// normalization that defines what a hostname even is — means a caller holding
+/// a certificate SAN list never has to re-derive it, which is where the
+/// `*.*.shop` double-wildcard defect came from.
+pub fn relative_name_for_hostname(apex: &str, hostname: &str) -> DeployServiceResult<String> {
+    let apex = normalize_domain_hostname(apex)?;
+    let hostname = normalize_domain_hostname(hostname)?;
+    if hostname == apex {
+        return Ok("@".to_owned());
+    }
+    let suffix = format!(".{apex}");
+    hostname
+        .strip_suffix(&suffix)
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            DeployServiceError::validation("hostname must remain inside the selected domain zone")
+        })
+}
+
 pub fn dns_txt_record_name(hostname: &str) -> DeployServiceResult<String> {
     let hostname = hostname.strip_prefix("*.").unwrap_or(hostname);
     let record_name = format!("{DOMAIN_VERIFICATION_RECORD_LABEL}.{hostname}");
@@ -124,7 +148,10 @@ pub fn dns_txt_record_name(hostname: &str) -> DeployServiceResult<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{dns_txt_record_name, normalize_domain_hostname, normalize_zone_apex};
+    use super::{
+        dns_txt_record_name, normalize_domain_hostname, normalize_zone_apex,
+        relative_name_for_hostname,
+    };
 
     #[test]
     fn normalizes_idna_case_trailing_dot_and_wildcard() {
@@ -146,6 +173,66 @@ mod tests {
     fn rejects_ip_single_label_and_ambiguous_wildcards() {
         for hostname in ["127.0.0.1", "localhost", "*.*.example.com", ""] {
             assert!(normalize_domain_hostname(hostname).is_err(), "{hostname}");
+        }
+    }
+
+    #[test]
+    fn folds_fully_qualified_hostnames_back_to_relative_names() {
+        // `@` is the apex; a leading `*.` survives the fold as its own label so
+        // the repository rebuilds the identical hostname from it.
+        assert_eq!(
+            relative_name_for_hostname("example.com", "example.com").unwrap(),
+            "@"
+        );
+        assert_eq!(
+            relative_name_for_hostname("example.com", "www.example.com").unwrap(),
+            "www"
+        );
+        assert_eq!(
+            relative_name_for_hostname("example.com", "*.example.com").unwrap(),
+            "*"
+        );
+        assert_eq!(
+            relative_name_for_hostname("example.com", "*.shop.example.com").unwrap(),
+            "*.shop"
+        );
+        // Both sides are normalized, so case and trailing dots fold too.
+        assert_eq!(
+            relative_name_for_hostname("Example.COM.", "WWW.Example.Com.").unwrap(),
+            "www"
+        );
+        for (apex, hostname) in [
+            ("example.com", "example.com.evil.test"),
+            ("example.com", "*.com"),
+            ("example.com", "other.test"),
+        ] {
+            assert!(
+                relative_name_for_hostname(apex, hostname).is_err(),
+                "{hostname} must not fold into {apex}"
+            );
+        }
+    }
+
+    #[test]
+    fn relative_names_round_trip_through_the_claim_shape() {
+        // The certificate wizard hands over a fully-qualified SAN list and the
+        // claim layer folds it back; the property that keeps the double-wildcard
+        // defect from returning is that the fold is exactly invertible.
+        for apex in ["example.com", "example.co.uk"] {
+            for hostname in [
+                apex.to_owned(),
+                format!("www.{apex}"),
+                format!("*.{apex}"),
+                format!("*.shop.{apex}"),
+            ] {
+                let relative = relative_name_for_hostname(apex, &hostname).unwrap();
+                let rebuilt = if relative == "@" {
+                    apex.to_owned()
+                } else {
+                    format!("{relative}.{apex}")
+                };
+                assert_eq!(rebuilt, hostname);
+            }
         }
     }
 

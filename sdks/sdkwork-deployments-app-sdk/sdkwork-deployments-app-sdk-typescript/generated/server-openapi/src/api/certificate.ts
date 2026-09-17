@@ -1,8 +1,31 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CertificateResponse, CreateCertificateRequest, PageInfo } from '../types';
+import type { CertificateRenewalResponse, CertificateResponse, CreateCertificateRequest, PageInfo } from '../types';
 
+
+export interface CertificateRenewalsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export class CertificateRenewalsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 获取证书续期历史 */
+  async list(certificateId: string, params?: CertificateRenewalsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: CertificateRenewalResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: CertificateRenewalResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/renewals`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+}
 
 export interface CertificateListParams {
   page?: number;
@@ -19,9 +42,11 @@ export interface CertificateRenewParams {
 
 export class CertificateApi {
   private client: HttpClient;
+  public readonly renewals: CertificateRenewalsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.renewals = new CertificateRenewalsApi(client);
   }
 
 

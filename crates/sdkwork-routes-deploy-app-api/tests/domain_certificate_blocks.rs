@@ -22,11 +22,18 @@ fn block_paths() -> Vec<(HttpMethod, &'static str)> {
         (HttpMethod::Patch, paths::DOMAIN_ZONE_HOSTNAME),
         (HttpMethod::Delete, paths::DOMAIN_ZONE_HOSTNAME),
         (HttpMethod::Post, paths::DOMAIN_ZONE_HOSTNAME_VERIFY),
+        (HttpMethod::Post, paths::DOMAIN_ZONE_HOSTNAME_CLAIMS),
         (HttpMethod::Get, paths::CERTIFICATES),
         (HttpMethod::Post, paths::CERTIFICATES),
         (HttpMethod::Get, paths::CERTIFICATE),
         (HttpMethod::Delete, paths::CERTIFICATE),
         (HttpMethod::Post, paths::CERTIFICATE_RENEW),
+        (HttpMethod::Get, paths::CERTIFICATE_RENEWALS),
+        // The cloud account surface belongs to this block: it is what the zone
+        // and certificate forms open when they need to bind a DNS provider
+        // account, so it is mounted and inventoried with the same filter.
+        (HttpMethod::Get, paths::CLOUD_ACCOUNTS),
+        (HttpMethod::Post, paths::CLOUD_ACCOUNTS),
     ]
 }
 

@@ -99,9 +99,16 @@ impl DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<EntitlementProjectionPage> {
         let (page, page_size, offset) = pagination(page, page_size);
-        let (filter, bind) = match tenant_id {
-            Some(_tenant_id) => ("WHERE tenant_id = $1", true),
-            None => ("", false),
+        // The tenant predicate and the page window must never share a placeholder
+        // number. PostgreSQL resolves a repeated `$n` by type rather than by
+        // intent, so a shared `$1` silently becomes `LIMIT <tenant_id> OFFSET
+        // <page_size>`: for tenant 7 with page_size 20 that reads rows 21..28 of
+        // the tenant, so the tenant-scoped page comes back empty (or wrong)
+        // while the independently counted total still reports rows. No error is
+        // raised, which is what made this survive review.
+        let (filter, paging, bind) = match tenant_id {
+            Some(_tenant_id) => ("WHERE tenant_id = $1", "LIMIT $2 OFFSET $3", true),
+            None => ("", "LIMIT $1 OFFSET $2", false),
         };
         let count_query =
             format!("SELECT COUNT(*) AS total FROM deploy_tenant_entitlement_projection {filter}");
@@ -120,7 +127,7 @@ impl DeployRepository {
                     plan_key, entitlements_json, effective_at, expires_at, projection_status,
                     created_at, updated_at
              FROM deploy_tenant_entitlement_projection {filter}
-             ORDER BY updated_at DESC, id DESC LIMIT $1 OFFSET $2"
+             ORDER BY updated_at DESC, id DESC {paging}"
         );
         let mut list = sqlx::query(AssertSqlSafe(&*list_query));
         if bind {
@@ -157,13 +164,17 @@ impl DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<BuildQueuePage> {
         let (page, page_size, offset) = pagination(page, page_size);
-        let (filter, bind) = match tenant_id {
+        // See `list_entitlement_projections_repo`: the tenant predicate and the
+        // page window must not share a placeholder number.
+        let (filter, paging, bind) = match tenant_id {
             Some(_tenant_id) => (
                 "WHERE b.tenant_id = $1 AND b.build_status IN ('QUEUED','PREPARING') AND b.deleted_at IS NULL",
+                "LIMIT $2 OFFSET $3",
                 true,
             ),
             None => (
                 "WHERE b.build_status IN ('QUEUED','PREPARING') AND b.deleted_at IS NULL",
+                "LIMIT $1 OFFSET $2",
                 false,
             ),
         };
@@ -185,7 +196,7 @@ impl DeployRepository {
              JOIN deploy_app a ON a.id = b.app_id
              JOIN deploy_app_platform_target t ON t.id = b.platform_target_id
              {filter}
-             ORDER BY b.created_at ASC, b.id ASC LIMIT $1 OFFSET $2"
+             ORDER BY b.created_at ASC, b.id ASC {paging}"
         );
         let mut list = sqlx::query(AssertSqlSafe(&*list_query));
         if bind {

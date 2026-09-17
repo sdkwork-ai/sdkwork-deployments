@@ -34,7 +34,8 @@
       {"name": "deployRepository", "export": ".", "provider": "sdkwork-intelligence-deploy-repository-sqlx"},
       {"name": "deployDrive", "export": ".", "provider": "sdkwork-deploy-drive-port"},
       {"name": "contentProvider", "export": ".", "provider": "sdkwork-deploy-content-provider-port"},
-      {"name": "deployWebRuntime", "export": ".", "provider": "sdkwork-deploy-web-port"}
+      {"name": "deployWebRuntime", "export": ".", "provider": "sdkwork-deploy-web-port"},
+      {"name": "deployCloudAccountPort", "export": ".", "provider": "sdkwork-deploy-cloud-account-port"}
     ],
     "runtimeEntrypoints": [
       "bootstrap_deploy_service_host_from_env",
@@ -49,6 +50,7 @@
     "configKeys": [
       "SDKWORK_DATABASE_*",
       "SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER",
+      "SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS",
       "SDKWORK_DRIVE_FACADE_URL",
       "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL",
       "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE",

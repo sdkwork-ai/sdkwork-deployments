@@ -16,6 +16,7 @@ Production must fail closed into generated SDK adapters:
 SDKWORK_DEPLOY_USE_MEMORY_DRIVE=0
 SDKWORK_DRIVE_FACADE_URL=<drive-app-api-url>
 SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false
+SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false
 SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL=<drive-internal-api-url>
 SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-drive-internal-ingress-token
 SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL=<knowledgebase-internal-api-url>

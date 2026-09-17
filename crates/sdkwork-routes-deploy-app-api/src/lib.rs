@@ -11,8 +11,9 @@ pub mod web_bootstrap;
 pub use domain_certificate_manifest::domain_certificate_route_manifest;
 pub use http_route_manifest::app_route_manifest;
 pub use routes::{
-    build_certificate_management_router, build_domain_management_router, build_router_with_app_api,
-    build_router_with_shared_app_api, AppState,
+    build_certificate_management_router, build_cloud_account_router,
+    build_domain_management_router, build_router_with_app_api, build_router_with_shared_app_api,
+    AppState,
 };
 pub use sdkwork_deploy_contract::{DeployAppApi, DeployAppRequestContext};
 pub use web_bootstrap::{

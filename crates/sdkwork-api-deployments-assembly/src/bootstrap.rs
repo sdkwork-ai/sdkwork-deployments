@@ -5,9 +5,10 @@ use sdkwork_database_sqlx::DatabasePool;
 use sdkwork_deploy_service_host::bootstrap_deploy_service_host_from_env;
 use sdkwork_intelligence_deploy_service::DeployService;
 use sdkwork_routes_deploy_app_api::{
-    build_certificate_management_router, build_domain_management_router,
-    deploy_app_api_domain_context_injectors, domain_certificate_route_manifest,
-    gateway_mount as mount_app, gateway_route_manifest as app_route_manifest,
+    build_certificate_management_router, build_cloud_account_router,
+    build_domain_management_router, deploy_app_api_domain_context_injectors,
+    domain_certificate_route_manifest, gateway_mount as mount_app,
+    gateway_route_manifest as app_route_manifest,
     wrap_router_with_web_framework_from_env as wrap_app, AppState,
 };
 use sdkwork_routes_deploy_backend_api::{
@@ -122,11 +123,26 @@ pub struct DomainCertificateBlocks {
     pub readiness_check: Arc<dyn ReadinessCheck>,
 }
 
+/// Composes the domain / certificate / cloud-account **sub-surface** only.
+///
+/// This is deliberately **not** the same-origin dependency entrypoint. It
+/// mounts a subset of the `/app/v3/api` routes, so a host that serves it as its
+/// whole deploy dependency answers 404 for every app, upload session, artifact,
+/// signing identity, build template, and usage-event route — the exact failure
+/// API_ASSEMBLY_SPEC §6.1 describes. Consuming gateways call
+/// [`assemble_same_origin_contribution_with_pool`] instead; this helper exists
+/// for a host that genuinely mounts the domain / certificate blocks alone.
+///
+/// It is kept regardless of callers because
+/// `sdkwork-specs/tools/materialize-api-assembly.mjs` probes for its presence
+/// when rendering this crate's `lib.rs` export list, so removing it would
+/// silently drop an export from the generated assembly surface.
 pub async fn assemble_domain_certificate_blocks() -> Result<DomainCertificateBlocks, String> {
     let service = bootstrap_deploy_service_host_from_env().await?.service;
     let router = Router::new()
         .merge(build_domain_management_router())
         .merge(build_certificate_management_router())
+        .merge(build_cloud_account_router())
         .with_state(AppState {
             api: service.clone(),
         });
@@ -140,6 +156,51 @@ pub async fn assemble_domain_certificate_blocks() -> Result<DomainCertificateBlo
         domain_context_injectors,
         readiness_check,
     })
+}
+
+/// The complete Deploy App API as **one** host-neutral contribution on the
+/// caller's process-shared PostgreSQL pool.
+///
+/// API_ASSEMBLY_SPEC §6.1: a gateway that selects this dependency declares it
+/// as a same-origin required component port and calls this owner entrypoint; it
+/// must not rebuild `ApiAssemblyContribution` from [`DomainCertificateBlocks`]
+/// (§6.2.1 forbids the host projecting dependency fields into a hand-written
+/// contribution). The owner defines its own contribution, so every consuming
+/// host publishes the same manifest, OpenAPI document, and permission catalog.
+///
+/// **Coverage.** The contribution spans every route the consuming host's
+/// `/app/v3/api` dependency entry declares as served — apps, domain zones,
+/// certificates, cloud accounts, upload sessions, artifacts, signing
+/// identities, build templates, and usage events — because API_ASSEMBLY_SPEC
+/// §6.1 makes a declared-but-unserved same-origin surface an opaque 404 on an
+/// authenticated operator action.
+///
+/// It is therefore composed from the route crate's own
+/// `gateway_mount` / `gateway_route_manifest` pair instead of enumerating
+/// blocks here: a hand-enumerated subset cannot be detected by any gate, and
+/// silently serves fewer routes than this manifest, the synthesized OpenAPI
+/// document, and the permission catalog all claim. Mounting the route crate's
+/// canonical surface keeps the executable router and the published inventory
+/// equal by construction.
+///
+/// The router is deliberately un-wrapped, exactly as
+/// [`assemble_domain_certificate_blocks`] documents: the consuming host applies
+/// the single Web Framework layer for its whole composed surface.
+pub async fn assemble_same_origin_contribution_with_pool(
+    pool: DatabasePool,
+) -> Result<ApiAssemblyContribution, String> {
+    let service = sdkwork_deploy_service_host::bootstrap_deploy_service_host_with_pool(pool)
+        .await?
+        .service;
+    let router = mount_app(service.clone());
+    ApiAssemblyContribution::from_manifest(
+        "sdkwork-deployments",
+        "SDKWork Deploy App API",
+        router,
+        app_route_manifest(),
+        deploy_app_api_domain_context_injectors(),
+        Arc::new(DeployServiceReadinessCheck { service }),
+    )
 }
 
 /// Migrate-only entrypoint for the Deployments database module, reusable by

@@ -14,6 +14,7 @@ use sdkwork_deploy_contract::{
     UsageReconciliationResponse,
 };
 
+use crate::certificate_material::{seal_issued_material, DeclaredCertificateEvidence};
 use crate::DeployService;
 
 impl DeployService {
@@ -286,19 +287,10 @@ impl DeployBackendApi for DeployService {
         request: &RequestCertificateOrderRequest,
     ) -> DeployServiceResult<CertificateOrderResponse> {
         let tenant_id = Self::backend_write_tenant(context)?;
-        if request.idempotency_key.trim().is_empty() {
-            return Err(DeployServiceError::validation("idempotencyKey is required"));
-        }
-        if let Some(challenge_type) = request.challenge_type.as_deref() {
-            if !matches!(challenge_type, "HTTP_01" | "DNS_01") {
-                return Err(DeployServiceError::validation(
-                    "challengeType must be HTTP_01 or DNS_01",
-                ));
-            }
-        }
-        self.repository
-            .request_certificate_order(tenant_id, request)
-            .await
+        // Delegated rather than reimplemented: the renewal sweep opens orders
+        // through the same function, and a second copy of the CAA pre-flight here
+        // would let the two paths drift until only one of them still checked.
+        self.open_certificate_order(tenant_id, request).await
     }
 
     async fn advance_certificate_order(
@@ -376,18 +368,6 @@ impl DeployBackendApi for DeployService {
         if request.version_no <= 0 {
             return Err(DeployServiceError::validation("versionNo must be positive"));
         }
-        for (value, field) in [
-            (&request.serial_sha256, "serialSha256"),
-            (&request.fingerprint_sha256, "fingerprintSha256"),
-            (&request.spki_sha256, "spkiSha256"),
-            (&request.chain_sha256, "chainSha256"),
-        ] {
-            if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
-                return Err(DeployServiceError::validation(format!(
-                    "{field} must be 64 hexadecimal characters"
-                )));
-            }
-        }
         if !matches!(request.key_algorithm.as_str(), "RSA" | "ECDSA") {
             return Err(DeployServiceError::validation(
                 "keyAlgorithm must be RSA or ECDSA",
@@ -407,9 +387,33 @@ impl DeployBackendApi for DeployService {
                 "notBefore/notAfter must be RFC3339 timestamps",
             ));
         }
+
+        // The version's identity must exist before the material is sealed: the
+        // AAD binds each sealed file to this uuid and the row is written under
+        // the same value, so the two cannot drift.
+        let certificate_version_uuid = sdkwork_database_id::uuid_v4();
+        let material = seal_issued_material(
+            &request.material,
+            &DeclaredCertificateEvidence {
+                serial_sha256: &request.serial_sha256,
+                fingerprint_sha256: &request.fingerprint_sha256,
+                spki_sha256: &request.spki_sha256,
+                chain_sha256: &request.chain_sha256,
+                issuer: &request.issuer,
+                subject: &request.subject,
+                key_algorithm: &request.key_algorithm,
+                not_before: &request.not_before,
+                not_after: &request.not_after,
+            },
+            &certificate_version_uuid,
+            self.certificate_material_key.as_deref(),
+            self.certificate_trust_anchors.as_deref(),
+        )?;
+
         self.repository
             .store_certificate_version(
                 tenant_id,
+                &certificate_version_uuid,
                 &request.order_id,
                 request.version_no,
                 &request.serial_sha256,
@@ -422,6 +426,7 @@ impl DeployBackendApi for DeployService {
                 &request.not_before,
                 &request.not_after,
                 &request.secret_bundle_ref,
+                &material,
             )
             .await
     }

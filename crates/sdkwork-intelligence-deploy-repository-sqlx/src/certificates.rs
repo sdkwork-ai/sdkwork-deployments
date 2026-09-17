@@ -1,9 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use sdkwork_deploy_contract::{
-    CertificatePage, CertificateResponse, CreateCertificateRequest, DeployServiceError,
-    DeployServiceResult, CERTIFICATE_RENEWAL_STATUS_PLANNED, CERTIFICATE_SOURCE_MANAGED,
-    CERTIFICATE_STATUS_REVOKED,
+    plan_certificate_identifiers, resolve_validation_method, CertificatePage, CertificatePlanError,
+    CertificateResponse, CertificateScope, CreateCertificateRequest, DeployServiceError,
+    DeployServiceResult, ValidationMethod, CERTIFICATE_RENEWAL_STATUS_PLANNED,
+    CERTIFICATE_SOURCE_MANAGED, CERTIFICATE_STATUS_REVOKED, MAX_CERTIFICATE_IDENTIFIERS,
 };
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
@@ -12,9 +13,13 @@ use crate::support::{
     sha256_hex, store_error,
 };
 use crate::DeployRepository;
+use chrono::Utc;
+use sdkwork_intelligence_deploy_service::certificate_renewal::ValidityWindow;
 
 const CERTIFICATE_SELECT: &str = "c.uuid, c.cert_name, c.certificate_source, c.ca_profile,
+     c.certificate_scope, c.validation_method, c.provider_account_id,
      c.preferred_key_algorithm, c.auto_renew, c.renewal_status, c.status,
+     c.renew_before_days, c.renewal_failure_count, c.last_renewal_at,
      c.created_at, c.updated_at, c.version,
      v.uuid AS current_version_uuid, v.issuer, v.not_before, v.not_after,
      COALESCE((
@@ -148,13 +153,12 @@ impl DeployRepository {
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
-        let domains = sqlx::query(
-            "SELECT id, uuid, hostname_ascii, hostname_type
+        let requested_domains = sqlx::query(
+            "SELECT id, hostname_ascii
              FROM deploy_domain
              WHERE tenant_id = $1 AND uuid = ANY($2)
                AND verification_status = 'VERIFIED' AND status = 'ACTIVE'
                AND deleted_at IS NULL
-             ORDER BY hostname_ascii, id
              FOR SHARE",
         )
         .bind(tenant_id)
@@ -162,10 +166,66 @@ impl DeployRepository {
         .fetch_all(&mut *transaction)
         .await
         .map_err(|error| store_error("resolve certificate hostname identifiers", error))?;
-        if domains.len() != request.domain_ids.len() {
+        if requested_domains.len() != request.domain_ids.len() {
             return Err(DeployServiceError::validation(
                 "every domainId must reference an active verified hostname in the current tenant",
             ));
+        }
+        let requested_hostnames = requested_domains
+            .iter()
+            .map(|row| row.try_get::<String, _>("hostname_ascii"))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                DeployServiceError::Internal(format!("map certificate hostname: {error}"))
+            })?;
+
+        // Scope rules (apex completion, wildcard depth, challenge legality) are
+        // pure and live in the contract crate; this layer only supplies the
+        // claims the caller selected.
+        let planned_identifiers =
+            plan_certificate_identifiers(request.certificate_scope, &requested_hostnames)
+                .map_err(map_certificate_plan_error)?;
+        let validation_method =
+            resolve_validation_method(request.certificate_scope, request.validation_method)
+                .map_err(map_certificate_plan_error)?;
+
+        // A wildcard scope adds the apex, which the caller did not select, so the
+        // planned set is resolved against `deploy_domain` a second time rather
+        // than reusing `requested_domains`. The added apex must already be an
+        // active verified claim of this tenant.
+        let planned_hostnames = planned_identifiers
+            .iter()
+            .map(|identifier| identifier.hostname.clone())
+            .collect::<Vec<_>>();
+        let planned_claims = sqlx::query(
+            "SELECT id, hostname_ascii
+             FROM deploy_domain
+             WHERE tenant_id = $1 AND hostname_ascii = ANY($2)
+               AND verification_status = 'VERIFIED' AND status = 'ACTIVE'
+               AND deleted_at IS NULL
+             FOR SHARE",
+        )
+        .bind(tenant_id)
+        .bind(&planned_hostnames)
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(|error| store_error("resolve planned certificate identifiers", error))?;
+        let mut claim_by_hostname = HashMap::with_capacity(planned_claims.len());
+        for claim in &planned_claims {
+            let hostname: String = claim.try_get("hostname_ascii").map_err(|error| {
+                DeployServiceError::Internal(format!("map planned certificate hostname: {error}"))
+            })?;
+            let domain_id: i64 = claim.try_get("id").map_err(|error| {
+                DeployServiceError::Internal(format!("map planned certificate domain id: {error}"))
+            })?;
+            claim_by_hostname.insert(hostname, domain_id);
+        }
+        for identifier in &planned_identifiers {
+            if !claim_by_hostname.contains_key(&identifier.hostname) {
+                return Err(map_certificate_plan_error(
+                    CertificatePlanError::WildcardApexMissing,
+                ));
+            }
         }
 
         let certificate_id = next_id(self.id_generator())?;
@@ -173,10 +233,11 @@ impl DeployRepository {
         sqlx::query(
             "INSERT INTO deploy_certificate (
                 id, uuid, tenant_id, organization_id, cert_name, certificate_source,
-                ca_profile, preferred_key_algorithm, auto_renew, renewal_status, status,
+                ca_profile, certificate_scope, validation_method, preferred_key_algorithm,
+                auto_renew, renew_before_days, renewal_status, status, provider_account_id,
                 idempotency_key, request_sha256, created_by, updated_by
              ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,TRUE,'NONE','PENDING',$9,$10,$11,$11
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'NONE','PENDING',$13,$14,$15,$16,$16
              )",
         )
         .bind(certificate_id)
@@ -186,7 +247,12 @@ impl DeployRepository {
         .bind(request.cert_name.trim())
         .bind(CERTIFICATE_SOURCE_MANAGED)
         .bind(&request.ca_profile)
+        .bind(request.certificate_scope.as_str())
+        .bind(validation_method.as_str())
         .bind(&request.preferred_key_algorithm)
+        .bind(request.auto_renew)
+        .bind(request.renew_before_days)
+        .bind(request.provider_account_id.as_deref())
         .bind(idempotency_key)
         .bind(&request_sha256)
         .bind(actor_id)
@@ -194,7 +260,13 @@ impl DeployRepository {
         .await
         .map_err(|error| store_error("insert deploy_certificate", error))?;
 
-        for (position, domain) in domains.iter().enumerate() {
+        for (position, identifier) in planned_identifiers.iter().enumerate() {
+            let domain_id = claim_by_hostname
+                .get(&identifier.hostname)
+                .copied()
+                .ok_or_else(|| {
+                    map_certificate_plan_error(CertificatePlanError::WildcardApexMissing)
+                })?;
             sqlx::query(
                 "INSERT INTO deploy_certificate_identifier (
                     id, uuid, tenant_id, certificate_id, domain_id, identifier_type,
@@ -205,25 +277,9 @@ impl DeployRepository {
             .bind(new_uuid())
             .bind(tenant_id)
             .bind(certificate_id)
-            .bind(domain.try_get::<i64, _>("id").map_err(|error| {
-                DeployServiceError::Internal(format!("map certificate domain id: {error}"))
-            })?)
-            .bind(
-                domain
-                    .try_get::<String, _>("hostname_type")
-                    .map_err(|error| {
-                        DeployServiceError::Internal(format!(
-                            "map certificate identifier type: {error}"
-                        ))
-                    })?,
-            )
-            .bind(
-                domain
-                    .try_get::<String, _>("hostname_ascii")
-                    .map_err(|error| {
-                        DeployServiceError::Internal(format!("map certificate hostname: {error}"))
-                    })?,
-            )
+            .bind(domain_id)
+            .bind(identifier.identifier_type.as_str())
+            .bind(&identifier.hostname)
             .bind(position as i32)
             .execute(&mut *transaction)
             .await
@@ -303,7 +359,7 @@ fn validate_create_certificate(
             "Idempotency-Key must contain between 1 and 128 characters",
         ));
     }
-    if request.domain_ids.is_empty() || request.domain_ids.len() > 100 {
+    if request.domain_ids.is_empty() || request.domain_ids.len() > MAX_CERTIFICATE_IDENTIFIERS {
         return Err(DeployServiceError::validation(
             "domainIds must contain between 1 and 100 hostnames",
         ));
@@ -332,24 +388,95 @@ fn validate_create_certificate(
     Ok(())
 }
 
+/// Maps a pure planning rejection onto the API problem surface.
+///
+/// The planner reports a stable machine code plus a message that never echoes
+/// the offending hostname; only the message is surfaced so a rejection cannot
+/// be used to probe another tenant's hostname inventory.
+fn map_certificate_plan_error(error: CertificatePlanError) -> DeployServiceError {
+    DeployServiceError::validation(format!("{}: {}", error.code(), error.message()))
+}
+
+/// Decodes a certificate scope column that the baseline constrains to
+/// `SINGLE_DOMAIN` / `WILDCARD`.
+fn decode_certificate_scope(raw: &str) -> Result<CertificateScope, sqlx::Error> {
+    CertificateScope::parse(raw)
+        .ok_or_else(|| sqlx::Error::Decode(format!("unknown certificate_scope: {raw}").into()))
+}
+
+/// Decodes a validation method column that the baseline constrains to
+/// `AUTO` / `HTTP_01` / `DNS_01`.
+fn decode_validation_method(raw: &str) -> Result<ValidationMethod, sqlx::Error> {
+    ValidationMethod::parse(raw)
+        .ok_or_else(|| sqlx::Error::Decode(format!("unknown validation_method: {raw}").into()))
+}
+
 fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> {
     let identifiers =
         json_from_row(row, "identifiers")?.unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
     let identifiers = serde_json::from_value::<Vec<String>>(identifiers)
         .map_err(|error| sqlx::Error::Decode(Box::new(error)))?;
+    let certificate_scope =
+        decode_certificate_scope(&row.try_get::<String, _>("certificate_scope")?)?;
+    let validation_method =
+        decode_validation_method(&row.try_get::<String, _>("validation_method")?)?;
+    let not_before = optional_datetime_from_row(row, "not_before")?;
+    let not_after = optional_datetime_from_row(row, "not_after")?;
+    let renew_before_days: i32 = row.try_get("renew_before_days")?;
+
+    // The phase, the due instant and the remaining days are derived from the
+    // served version's own X.509 window rather than from `status`, so a row whose
+    // status lags the clock still reports the truth. They are computed through
+    // the same functions the renewal sweep uses, which is what stops the console
+    // and the scheduler from ever disagreeing about when a certificate is due.
+    //
+    // A certificate with no active version has no window and therefore no phase:
+    // reporting `VALID` for a `PENDING` certificate would be a lie an operator
+    // would act on.
+    let (renewal_due_at, days_until_expiry, validity_phase) =
+        match (not_before.as_deref(), not_after.as_deref()) {
+            (Some(not_before), Some(not_after)) => {
+                match ValidityWindow::from_rfc3339(not_before, not_after) {
+                    Ok(window) => {
+                        let now = Utc::now();
+                        (
+                            Some(window.renewal_due_at(renew_before_days).to_rfc3339()),
+                            Some(window.whole_days_remaining(now)),
+                            Some(window.classify(renew_before_days, now).as_str().to_owned()),
+                        )
+                    }
+                    // A stored window the rule cannot reason about is surfaced as an
+                    // absent phase rather than as a 500: the certificate is still
+                    // listable, and the broken row is visible instead of swallowing
+                    // the whole page.
+                    Err(_) => (None, None, None),
+                }
+            }
+            _ => (None, None, None),
+        };
+
     Ok(CertificateResponse {
         id: row.try_get("uuid")?,
         cert_name: row.try_get("cert_name")?,
         certificate_source: row.try_get("certificate_source")?,
         ca_profile: row.try_get("ca_profile")?,
+        certificate_scope,
+        validation_method,
+        provider_account_id: row.try_get("provider_account_id")?,
         preferred_key_algorithm: row.try_get("preferred_key_algorithm")?,
         identifiers,
         current_version_id: row.try_get("current_version_uuid")?,
         issuer: row.try_get("issuer")?,
-        not_before: optional_datetime_from_row(row, "not_before")?,
-        not_after: optional_datetime_from_row(row, "not_after")?,
+        not_before,
+        not_after,
         auto_renew: row.try_get("auto_renew")?,
         renewal_status: row.try_get("renewal_status")?,
+        renew_before_days,
+        renewal_due_at,
+        days_until_expiry,
+        validity_phase,
+        last_renewal_at: optional_datetime_from_row(row, "last_renewal_at")?,
+        renewal_failure_count: row.try_get("renewal_failure_count")?,
         status: row.try_get("status")?,
         created_at: datetime_from_row(row, "created_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,

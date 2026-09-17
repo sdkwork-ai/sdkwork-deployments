@@ -58,11 +58,7 @@ pub struct ResolvedDeployServer {
     /// the app-level `deploy_app.nginx_conf` base). `None` when the app has no
     /// managed nginx configuration, in which case the Web Server keeps serving
     /// through the compiled descriptor alone.
-    #[serde(
-        rename = "nginxConf",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "nginxConf", default, skip_serializing_if = "Option::is_none")]
     pub nginx_conf: Option<String>,
     /// SHA-256 of [`Self::nginx_conf`] when present.
     #[serde(

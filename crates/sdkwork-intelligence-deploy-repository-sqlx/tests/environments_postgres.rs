@@ -31,10 +31,20 @@ fn deploy_module() -> Arc<DefaultDatabaseModule> {
 }
 
 fn database_pool(pool: PgPool) -> DatabasePool {
+    // The migration lock opens its own connection from this config, so it has to
+    // describe the pool that is actually in use. `DatabaseConfig::default()` is a
+    // SQLite configuration with an empty URL, which made every test in this file
+    // fail with `migration_lock_open_failed (postgres): relative URL without a
+    // base` before reaching a single assertion.
+    let url = std::env::var("SDKWORK_DATABASE_TEST_POSTGRES_URL").unwrap_or_default();
     DatabasePool::Postgres(
         pool,
         sdkwork_database_sqlx::PoolContext {
-            config: DatabaseConfig::default(),
+            config: DatabaseConfig {
+                engine: sdkwork_database_config::DatabaseEngine::Postgres,
+                url,
+                ..DatabaseConfig::default()
+            },
         },
     )
 }
@@ -81,23 +91,27 @@ async fn create_app(repository: &DeployRepository, slug: &str) -> String {
     app.id
 }
 
-/// Inserts a release row for the app directly (the full package chain is
-/// exercised by the release integration tests) and returns its uuid.
+/// Seeds the release the promotion chain promotes through environments.
+///
+/// `deploy_release` requires a platform target and a package, and
+/// `deploy_package` requires a build, so the whole chain goes through the shared
+/// fixture rather than a hand-written insert that omits the required columns.
 async fn insert_release(pool: &PgPool, app_internal_id: i64, version: &str) -> String {
-    let uuid = format!("00000000-0000-4000-8000-{}", version.replace('.', "0"));
-    sqlx::query(
-        "INSERT INTO deploy_release
-            (id, uuid, tenant_id, organization_id, app_id, package_id, semantic_version,
-             release_status, created_at, updated_at)
-         VALUES (8001, $1, 7, 9, $2, 0, $3, 'ACTIVE', NOW(), NOW())",
+    common::seed_delivery_chain(
+        pool,
+        common::DeliveryChainIds {
+            platform_target: 8001,
+            build: 8002,
+            package: 8003,
+            release: 8004,
+        },
+        app_internal_id,
+        version,
+        "ACTIVE",
+        0,
     )
-    .bind(&uuid)
-    .bind(app_internal_id)
-    .bind(version)
-    .execute(pool)
     .await
-    .expect("insert release");
-    uuid
+    .release_uuid
 }
 
 #[tokio::test]

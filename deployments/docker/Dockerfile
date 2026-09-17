@@ -3,7 +3,9 @@ COPY . /src
 WORKDIR /src/sdkwork-deployments
 RUN cargo build --release \
     -p sdkwork-api-deployments-standalone-gateway \
-    -p sdkwork-deploy-runtime-assignment-worker
+    -p sdkwork-deploy-runtime-assignment-worker \
+    -p sdkwork-deploy-certificate-renewal-worker \
+    -p sdkwork-deploy-certificate-worker
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -14,6 +16,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder --chown=10001:10001 /src/sdkwork-deployments/target/release/sdkwork-api-deployments-standalone-gateway /usr/local/bin/sdkwork-api-deployments-standalone-gateway
 COPY --from=builder --chown=10001:10001 /src/sdkwork-deployments/target/release/sdkwork-deploy-runtime-assignment-worker /usr/local/bin/sdkwork-deploy-runtime-assignment-worker
+COPY --from=builder --chown=10001:10001 /src/sdkwork-deployments/target/release/sdkwork-deploy-certificate-renewal-worker /usr/local/bin/sdkwork-deploy-certificate-renewal-worker
+COPY --from=builder --chown=10001:10001 /src/sdkwork-deployments/target/release/sdkwork-deploy-certificate-worker /usr/local/bin/sdkwork-deploy-certificate-worker
 COPY --from=builder --chown=10001:10001 /src/sdkwork-deployments/database /app/database
 ENV SDKWORK_DEPLOY_APP_ROOT=/app
 ENV SDKWORK_DEPLOY_ENVIRONMENT=production

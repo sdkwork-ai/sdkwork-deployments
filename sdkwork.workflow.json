@@ -129,7 +129,9 @@
       "runner": "ubuntu-24.04",
       "outputGlobs": [
         "target/release/sdkwork-api-deployments-standalone-gateway*",
-        "target/release/sdkwork-deploy-runtime-assignment-worker*"
+        "target/release/sdkwork-deploy-runtime-assignment-worker*",
+        "target/release/sdkwork-deploy-certificate-renewal-worker*",
+        "target/release/sdkwork-deploy-certificate-worker*"
       ],
       "deploymentProfile": "cloud",
       "runtimeTarget": "server"

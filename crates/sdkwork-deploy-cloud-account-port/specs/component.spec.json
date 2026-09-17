@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-deploy-cloud-account-port",
+    "displayName": "SDKWork Deploy Cloud Account Port",
+    "version": "0.1.0",
+    "type": "rust-crate",
+    "root": "crates/sdkwork-deploy-cloud-account-port",
+    "domain": "deploy",
+    "capability": "cloud-account-integration",
+    "surface": "backend-provider",
+    "languages": ["rust"],
+    "generated": false,
+    "manifests": ["Cargo.toml", "specs/component.spec.json"]
+  },
+  "canonicalSpecs": [
+    {"file": "DATABASE_FRAMEWORK_SPEC.md", "path": "../../../sdkwork-specs/DATABASE_FRAMEWORK_SPEC.md", "purpose": "Cross-module persistence consumption through the owner's export rather than Deploy-owned credential tables."},
+    {"file": "APPLICATION_LAYERED_ARCHITECTURE_SPEC.md", "path": "../../../sdkwork-specs/APPLICATION_LAYERED_ARCHITECTURE_SPEC.md", "purpose": "Permitted cross-module integration surfaces."},
+    {"file": "ENGINEERING_WORKFLOW_SPEC.md", "path": "../../../sdkwork-specs/ENGINEERING_WORKFLOW_SPEC.md", "purpose": "Composing cross-module behaviour from declared ports."},
+    {"file": "IAM_SPEC.md", "path": "../../../sdkwork-specs/IAM_SPEC.md", "purpose": "IAM ownership of the provider account center and its credential custody."},
+    {"file": "SECURITY_SPEC.md", "path": "../../../sdkwork-specs/SECURITY_SPEC.md", "purpose": "Cloud credential handling, scope visibility, and error disclosure."},
+    {"file": "RUST_CODE_SPEC.md", "path": "../../../sdkwork-specs/RUST_CODE_SPEC.md", "purpose": "Rust port and adapter structure."},
+    {"file": "TEST_SPEC.md", "path": "../../../sdkwork-specs/TEST_SPEC.md", "purpose": "Port boundary verification."}
+  ],
+  "contracts": {
+    "layerRole": "backend-provider",
+    "publicExports": ["."],
+    "providedPorts": [
+      {"name": "deployCloudAccountPort", "export": "."}
+    ],
+    "requiredPorts": [
+      {"name": "iamProviderAccountService", "export": ".", "provider": "sdkwork-iam-provider-account-service"}
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": [
+      "SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS"
+    ]
+  },
+  "verification": {
+    "commands": ["cargo test -p sdkwork-deploy-cloud-account-port"]
+  }
+}

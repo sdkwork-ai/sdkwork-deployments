@@ -1,9 +1,11 @@
 # =============================================================================
 # SDKWork Deploy — standalone gateway stack (external dependency mode)
 # =============================================================================
-# Two single-process containers share one immutable image digest:
-#   gateway  sdkwork-api-deployments-standalone-gateway  (public application API)
-#   worker   sdkwork-deploy-runtime-assignment-worker     (runtime assignment worker)
+# Four single-process containers share one immutable image digest:
+#   gateway   sdkwork-api-deployments-standalone-gateway       (public application API)
+#   worker    sdkwork-deploy-runtime-assignment-worker         (runtime assignment worker)
+#   certs     sdkwork-deploy-certificate-renewal-worker        (certificate renewal planner)
+#   certs-issue sdkwork-deploy-certificate-worker              (certificate issuance executor)
 #
 # PostgreSQL and Redis are provisioned EXTERNALLY (see docker-compose.external.yml
 # and scripts/provision-databases.sh). They are NOT started by compose.
@@ -54,3 +56,43 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     logging: *default-logging
+
+  # Renewal is a separate process from the assignment worker on purpose: the two
+  # fail for unrelated reasons (a CA rate limit versus a runtime API outage), and
+  # a crash loop in one must not stop the other from making progress.
+  certificate-renewal:
+    image: ${GATEWAY_IMAGE:-sdkwork-api-deployments-standalone-gateway:local}
+    container_name: ${GATEWAY_ENVIRONMENT:-development}-certificate-renewal
+    command: ["sdkwork-deploy-certificate-renewal-worker"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  # Ordering planner and issuance executor are separate processes for the same
+  # reason the renewal worker is separate from the assignment worker: they fail
+  # for unrelated reasons, and a CA outage must not stop renewals from being
+  # planned. The executor is the only process that talks to the CA and to the
+  # DNS provider, so it alone needs the ACME and DNS settings.
+  #
+  # HTTP-01 validation needs the challenge webroot shared with whichever edge
+  # serves `/.well-known/acme-challenge/` for the managed domains; a token
+  # written into a private volume is a token no CA will ever fetch. The named
+  # volume below is the share point — mount it read-only into that edge.
+  certificate-issuance:
+    image: ${GATEWAY_IMAGE:-sdkwork-api-deployments-standalone-gateway:local}
+    container_name: ${GATEWAY_ENVIRONMENT:-development}-certificate-issuance
+    command: ["sdkwork-deploy-certificate-worker"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    # Process identity, not deployment configuration, so it does not belong in
+    # the generated env file: the value is recorded verbatim in
+    # `deploy_certificate_order.lease_owner`, and two processes sharing a name
+    # would each read the other's live lease as abandoned.
+    environment:
+      SDKWORK_DEPLOY_CERTIFICATE_ISSUANCE_WORKER_ID: certificate-issuance-0
+    volumes:
+      - certificate-webroot:/var/lib/sdkwork/deploy/acme-webroot
+    logging: *default-logging
+
+volumes:
+  certificate-webroot:

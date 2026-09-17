@@ -30,6 +30,9 @@ tables:
   - name: deploy_certificate_version
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_certificate_material
+    lifecycle_status: active
+    owner: deploy-platform
   - name: deploy_deployment
     lifecycle_status: active
     owner: deploy-platform
@@ -102,6 +105,12 @@ tables:
   - name: deploy_certificate_challenge
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_dns_provider_credential
+    lifecycle_status: deprecated
+    owner: deploy-platform
+  - name: deploy_certificate_quota_usage
+    lifecycle_status: active
+    owner: deploy-platform
   - name: deploy_certificate_distribution
     lifecycle_status: active
     owner: deploy-platform
@@ -166,5 +175,8 @@ tables:
     lifecycle_status: active
     owner: deploy-platform
   - name: deploy_environment_promotion
+    lifecycle_status: active
+    owner: deploy-platform
+  - name: deploy_certificate_renewal
     lifecycle_status: active
     owner: deploy-platform

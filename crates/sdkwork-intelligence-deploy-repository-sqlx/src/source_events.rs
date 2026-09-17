@@ -85,7 +85,8 @@ impl DeployRepository {
                 (id, uuid, tenant_id, organization_id, app_id, source_repository_id,
                  event_kind, source_ref, source_commit, commit_message, sender_ref,
                  payload_sha256, event_status, builds_triggered, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', 0, $13)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', 0,
+                     CAST($13 AS TIMESTAMPTZ))
              ON CONFLICT (source_repository_id, source_commit) DO NOTHING",
         )
         .bind(event_id)
@@ -106,9 +107,10 @@ impl DeployRepository {
         .map_err(|error| store_error("insert deploy_source_event", error))?;
         if inserted.rows_affected() == 0 {
             let existing = sqlx::query(
-                "SELECT uuid, tenant_id, a.uuid AS app_uuid, r.uuid AS repo_uuid,
-                        event_kind, source_ref, source_commit, commit_message, payload_sha256,
-                        event_status, builds_triggered, error_code, processed_at, created_at
+                "SELECT e.uuid, e.tenant_id, a.uuid AS app_uuid, r.uuid AS repo_uuid,
+                        e.event_kind, e.source_ref, e.source_commit, e.commit_message,
+                        e.payload_sha256, e.event_status, e.builds_triggered, e.error_code,
+                        e.processed_at, e.created_at
                  FROM deploy_source_event e
                  JOIN deploy_app a ON a.id = e.app_id
                  JOIN deploy_source_repository r ON r.id = e.source_repository_id
@@ -169,9 +171,12 @@ impl DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<SourceEventPage> {
         let (page, page_size, offset) = pagination(page, page_size);
-        let (filter, bind) = match tenant_id {
-            Some(_tenant_id) => ("WHERE e.tenant_id = $1", true),
-            None => ("", false),
+        // See `list_entitlement_projections_repo`: the tenant predicate and the
+        // page window must not share a placeholder number, or `LIMIT $1` reads
+        // the tenant id and `OFFSET $2` reads the page size.
+        let (filter, paging, bind) = match tenant_id {
+            Some(_tenant_id) => ("WHERE e.tenant_id = $1", "LIMIT $2 OFFSET $3", true),
+            None => ("", "LIMIT $1 OFFSET $2", false),
         };
         let count_query = format!("SELECT COUNT(*) AS total FROM deploy_source_event e {filter}");
         let mut count = sqlx::query(AssertSqlSafe(&*count_query));
@@ -193,7 +198,7 @@ impl DeployRepository {
              JOIN deploy_app a ON a.id = e.app_id
              JOIN deploy_source_repository r ON r.id = e.source_repository_id
              {filter}
-             ORDER BY e.created_at DESC, e.id DESC LIMIT $1 OFFSET $2"
+             ORDER BY e.created_at DESC, e.id DESC {paging}"
         );
         let mut list = sqlx::query(AssertSqlSafe(&*list_query));
         if bind {
@@ -270,6 +275,35 @@ fn map_source_event_row(
     })
 }
 
+impl DeployRepository {
+    /// Active build trigger candidates for an app: platform targets with an
+    /// ACTIVE status and a governed build template.
+    pub(super) async fn list_trigger_targets_repo(
+        &self,
+        app_id: &str,
+    ) -> DeployServiceResult<Vec<TriggerTarget>> {
+        let rows = sqlx::query(
+            "SELECT t.uuid AS target_uuid, bt.uuid AS template_uuid
+             FROM deploy_app_platform_target t
+             JOIN deploy_app a ON a.id = t.app_id
+             JOIN deploy_build_template bt ON bt.id = t.build_template_id
+             WHERE a.uuid = $1 AND t.deleted_at IS NULL
+               AND t.target_status = 'ACTIVE' AND bt.template_status = 'ACTIVE'",
+        )
+        .bind(app_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list trigger targets", error))?;
+        Ok(rows
+            .iter()
+            .map(|row| TriggerTarget {
+                platform_target_id: row.try_get("target_uuid").unwrap_or_default(),
+                template_id: row.try_get("template_uuid").unwrap_or_default(),
+            })
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// Normalizes a repository URL for matching: strip trailing `.git` and
@@ -310,34 +344,5 @@ mod tests {
             normalize_repository_url("  https://github.com/a/b.git  "),
             "github.com/a/b"
         );
-    }
-}
-
-impl DeployRepository {
-    /// Active build trigger candidates for an app: platform targets with an
-    /// ACTIVE status and a governed build template.
-    pub(super) async fn list_trigger_targets_repo(
-        &self,
-        app_id: &str,
-    ) -> DeployServiceResult<Vec<TriggerTarget>> {
-        let rows = sqlx::query(
-            "SELECT t.uuid AS target_uuid, bt.uuid AS template_uuid
-             FROM deploy_app_platform_target t
-             JOIN deploy_app a ON a.id = t.app_id
-             JOIN deploy_build_template bt ON bt.id = t.build_template_id
-             WHERE a.uuid = $1 AND t.deleted_at IS NULL
-               AND t.target_status = 'ACTIVE' AND bt.template_status = 'ACTIVE'",
-        )
-        .bind(app_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| store_error("list trigger targets", error))?;
-        Ok(rows
-            .iter()
-            .map(|row| TriggerTarget {
-                platform_target_id: row.try_get("target_uuid").unwrap_or_default(),
-                template_id: row.try_get("template_uuid").unwrap_or_default(),
-            })
-            .collect())
     }
 }

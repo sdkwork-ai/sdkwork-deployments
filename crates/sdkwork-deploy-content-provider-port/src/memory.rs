@@ -1,8 +1,7 @@
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{ContentProviderResourceSource, DeployServiceError};
 use sdkwork_deploy_runtime_compiler::{
-    RuntimeProviderType, RuntimeResourceCapabilities,
-    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+    RuntimeProviderType, RuntimeResourceCapabilities, DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
     KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION,
 };
 

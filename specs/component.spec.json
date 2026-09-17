@@ -45,6 +45,8 @@
       "crates/sdkwork-api-deployments-standalone-gateway",
       "crates/sdkwork-deploy-content-provider-port",
       "crates/sdkwork-deploy-runtime-assignment-worker",
+      "crates/sdkwork-deploy-certificate-renewal-worker",
+      "crates/sdkwork-deploy-certificate-worker",
       "crates/sdkwork-deploy-service-host",
       "crates/sdkwork-deploy-web-port",
       "crates/sdkwork-routes-deploy-app-api",
@@ -60,6 +62,16 @@
         "id": "runtime-assignment-worker",
         "crate": "sdkwork-deploy-runtime-assignment-worker",
         "binary": "sdkwork-deploy-runtime-assignment-worker"
+      },
+      {
+        "id": "certificate-renewal-worker",
+        "crate": "sdkwork-deploy-certificate-renewal-worker",
+        "binary": "sdkwork-deploy-certificate-renewal-worker"
+      },
+      {
+        "id": "certificate-issuance-worker",
+        "crate": "sdkwork-deploy-certificate-worker",
+        "binary": "sdkwork-deploy-certificate-worker"
       },
       {
         "id": "build-runner",
@@ -180,6 +192,7 @@
     "configKeys": [
       "SDKWORK_DATABASE_*",
       "SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER",
+      "SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS",
       "SDKWORK_DRIVE_FACADE_URL",
       "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL",
       "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE",

@@ -337,7 +337,7 @@ impl DeployRepository {
             resolve_build_internal_id(&self.pool, tenant_id, app_internal_id, build_id).await?;
 
         let current = sqlx::query(
-            "SELECT build_status, runner_node_uuid, finished_at FROM deploy_build
+            "SELECT build_status, runner_node_uuid, started_at, finished_at FROM deploy_build
              WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(build_internal_id)
@@ -346,7 +346,14 @@ impl DeployRepository {
         .map_err(|error| store_error("read deploy_build state", error))?;
         let current_status: String = current.try_get("build_status").unwrap_or_default();
         let current_runner: Option<String> = current.try_get("runner_node_uuid").ok();
-        let finished_at: Option<String> = current.try_get("finished_at").ok();
+        // Both instants are TIMESTAMPTZ. Reading them as `String` failed on the
+        // wire and `.ok()` turned that failure into `None`, which made the
+        // terminal-state guard below unreachable: a finished build could be
+        // driven through the state machine again, and `duration_ms` was never
+        // computed. `started_at` also has to be selected — it is what the
+        // duration is measured from.
+        let finished_at = optional_datetime(&current, "finished_at")?;
+        let started_at = optional_datetime(&current, "started_at")?;
 
         if finished_at.is_some() {
             return Err(DeployServiceError::conflict(
@@ -411,8 +418,7 @@ impl DeployRepository {
 
         let now = now_rfc3339();
         let (finished_value, duration_ms) = if request.build_status.is_terminal() {
-            let started: Option<String> = current.try_get("started_at").ok();
-            let duration = started
+            let duration = started_at
                 .as_deref()
                 .and_then(|started| parse_duration_ms(started, &now));
             (Some(now.clone()), duration)
@@ -429,8 +435,12 @@ impl DeployRepository {
                 source_snapshot_json = COALESCE($7, source_snapshot_json),
                 quality_gate_json = COALESCE($8, quality_gate_json),
                 error_code = $9,
-                started_at = COALESCE($10, started_at),
-                finished_at = COALESCE($11, finished_at),
+                -- The runner reports these as RFC3339 strings, so the cast is
+                -- what lets them meet the TIMESTAMPTZ column: COALESCE of a
+                -- text parameter and a timestamp column is rejected outright
+                -- instead of being coerced.
+                started_at = COALESCE(CAST($10 AS TIMESTAMPTZ), started_at),
+                finished_at = COALESCE(CAST($11 AS TIMESTAMPTZ), finished_at),
                 duration_ms = COALESCE($12, duration_ms),
                 updated_by = $13, updated_at = NOW(), version = version + 1
              WHERE id = $1 AND deleted_at IS NULL",

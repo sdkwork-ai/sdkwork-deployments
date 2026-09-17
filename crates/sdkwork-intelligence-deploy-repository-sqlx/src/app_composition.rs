@@ -898,11 +898,10 @@ async fn load_environment_bindings(
                 preserve_query: row.try_get("preserve_query").unwrap_or(true),
             }
         } else {
-            let default_variant_id: Option<i64> =
-                row.try_get("default_variant_id").ok().flatten();
+            let default_variant_id: Option<i64> = row.try_get("default_variant_id").ok().flatten();
             let forced_variant_id: Option<i64> = row.try_get("forced_variant_id").ok().flatten();
-            let default = resolve_variant_uuid(transaction, &mut variant_uuids, default_variant_id)
-                .await?;
+            let default =
+                resolve_variant_uuid(transaction, &mut variant_uuids, default_variant_id).await?;
             let forced =
                 resolve_variant_uuid(transaction, &mut variant_uuids, forced_variant_id).await?;
             RuntimeBindingAction::serve(default, forced)

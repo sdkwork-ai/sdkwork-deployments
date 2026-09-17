@@ -11,7 +11,8 @@ use sdkwork_deploy_contract::{
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
 use crate::support::{
-    new_uuid, next_id, pagination, required_datetime, resolve_app_internal_id, store_error,
+    new_uuid, next_id, optional_datetime, pagination, required_datetime, resolve_app_internal_id,
+    store_error,
 };
 use crate::DeployRepository;
 
@@ -682,7 +683,8 @@ impl DeployRepository {
                 (id, uuid, tenant_id, organization_id, identity_name, signing_kind,
                  platform_target_id, fingerprint_sha256, expires_at, secret_ref,
                  identity_status, created_by, updated_by, created_at, updated_at, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, NOW(), NOW(), 1)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CAST($9 AS TIMESTAMPTZ), $10, $11, $12, $12,
+                     NOW(), NOW(), 1)
              RETURNING uuid",
         )
         .bind(identity_id)
@@ -862,10 +864,11 @@ fn map_signing_identity_row(row: &PgRow) -> Result<SigningIdentityResponse, Depl
         signing_kind: row.try_get("signing_kind").unwrap_or_default(),
         platform_target_id: row.try_get("platform_target_uuid").ok(),
         fingerprint_sha256: row.try_get("fingerprint_sha256").ok(),
-        expires_at: row
-            .try_get::<Option<String>, _>("expires_at")
-            .ok()
-            .flatten(),
+        // `expires_at` is TIMESTAMPTZ. Decoding it straight into `String` is
+        // rejected on the wire, and `.ok()` swallowed that rejection — so the
+        // expiry, which is the whole point of a signing identity record, was
+        // silently absent from every response.
+        expires_at: optional_datetime(row, "expires_at")?,
         secret_ref: row.try_get("secret_ref").ok(),
         identity_status: row.try_get("identity_status").unwrap_or_default(),
         created_at,

@@ -62,7 +62,9 @@ the live WebsiteRoot/WikiPublication path.
 
 Production artifact upload requires `SDKWORK_DRIVE_FACADE_URL` and
 `SDKWORK_DEPLOY_USE_MEMORY_DRIVE=0`. Live provider attachment additionally requires
-`SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false` and the Drive/Knowledgebase Internal API URL and
+`SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false`, `SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false`
+(the DNS credential account center is the default; the flag only opts out), and the
+Drive/Knowledgebase Internal API URL and
 ingress-token-file settings.
 
 ## Artifact And Release Pipeline

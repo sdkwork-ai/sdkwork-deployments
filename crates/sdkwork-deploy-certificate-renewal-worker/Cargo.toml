@@ -1,0 +1,24 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-certificate-renewal-worker"
+version.workspace = true
+edition.workspace = true
+
+
+[lints]
+workspace = true
+[lib]
+name = "sdkwork_deploy_certificate_renewal_worker"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sdkwork-deploy-certificate-renewal-worker"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+sdkwork-deploy-core.workspace = true
+sdkwork-deploy-service-host.workspace = true
+sdkwork-intelligence-deploy-service.workspace = true

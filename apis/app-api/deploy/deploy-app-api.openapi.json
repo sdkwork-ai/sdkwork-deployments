@@ -122,7 +122,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.read"
       },
       "post": {
         "operationId": "domainZones.create",
@@ -211,7 +212,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
     "/app/v3/api/domain_zones/{zoneId}": {
@@ -282,7 +284,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.read"
       },
       "patch": {
         "operationId": "domainZones.update",
@@ -366,7 +369,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       },
       "delete": {
         "operationId": "domainZones.delete",
@@ -410,7 +414,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
     "/app/v3/api/domain_zones/{zoneId}/hostnames": {
@@ -496,7 +501,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       },
       "post": {
         "operationId": "domainZones.hostnames.create",
@@ -595,7 +601,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
     "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}": {
@@ -669,7 +676,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       },
       "patch": {
         "operationId": "domainZones.hostnames.update",
@@ -763,7 +771,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       },
       "delete": {
         "operationId": "domainZones.hostnames.delete",
@@ -807,7 +816,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
     "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}/verify": {
@@ -896,15 +906,128 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
-    "/app/v3/api/sites": {
-      "get": {
-        "operationId": "sites.list",
-        "summary": "获取站点列表",
+    "/app/v3/api/domain_zones/{zoneId}/hostname_claims": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DomainZoneIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "domainZones.hostnameClaims.ensure",
+        "summary": "Ensure ownership of a set of hostnames",
+        "description": "Declares whichever of the requested hostnames the tenant does not own yet and runs one ownership check over each of them, so an order covering N names costs one round trip instead of 2N. The hostnames are fully qualified names rather than zone-relative ones: the server folds them back, because every caller that re-derives the fold is a place for the leading \"*.\" to be applied twice.\n",
         "tags": [
-          "site"
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsureDomainHostnameClaimsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ownership state for every requested hostname",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/DomainHostnameClaimResponse"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "资源冲突",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "校验错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
+      }
+    },
+    "/app/v3/api/cloud_accounts": {
+      "get": {
+        "operationId": "cloudAccounts.list",
+        "summary": "List cloud accounts usable for DNS automation",
+        "tags": [
+          "domain"
         ],
         "security": [
           {
@@ -920,806 +1043,52 @@
             "$ref": "#/components/parameters/PageSizeParam"
           },
           {
-            "name": "status",
+            "name": "dnsProvider",
             "in": "query",
             "schema": {
-              "type": "integer",
+              "type": "string",
               "enum": [
-                0,
-                1,
-                2,
-                3
+                "ALIYUN_DNS",
+                "DNSPOD",
+                "CLOUDFLARE"
               ]
-            }
+            },
+            "description": "Restrict to accounts that drive this DNS family. This is what the zone and certificate forms send, and what makes the response short enough to be a picker rather than an inventory."
           },
           {
-            "name": "site_type",
+            "name": "scopeType",
             "in": "query",
             "schema": {
-              "type": "integer",
+              "type": "string",
               "enum": [
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
+                "platform",
+                "tenant",
+                "user"
               ]
-            }
+            },
+            "description": "Restrict to one visibility level; absent returns every level."
+          },
+          {
+            "name": "mine",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Only accounts the caller personally bound."
           },
           {
             "name": "keyword",
             "in": "query",
             "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": [
-                            "items",
-                            "pageInfo"
-                          ],
-                          "properties": {
-                            "items": {
-                              "type": "array",
-                              "items": {
-                                "$ref": "#/components/schemas/SiteResponse"
-                              }
-                            },
-                            "pageInfo": {
-                              "$ref": "#/components/schemas/PageInfo"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "请求过于频繁",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      },
-      "post": {
-        "operationId": "sites.create",
-        "summary": "创建站点",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateSiteRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "创建成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/SiteResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "请求参数错误",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "资源冲突",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "校验错误",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.retrieve",
-        "summary": "获取站点详情",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/SiteResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [],
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      },
-      "patch": {
-        "operationId": "sites.update",
-        "summary": "更新站点",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateSiteRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "更新成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/SiteResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "校验错误",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [],
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      },
-      "delete": {
-        "operationId": "sites.delete",
-        "summary": "删除站点",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "删除成功"
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [],
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/activate": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "post": {
-        "operationId": "sites.activate",
-        "summary": "激活站点",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "激活成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/SiteResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/composition": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "put": {
-        "operationId": "sites.composition.update",
-        "summary": "Replace and publish the complete live website composition",
-        "description": "Atomically replaces the normalized site composition, appends an immutable SiteRevision, and enqueues complete runtime-set assignments. Live Drive or Knowledgebase content changes do not call this operation and do not create releases or deployments.",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IfMatchParam"
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateSiteCompositionRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The composition revision and runtime assignments were committed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/SiteCompositionResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "请求参数错误",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Access denied",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "资源冲突",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "校验错误",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/pause": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "post": {
-        "operationId": "sites.pause",
-        "summary": "暂停站点",
-        "tags": [
-          "site"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "暂停成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/SiteResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/deployments": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.deployments.list",
-        "summary": "获取部署历史",
-        "tags": [
-          "deployment"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PageParam"
-          },
-          {
-            "$ref": "#/components/parameters/PageSizeParam"
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "enum": [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
-              ]
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "description": "不透明 keyset 续页令牌（PAGINATION_SPEC §6），提供时走 cursor 模式",
-            "schema": {
               "type": "string",
-              "maxLength": 512
+              "maxLength": 200
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "成功",
+            "description": "Success",
             "content": {
               "application/json": {
                 "schema": {
@@ -1744,7 +1113,7 @@
                             "items": {
                               "type": "array",
                               "items": {
-                                "$ref": "#/components/schemas/DeploymentResponse"
+                                "$ref": "#/components/schemas/CloudAccountResponse"
                               }
                             },
                             "pageInfo": {
@@ -1774,13 +1143,14 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.cloudAccounts.read"
       },
       "post": {
-        "operationId": "sites.deployments.create",
-        "summary": "发起部署",
+        "operationId": "cloudAccounts.create",
+        "summary": "Register a cloud account for DNS automation",
         "tags": [
-          "deployment"
+          "domain"
         ],
         "security": [
           {
@@ -1799,14 +1169,14 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateDeploymentRequest"
+                "$ref": "#/components/schemas/CreateCloudAccountRequest"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "部署已触发",
+            "description": "Created",
             "content": {
               "application/json": {
                 "schema": {
@@ -1827,7 +1197,7 @@
                           ],
                           "properties": {
                             "item": {
-                              "$ref": "#/components/schemas/DeploymentResponse"
+                              "$ref": "#/components/schemas/CloudAccountRegistrationResponse"
                             }
                           }
                         }
@@ -1844,334 +1214,6 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "资源冲突",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/deployments/{deploymentId}": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        },
-        {
-          "$ref": "#/components/parameters/DeploymentIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.deployments.retrieve",
-        "summary": "获取部署详情",
-        "tags": [
-          "deployment"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/DeploymentResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [],
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/deployments/{deploymentId}/rollback": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        },
-        {
-          "$ref": "#/components/parameters/DeploymentIdParam"
-        }
-      ],
-      "post": {
-        "operationId": "sites.deployments.rollback",
-        "summary": "回滚部署",
-        "tags": [
-          "deployment"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "回滚成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/DeploymentResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/releases": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.releases.list",
-        "summary": "获取站点发布版本列表",
-        "tags": [
-          "release"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/PageParam"
-          },
-          {
-            "$ref": "#/components/parameters/PageSizeParam"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": [
-                            "items",
-                            "pageInfo"
-                          ],
-                          "properties": {
-                            "items": {
-                              "type": "array",
-                              "items": {
-                                "$ref": "#/components/schemas/ReleaseResponse"
-                              }
-                            },
-                            "pageInfo": {
-                              "$ref": "#/components/schemas/PageInfo"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "未认证",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      },
-      "post": {
-        "operationId": "sites.releases.create",
-        "summary": "从制品创建不可变发布版本",
-        "tags": [
-          "release"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateReleaseRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "创建成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/ReleaseResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
                 }
               }
             }
@@ -2201,228 +1243,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/releases/{releaseId}": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        },
-        {
-          "$ref": "#/components/parameters/ReleaseIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.releases.retrieve",
-        "summary": "获取发布版本详情",
-        "tags": [
-          "release"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/ReleaseResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "资源不存在",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [],
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/env_variables": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.envVariables.list",
-        "summary": "获取环境变量列表",
-        "tags": [
-          "envVariable"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "environment",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "default": "production"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": [
-                            "items",
-                            "pageInfo"
-                          ],
-                          "properties": {
-                            "items": {
-                              "type": "array",
-                              "items": {
-                                "$ref": "#/components/schemas/EnvVariableResponse"
-                              }
-                            },
-                            "pageInfo": {
-                              "$ref": "#/components/schemas/PageInfo"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      },
-      "post": {
-        "operationId": "sites.envVariables.create",
-        "summary": "创建环境变量",
-        "tags": [
-          "envVariable"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateEnvVariableRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "创建成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/EnvVariableResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.cloudAccounts.write"
       }
     },
     "/app/v3/api/certificates": {
@@ -2493,7 +1315,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.read"
       },
       "post": {
         "operationId": "certificates.create",
@@ -2562,7 +1385,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.write"
       }
     },
     "/app/v3/api/certificates/{certificateId}": {
@@ -2643,7 +1467,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.read"
       },
       "delete": {
         "operationId": "certificates.delete",
@@ -2688,7 +1513,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.write"
       }
     },
     "/app/v3/api/certificates/{certificateId}/renew": {
@@ -2785,7 +1611,116 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.write"
+      }
+    },
+    "/app/v3/api/certificates/{certificateId}/renewals": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CertificateIdParam"
+        }
+      ],
+      "get": {
+        "operationId": "certificates.renewals.list",
+        "summary": "获取证书续期历史",
+        "description": "返回该证书的续期尝试台账，按创建时间倒序。每条记录保留本次尝试交接的 有效期窗口（previousNotBefore/previousNotAfter 与 newNotBefore/newNotAfter）， 因此证书被替换之后，「这个域名在某个时间段由哪张证书覆盖」仍然可以回答； 证书自身只保存当前状态，历史版本一旦被取代就无法从这里复原。",
+        "tags": [
+          "certificate"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/CertificateRenewalResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "校验错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.write"
       }
     },
     "/app/v3/api/upload_sessions": {
@@ -2866,7 +1801,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.uploadSessions.write"
       }
     },
     "/app/v3/api/upload_sessions/{uploadSessionId}": {
@@ -2943,7 +1879,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.uploadSessions.read"
       }
     },
     "/app/v3/api/upload_sessions/{uploadSessionId}/complete": {
@@ -3026,7 +1963,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.uploadSessions.write"
       }
     },
     "/app/v3/api/upload_sessions/{uploadSessionId}/cancel": {
@@ -3098,7 +2036,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.uploadSessions.write"
       }
     },
     "/app/v3/api/artifacts": {
@@ -3191,7 +2130,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.artifacts.write"
       },
       "get": {
         "operationId": "artifacts.list",
@@ -3271,7 +2211,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.artifacts.read"
       }
     },
     "/app/v3/api/artifacts/{artifactId}": {
@@ -3342,7 +2283,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.artifacts.read"
       },
       "delete": {
         "operationId": "artifacts.delete",
@@ -3377,145 +2319,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      }
-    },
-    "/app/v3/api/sites/{siteId}/health_checks": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/SiteIdParam"
-        }
-      ],
-      "get": {
-        "operationId": "sites.healthChecks.list",
-        "summary": "获取健康检查配置",
-        "tags": [
-          "monitor"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "required": [
-                            "items",
-                            "pageInfo"
-                          ],
-                          "properties": {
-                            "items": {
-                              "type": "array",
-                              "items": {
-                                "$ref": "#/components/schemas/HealthCheckResponse"
-                              }
-                            },
-                            "pageInfo": {
-                              "$ref": "#/components/schemas/PageInfo"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "parameters": [],
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
-      },
-      "post": {
-        "operationId": "sites.healthChecks.create",
-        "summary": "创建健康检查",
-        "tags": [
-          "monitor"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "x-sdkwork-idempotent": true,
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKeyParam"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateHealthCheckRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "创建成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/HealthCheckResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "app-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.artifacts.write"
       }
     },
     "/app/v3/api/apps": {
@@ -3596,7 +2401,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
       },
       "post": {
         "operationId": "apps.create",
@@ -3685,7 +2491,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
       }
     },
     "/app/v3/api/apps/{appId}": {
@@ -3762,7 +2569,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
       },
       "patch": {
         "operationId": "apps.update",
@@ -3836,7 +2644,643 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/activate": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "apps.activate",
+        "summary": "激活应用",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "激活成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/composition": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "apps.composition.update",
+        "summary": "Replace and publish the complete live app composition",
+        "description": "Atomically replaces the normalized app composition, appends an immutable AppRevision, and enqueues complete runtime-set assignments. Live Drive or Knowledgebase content changes do not call this operation and do not create releases or deployments.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatchParam"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAppCompositionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The composition revision and runtime assignments were committed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppCompositionResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "资源冲突",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "校验错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/pause": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "apps.pause",
+        "summary": "暂停应用",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "暂停成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/env_variables": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.envVariables.list",
+        "summary": "获取环境变量列表",
+        "tags": [
+          "envVariable"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "environment",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "production"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/EnvVariableResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      },
+      "post": {
+        "operationId": "apps.envVariables.create",
+        "summary": "创建环境变量",
+        "tags": [
+          "envVariable"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnvVariableRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/EnvVariableResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/health_checks": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.healthChecks.list",
+        "summary": "获取健康检查配置",
+        "tags": [
+          "monitor"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/HealthCheckResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      },
+      "post": {
+        "operationId": "apps.healthChecks.create",
+        "summary": "创建健康检查",
+        "tags": [
+          "monitor"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHealthCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/HealthCheckResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
       }
     },
     "/app/v3/api/apps/{appId}/platform_targets": {
@@ -3921,7 +3365,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.platformTargets.read"
       },
       "post": {
         "operationId": "platformTargets.create",
@@ -4000,7 +3445,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.platformTargets.write"
       }
     },
     "/app/v3/api/apps/{appId}/platform_targets/{platformTargetId}": {
@@ -4086,7 +3532,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.platformTargets.read"
       }
     },
     "/app/v3/api/apps/{appId}/source_repositories": {
@@ -4171,7 +3618,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.sourceRepositories.read"
       },
       "post": {
         "operationId": "sourceRepositories.create",
@@ -4250,7 +3698,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.sourceRepositories.write"
       }
     },
     "/app/v3/api/apps/{appId}/source_repositories/{sourceRepositoryId}": {
@@ -4336,7 +3785,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.sourceRepositories.read"
       }
     },
     "/app/v3/api/build_templates": {
@@ -4417,7 +3867,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.buildTemplates.read"
       },
       "post": {
         "operationId": "buildTemplates.create",
@@ -4496,7 +3947,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.buildTemplates.write"
       }
     },
     "/app/v3/api/build_templates/{buildTemplateId}": {
@@ -4573,7 +4025,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.buildTemplates.read"
       }
     },
     "/app/v3/api/apps/{appId}/builds": {
@@ -4665,7 +4118,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.builds.read"
       },
       "post": {
         "operationId": "builds.create",
@@ -4744,7 +4198,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.builds.write"
       }
     },
     "/app/v3/api/apps/{appId}/builds/{buildId}": {
@@ -4830,7 +4285,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.builds.read"
       }
     },
     "/app/v3/api/apps/{appId}/builds/{buildId}/state": {
@@ -4926,7 +4382,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.builds.write"
       }
     },
     "/app/v3/api/apps/{appId}/packages": {
@@ -5018,7 +4475,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.packages.read"
       },
       "post": {
         "operationId": "packages.create",
@@ -5097,7 +4555,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.packages.write"
       }
     },
     "/app/v3/api/apps/{appId}/packages/{packageId}": {
@@ -5183,7 +4642,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.packages.read"
       }
     },
     "/app/v3/api/apps/{appId}/releases": {
@@ -5275,7 +4735,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.releases.read"
       },
       "post": {
         "operationId": "releases.create",
@@ -5364,7 +4825,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.releases.write"
       }
     },
     "/app/v3/api/apps/{appId}/releases/{releaseId}": {
@@ -5450,7 +4912,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.releases.read"
       }
     },
     "/app/v3/api/apps/{appId}/channels": {
@@ -5535,7 +4998,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.channels.read"
       }
     },
     "/app/v3/api/apps/{appId}/channels/{channelId}": {
@@ -5621,7 +5085,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.channels.read"
       }
     },
     "/app/v3/api/apps/{appId}/channels/{channelId}/promotions": {
@@ -5722,7 +5187,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.channels.write"
       }
     },
     "/app/v3/api/apps/{appId}/channels/{channelId}/rollouts": {
@@ -5823,7 +5289,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.channels.write"
       }
     },
     "/app/v3/api/apps/{appId}/deployments": {
@@ -5915,7 +5382,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.deployments.read"
       },
       "post": {
         "operationId": "deployments.create",
@@ -5994,7 +5462,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.deployments.write"
       }
     },
     "/app/v3/api/apps/{appId}/deployments/{deploymentId}": {
@@ -6080,7 +5549,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.deployments.read"
       }
     },
     "/app/v3/api/signing_identities": {
@@ -6161,7 +5631,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.signingIdentities.read"
       },
       "post": {
         "operationId": "signingIdentities.create",
@@ -6240,7 +5711,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.signingIdentities.write"
       }
     },
     "/app/v3/api/signing_identities/{signingIdentityId}": {
@@ -6317,7 +5789,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.signingIdentities.read"
       }
     },
     "/app/v3/api/usage_events": {
@@ -6399,7 +5872,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.usageEvents.read"
       }
     },
     "/app/v3/api/apps/{appId}/database_profiles": {
@@ -6491,7 +5965,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseProfiles.read"
       },
       "post": {
         "operationId": "appDatabaseProfiles.create",
@@ -6578,7 +6053,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseProfiles.write"
       }
     },
     "/app/v3/api/apps/{appId}/database_profiles/{profileId}": {
@@ -6664,7 +6140,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseProfiles.read"
       },
       "patch": {
         "operationId": "appDatabaseProfiles.update",
@@ -6750,7 +6227,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseProfiles.write"
       }
     },
     "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations": {
@@ -6851,7 +6329,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseMigrations.read"
       },
       "post": {
         "operationId": "appDatabaseMigrations.create",
@@ -6937,7 +6416,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseMigrations.write"
       }
     },
     "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations/{migrationId}": {
@@ -7032,7 +6512,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appDatabaseMigrations.read"
       }
     },
     "/app/v3/api/apps/{appId}/environments": {
@@ -7124,7 +6605,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appEnvironments.read"
       },
       "post": {
         "operationId": "appEnvironments.create",
@@ -7210,7 +6692,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appEnvironments.write"
       }
     },
     "/app/v3/api/apps/{appId}/environments/{environmentId}": {
@@ -7296,7 +6779,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appEnvironments.read"
       },
       "patch": {
         "operationId": "appEnvironments.update",
@@ -7382,7 +6866,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appEnvironments.write"
       }
     },
     "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions": {
@@ -7483,7 +6968,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appEnvironments.read"
       },
       "post": {
         "operationId": "appEnvironments.create",
@@ -7570,7 +7056,8 @@
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token"
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.appEnvironments.write"
       }
     }
   },
@@ -7612,20 +7099,11 @@
           "default": 20
         }
       },
-      "SiteIdParam": {
-        "name": "siteId",
-        "in": "path",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
       "IfMatchParam": {
         "name": "If-Match",
         "in": "header",
         "required": true,
-        "description": "Strong ETag containing the decimal-string Site version, for example `\"3\"`.",
+        "description": "Strong ETag containing the decimal-string app version, for example `\"3\"`.",
         "schema": {
           "type": "string",
           "pattern": "^(\"[0-9]+\"|[0-9]+)$",
@@ -7753,79 +7231,7 @@
           }
         }
       },
-      "CreateSiteRequest": {
-        "type": "object",
-        "required": [
-          "name",
-          "siteType"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "slug": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "pattern": "^[a-z0-9][a-z0-9\\-]*[a-z0-9]$"
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 500
-          },
-          "siteType": {
-            "type": "integer",
-            "enum": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6
-            ]
-          },
-          "runtimeConfig": {
-            "type": "object",
-            "properties": {
-              "buildCommand": {
-                "type": "string"
-              },
-              "outputDirectory": {
-                "type": "string"
-              },
-              "nodeVersion": {
-                "type": "string"
-              },
-              "installCommand": {
-                "type": "string"
-              },
-              "startCommand": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "UpdateSiteRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "description": {
-            "type": "string",
-            "maxLength": 500
-          },
-          "runtimeConfig": {
-            "type": "object"
-          }
-        }
-      },
-      "UpdateSiteCompositionRequest": {
+      "UpdateAppCompositionRequest": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -7838,7 +7244,7 @@
         ],
         "properties": {
           "environment": {
-            "$ref": "#/components/schemas/SiteEnvironment"
+            "$ref": "#/components/schemas/AppPublishEnvironment"
           },
           "defaultVariantKey": {
             "$ref": "#/components/schemas/CompositionKey"
@@ -7848,7 +7254,7 @@
             "minItems": 1,
             "maxItems": 512,
             "items": {
-              "$ref": "#/components/schemas/SiteResourceDefinition"
+              "$ref": "#/components/schemas/AppResourceDefinition"
             }
           },
           "variants": {
@@ -7856,7 +7262,7 @@
             "minItems": 1,
             "maxItems": 64,
             "items": {
-              "$ref": "#/components/schemas/SiteVariantDefinition"
+              "$ref": "#/components/schemas/AppVariantDefinition"
             }
           },
           "variantRules": {
@@ -7864,7 +7270,7 @@
             "maxItems": 1024,
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/SiteVariantRuleDefinition"
+              "$ref": "#/components/schemas/AppVariantRuleDefinition"
             }
           },
           "mounts": {
@@ -7872,7 +7278,7 @@
             "minItems": 1,
             "maxItems": 2048,
             "items": {
-              "$ref": "#/components/schemas/SiteMountDefinition"
+              "$ref": "#/components/schemas/AppMountDefinition"
             }
           },
           "bindings": {
@@ -7880,24 +7286,24 @@
             "minItems": 1,
             "maxItems": 1024,
             "items": {
-              "$ref": "#/components/schemas/SiteBindingDefinition"
+              "$ref": "#/components/schemas/AppBindingDefinition"
             }
           },
           "deliveryPolicy": {
-            "$ref": "#/components/schemas/SiteDeliveryPolicy"
+            "$ref": "#/components/schemas/AppDeliveryPolicy"
           },
           "securityPolicy": {
-            "$ref": "#/components/schemas/SiteSecurityPolicy"
+            "$ref": "#/components/schemas/AppSecurityPolicy"
           },
           "limits": {
-            "$ref": "#/components/schemas/SiteRuntimeLimits"
+            "$ref": "#/components/schemas/AppRuntimeLimits"
           },
           "observabilityPolicy": {
-            "$ref": "#/components/schemas/SiteObservabilityPolicy"
+            "$ref": "#/components/schemas/AppObservabilityPolicy"
           }
         }
       },
-      "SiteEnvironment": {
+      "AppPublishEnvironment": {
         "type": "string",
         "enum": [
           "development",
@@ -7912,7 +7318,7 @@
         "maxLength": 64,
         "pattern": "^[A-Za-z0-9._:-]+$"
       },
-      "SiteResourceDefinition": {
+      "AppResourceDefinition": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8030,7 +7436,7 @@
           }
         }
       },
-      "SiteVariantDefinition": {
+      "AppVariantDefinition": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8066,7 +7472,7 @@
           }
         }
       },
-      "SiteVariantRuleDefinition": {
+      "AppVariantRuleDefinition": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8144,7 +7550,7 @@
           }
         }
       },
-      "SiteMountDefinition": {
+      "AppMountDefinition": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8216,7 +7622,7 @@
           }
         }
       },
-      "SiteBindingDefinition": {
+      "AppBindingDefinition": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8329,7 +7735,7 @@
           }
         }
       },
-      "SiteDeliveryPolicy": {
+      "AppDeliveryPolicy": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -8360,7 +7766,7 @@
           }
         }
       },
-      "SiteSecurityPolicy": {
+      "AppSecurityPolicy": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -8386,7 +7792,7 @@
           }
         }
       },
-      "SiteRuntimeLimits": {
+      "AppRuntimeLimits": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -8440,7 +7846,7 @@
           }
         }
       },
-      "SiteObservabilityPolicy": {
+      "AppObservabilityPolicy": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
@@ -8460,7 +7866,7 @@
           }
         }
       },
-      "SiteCompositionResponse": {
+      "AppCompositionResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8479,17 +7885,17 @@
             "pattern": "^[0-9]+$"
           },
           "revision": {
-            "$ref": "#/components/schemas/SiteRevisionResponse"
+            "$ref": "#/components/schemas/AppRevisionResponse"
           },
           "runtimeAssignments": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SiteRuntimeAssignmentResponse"
+              "$ref": "#/components/schemas/AppRuntimeAssignmentResponse"
             }
           }
         }
       },
-      "SiteRevisionResponse": {
+      "AppRevisionResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8520,7 +7926,7 @@
           }
         }
       },
-      "SiteRuntimeAssignmentResponse": {
+      "AppRuntimeAssignmentResponse": {
         "type": "object",
         "additionalProperties": false,
         "required": [
@@ -8554,67 +7960,6 @@
           }
         }
       },
-      "SiteResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "siteType": {
-            "type": "integer"
-          },
-          "status": {
-            "type": "integer"
-          },
-          "runtimeConfig": {
-            "type": "object"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "version": {
-            "type": "string",
-            "pattern": "^[0-9]+$"
-          }
-        }
-      },
-      "SitePage": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SiteResponse"
-            }
-          },
-          "total": {
-            "type": "string",
-            "format": "int64",
-            "x-sdkwork-int64-string": true
-          },
-          "page": {
-            "type": "integer"
-          },
-          "pageSize": {
-            "type": "integer"
-          }
-        }
-      },
       "CreateDomainZoneRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -8642,6 +7987,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "providerAccountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$",
+            "description": "Cloud account that presents this zone's DNS-01 challenges, from the platform provider account center. Optional: omitting it leaves the zone unpinned, and issuance then resolves an account by provider and falls back to the deployment-level provider configuration. An account holding no credential is refused here rather than at the first certificate order that needs it."
           }
         }
       },
@@ -8664,6 +8016,11 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "providerAccountId": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Re-pins the zone's cloud account. An empty string clears the pin so the zone resolves an account per issuance; omitting the field leaves the current pin untouched."
           },
           "status": {
             "type": "string",
@@ -8701,6 +8058,10 @@
           },
           "dnsProvider": {
             "type": "string"
+          },
+          "providerAccountId": {
+            "type": "string",
+            "description": "The cloud account pinned to serve this zone's DNS-01 challenges, absent when the zone has none and resolves one per issuance."
           },
           "status": {
             "type": "string",
@@ -8740,6 +8101,187 @@
           "version": {
             "type": "string",
             "pattern": "^[0-9]+$"
+          }
+        }
+      },
+      "CloudAccountResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "accountCode",
+          "displayName",
+          "vendorCode",
+          "scopeType",
+          "tenantGlobal",
+          "isDefault",
+          "status",
+          "credentialConfigured"
+        ],
+        "description": "A DNS-capable cloud account, projected from the platform provider account center where its credential is held and rotated. Deploy never returns credential material here, only whether one is configured. `tenantGlobal` is the wire form of the 租户全局 / 我的账号 split and is derived from `scopeType`, so the two cannot disagree.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Account id in the provider account center."
+          },
+          "accountCode": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "vendorCode": {
+            "type": "string",
+            "description": "Cloud vendor, e.g. aliyun, tencent, cloudflare. The account center owns this vocabulary."
+          },
+          "dnsProvider": {
+            "type": "string",
+            "enum": [
+              "ALIYUN_DNS",
+              "DNSPOD",
+              "CLOUDFLARE"
+            ],
+            "description": "The DNS family this account drives, derived from `vendorCode`. Absent for a vendor that drives no supported family, which is why such an account is listed but cannot be bound."
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "tenant",
+              "user"
+            ]
+          },
+          "tenantGlobal": {
+            "type": "boolean",
+            "description": "True for `platform` and `tenant` accounts, which any member of the tenant may use; false for an account one user bound to themselves."
+          },
+          "ownerUserId": {
+            "type": "string",
+            "description": "Set for `user`-scope accounts only."
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "Whether this account is its level's default for its vendor."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled",
+              "archived"
+            ]
+          },
+          "credentialConfigured": {
+            "type": "boolean",
+            "description": "Whether an active credential exists behind the account. An account without one can be listed but not bound: it looks configured and is not."
+          },
+          "capabilityCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Capabilities the account advertises. Empty means unspecified, which the account center treats as reusable for everything."
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "sandbox",
+              "production"
+            ]
+          }
+        }
+      },
+      "CreateCloudAccountRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "displayName",
+          "dnsProvider",
+          "secretAccessKey"
+        ],
+        "description": "The fields are the union of what the supported families need so the console renders one form: `accessKeyId` is the public half (Aliyun AccessKeyId, DNSPod LoginId) and is unused by Cloudflare, while `secretAccessKey` is always the secret half (Aliyun AccessKeySecret, DNSPod ApiToken, Cloudflare ApiToken).",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "accountCode": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "The account code within its scope, pre-filled by the console with a suggestion rather than derived server-side: a derived code collides the second time a tenant adds a second account for the same vendor."
+          },
+          "dnsProvider": {
+            "type": "string",
+            "enum": [
+              "ALIYUN_DNS",
+              "DNSPOD",
+              "CLOUDFLARE"
+            ]
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "tenant",
+              "user"
+            ],
+            "default": "tenant",
+            "description": "A tenant member may not publish a `platform` account; the account center refuses it, and the console offers the level only where it can succeed."
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "development",
+              "sandbox",
+              "production"
+            ]
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false,
+            "description": "Promote this account to its level's default for its vendor."
+          },
+          "accessKeyId": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Required by the key-pair families, ignored by bearer-token ones."
+          },
+          "secretAccessKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "writeOnly": true
+          },
+          "sessionToken": {
+            "type": "string",
+            "maxLength": 4096,
+            "writeOnly": true
+          }
+        }
+      },
+      "CloudAccountRegistrationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "account",
+          "reused",
+          "credentialApplied"
+        ],
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/CloudAccountResponse"
+          },
+          "reused": {
+            "type": "boolean",
+            "description": "True when an equivalent account already existed and was reused, so the console reports 已存在，直接复用 rather than 已创建."
+          },
+          "credentialApplied": {
+            "type": "boolean",
+            "description": "True when this call stored the secret. A reused account that already had a credential is left alone: silently rotating a credential another business module may be using is not this flow's decision to make."
           }
         }
       },
@@ -8891,6 +8433,63 @@
             "type": "string",
             "format": "date-time",
             "description": "当前验证尝试的失效时间；域名已验证时可省略。"
+          }
+        }
+      },
+      "EnsureDomainHostnameClaimsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hostnames"
+        ],
+        "properties": {
+          "hostnames": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "description": "Fully-qualified hostnames the caller intends to cover; a leading \"*.\" is accepted on the leftmost label only. Names outside the selected zone, and names that repeat, are rejected before any hostname row is written so a failed request never leaves the tenant owning names nobody asked to keep.\n",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253
+            }
+          }
+        }
+      },
+      "DomainHostnameClaimResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "hostname",
+          "verified"
+        ],
+        "properties": {
+          "hostname": {
+            "$ref": "#/components/schemas/DomainHostnameResponse"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "What this call's ownership check observed. The caller can never assert success (ADR-20260723 §3), so `false` means the TXT record is not published yet — it does not mean the request failed. A hostname that is already VERIFIED reports `true` without a lookup.\n"
+          },
+          "dnsRecordName": {
+            "type": "string",
+            "description": "Canonical TXT record name to publish; omitted once the hostname is verified."
+          },
+          "dnsRecordType": {
+            "type": "string",
+            "enum": [
+              "TXT"
+            ],
+            "description": "Record type to publish; omitted once the hostname is verified."
+          },
+          "dnsRecordValue": {
+            "type": "string",
+            "description": "Public proof digest to publish. Returned only by the call that created the verification attempt, matching the domain-verification \"shown once\" rule; a later check reports state without replaying the value."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Expiry of the outstanding attempt; omitted once the hostname is verified."
           }
         }
       },
@@ -9076,6 +8675,25 @@
               "format": "uuid"
             }
           },
+          "certificateScope": {
+            "type": "string",
+            "enum": [
+              "SINGLE_DOMAIN",
+              "WILDCARD"
+            ],
+            "default": "SINGLE_DOMAIN",
+            "description": "`SINGLE_DOMAIN` issues for the exact names supplied. `WILDCARD` additionally plans the apex of each wildcard, because a wildcard SAN does not cover its own apex, and forces DNS-01 validation."
+          },
+          "validationMethod": {
+            "type": "string",
+            "enum": [
+              "AUTO",
+              "HTTP_01",
+              "DNS_01"
+            ],
+            "default": "AUTO",
+            "description": "Operator preference. `AUTO` resolves to HTTP_01 for a `SINGLE_DOMAIN` scope and always to DNS_01 for `WILDCARD`. `HTTP_01` is rejected for a `WILDCARD` scope."
+          },
           "caProfile": {
             "type": "string",
             "enum": [
@@ -9091,6 +8709,115 @@
               "ECDSA"
             ],
             "default": "ECDSA"
+          },
+          "autoRenew": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether the control plane keeps this certificate renewed on its own. Defaults to true: asking for a managed certificate means asking for a name that stays covered, not for a reminder to renew it."
+          },
+          "renewBeforeDays": {
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 90,
+            "default": 30,
+            "description": "Days before expiry at which renewal starts. Stored per certificate rather than read from the app binding's TLS policy, because one certificate may back several listeners with different policies and a renewal trigger has to resolve to exactly one window. The configured lead time is additionally floored at one third of the certificate's lifetime, so a value larger than a short-lived certificate's lifetime cannot make a fresh certificate immediately due."
+          },
+          "providerAccountId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$",
+            "description": "Cloud account that presents this certificate's DNS-01 challenges, overriding the zone's pin so one zone can issue through several vendor accounts. Optional: omitting it leaves the certificate deferring to its zone, then to the account center, then to the deployment-level provider configuration, decided when an order runs."
+          }
+        }
+      },
+      "CertificateRenewalResponse": {
+        "type": "object",
+        "description": "One renewal attempt. The previous/new window pair is the point of the record: it is what makes continuous coverage auditable after the version it describes has been superseded.",
+        "required": [
+          "id",
+          "certificateId",
+          "triggerKind",
+          "status",
+          "attemptNo",
+          "scheduledAt",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "certificateId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "triggerKind": {
+            "type": "string",
+            "enum": [
+              "SCHEDULED",
+              "MANUAL"
+            ],
+            "description": "`SCHEDULED` came from the due-certificate sweep, `MANUAL` from an operator request. Recorded rather than inferred, because it changes how a failure reads: a scheduled one is broken automation that keeps retrying on its own, a manual one is an act the operator is already watching."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PLANNED",
+              "ORDERED",
+              "SUCCEEDED",
+              "FAILED",
+              "SKIPPED",
+              "CANCELLED"
+            ],
+            "description": "`PLANNED` and `ORDERED` are open, and at most one attempt per certificate may be open; every other value is terminal and carries `finishedAt`."
+          },
+          "attemptNo": {
+            "type": "integer"
+          },
+          "previousVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resultingVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "previousNotBefore": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "previousNotAfter": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Expiry of the version being replaced, captured when the attempt was claimed, so the handover stays auditable even though that version is now superseded."
+          },
+          "newNotBefore": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "newNotAfter": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastErrorCode": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -9101,10 +8828,14 @@
           "certName",
           "certificateSource",
           "caProfile",
+          "certificateScope",
+          "validationMethod",
           "preferredKeyAlgorithm",
           "identifiers",
           "autoRenew",
           "renewalStatus",
+          "renewBeforeDays",
+          "renewalFailureCount",
           "status",
           "createdAt",
           "updatedAt",
@@ -9132,6 +8863,26 @@
               "LETS_ENCRYPT_PRODUCTION",
               "CUSTOM"
             ]
+          },
+          "certificateScope": {
+            "type": "string",
+            "enum": [
+              "SINGLE_DOMAIN",
+              "WILDCARD"
+            ]
+          },
+          "validationMethod": {
+            "type": "string",
+            "enum": [
+              "AUTO",
+              "HTTP_01",
+              "DNS_01"
+            ],
+            "description": "The resolved method the challenge orchestrator must present. A `WILDCARD` certificate always reports `DNS_01`."
+          },
+          "providerAccountId": {
+            "type": "string",
+            "description": "The cloud account pinned to present this certificate's DNS-01 challenges, absent when the certificate defers to its zone or to the deployment-level provider configuration."
           },
           "preferredKeyAlgorithm": {
             "type": "string",
@@ -9184,6 +8935,40 @@
               "FAILED",
               "REVOKED"
             ]
+          },
+          "renewBeforeDays": {
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 90,
+            "description": "Lead time before expiry at which renewal starts. The server sends the derived instants below so every surface agrees on one window rule instead of each re-implementing it."
+          },
+          "renewalDueAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When renewal work becomes due for the version being served: `max(notBefore + lifetime/3, notAfter - renewBeforeDays)`. The lifetime floor keeps a lead time longer than a short-lived certificate's own life from making a fresh certificate immediately due."
+          },
+          "daysUntilExpiry": {
+            "type": "integer",
+            "description": "Whole days until the served version expires, floored; negative once past. Floored so that a certificate with twelve hours left and one that expired yesterday cannot both render as `0`."
+          },
+          "validityPhase": {
+            "type": "string",
+            "enum": [
+              "NOT_YET_VALID",
+              "VALID",
+              "EXPIRING_SOON",
+              "EXPIRED"
+            ],
+            "description": "Where the served version sits in its validity window right now. Computed at read time, never stored: a persisted phase would be wrong from the instant the clock crossed a boundary."
+          },
+          "lastRenewalAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When renewal last ran to completion, successfully or not."
+          },
+          "renewalFailureCount": {
+            "type": "integer",
+            "description": "Consecutive failed renewal attempts, reset to zero by a success. Exposed because the retry backoff hides repetition from the schedule: without it a certificate failing every day is indistinguishable from one that has never been tried."
           },
           "createdAt": {
             "type": "string",

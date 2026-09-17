@@ -6,6 +6,12 @@ pub const DOMAIN_ZONE_HOSTNAMES: &str = "/app/v3/api/domain_zones/{zoneId}/hostn
 pub const DOMAIN_ZONE_HOSTNAME: &str = "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}";
 pub const DOMAIN_ZONE_HOSTNAME_VERIFY: &str =
     "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}/verify";
+pub const DOMAIN_ZONE_HOSTNAME_CLAIMS: &str = "/app/v3/api/domain_zones/{zoneId}/hostname_claims";
+/// Cloud accounts a zone or certificate can be bound to.
+///
+/// A top-level collection rather than a sub-resource of a zone: the same account is
+/// what a zone pins and what a certificate overrides, and an account outlives both.
+pub const CLOUD_ACCOUNTS: &str = "/app/v3/api/cloud_accounts";
 
 pub const APP_COMPOSITION: &str = "/app/v3/api/apps/{appId}/composition";
 pub const APP_ACTIVATE: &str = "/app/v3/api/apps/{appId}/activate";
@@ -16,6 +22,7 @@ pub const APP_HEALTH_CHECKS: &str = "/app/v3/api/apps/{appId}/health_checks";
 pub const CERTIFICATES: &str = "/app/v3/api/certificates";
 pub const CERTIFICATE: &str = "/app/v3/api/certificates/{certificateId}";
 pub const CERTIFICATE_RENEW: &str = "/app/v3/api/certificates/{certificateId}/renew";
+pub const CERTIFICATE_RENEWALS: &str = "/app/v3/api/certificates/{certificateId}/renewals";
 pub const UPLOAD_SESSIONS: &str = "/app/v3/api/upload_sessions";
 pub const UPLOAD_SESSION: &str = "/app/v3/api/upload_sessions/{uploadSessionId}";
 pub const UPLOAD_SESSION_COMPLETE: &str = "/app/v3/api/upload_sessions/{uploadSessionId}/complete";

@@ -10,9 +10,12 @@ workspace = true
 [dependencies]
 async-trait.workspace = true
 hickory-resolver.workspace = true
+rustls-pki-types.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 sdkwork-database-id.workspace = true
+sdkwork-deploy-certificate-material.workspace = true
+sdkwork-deploy-cloud-account-port.workspace = true
 sdkwork-deploy-core.workspace = true
 sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-database-host.workspace = true
@@ -23,3 +26,4 @@ sdkwork-deploy-web-port.workspace = true
 sdkwork-intelligence-deploy-repository-sqlx.workspace = true
 sdkwork-intelligence-deploy-service.workspace = true
 sdkwork-utils-rust.workspace = true
+sdkwork-webserver-acme-service.workspace = true

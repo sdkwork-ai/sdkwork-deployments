@@ -13,7 +13,8 @@ use crate::support::{
 use crate::DeployRepository;
 
 const ZONE_SELECT: &str =
-    "z.uuid, z.apex_hostname, z.display_name, z.dns_provider, z.status, z.updated_at, z.version,
+    "z.uuid, z.apex_hostname, z.display_name, z.dns_provider, z.provider_account_id, z.status,
+     z.updated_at, z.version,
      (SELECT COUNT(*) FROM deploy_domain d WHERE d.zone_id = z.id AND d.deleted_at IS NULL) AS hostname_count,
      (SELECT COUNT(*) FROM deploy_domain d WHERE d.zone_id = z.id AND d.verification_status = 'VERIFIED' AND d.deleted_at IS NULL) AS verified_hostname_count,
      (SELECT COUNT(DISTINCT ci.certificate_id) FROM deploy_certificate_identifier ci JOIN deploy_domain d ON d.id = ci.domain_id WHERE d.zone_id = z.id AND d.deleted_at IS NULL) AS certificate_count,
@@ -25,10 +26,26 @@ const HOSTNAME_SELECT: &str =
      (SELECT COUNT(DISTINCT ci.certificate_id) FROM deploy_certificate_identifier ci WHERE ci.domain_id = d.id) AS certificate_count,
      (SELECT COUNT(*) FROM deploy_app_binding b WHERE b.domain_id = d.id AND b.deleted_at IS NULL) AS binding_count";
 
+/// The owner gate every caller-facing zone query carries.
+///
+/// A zone created through the console belongs to the user who created it, so a
+/// caller only ever reaches the zones it owns. `user_id IS NULL` marks a zone
+/// that is not user-private but tenant-level - the platform-owned
+/// `app.<suffix>` inventory the deployment provisions for the whole tenant -
+/// and it stays visible to every member of the tenant.
+///
+/// A caller with no user subject therefore reads exactly those tenant-level
+/// zones and nothing else, because `user_id = NULL` is never true. That is the
+/// honest answer for a service principal, and it needs no separate branch.
+fn zone_owner_gate(parameter: usize) -> String {
+    format!("(z.user_id IS NULL OR z.user_id = ${parameter})")
+}
+
 impl DeployRepository {
     pub(super) async fn list_domain_zones_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         query: &ListDomainZonesQuery,
     ) -> DeployServiceResult<DomainZonePage> {
         let (page, page_size, offset) = pagination(query.page, query.page_size);
@@ -40,13 +57,17 @@ impl DeployRepository {
             .filter(|value| !value.is_empty())
             .map(|value| format!("%{}%", value.to_ascii_lowercase()))
             .unwrap_or_default();
-        let predicate = "z.tenant_id = $1 AND z.deleted_at IS NULL
-            AND ($2 = '' OR z.status = $2)
-            AND ($3 = '' OR LOWER(z.apex_hostname) LIKE $3 OR LOWER(COALESCE(z.display_name, '')) LIKE $3)";
+        let predicate = format!(
+            "z.tenant_id = $1 AND {} AND z.deleted_at IS NULL
+            AND ($3 = '' OR z.status = $3)
+            AND ($4 = '' OR LOWER(z.apex_hostname) LIKE $4 OR LOWER(COALESCE(z.display_name, '')) LIKE $4)",
+            zone_owner_gate(2)
+        );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM deploy_dns_zone z WHERE {predicate}"
         )))
         .bind(tenant_id)
+        .bind(owner_user_id)
         .bind(status)
         .bind(&keyword)
         .fetch_one(&self.pool)
@@ -54,9 +75,10 @@ impl DeployRepository {
         .map_err(|error| store_error("count deploy_dns_zone", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ZONE_SELECT} FROM deploy_dns_zone z WHERE {predicate}
-             ORDER BY z.updated_at DESC, z.id DESC LIMIT $4 OFFSET $5"
+             ORDER BY z.updated_at DESC, z.id DESC LIMIT $5 OFFSET $6"
         )))
         .bind(tenant_id)
+        .bind(owner_user_id)
         .bind(status)
         .bind(keyword)
         .bind(page_size)
@@ -127,8 +149,8 @@ impl DeployRepository {
         sqlx::query(
             "INSERT INTO deploy_dns_zone (
                 id, uuid, tenant_id, organization_id, apex_hostname, display_name, dns_provider,
-                provider_zone_ref, status, created_by, updated_by
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE', $9, $9)",
+                provider_zone_ref, provider_account_id, status, user_id, created_by, updated_by
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $11)",
         )
         .bind(zone_id)
         .bind(&zone_uuid)
@@ -138,6 +160,10 @@ impl DeployRepository {
         .bind(request.display_name.as_deref())
         .bind(request.dns_provider.as_deref())
         .bind(request.provider_zone_ref.as_deref())
+        .bind(request.provider_account_id.as_deref())
+        // The creator is the owner: this row is the caller's own domain from
+        // here on, and `created_by` stays the audit half of the same fact.
+        .bind(actor_id)
         .bind(actor_id)
         .execute(&mut *transaction)
         .await
@@ -162,20 +188,26 @@ impl DeployRepository {
             .commit()
             .await
             .map_err(|error| store_error("commit create deploy_dns_zone", error))?;
-        self.retrieve_domain_zone_repo(tenant_id, &zone_uuid).await
+        // Returned as the owner sees it, so a zone the caller cannot reach is
+        // never echoed back from the create path either.
+        self.retrieve_domain_zone_repo(tenant_id, actor_id, &zone_uuid)
+            .await
     }
 
     pub(super) async fn retrieve_domain_zone_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<DomainZoneResponse> {
         let row = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ZONE_SELECT} FROM deploy_dns_zone z
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL"
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND {} AND z.deleted_at IS NULL",
+            zone_owner_gate(3)
         )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("retrieve deploy_dns_zone", error))?;
@@ -186,6 +218,9 @@ impl DeployRepository {
             .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))
     }
 
+    /// `actor_id` is both the audit actor and the owner this write must belong
+    /// to: the service resolves it from the caller's own session, so a zone the
+    /// caller does not own never matches and answers `not found`.
     pub(super) async fn update_domain_zone_repo(
         &self,
         tenant_id: i64,
@@ -193,12 +228,28 @@ impl DeployRepository {
         zone_id: &str,
         request: &UpdateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse> {
+        // "Leave the pin alone" and "unpin it" are different requests, and
+        // `COALESCE` cannot express the second: it treats NULL as "keep". A
+        // deliberate empty string therefore arrives as its own flag and writes
+        // NULL, while an omitted field keeps whatever is pinned.
+        let clear_provider_account = matches!(
+            request.provider_account_id.as_deref(),
+            Some(value) if value.trim().is_empty()
+        );
+        let provider_account_id = request
+            .provider_account_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
         let result = sqlx::query(
             "UPDATE deploy_dns_zone SET
                 display_name = COALESCE($3, display_name), dns_provider = COALESCE($4, dns_provider),
                 provider_zone_ref = COALESCE($5, provider_zone_ref), status = COALESCE($6, status),
+                provider_account_id = CASE WHEN $8 THEN NULL
+                    ELSE COALESCE($9, provider_account_id) END,
                 updated_by = $7, updated_at = CURRENT_TIMESTAMP, version = version + 1
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND uuid = $2
+               AND (user_id IS NULL OR user_id = $10) AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(zone_id)
@@ -207,29 +258,89 @@ impl DeployRepository {
         .bind(request.provider_zone_ref.as_deref())
         .bind(request.status.as_deref())
         .bind(actor_id)
+        .bind(clear_provider_account)
+        .bind(provider_account_id)
+        .bind(actor_id)
         .execute(&self.pool)
         .await
         .map_err(|error| store_error("update deploy_dns_zone", error))?;
         if result.rows_affected() != 1 {
             return Err(DeployServiceError::not_found("domain zone not found"));
         }
-        self.retrieve_domain_zone_repo(tenant_id, zone_id).await
+        self.retrieve_domain_zone_repo(tenant_id, actor_id, zone_id)
+            .await
+    }
+
+    /// Resolves the zone that owns `hostname` and the account pinned to it.
+    ///
+    /// The lookup walks the hostname's own `deploy_domain` row up to its zone
+    /// instead of matching `apex_hostname` by suffix, so a name that is a suffix of
+    /// another zone's apex (`notexample.com` against `example.com`) is not
+    /// misattributed, and a claim that was never declared here answers `None`.
+    pub(super) async fn retrieve_dns_challenge_zone_repo(
+        &self,
+        tenant_id: i64,
+        hostname: &str,
+    ) -> DeployServiceResult<Option<sdkwork_intelligence_deploy_service::DnsChallengeZone>> {
+        let normalized = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
+        let row = sqlx::query(
+            "SELECT z.apex_hostname, z.dns_provider, z.provider_zone_ref, z.provider_account_id
+             FROM deploy_domain d
+             JOIN deploy_dns_zone z ON z.id = d.zone_id
+             WHERE d.tenant_id = $1 AND d.hostname_ascii = $2
+               AND d.deleted_at IS NULL AND z.deleted_at IS NULL
+             ORDER BY d.id DESC
+             LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(&normalized)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("retrieve deploy_dns_zone for hostname", error))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let zone_apex: String = row.try_get("apex_hostname").map_err(|error| {
+            DeployServiceError::Internal(format!("map deploy_dns_zone apex: {error}"))
+        })?;
+        let dns_provider: Option<String> = row.try_get("dns_provider").map_err(|error| {
+            DeployServiceError::Internal(format!("map deploy_dns_zone provider: {error}"))
+        })?;
+        let provider_zone_ref: Option<String> =
+            row.try_get("provider_zone_ref").map_err(|error| {
+                DeployServiceError::Internal(format!("map deploy_dns_zone zone ref: {error}"))
+            })?;
+        let provider_account_id: Option<String> =
+            row.try_get("provider_account_id").map_err(|error| {
+                DeployServiceError::Internal(format!("map deploy_dns_zone account: {error}"))
+            })?;
+        Ok(Some(
+            sdkwork_intelligence_deploy_service::DnsChallengeZone {
+                zone_apex,
+                dns_provider,
+                provider_zone_ref,
+                provider_account_id,
+            },
+        ))
     }
 
     pub(super) async fn delete_domain_zone_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<()> {
         // The apex hostname row belongs to the zone itself (created together
         // with the zone), so only user-added hostnames block the deletion.
-        let hostname_count: i64 = sqlx::query_scalar(
+        let hostname_count: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND {} AND z.deleted_at IS NULL
                AND d.deleted_at IS NULL AND d.hostname_ascii <> z.apex_hostname",
-        )
+            zone_owner_gate(3)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_dns_zone hostnames", error))?;
@@ -240,16 +351,18 @@ impl DeployRepository {
         }
         // Any hostname (including the apex) referenced by an app binding or a
         // certificate identifier must be released before the zone is removed.
-        let reference_count: i64 = sqlx::query_scalar(
+        let reference_count: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL AND d.deleted_at IS NULL
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND {} AND z.deleted_at IS NULL AND d.deleted_at IS NULL
                AND ((SELECT COUNT(*) FROM deploy_app_binding b
                      WHERE b.domain_id = d.id AND b.deleted_at IS NULL) > 0
                  OR (SELECT COUNT(*) FROM deploy_certificate_identifier ci
                      WHERE ci.domain_id = d.id) > 0)",
-        )
+            zone_owner_gate(3)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_dns_zone references", error))?;
@@ -266,10 +379,12 @@ impl DeployRepository {
         let result = sqlx::query(
             "UPDATE deploy_dns_zone
              SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, version = version + 1
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND uuid = $2
+               AND (user_id IS NULL OR user_id = $3) AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("delete deploy_dns_zone", error))?;
@@ -278,15 +393,17 @@ impl DeployRepository {
         }
         // The apex hostname row is removed together with its zone so it cannot
         // linger as a dangling domain asset after the zone is gone.
-        sqlx::query(
+        sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_domain d
              SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, version = d.version + 1
              FROM deploy_dns_zone z
-             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2
+             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND {}
                AND d.hostname_ascii = z.apex_hostname AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(3)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("delete deploy_dns_zone apex hostname", error))?;
@@ -302,18 +419,21 @@ impl DeployRepository {
     pub(super) async fn domain_hostname_verification_challenge_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainVerificationChallenge> {
-        let row = sqlx::query(
+        let row = sqlx::query(AssertSqlSafe(format!(
             "SELECT d.id, d.hostname_ascii, d.verification_status
              FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(4)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
+        .bind(owner_user_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("load deploy_domain verification target", error))?
@@ -451,6 +571,7 @@ impl DeployRepository {
     pub(super) async fn confirm_domain_hostname_verification_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
         verification_id: &str,
@@ -463,18 +584,19 @@ impl DeployRepository {
             .begin()
             .await
             .map_err(|error| store_error("begin domain hostname verification", error))?;
-        let verification = sqlx::query(
+        let verification = sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_domain_verification v
              SET status = 'VERIFIED', observed_sha256 = $5, verifier_identity = $6,
                  checked_at = $7, verified_at = $7, attempt_count = attempt_count + 1,
                  updated_at = $7, version = version + 1
              WHERE v.tenant_id = $1 AND v.uuid = $4 AND v.domain_id = (
                  SELECT d.id FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-                 WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+                 WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                    AND d.verification_status <> 'VERIFIED'
                    AND z.deleted_at IS NULL AND d.deleted_at IS NULL
              ) AND v.proof_sha256 = $5 AND v.status IN ('PENDING', 'CHECKING') AND v.expires_at > $7",
-        )
+            zone_owner_gate(8)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
@@ -482,6 +604,7 @@ impl DeployRepository {
         .bind(observed_sha256)
         .bind(verifier_identity)
         .bind(now)
+        .bind(owner_user_id)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("confirm deploy_domain_verification", error))?;
@@ -492,19 +615,21 @@ impl DeployRepository {
                 .map_err(|error| store_error("rollback rejected domain verification", error))?;
             return Ok(false);
         }
-        let domain = sqlx::query(
+        let domain = sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_domain d
              SET verification_status = 'VERIFIED', verified_at = $4,
                  updated_at = $4, version = d.version + 1
              FROM deploy_dns_zone z
-             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND d.verification_status <> 'VERIFIED'
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(5)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
         .bind(now)
+        .bind(owner_user_id)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("activate verified deploy_domain", error))?;
@@ -527,29 +652,52 @@ impl DeployRepository {
     pub(super) async fn list_domain_hostnames_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainHostnamePage> {
         let (page, page_size, offset) = pagination(page, page_size);
-        let total: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+        // The zone is resolved before the page is built so an unreachable zone
+        // answers "not found" rather than an empty page: an empty page would
+        // claim the caller owns a zone that simply has no hostnames yet, which
+        // is a different fact and the one the console renders as "nothing here".
+        let reachable = sqlx::query_scalar::<_, i64>(AssertSqlSafe(format!(
+            "SELECT z.id FROM deploy_dns_zone z
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND {} AND z.deleted_at IS NULL",
+            zone_owner_gate(3)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_dns_zone for hostnames", error))?;
+        if reachable.is_none() {
+            return Err(DeployServiceError::not_found("domain zone not found"));
+        }
+        let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND {} AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
+            zone_owner_gate(3)
+        )))
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(owner_user_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_domain by zone", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {HOSTNAME_SELECT} FROM deploy_domain d
              JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL AND d.deleted_at IS NULL
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND {} AND z.deleted_at IS NULL AND d.deleted_at IS NULL
              ORDER BY CASE WHEN d.hostname_ascii = z.apex_hostname THEN 0 ELSE 1 END,
-                      d.hostname_ascii, d.id LIMIT $3 OFFSET $4"
+                      d.hostname_ascii, d.id LIMIT $4 OFFSET $5",
+            zone_owner_gate(3)
         )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -568,6 +716,142 @@ impl DeployRepository {
         })
     }
 
+    /// Declares `relative_name` in the zone, or returns the row that already
+    /// holds it.
+    ///
+    /// [`Self::create_domain_hostname_repo`] is deliberately strict — "this
+    /// hostname already exists" is the right answer when an operator adds a name
+    /// by hand. A certificate order needs the opposite: the wizard states the
+    /// hostnames it is about to cover and must land on the rows it already owns
+    /// (the apex row ships with the zone, so it always pre-exists) without
+    /// treating that as an error. Only collisions **outside** this zone stay
+    /// refusals, because a hostname belongs to exactly one zone.
+    pub(super) async fn ensure_domain_hostname_repo(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        zone_id: &str,
+        relative_name: &str,
+    ) -> DeployServiceResult<DomainHostnameResponse> {
+        let zone = sqlx::query(
+            "SELECT id, organization_id, apex_hostname FROM deploy_dns_zone
+             WHERE tenant_id = $1 AND uuid = $2
+               AND (user_id IS NULL OR user_id = $3)
+               AND status = 'ACTIVE' AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(actor_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_dns_zone", error))?
+        .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
+        let zone_internal_id: i64 = zone.try_get("id").map_err(|error| {
+            DeployServiceError::Internal(format!("map deploy_dns_zone id: {error}"))
+        })?;
+        let organization_id: i64 = zone.try_get("organization_id").map_err(|error| {
+            DeployServiceError::Internal(format!("map deploy_dns_zone organization: {error}"))
+        })?;
+        let apex_hostname: String = zone.try_get("apex_hostname").map_err(|error| {
+            DeployServiceError::Internal(format!("map deploy_dns_zone apex: {error}"))
+        })?;
+        let hostname = hostname_from_relative_name(relative_name, &apex_hostname)?;
+
+        if let Some(uuid) = self
+            .find_domain_hostname_uuid(tenant_id, zone_internal_id, &hostname)
+            .await?
+        {
+            return self
+                .retrieve_domain_hostname_repo(tenant_id, actor_id, zone_id, &uuid)
+                .await;
+        }
+
+        let conflicts: (bool, bool) = sqlx::query_as(
+            "SELECT
+                EXISTS (SELECT 1 FROM deploy_dns_zone
+                        WHERE deleted_at IS NULL AND apex_hostname = $1),
+                EXISTS (SELECT 1 FROM deploy_domain
+                        WHERE deleted_at IS NULL AND hostname_ascii = $1)",
+        )
+        .bind(&hostname)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("check deploy_domain hostname conflicts", error))?;
+        if conflicts.0 {
+            return Err(DeployServiceError::conflict(
+                "hostname is already registered as a domain zone apex",
+            ));
+        }
+        if conflicts.1 {
+            return Err(DeployServiceError::conflict(
+                "hostname already exists in another domain zone",
+            ));
+        }
+
+        let hostname_type = if hostname.starts_with("*.") {
+            "WILDCARD"
+        } else {
+            "EXACT"
+        };
+        let id = next_id(self.id_generator())?;
+        let uuid = new_uuid();
+        let insert = sqlx::query(
+            "INSERT INTO deploy_domain (
+                id, uuid, tenant_id, organization_id, zone_id, hostname_ascii, hostname_type,
+                verification_status, status, created_by, updated_by
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', 'ACTIVE', $8, $8)",
+        )
+        .bind(id)
+        .bind(&uuid)
+        .bind(tenant_id)
+        .bind(organization_id)
+        .bind(zone_internal_id)
+        .bind(&hostname)
+        .bind(hostname_type)
+        .bind(actor_id)
+        .execute(&self.pool)
+        .await;
+        if let Err(error) = insert {
+            // A concurrent claim of the same hostname can slip between the reuse
+            // lookup above and this insert; the global unique index turns that
+            // race into a duplicate-key error rather than a duplicate row. Since
+            // the caller asked for exactly "make sure I own this", reporting the
+            // row the other writer just created is the honest answer — and if the
+            // failure was anything else, nothing is found here and the original
+            // error is returned untouched.
+            if let Some(existing) = self
+                .find_domain_hostname_uuid(tenant_id, zone_internal_id, &hostname)
+                .await?
+            {
+                return self
+                    .retrieve_domain_hostname_repo(tenant_id, actor_id, zone_id, &existing)
+                    .await;
+            }
+            return Err(store_error("insert deploy_domain hostname", error));
+        }
+        self.retrieve_domain_hostname_repo(tenant_id, actor_id, zone_id, &uuid)
+            .await
+    }
+
+    async fn find_domain_hostname_uuid(
+        &self,
+        tenant_id: i64,
+        zone_internal_id: i64,
+        hostname_ascii: &str,
+    ) -> DeployServiceResult<Option<String>> {
+        let uuid: Option<String> = sqlx::query_scalar(
+            "SELECT uuid FROM deploy_domain
+             WHERE tenant_id = $1 AND zone_id = $2 AND hostname_ascii = $3 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(zone_internal_id)
+        .bind(hostname_ascii)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("find deploy_domain hostname", error))?;
+        Ok(uuid)
+    }
+
     pub(super) async fn create_domain_hostname_repo(
         &self,
         tenant_id: i64,
@@ -577,10 +861,13 @@ impl DeployRepository {
     ) -> DeployServiceResult<DomainHostnameResponse> {
         let zone = sqlx::query(
             "SELECT id, organization_id, apex_hostname FROM deploy_dns_zone
-             WHERE tenant_id = $1 AND uuid = $2 AND status = 'ACTIVE' AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND uuid = $2
+               AND (user_id IS NULL OR user_id = $3)
+               AND status = 'ACTIVE' AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(actor_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("resolve deploy_dns_zone", error))?
@@ -650,24 +937,27 @@ impl DeployRepository {
         .execute(&self.pool)
         .await
         .map_err(|error| store_error("insert deploy_domain hostname", error))?;
-        self.retrieve_domain_hostname_repo(tenant_id, zone_id, &uuid)
+        self.retrieve_domain_hostname_repo(tenant_id, actor_id, zone_id, &uuid)
             .await
     }
 
     pub(super) async fn retrieve_domain_hostname_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainHostnameResponse> {
         let row = sqlx::query(AssertSqlSafe(format!(
             "SELECT {HOSTNAME_SELECT} FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
-               AND z.deleted_at IS NULL AND d.deleted_at IS NULL"
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
+               AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
+            zone_owner_gate(4)
         )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
+        .bind(owner_user_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("retrieve deploy_domain hostname", error))?;
@@ -681,21 +971,24 @@ impl DeployRepository {
     pub(super) async fn delete_domain_hostname_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<()> {
-        let (references, is_apex): (i64, bool) = sqlx::query_as(
+        let (references, is_apex): (i64, bool) = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT
                 (SELECT COUNT(*) FROM deploy_app_binding b WHERE b.domain_id = d.id AND b.deleted_at IS NULL)
                 + (SELECT COUNT(*) FROM deploy_certificate_identifier ci WHERE ci.domain_id = d.id),
                 d.hostname_ascii = z.apex_hostname
              FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(4)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
+        .bind(owner_user_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_domain references", error))?
@@ -710,16 +1003,18 @@ impl DeployRepository {
                 "domain hostname is still bound to an application or certificate",
             ));
         }
-        let result = sqlx::query(
+        let result = sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_domain d
              SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, version = d.version + 1
              FROM deploy_dns_zone z
-             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(4)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
+        .bind(owner_user_id)
         .execute(&self.pool)
         .await
         .map_err(|error| store_error("delete deploy_domain hostname", error))?;
@@ -740,19 +1035,21 @@ impl DeployRepository {
         // The apex hostname is owned by the zone itself and cannot be
         // renamed; referenced hostnames keep their name so certificate
         // coverage and application bindings stay valid.
-        let (apex_hostname, is_apex, references): (String, bool, i64) = sqlx::query_as(
+        let (apex_hostname, is_apex, references): (String, bool, i64) = sqlx::query_as(AssertSqlSafe(format!(
             "SELECT
                 z.apex_hostname,
                 d.hostname_ascii = z.apex_hostname,
                 (SELECT COUNT(*) FROM deploy_app_binding b WHERE b.domain_id = d.id AND b.deleted_at IS NULL)
                 + (SELECT COUNT(*) FROM deploy_certificate_identifier ci WHERE ci.domain_id = d.id)
              FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(4)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
+        .bind(actor_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("resolve deploy_domain for rename", error))?
@@ -810,20 +1107,22 @@ impl DeployRepository {
             .begin()
             .await
             .map_err(|error| store_error("begin rename deploy_domain transaction", error))?;
-        let result = sqlx::query(
+        let result = sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_domain d SET
                 hostname_ascii = $4, hostname_type = $5,
                 verification_status = 'PENDING', verified_at = NULL,
                 updated_by = $6, updated_at = CURRENT_TIMESTAMP, version = d.version + 1
              FROM deploy_dns_zone z
-             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+             WHERE d.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(7)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
         .bind(&hostname)
         .bind(hostname_type)
+        .bind(actor_id)
         .bind(actor_id)
         .execute(&mut *transaction)
         .await
@@ -835,17 +1134,19 @@ impl DeployRepository {
                 .map_err(|error| store_error("rollback rename deploy_domain", error))?;
             return Err(DeployServiceError::not_found("domain hostname not found"));
         }
-        sqlx::query(
+        sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_domain_verification v SET
                 status = 'EXPIRED', updated_at = CURRENT_TIMESTAMP, version = v.version + 1
              FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
              WHERE v.domain_id = d.id AND v.status IN ('PENDING', 'CHECKING')
-               AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3
+               AND z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
-        )
+            zone_owner_gate(4)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_id)
+        .bind(actor_id)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("expire deploy_domain_verification on rename", error))?;
@@ -853,7 +1154,7 @@ impl DeployRepository {
             .commit()
             .await
             .map_err(|error| store_error("commit rename deploy_domain", error))?;
-        self.retrieve_domain_hostname_repo(tenant_id, zone_id, hostname_id)
+        self.retrieve_domain_hostname_repo(tenant_id, actor_id, zone_id, hostname_id)
             .await
     }
 }
@@ -901,6 +1202,7 @@ fn map_zone_row(row: &PgRow) -> Result<DomainZoneResponse, sqlx::Error> {
         apex_hostname: row.try_get("apex_hostname")?,
         display_name: row.try_get("display_name").ok(),
         dns_provider: row.try_get("dns_provider").ok(),
+        provider_account_id: row.try_get("provider_account_id").ok(),
         status: row.try_get("status")?,
         hostname_count: row.try_get("hostname_count")?,
         verified_hostname_count: row.try_get("verified_hostname_count")?,

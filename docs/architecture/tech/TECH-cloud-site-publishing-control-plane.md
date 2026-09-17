@@ -251,8 +251,10 @@ than silent reinterpretation.
 
 #### `deploy_dns_zone` And `deploy_domain`
 
-`deploy_dns_zone` is the explicit tenant-owned root-domain inventory (`apex_hostname`, display and
-DNS-provider metadata, status). `deploy_domain` is a normalized exact or wildcard hostname under a
+`deploy_dns_zone` is the explicit root-domain inventory, owned by a **user subject** within the
+tenant (`apex_hostname`, display and DNS-provider metadata, status, `user_id`). `user_id IS NULL`
+marks the platform-owned tenant-level zones (`app.<suffix>`) that every member of the tenant may
+see; every other zone is visible only to its owner. `deploy_domain` is a normalized exact or wildcard hostname under a
 Zone (`zone_id`, `hostname_ascii`, `hostname_type`, verification state, lifecycle state). Neither
 table owns a Site. `deploy_domain_verification` stores expiring proof attempts and observed digests.
 

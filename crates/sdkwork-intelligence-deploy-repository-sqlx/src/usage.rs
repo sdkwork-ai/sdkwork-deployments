@@ -39,7 +39,9 @@ impl DeployRepository {
                 (id, uuid, tenant_id, organization_id, app_id, binding_id, period_start,
                  dimension, quantity, unit, source_target_uuid, source_window_id,
                  deduplication_key, attribution_json, observed_at, ingested_at, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15, $15)
+             VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS TIMESTAMPTZ), $8, $9, $10, $11, $12,
+                     $13, $14, CAST($15 AS TIMESTAMPTZ), CAST($15 AS TIMESTAMPTZ),
+                     CAST($15 AS TIMESTAMPTZ))
              ON CONFLICT (tenant_id, deduplication_key) DO NOTHING
              RETURNING uuid",
         )
@@ -281,8 +283,8 @@ impl DeployRepository {
             AND ($4 = '' OR u.attribution_json->>'hostname' = $4)
             AND ($5 = '' OR u.attribution_json->>'serverIp' = $5)
             AND ($6 = '' OR u.attribution_json->>'appId' = $6)
-            AND ($7 = '' OR u.period_start >= $7)
-            AND ($8 = '' OR u.period_start < $8)";
+            AND ($7 = '' OR u.period_start >= CAST($7 AS TIMESTAMPTZ))
+            AND ($8 = '' OR u.period_start < CAST($8 AS TIMESTAMPTZ))";
         let count_sql = format!(
             "SELECT COUNT(*) AS total FROM deploy_usage_event u
              LEFT JOIN deploy_app_binding b ON b.id = u.binding_id

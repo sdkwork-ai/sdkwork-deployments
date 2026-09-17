@@ -7,8 +7,7 @@ use sdkwork_deploy_contract::{
     DriveWebsiteRootSelector,
 };
 use sdkwork_deploy_runtime_compiler::{
-    RuntimeProviderType, RuntimeResourceCapabilities,
-    DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
+    RuntimeProviderType, RuntimeResourceCapabilities, DRIVE_WEBSITE_ROOT_PROVIDER_CONTRACT_VERSION,
     KNOWLEDGEBASE_WIKI_PUBLICATION_PROVIDER_CONTRACT_VERSION,
 };
 use sdkwork_drive_app_sdk_generated_rust::{

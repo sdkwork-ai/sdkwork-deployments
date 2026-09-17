@@ -8,224 +8,148 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/app/v3/api/domain_zones",
         "domain",
         "domainZones.list",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/domain_zones",
         "domain",
         "domainZones.create",
     )
+    .with_required_permission("deploy.domainZones.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/domain_zones/{zoneId}",
         "domain",
         "domainZones.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/domain_zones/{zoneId}",
         "domain",
         "domainZones.update",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/app/v3/api/domain_zones/{zoneId}",
         "domain",
         "domainZones.delete",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/domain_zones/{zoneId}/hostnames",
         "domain",
         "domainZones.hostnames.list",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/domain_zones/{zoneId}/hostnames",
         "domain",
         "domainZones.hostnames.create",
     )
+    .with_required_permission("deploy.domainZones.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
         "domain",
         "domainZones.hostnames.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
         "domain",
         "domainZones.hostnames.update",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
         "domain",
         "domainZones.hostnames.delete",
-    ),
+    )
+    .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}/verify",
         "domain",
         "domainZones.hostnames.verify",
     )
+    .with_required_permission("deploy.domainZones.write")
     .with_idempotent(true),
-    HttpRoute::dual_token(HttpMethod::Get, "/app/v3/api/sites", "site", "sites.list")
-        .with_required_permission("deploy.sites.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/sites",
-        "site",
-        "sites.create",
+        "/app/v3/api/domain_zones/{zoneId}/hostname_claims",
+        "domain",
+        "domainZones.hostnameClaims.ensure",
     )
-    .with_required_permission("deploy.sites.write")
+    .with_required_permission("deploy.domainZones.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}",
-        "site",
-        "sites.retrieve",
+        "/app/v3/api/cloud_accounts",
+        "domain",
+        "cloudAccounts.list",
     )
-    .with_required_permission("deploy.sites.read"),
-    HttpRoute::dual_token(
-        HttpMethod::Patch,
-        "/app/v3/api/sites/{siteId}",
-        "site",
-        "sites.update",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Delete,
-        "/app/v3/api/sites/{siteId}",
-        "site",
-        "sites.delete",
-    )
-    .with_required_permission("deploy.sites.write"),
+    .with_required_permission("deploy.cloudAccounts.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/activate",
-        "site",
-        "sites.activate",
+        "/app/v3/api/cloud_accounts",
+        "domain",
+        "cloudAccounts.create",
     )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Put,
-        "/app/v3/api/sites/{siteId}/composition",
-        "site",
-        "sites.composition.update",
-    )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/pause",
-        "site",
-        "sites.pause",
-    )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}/deployments",
-        "deployment",
-        "sites.deployments.list",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/deployments",
-        "deployment",
-        "sites.deployments.create",
-    )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}/deployments/{deploymentId}",
-        "deployment",
-        "sites.deployments.retrieve",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/deployments/{deploymentId}/rollback",
-        "deployment",
-        "sites.deployments.rollback",
-    )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}/releases",
-        "release",
-        "sites.releases.list",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/releases",
-        "release",
-        "sites.releases.create",
-    )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}/releases/{releaseId}",
-        "release",
-        "sites.releases.retrieve",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}/env_variables",
-        "envVariable",
-        "sites.envVariables.list",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/env_variables",
-        "envVariable",
-        "sites.envVariables.create",
-    )
-    .with_required_permission("deploy.sites.write")
+    .with_required_permission("deploy.cloudAccounts.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/certificates",
         "certificate",
         "certificates.list",
-    ),
+    )
+    .with_required_permission("deploy.certificates.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/certificates",
         "certificate",
         "certificates.create",
     )
+    .with_required_permission("deploy.certificates.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/certificates/{certificateId}",
         "certificate",
         "certificates.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.certificates.read"),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/app/v3/api/certificates/{certificateId}",
         "certificate",
         "certificates.delete",
-    ),
+    )
+    .with_required_permission("deploy.certificates.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/certificates/{certificateId}/renew",
         "certificate",
         "certificates.renew",
     )
+    .with_required_permission("deploy.certificates.write")
     .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/certificates/{certificateId}/renewals",
+        "certificate",
+        "certificates.renewals.list",
+    )
+    .with_required_permission("deploy.certificates.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/upload_sessions",
@@ -286,308 +210,394 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "artifacts.delete",
     )
     .with_required_permission("deploy.artifacts.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/sites/{siteId}/health_checks",
-        "monitor",
-        "sites.healthChecks.list",
-    )
-    .with_required_permission("deploy.sites.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/sites/{siteId}/health_checks",
-        "monitor",
-        "sites.healthChecks.create",
-    )
-    .with_required_permission("deploy.sites.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(HttpMethod::Get, "/app/v3/api/apps", "app", "apps.list"),
+    HttpRoute::dual_token(HttpMethod::Get, "/app/v3/api/apps", "app", "apps.list")
+        .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(HttpMethod::Post, "/app/v3/api/apps", "app", "apps.create")
+        .with_required_permission("deploy.apps.write")
         .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}",
         "app",
         "apps.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/apps/{appId}",
         "app",
         "apps.update",
-    ),
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/activate",
+        "app",
+        "apps.activate",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/composition",
+        "app",
+        "apps.composition.update",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/pause",
+        "app",
+        "apps.pause",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/env_variables",
+        "envVariable",
+        "apps.envVariables.list",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/env_variables",
+        "envVariable",
+        "apps.envVariables.create",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/health_checks",
+        "monitor",
+        "apps.healthChecks.list",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/health_checks",
+        "monitor",
+        "apps.healthChecks.create",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/platform_targets",
         "app",
         "platformTargets.list",
-    ),
+    )
+    .with_required_permission("deploy.platformTargets.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/platform_targets",
         "app",
         "platformTargets.create",
     )
+    .with_required_permission("deploy.platformTargets.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/platform_targets/{platformTargetId}",
         "app",
         "platformTargets.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.platformTargets.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/source_repositories",
         "app",
         "sourceRepositories.list",
-    ),
+    )
+    .with_required_permission("deploy.sourceRepositories.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/source_repositories",
         "app",
         "sourceRepositories.create",
     )
+    .with_required_permission("deploy.sourceRepositories.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/source_repositories/{sourceRepositoryId}",
         "app",
         "sourceRepositories.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.sourceRepositories.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/build_templates",
         "build",
         "buildTemplates.list",
-    ),
+    )
+    .with_required_permission("deploy.buildTemplates.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/build_templates",
         "build",
         "buildTemplates.create",
     )
+    .with_required_permission("deploy.buildTemplates.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/build_templates/{buildTemplateId}",
         "build",
         "buildTemplates.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.buildTemplates.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/builds",
         "build",
         "builds.list",
-    ),
+    )
+    .with_required_permission("deploy.builds.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/builds",
         "build",
         "builds.create",
     )
+    .with_required_permission("deploy.builds.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/builds/{buildId}",
         "build",
         "builds.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.builds.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/apps/{appId}/builds/{buildId}/state",
         "build",
         "builds.update",
-    ),
+    )
+    .with_required_permission("deploy.builds.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/packages",
         "package",
         "packages.list",
-    ),
+    )
+    .with_required_permission("deploy.packages.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/packages",
         "package",
         "packages.create",
     )
+    .with_required_permission("deploy.packages.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/packages/{packageId}",
         "package",
         "packages.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.packages.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/releases",
         "release",
         "releases.list",
-    ),
+    )
+    .with_required_permission("deploy.releases.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/releases",
         "release",
         "releases.create",
     )
+    .with_required_permission("deploy.releases.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/releases/{releaseId}",
         "release",
         "releases.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.releases.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/channels",
         "release",
         "channels.list",
-    ),
+    )
+    .with_required_permission("deploy.channels.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/channels/{channelId}",
         "release",
         "channels.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.channels.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/channels/{channelId}/promotions",
         "release",
         "channels.create",
     )
+    .with_required_permission("deploy.channels.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/channels/{channelId}/rollouts",
         "release",
         "channels.rollouts.list",
-    ),
+    )
+    .with_required_permission("deploy.channels.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/deployments",
         "deployment",
         "deployments.list",
-    ),
+    )
+    .with_required_permission("deploy.deployments.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/deployments",
         "deployment",
         "deployments.create",
     )
+    .with_required_permission("deploy.deployments.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/deployments/{deploymentId}",
         "deployment",
         "deployments.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.deployments.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/signing_identities",
         "signing",
         "signingIdentities.list",
-    ),
+    )
+    .with_required_permission("deploy.signingIdentities.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/signing_identities",
         "signing",
         "signingIdentities.create",
     )
+    .with_required_permission("deploy.signingIdentities.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/signing_identities/{signingIdentityId}",
         "signing",
         "signingIdentities.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.signingIdentities.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/usage_events",
         "usage",
         "usageEvents.list",
-    ),
+    )
+    .with_required_permission("deploy.usageEvents.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/database_profiles",
         "appDatabase",
         "appDatabaseProfiles.list",
-    ),
+    )
+    .with_required_permission("deploy.appDatabaseProfiles.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/database_profiles",
         "appDatabase",
         "appDatabaseProfiles.create",
     )
+    .with_required_permission("deploy.appDatabaseProfiles.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/database_profiles/{profileId}",
         "appDatabase",
         "appDatabaseProfiles.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.appDatabaseProfiles.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/apps/{appId}/database_profiles/{profileId}",
         "appDatabase",
         "appDatabaseProfiles.update",
     )
+    .with_required_permission("deploy.appDatabaseProfiles.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations",
         "appDatabase",
         "appDatabaseMigrations.list",
-    ),
+    )
+    .with_required_permission("deploy.appDatabaseMigrations.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations",
         "appDatabase",
         "appDatabaseMigrations.create",
     )
+    .with_required_permission("deploy.appDatabaseMigrations.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations/{migrationId}",
         "appDatabase",
         "appDatabaseMigrations.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.appDatabaseMigrations.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/environments",
         "appEnvironment",
         "appEnvironments.list",
-    ),
+    )
+    .with_required_permission("deploy.appEnvironments.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/environments",
         "appEnvironment",
         "appEnvironments.create",
     )
+    .with_required_permission("deploy.appEnvironments.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/environments/{environmentId}",
         "appEnvironment",
         "appEnvironments.retrieve",
-    ),
+    )
+    .with_required_permission("deploy.appEnvironments.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/apps/{appId}/environments/{environmentId}",
         "appEnvironment",
         "appEnvironments.update",
     )
+    .with_required_permission("deploy.appEnvironments.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
         "appEnvironment",
         "appEnvironments.list",
-    ),
+    )
+    .with_required_permission("deploy.appEnvironments.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
         "appEnvironment",
         "appEnvironments.create",
     )
+    .with_required_permission("deploy.appEnvironments.write")
     .with_idempotent(true),
 ];
 

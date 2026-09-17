@@ -75,3 +75,6 @@ Thumbs.db
 # Local artifacts and build output (do not commit)
 node_modules.stale.*/
 sdks/**/package-lock.json
+
+# Local assistant state (do not commit)
+.workbuddy/

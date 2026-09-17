@@ -3811,6 +3811,19 @@
           "lastErrorCode": {
             "type": "string"
           },
+          "caaDecision": {
+            "type": "string",
+            "enum": [
+              "PERMITTED",
+              "UNAUTHORIZED_CA",
+              "LOOKUP_FAILED"
+            ],
+            "description": "CAA pre-issuance decision. `UNAUTHORIZED_CA` blocks issuance; the decision is recorded so a refusal stays auditable without re-querying DNS. Always present together with `caaCheckedAt`."
+          },
+          "caaCheckedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "deadlineAt": {
             "type": "string",
             "format": "date-time"
@@ -3874,6 +3887,24 @@
           },
           "presentationRef": {
             "type": "string"
+          },
+          "dnsRecordName": {
+            "type": "string",
+            "pattern": "^_acme-challenge\\.",
+            "description": "DNS-01 TXT record owner. A wildcard identifier and its apex share one record name, so presentation order never affects validation."
+          },
+          "dnsRecordType": {
+            "type": "string",
+            "enum": [
+              "TXT"
+            ]
+          },
+          "dnsRecordValue": {
+            "type": "string"
+          },
+          "presentationExpiresAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "status": {
             "type": "string"
@@ -3949,7 +3980,8 @@
           "keyAlgorithm",
           "notBefore",
           "notAfter",
-          "secretBundleRef"
+          "secretBundleRef",
+          "material"
         ],
         "properties": {
           "orderId": {
@@ -3996,6 +4028,32 @@
           },
           "secretBundleRef": {
             "type": "string"
+          },
+          "material": {
+            "$ref": "#/components/schemas/CertificateMaterialPayload"
+          }
+        }
+      },
+      "CertificateMaterialPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The PEM files of one issued certificate. The digests above are re-derived from these bytes and any disagreement refuses the whole request, so the recorded metadata and the stored material cannot drift apart.",
+        "required": [
+          "certificateChainPem",
+          "privateKeyPem"
+        ],
+        "properties": {
+          "certificateChainPem": {
+            "type": "string",
+            "description": "The certificate chain the CA returned, leaf first and then its intermediates — byte for byte what an ACME client stores as `fullchain.pem`. The control plane splits it into `cert.pem`, `chain.pem` and `fullchain.pem`, and hashes it as given for `chainSha256`."
+          },
+          "privateKeyPem": {
+            "type": "string",
+            "description": "The private key. Stored sealed under a data key wrapped by the custody master key; it is never persisted as plaintext and is not readable over any API."
+          },
+          "rootPem": {
+            "type": "string",
+            "description": "The trust anchor the chain terminates at. Optional: most CAs omit it because the root belongs in the client's trust store. When absent the control plane resolves the anchor from the chain itself, or from its configured trust anchor bundle, and refuses the request if neither applies — it never stores an unanchored bundle."
           }
         }
       },

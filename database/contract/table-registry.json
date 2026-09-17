@@ -45,6 +45,12 @@
       "lifecycle_status": "active"
     },
     {
+      "table_name": "deploy_certificate_material",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
       "table_name": "deploy_deployment",
       "owner": "deploy-platform",
       "compliance_level": "L2",
@@ -189,6 +195,18 @@
       "lifecycle_status": "active"
     },
     {
+      "table_name": "deploy_dns_provider_credential",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "deprecated"
+    },
+    {
+      "table_name": "deploy_certificate_quota_usage",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
       "table_name": "deploy_certificate_distribution",
       "owner": "deploy-platform",
       "compliance_level": "L2",
@@ -316,6 +334,12 @@
     },
     {
       "table_name": "deploy_environment_promotion",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "deploy_certificate_renewal",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"

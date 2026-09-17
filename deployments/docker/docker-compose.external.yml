@@ -29,3 +29,15 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     logging: *default-logging
+  # Both certificate processes read the same external PostgreSQL as the gateway:
+  # the planner writes the renewal order, the executor claims it. Without the
+  # host-gateway alias they cannot resolve `host.docker.internal` on Linux and
+  # crash-loop on connect.
+  certificate-renewal:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging: *default-logging
+  certificate-issuance:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging: *default-logging

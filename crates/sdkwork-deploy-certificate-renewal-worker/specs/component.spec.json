@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-deploy-certificate-renewal-worker",
+    "displayName": "SDKWork Deploy Certificate Renewal Worker",
+    "version": "0.1.0",
+    "type": "rust-crate",
+    "root": "crates/sdkwork-deploy-certificate-renewal-worker",
+    "domain": "deploy",
+    "capability": "certificate-renewal-convergence",
+    "surface": "runtime-service-host",
+    "languages": ["rust"],
+    "generated": false,
+    "manifests": ["Cargo.toml", "specs/component.spec.json"]
+  },
+  "canonicalSpecs": [
+    {"file": "CODE_STYLE_SPEC.md", "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md", "purpose": "Authored worker boundaries and test placement."},
+    {"file": "NAMING_SPEC.md", "path": "../../../sdkwork-specs/NAMING_SPEC.md", "purpose": "Worker and configuration naming."},
+    {"file": "RUST_CODE_SPEC.md", "path": "../../../sdkwork-specs/RUST_CODE_SPEC.md", "purpose": "Background worker, retry, and shutdown rules."},
+    {"file": "CONFIG_SPEC.md", "path": "../../../sdkwork-specs/CONFIG_SPEC.md", "purpose": "Typed bounded runtime configuration."},
+    {"file": "DATABASE_SPEC.md", "path": "../../../sdkwork-specs/DATABASE_SPEC.md", "purpose": "Renewal lease, ledger, retry, and idempotency semantics."},
+    {"file": "OBSERVABILITY_SPEC.md", "path": "../../../sdkwork-specs/OBSERVABILITY_SPEC.md", "purpose": "Structured bounded job logging."},
+    {"file": "SECURITY_SPEC.md", "path": "../../../sdkwork-specs/SECURITY_SPEC.md", "purpose": "CA-account rate-limit protection and secret-safe order creation."},
+    {"file": "TEST_SPEC.md", "path": "../../../sdkwork-specs/TEST_SPEC.md", "purpose": "Worker configuration, claim, backoff, and shutdown verification."}
+  ],
+  "contracts": {
+    "layerRole": "runtime-service-host",
+    "publicExports": ["."],
+    "providedPorts": [
+      {"name": "certificateRenewalWorker", "export": "."},
+      {"name": "certificateExpirySweepWorker", "export": "."}
+    ],
+    "requiredPorts": [
+      {"name": "deployServiceHost", "export": ".", "provider": "sdkwork-deploy-service-host"}
+    ],
+    "runtimeEntrypoints": ["sdkwork-deploy-certificate-renewal-worker"],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": [
+      "SDKWORK_NODE_INSTANCE_ID",
+      "SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_WORKER_ID",
+      "SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_BATCH_SIZE",
+      "SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_POLL_INTERVAL_MILLIS",
+      "SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_LEASE_SECONDS",
+      "SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_SWEEP_INTERVAL_MILLIS",
+      "SDKWORK_DEPLOY_CERTIFICATE_MASTER_KEY_FILE",
+      "SDKWORK_DEPLOY_TRUST_ANCHOR_FILE",
+      "SDKWORK_DEPLOY_DNS_PROVIDER_KIND",
+      "SDKWORK_DEPLOY_DNS_PROVIDER_CREDENTIAL",
+      "SDKWORK_DEPLOY_DNS_ZONE_APEX",
+      "SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS"
+    ]
+  },
+  "verification": {
+    "commands": ["cargo test -p sdkwork-deploy-certificate-renewal-worker"]
+  }
+}

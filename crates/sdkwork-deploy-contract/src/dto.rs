@@ -1,5 +1,109 @@
 use serde::{Deserialize, Serialize};
 
+/// How many host shapes one certificate aggregate is sold and validated as.
+///
+/// The scope is a property of the certificate, not of an individual identifier:
+/// `deploy_certificate_identifier` keeps recording the per-identifier
+/// `EXACT`/`WILDCARD` shape, while this value states the product intent the
+/// operator chose and drives validation, planning, and quota accounting.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CertificateScope {
+    /// Exactly one exact FQDN identifier.
+    #[default]
+    SingleDomain,
+    /// One leading-label wildcard plus the apex it hangs off. A wildcard SAN does
+    /// not cover the apex, so the aggregate always plans two identifiers.
+    Wildcard,
+}
+
+impl CertificateScope {
+    pub const ALL: [Self; 2] = [Self::SingleDomain, Self::Wildcard];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SingleDomain => "SINGLE_DOMAIN",
+            Self::Wildcard => "WILDCARD",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "SINGLE_DOMAIN" => Some(Self::SingleDomain),
+            "WILDCARD" => Some(Self::Wildcard),
+            _ => None,
+        }
+    }
+
+    /// Whether an issuance using this scope may present an HTTP-01 challenge.
+    /// Wildcards require DNS-01 because the CA must prove control of every
+    /// name the wildcard could expand to.
+    pub const fn allows_http01(self) -> bool {
+        matches!(self, Self::SingleDomain)
+    }
+}
+
+impl std::fmt::Display for CertificateScope {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+/// ACME challenge method selected for an issuance.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ValidationMethod {
+    /// Prefer HTTP-01 when the edge proof path is healthy, otherwise DNS-01.
+    /// Wildcard scopes always resolve to DNS-01 regardless of this value.
+    #[default]
+    Auto,
+    /// `/.well-known/acme-challenge/<token>` served by the edge. Exact names only.
+    Http01,
+    /// `_acme-challenge.<host>` TXT record, presented manually by an operator or
+    /// automatically through a configured DNS provider credential.
+    Dns01,
+}
+
+impl ValidationMethod {
+    pub const ALL: [Self; 3] = [Self::Auto, Self::Http01, Self::Dns01];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "AUTO",
+            Self::Http01 => "HTTP_01",
+            Self::Dns01 => "DNS_01",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "AUTO" => Some(Self::Auto),
+            "HTTP_01" => Some(Self::Http01),
+            "DNS_01" => Some(Self::Dns01),
+            _ => None,
+        }
+    }
+
+    /// Resolves the concrete ACME challenge type for a certificate scope.
+    ///
+    /// A wildcard scope can never resolve to HTTP-01: the returned method is the
+    /// one the challenge orchestrator must present, not merely the operator's
+    /// preference.
+    pub const fn resolve_for_scope(self, scope: CertificateScope) -> Self {
+        match (scope, self) {
+            (CertificateScope::Wildcard, _) => Self::Dns01,
+            (CertificateScope::SingleDomain, Self::Auto) => Self::Http01,
+            (_, method) => method,
+        }
+    }
+}
+
+impl std::fmt::Display for ValidationMethod {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DomainZoneResponse {
     pub id: String,
@@ -9,6 +113,14 @@ pub struct DomainZoneResponse {
     pub display_name: Option<String>,
     #[serde(rename = "dnsProvider", skip_serializing_if = "Option::is_none")]
     pub dns_provider: Option<String>,
+    /// Cloud account pinned to serve this zone's DNS-01 challenges.
+    ///
+    /// Absent means "resolve one": the certificate then falls back to the zone's
+    /// account, and failing that to the deployment-level DNS provider
+    /// configuration. See [`CloudAccountResponse`] — the id refers to the IAM
+    /// provider account center, not to a Deploy-owned row.
+    #[serde(rename = "providerAccountId", skip_serializing_if = "Option::is_none")]
+    pub provider_account_id: Option<String>,
     pub status: String,
     #[serde(rename = "hostnameCount")]
     pub hostname_count: i64,
@@ -41,6 +153,15 @@ pub struct CreateDomainZoneRequest {
     pub dns_provider: Option<String>,
     #[serde(rename = "providerZoneRef", default)]
     pub provider_zone_ref: Option<String>,
+    /// Cloud account that will present this zone's DNS-01 challenges.
+    ///
+    /// Optional. Omitting it is legal and common: the zone then carries no pin, and
+    /// issuance resolves an account from the account center by provider, falling
+    /// back to the deployment-level provider configuration. Nothing is derived and
+    /// stored, so re-registering the account later cannot leave the zone pointing
+    /// at an id that no longer exists.
+    #[serde(rename = "providerAccountId", default)]
+    pub provider_account_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -51,6 +172,14 @@ pub struct UpdateDomainZoneRequest {
     pub dns_provider: Option<String>,
     #[serde(rename = "providerZoneRef", default)]
     pub provider_zone_ref: Option<String>,
+    /// Re-pins the zone's cloud account.
+    ///
+    /// Three states, because "leave it" and "unpin it" are different requests and a
+    /// certificate's fallback depends on the difference: omitted leaves the current
+    /// pin alone, an empty string clears it (the zone then resolves an account per
+    /// issuance), and any other value must name an account this caller may bind.
+    #[serde(rename = "providerAccountId", default)]
+    pub provider_account_id: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
 }
@@ -123,6 +252,194 @@ pub struct DomainVerifyResponse {
     pub expires_at: Option<String>,
 }
 
+/// Batch ownership intent: "these are the hostnames this certificate order will
+/// cover — make sure I own them".
+///
+/// The names are **fully qualified** hostnames (a leading `*.` is allowed on the
+/// leftmost label) rather than the relative names `CreateDomainHostnameRequest`
+/// speaks. A caller that already knows what it wants to issue for should not
+/// have to fold the name back into the zone itself: that arithmetic is
+/// zone-local and every consumer that repeats it is a place to get it wrong.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnsureDomainHostnameClaimsRequest {
+    pub hostnames: Vec<String>,
+}
+
+/// One hostname's ownership state after an `ensure` pass.
+///
+/// `verified` is the **observation made by this call**, not a copy of the row:
+/// ownership is proven by a DNS TXT lookup, so asking again is the only way to
+/// learn whether the operator has published the record yet. The presentation
+/// fields are populated only while a challenge is outstanding, and `dnsRecordValue`
+/// is the public proof digest — never key material.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DomainHostnameClaimResponse {
+    pub hostname: DomainHostnameResponse,
+    pub verified: bool,
+    #[serde(rename = "dnsRecordName", skip_serializing_if = "Option::is_none")]
+    pub dns_record_name: Option<String>,
+    #[serde(rename = "dnsRecordType", skip_serializing_if = "Option::is_none")]
+    pub dns_record_type: Option<String>,
+    #[serde(rename = "dnsRecordValue", skip_serializing_if = "Option::is_none")]
+    pub dns_record_value: Option<String>,
+    #[serde(rename = "expiresAt", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DomainHostnameClaimBatchResponse {
+    pub items: Vec<DomainHostnameClaimResponse>,
+}
+
+/// A DNS-capable cloud account, as the Deploy console renders it.
+///
+/// A projection of the IAM provider account center, not a Deploy-owned resource:
+/// the same Aliyun or Cloudflare key is wanted by other business modules, and its
+/// custody — envelope encryption, rotation, write-only access — stays with IAM.
+/// Deploy therefore never returns credential material here, only whether one is
+/// configured.
+///
+/// `tenant_global` is the wire form of the distinction the picker shows: `true`
+/// for `platform` and `tenant` accounts any member of the tenant may use, `false`
+/// for an account one user bound to themselves. It is derived rather than sent by
+/// IAM so the two surfaces cannot drift.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CloudAccountResponse {
+    pub id: String,
+    #[serde(rename = "accountCode")]
+    pub account_code: String,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "vendorCode")]
+    pub vendor_code: String,
+    /// Canonical DNS provider spelling this account drives: `ALIYUN_DNS`,
+    /// `DNSPOD`, or `CLOUDFLARE`. Absent when the vendor drives no DNS family this
+    /// build supports, which is why such an account is never offered for binding.
+    #[serde(rename = "dnsProvider", skip_serializing_if = "Option::is_none")]
+    pub dns_provider: Option<String>,
+    /// `platform`, `tenant`, or `user`.
+    #[serde(rename = "scopeType")]
+    pub scope_type: String,
+    /// Whether every member of the tenant may use this account.
+    #[serde(rename = "tenantGlobal")]
+    pub tenant_global: bool,
+    /// Set for `user`-scope accounts only.
+    #[serde(rename = "ownerUserId", skip_serializing_if = "Option::is_none")]
+    pub owner_user_id: Option<String>,
+    #[serde(rename = "isDefault")]
+    pub is_default: bool,
+    pub status: String,
+    /// Whether an active credential exists behind the account. An account without
+    /// one can be listed but not bound: it looks configured and is not.
+    #[serde(rename = "credentialConfigured")]
+    pub credential_configured: bool,
+    /// Capabilities the account advertises. Empty means unspecified, which stays
+    /// reusable for everything.
+    #[serde(rename = "capabilityCodes", default)]
+    pub capability_codes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub environment: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CloudAccountPage {
+    /// Matching accounts, **narrowest first**: personal accounts, then the tenant's
+    /// shared ones, then platform ones, with each level's default ahead of its other
+    /// candidates.
+    ///
+    /// The order is part of the contract rather than an accident of the query: it is
+    /// the same precedence the server itself resolves in, so `items[0]` is the
+    /// account a create would reuse whenever the choice is unambiguous. Without that
+    /// stated, every console would re-derive the rule and some would get it wrong.
+    pub items: Vec<CloudAccountResponse>,
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
+/// Filters for the account picker.
+///
+/// Also the console's "先判断是否已存在" pre-check: filtering by `dnsProvider` and
+/// finding anything at all means the credential form can be skipped in favour of
+/// pinning what is already there, and a create would reuse it.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ListCloudAccountsQuery {
+    #[serde(default = "default_page")]
+    pub page: i32,
+    #[serde(default = "default_page_size")]
+    pub page_size: i32,
+    /// The DNS family being configured. Present whenever the picker is opened from a
+    /// zone or certificate form, and the reason an account list is short rather than
+    /// confusing: an object-storage account is not a DNS answer.
+    #[serde(
+        rename = "dnsProvider",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub dns_provider: Option<String>,
+    /// `platform`, `tenant`, or `user`. Absent walks every level the caller can see.
+    #[serde(rename = "scopeType", default, skip_serializing_if = "Option::is_none")]
+    pub scope_type: Option<String>,
+    /// Only the caller's own accounts.
+    #[serde(default)]
+    pub mine: bool,
+    /// Keyword over account code and display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyword: Option<String>,
+}
+
+/// Registers a DNS cloud account from console input.
+///
+/// The fields are the union of what the supported families need, so the console
+/// renders one form: `accessKeyId` is the public half (Aliyun AccessKeyId, DNSPod
+/// LoginId) and is unused by Cloudflare, and `secretAccessKey` is always the secret
+/// half (Aliyun AccessKeySecret, DNSPod ApiToken, Cloudflare ApiToken).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateCloudAccountRequest {
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    /// The account code within its scope. Pre-filled by the console with a
+    /// suggestion rather than derived server-side: a derived code collides the
+    /// second time a tenant adds a second account for the same vendor.
+    #[serde(rename = "accountCode", default)]
+    pub account_code: Option<String>,
+    /// The DNS family being configured; decides the credential shape.
+    #[serde(rename = "dnsProvider")]
+    pub dns_provider: String,
+    /// `platform`, `tenant`, or `user`. Defaults to `tenant`.
+    ///
+    /// A tenant member may not publish a `platform` account — the account center
+    /// refuses it — so the console offers the level as a choice only where it can
+    /// succeed.
+    #[serde(rename = "scopeType", default)]
+    pub scope_type: Option<String>,
+    #[serde(rename = "environment", default)]
+    pub environment: Option<String>,
+    /// Promote this account to its scope's default for its vendor.
+    #[serde(rename = "isDefault", default)]
+    pub is_default: bool,
+    #[serde(rename = "accessKeyId", default)]
+    pub access_key_id: Option<String>,
+    #[serde(rename = "secretAccessKey")]
+    pub secret_access_key: String,
+    #[serde(rename = "sessionToken", default)]
+    pub session_token: Option<String>,
+}
+
+/// What registering produced.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CloudAccountRegistrationResponse {
+    pub account: CloudAccountResponse,
+    /// `true` when an equivalent account already existed and was reused, so the
+    /// console reports "已存在，直接复用" rather than "已创建".
+    pub reused: bool,
+    /// `true` when this call stored the secret. A reused account that already had a
+    /// credential is left alone: silently rotating a credential another business
+    /// module may be using is not this flow's decision to make.
+    #[serde(rename = "credentialApplied")]
+    pub credential_applied: bool,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EnvVariableResponse {
     pub id: String,
@@ -162,6 +479,20 @@ pub struct CertificateResponse {
     pub certificate_source: String,
     #[serde(rename = "caProfile")]
     pub ca_profile: String,
+    #[serde(rename = "certificateScope")]
+    pub certificate_scope: CertificateScope,
+    #[serde(rename = "validationMethod")]
+    pub validation_method: ValidationMethod,
+    /// Cloud account pinned to present this certificate's DNS-01 challenges.
+    ///
+    /// The certificate-level pin overrides the zone's, which is what makes a
+    /// single zone able to serve certificates issued through different vendor
+    /// accounts. Absent means the zone decides, and failing that the
+    /// deployment-level provider configuration. Only meaningful for DNS-01; an
+    /// HTTP-01 certificate may carry one anyway so that switching validation
+    /// method later does not require re-entering it.
+    #[serde(rename = "providerAccountId", skip_serializing_if = "Option::is_none")]
+    pub provider_account_id: Option<String>,
     #[serde(rename = "preferredKeyAlgorithm")]
     pub preferred_key_algorithm: String,
     pub identifiers: Vec<String>,
@@ -177,6 +508,39 @@ pub struct CertificateResponse {
     pub auto_renew: bool,
     #[serde(rename = "renewalStatus")]
     pub renewal_status: String,
+    /// Lead time before expiry at which renewal starts.
+    ///
+    /// A lead time longer than the certificate's own lifetime is harmless rather
+    /// than pathological: the renewal window is floored at one third of the
+    /// lifetime, so a fresh short-lived certificate can never be immediately due.
+    #[serde(rename = "renewBeforeDays")]
+    pub renew_before_days: i32,
+    /// The instant renewal work becomes due for the version being served.
+    ///
+    /// Sent by the server rather than derived by each client so that every
+    /// surface — console, alerting, the scheduler itself — agrees on one window
+    /// rule.
+    #[serde(rename = "renewalDueAt", skip_serializing_if = "Option::is_none")]
+    pub renewal_due_at: Option<String>,
+    /// Whole days until the served version expires, floored; negative once past.
+    #[serde(rename = "daysUntilExpiry", skip_serializing_if = "Option::is_none")]
+    pub days_until_expiry: Option<i64>,
+    /// Which part of its validity window the served version is in right now.
+    ///
+    /// Computed at read time from the X.509 window, never persisted: a stored
+    /// phase would be wrong from the instant the clock crossed a boundary.
+    #[serde(rename = "validityPhase", skip_serializing_if = "Option::is_none")]
+    pub validity_phase: Option<String>,
+    /// When renewal last ran to completion, successfully or not.
+    #[serde(rename = "lastRenewalAt", skip_serializing_if = "Option::is_none")]
+    pub last_renewal_at: Option<String>,
+    /// Consecutive failed renewal attempts; a success resets it to zero.
+    ///
+    /// Surfaced because the retry backoff hides a repeated failure from the
+    /// schedule: without the count, a certificate failing every day looks the
+    /// same as one that has never been tried.
+    #[serde(rename = "renewalFailureCount")]
+    pub renewal_failure_count: i32,
     pub status: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,
@@ -193,12 +557,83 @@ pub struct CertificatePage {
     pub page_size: i32,
 }
 
+/// Apex of a leading-label wildcard hostname, or `None` when the input is not a
+/// single-label wildcard.
+///
+/// Only one leading label is stripped: `*.example.com` yields `example.com`,
+/// while `*.a.example.com` yields `a.example.com` (its own apex) and
+/// `*.*.example.com` / `a.*.example.com` are rejected because a certificate can
+/// only ever contain a single leading wildcard label (RFC 6125 §6.4.3).
+pub fn wildcard_apex(hostname: &str) -> Option<&str> {
+    let apex = hostname.strip_prefix("*.")?;
+    if apex.is_empty() || apex.contains('*') {
+        return None;
+    }
+    Some(apex)
+}
+
+/// Whether a hostname is exactly one leading-label wildcard.
+///
+/// `*.example.com` is valid; `*` alone, `*.*.example.com`, and
+/// `a.*.example.com` are not.
+pub fn is_single_label_wildcard(hostname: &str) -> bool {
+    wildcard_apex(hostname).is_some()
+}
+
+/// Tenant-scoped consumption of the CA budget.
+///
+/// The counters mirror the public CA policy surface (registered-domain budget,
+/// duplicate-certificate budget, new-order rate, failed-validation rate) so an
+/// operator can see why a request was refused instead of receiving an opaque
+/// provider error after the order was already created.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateQuotaResponse {
+    #[serde(rename = "certificatesPerDomain")]
+    pub certificates_per_domain: CertificateQuotaWindow,
+    #[serde(rename = "duplicateCertificateSets")]
+    pub duplicate_certificate_sets: CertificateQuotaWindow,
+    #[serde(rename = "newOrders")]
+    pub new_orders: CertificateQuotaWindow,
+    #[serde(rename = "failedValidations")]
+    pub failed_validations: CertificateQuotaWindow,
+    #[serde(rename = "concurrentOrders")]
+    pub concurrent_orders: CertificateQuotaWindow,
+}
+
+/// One bounded counter: what was consumed inside the rolling window, and what the
+/// configured ceiling is. `retry_after_at` is present only when the window is
+/// currently exhausted.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateQuotaWindow {
+    pub consumed: i64,
+    pub limit: i64,
+    #[serde(rename = "windowSeconds")]
+    pub window_seconds: i64,
+    #[serde(rename = "retryAfterAt", skip_serializing_if = "Option::is_none")]
+    pub retry_after_at: Option<String>,
+}
+
+impl CertificateQuotaWindow {
+    pub const fn exhausted(&self) -> bool {
+        self.consumed >= self.limit
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateCertificateRequest {
     #[serde(rename = "certName")]
     pub cert_name: String,
     #[serde(rename = "domainIds")]
     pub domain_ids: Vec<String>,
+    /// `SINGLE_DOMAIN` (default) or `WILDCARD`. A wildcard scope plans the apex
+    /// in addition to the wildcard itself, because a wildcard SAN does not
+    /// cover its own apex.
+    #[serde(rename = "certificateScope", default)]
+    pub certificate_scope: CertificateScope,
+    /// Operator preference. `AUTO` (default) resolves to HTTP-01 for a
+    /// single-domain scope and always to DNS-01 for a wildcard scope.
+    #[serde(rename = "validationMethod", default)]
+    pub validation_method: ValidationMethod,
     #[serde(rename = "caProfile", default = "default_certificate_ca_profile")]
     pub ca_profile: String,
     #[serde(
@@ -206,6 +641,33 @@ pub struct CreateCertificateRequest {
         default = "default_certificate_key_algorithm"
     )]
     pub preferred_key_algorithm: String,
+    /// Whether the control plane keeps this certificate renewed on its own.
+    ///
+    /// Defaults to true: an operator asking for a managed certificate is asking
+    /// for a name that stays covered, not for a reminder to renew it.
+    #[serde(rename = "autoRenew", default = "default_certificate_auto_renew")]
+    pub auto_renew: bool,
+    /// Days before expiry at which renewal starts; 7..=90, default 30.
+    ///
+    /// Stored per certificate rather than read from `deploy_tls_policy` because a
+    /// certificate may be bound to several listeners with different policies, and
+    /// a renewal trigger has to resolve to exactly one window. The configured lead
+    /// time is additionally floored at one third of the certificate's lifetime, so
+    /// a value larger than a short-lived certificate's lifetime is safe.
+    #[serde(
+        rename = "renewBeforeDays",
+        default = "default_certificate_renew_before_days"
+    )]
+    pub renew_before_days: i32,
+    /// Cloud account that will present this certificate's DNS-01 challenges.
+    ///
+    /// Overrides the zone's pin, so one zone can issue through several vendor
+    /// accounts. Omitting it is the common case and leaves the certificate deferring
+    /// to its zone, then to the account center, then to the deployment-level provider
+    /// configuration — decided when an order runs, not frozen at creation. Not
+    /// required for an HTTP-01 certificate, which never presents a DNS record.
+    #[serde(rename = "providerAccountId", default)]
+    pub provider_account_id: Option<String>,
 }
 
 fn default_certificate_ca_profile() -> String {
@@ -214,6 +676,14 @@ fn default_certificate_ca_profile() -> String {
 
 fn default_certificate_key_algorithm() -> String {
     "ECDSA".to_owned()
+}
+
+fn default_certificate_auto_renew() -> bool {
+    true
+}
+
+fn default_certificate_renew_before_days() -> i32 {
+    sdkwork_deploy_core::CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS
 }
 
 pub fn is_deploy_package_artifact_type(package_type: i32) -> bool {
@@ -531,11 +1001,13 @@ pub struct AuditLogPage {
     pub total: i64,
     pub page: i32,
     pub page_size: i32,
-    /// Opaque keyset continuation for cursor mode;  in offset mode or on
-    /// the last page (PAGINATION_SPEC §6).
+    /// Opaque keyset continuation (PAGINATION_SPEC §6). An offset page carries
+    /// one as well, which is how a client obtains its first cursor and switches
+    /// from `page` paging to keyset continuation; absent on the last page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
-    /// Exact page continuation flag for cursor mode;  in offset mode.
+    /// Whether a further window exists, in either mode; absent only when the
+    /// caller did not request page continuation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_more: Option<bool>,
 }

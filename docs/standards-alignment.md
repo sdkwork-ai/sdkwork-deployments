@@ -34,7 +34,8 @@ The runtime worker registers and renews referenced Drive WebsiteRoot channels th
 Drive Internal SDK before Web publication. Drive then delivers ordinary events directly to the
 Node-qualified Web callback; Deploy is not the event relay or acknowledgement authority.
 
-Domain management starts with tenant-owned `domain_zones`. Opening a Zone lists its apex and child
+Domain management starts with `domain_zones`, each owned by a user subject (`user_id`);
+`user_id IS NULL` marks platform tenant-level zones. Opening a Zone lists its apex and child
 hostname resources; application association exists only through `deploy_app_binding`, so one Site
 can use multiple hostnames and one verified hostname can participate in multiple non-conflicting
 application routes. `domainZones.hostnames.verify` exposes an expiring DNS TXT challenge at

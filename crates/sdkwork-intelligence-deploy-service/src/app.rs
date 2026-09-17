@@ -17,10 +17,11 @@ use sdkwork_deploy_contract::{
     DeployUploadSessionResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
     ListDomainZonesQuery, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
     PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
-    SigningIdentityPage, SigningIdentityResponse, SourceRepositoryPage, SourceRepositoryResponse,
-    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
-    UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
-    UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
+    RequestCertificateOrderRequest, SigningIdentityPage, SigningIdentityResponse,
+    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
+    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateBuildStateRequest,
+    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery,
+    UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
 };
 use sdkwork_deploy_drive_port::{DriveRequestCredentials, PrepareDeployUploadCommand};
 
@@ -40,6 +41,49 @@ impl DeployService {
         DriveRequestCredentials {
             auth_token: context.auth_token.clone(),
             access_token: context.access_token.clone(),
+        }
+    }
+
+    /// Requests the order that turns a freshly created certificate into a version.
+    ///
+    /// Nothing else did. The renewal sweep only looks at certificates that already carry
+    /// a validity window, and the renew endpoint refused a certificate that was not
+    /// `ACTIVE` or `FAILED`, so a row written `PENDING` by creation was declined by every
+    /// candidate path and never issued.
+    ///
+    /// The order is opened through `open_certificate_order`, so a console request
+    /// inherits the CAA pre-flight, the ACME account resolution and the idempotency the
+    /// operator endpoint and the renewal sweep already share. A second order-creation path
+    /// would be a quiet way for this one to become the unregulated one.
+    ///
+    /// A refusal is logged and swallowed: the certificate is a legitimate accepted intent,
+    /// a missing ACME account is a separate resource the operator can add, and `renew` can
+    /// request the order again once it exists. Failing the request here would make
+    /// certificate creation depend on unrelated setup.
+    async fn request_first_certificate_order(
+        &self,
+        tenant_id: i64,
+        certificate: &sdkwork_deploy_contract::CertificateResponse,
+    ) {
+        let request = RequestCertificateOrderRequest {
+            certificate_id: certificate.id.clone(),
+            // Anchored to the certificate, so replaying the creation replays the order
+            // rather than opening a second one for one intent.
+            idempotency_key: format!("initial:{}", certificate.id),
+            challenge_type: None,
+        };
+        match self.open_certificate_order(tenant_id, &request).await {
+            Ok(order) => tracing::info!(
+                certificate = %certificate.id,
+                order = %order.id,
+                "certificate created and its first order requested"
+            ),
+            Err(error) => tracing::warn!(
+                certificate = %certificate.id,
+                error = %error,
+                "certificate created but its first order could not be requested; \
+                 it stays PENDING and can be requested again by a renewal"
+            ),
         }
     }
 
@@ -103,6 +147,85 @@ impl DeployService {
             && stored.content_length == request.content_length
             && stored.checksum == request.checksum
     }
+
+    /// Runs one observation pass over a hostname's outstanding ownership proof.
+    ///
+    /// "Issue the challenge" and "check whether the operator published it" are
+    /// the same operation seen from two sides: the first pass creates the
+    /// attempt and hands back the record to publish, and every later pass
+    /// re-reads DNS. That is why the batch claim endpoint reuses this verbatim —
+    /// ADR-20260723 §3 forbids the caller from asserting success, so all this can
+    /// ever do is report what the lookup saw.
+    async fn advance_hostname_ownership(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        hostname_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerifyResponse> {
+        let challenge = self
+            .repository
+            .domain_hostname_verification_challenge(tenant_id, owner_user_id, zone_id, hostname_id)
+            .await?;
+        if challenge.verified || challenge.token.is_some() {
+            return Ok(challenge.response());
+        }
+        let verification_id = challenge.verification_id.as_deref().ok_or_else(|| {
+            sdkwork_deploy_contract::DeployServiceError::Internal(
+                "pending domain has no verification attempt".to_owned(),
+            )
+        })?;
+        let proof_sha256 = challenge.proof_sha256.as_deref().ok_or_else(|| {
+            sdkwork_deploy_contract::DeployServiceError::Internal(
+                "pending domain verification has no proof digest".to_owned(),
+            )
+        })?;
+        let observation = self
+            .domain_ownership_verifier
+            .verify_dns_txt(&challenge.hostname, proof_sha256)
+            .await?;
+        if !observation.matched {
+            return Ok(challenge.response());
+        }
+        let observed_sha256 = observation.observed_sha256.as_deref().ok_or_else(|| {
+            sdkwork_deploy_contract::DeployServiceError::Internal(
+                "matched domain verification has no observed digest".to_owned(),
+            )
+        })?;
+        if self
+            .repository
+            .confirm_domain_hostname_verification(
+                tenant_id,
+                owner_user_id,
+                zone_id,
+                hostname_id,
+                verification_id,
+                observed_sha256,
+                &observation.verifier_identity,
+            )
+            .await?
+        {
+            return Ok(sdkwork_deploy_contract::DomainVerifyResponse {
+                verified: true,
+                method: crate::domain_verification::DOMAIN_VERIFICATION_METHOD_DNS_TXT.to_owned(),
+                verification_id: Some(verification_id.to_owned()),
+                record_name: challenge.record_name,
+                token: None,
+                expires_at: challenge.expires_at,
+            });
+        }
+        let current = self
+            .repository
+            .domain_hostname_verification_challenge(tenant_id, owner_user_id, zone_id, hostname_id)
+            .await?;
+        if current.verified {
+            Ok(current.response())
+        } else {
+            Err(sdkwork_deploy_contract::DeployServiceError::conflict(
+                "domain verification challenge changed; retry with the current token",
+            ))
+        }
+    }
 }
 
 fn normalize_optional_text(
@@ -164,7 +287,11 @@ impl DeployAppApi for DeployService {
                 ));
             }
         }
-        self.repository.list_domain_zones(tenant_id, query).await
+        // The caller's own subject, not the tenant: the console lists the
+        // domains this user maintains and nothing else.
+        self.repository
+            .list_domain_zones(tenant_id, context.actor_id, query)
+            .await
     }
 
     async fn create_domain_zone(
@@ -179,6 +306,12 @@ impl DeployAppApi for DeployService {
         request.dns_provider = normalize_optional_text(request.dns_provider, 64, "dnsProvider")?;
         request.provider_zone_ref =
             normalize_optional_text(request.provider_zone_ref, 512, "providerZoneRef")?;
+        // Proved before the row is written: a zone pinned to an account this caller
+        // cannot see is a configuration error that would otherwise surface only when
+        // the first wildcard certificate tried to present through it.
+        request.provider_account_id = self
+            .pin_provider_account(context, tenant_id, request.provider_account_id.as_deref())
+            .await?;
         self.repository
             .create_domain_zone(
                 tenant_id,
@@ -196,7 +329,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainZoneResponse> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .retrieve_domain_zone(tenant_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
             .await
     }
 
@@ -219,6 +352,22 @@ impl DeployAppApi for DeployService {
         request.dns_provider = normalize_optional_text(request.dns_provider, 64, "dnsProvider")?;
         request.provider_zone_ref =
             normalize_optional_text(request.provider_zone_ref, 512, "providerZoneRef")?;
+        // Tri-state: absent leaves the pin, empty clears it, anything else must name
+        // an account this caller may bind. The clear marker stays an empty string
+        // rather than becoming `None`, which the repository would read as "no change"
+        // and silently ignore the operator's intent.
+        match self
+            .resolve_provider_account_update(
+                context,
+                tenant_id,
+                request.provider_account_id.as_deref(),
+            )
+            .await?
+        {
+            None => {}
+            Some(Some(account_id)) => request.provider_account_id = Some(account_id),
+            Some(None) => request.provider_account_id = Some(String::new()),
+        }
         self.repository
             .update_domain_zone(tenant_id, context.actor_id, zone_id, &request)
             .await
@@ -230,7 +379,9 @@ impl DeployAppApi for DeployService {
         zone_id: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
-        self.repository.delete_domain_zone(tenant_id, zone_id).await
+        self.repository
+            .delete_domain_zone(tenant_id, context.actor_id, zone_id)
+            .await
     }
 
     async fn list_domain_hostnames(
@@ -242,7 +393,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainHostnamePage> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .list_domain_hostnames(tenant_id, zone_id, page, page_size)
+            .list_domain_hostnames(tenant_id, context.actor_id, zone_id, page, page_size)
             .await
     }
 
@@ -253,9 +404,11 @@ impl DeployAppApi for DeployService {
         request: &CreateDomainHostnameRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainHostnameResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        // Resolved as this caller's own zone: a zone they do not own is
+        // reported as missing rather than lending its apex to the request.
         let zone = self
             .repository
-            .retrieve_domain_zone(tenant_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
             .await?;
         let relative_name =
             normalize_relative_hostname(&request.relative_name, &zone.apex_hostname)?;
@@ -277,7 +430,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainHostnameResponse> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .retrieve_domain_hostname(tenant_id, zone_id, hostname_id)
+            .retrieve_domain_hostname(tenant_id, context.actor_id, zone_id, hostname_id)
             .await
     }
 
@@ -289,7 +442,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .delete_domain_hostname(tenant_id, zone_id, hostname_id)
+            .delete_domain_hostname(tenant_id, context.actor_id, zone_id, hostname_id)
             .await
     }
 
@@ -303,7 +456,7 @@ impl DeployAppApi for DeployService {
         let tenant_id = Self::require_tenant(context)?;
         let zone = self
             .repository
-            .retrieve_domain_zone(tenant_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
             .await?;
         let relative_name =
             normalize_relative_hostname(&request.relative_name, &zone.apex_hostname)?;
@@ -325,67 +478,241 @@ impl DeployAppApi for DeployService {
         hostname_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerifyResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        let challenge = self
-            .repository
-            .domain_hostname_verification_challenge(tenant_id, zone_id, hostname_id)
-            .await?;
-        if challenge.verified || challenge.token.is_some() {
-            return Ok(challenge.response());
+        self.advance_hostname_ownership(tenant_id, context.actor_id, zone_id, hostname_id)
+            .await
+    }
+
+    /// Declares whatever is missing from the request and advances each hostname's
+    /// proof once, so an order that covers `N` names costs one round trip instead
+    /// of `2N`.
+    ///
+    /// Refolding the fully-qualified names into zone-relative ones happens here
+    /// rather than in the caller: the wizard already holds a SAN list, and every
+    /// consumer that re-derives the fold is a place for the `*.*.shop` double
+    /// wildcard to come back. A name that does not fold into the selected zone
+    /// fails the whole request **before** any row is written, because a partially
+    /// declared set would leave the tenant owning hostnames nobody asked to keep.
+    async fn ensure_domain_hostname_claims(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        request: &sdkwork_deploy_contract::EnsureDomainHostnameClaimsRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainHostnameClaimBatchResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        if request.hostnames.is_empty() {
+            return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                "at least one hostname is required",
+            ));
         }
-        let verification_id = challenge.verification_id.as_deref().ok_or_else(|| {
-            sdkwork_deploy_contract::DeployServiceError::Internal(
-                "pending domain has no verification attempt".to_owned(),
-            )
-        })?;
-        let proof_sha256 = challenge.proof_sha256.as_deref().ok_or_else(|| {
-            sdkwork_deploy_contract::DeployServiceError::Internal(
-                "pending domain verification has no proof digest".to_owned(),
-            )
-        })?;
-        let observation = self
-            .domain_ownership_verifier
-            .verify_dns_txt(&challenge.hostname, proof_sha256)
-            .await?;
-        if !observation.matched {
-            return Ok(challenge.response());
+        // The batch exists to prepare one certificate order, so it inherits that
+        // order's identifier budget instead of inventing a second one.
+        if request.hostnames.len() > sdkwork_deploy_contract::MAX_CERTIFICATE_IDENTIFIERS {
+            return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                "too many hostnames for one request",
+            ));
         }
-        let observed_sha256 = observation.observed_sha256.as_deref().ok_or_else(|| {
-            sdkwork_deploy_contract::DeployServiceError::Internal(
-                "matched domain verification has no observed digest".to_owned(),
-            )
-        })?;
-        if self
+        let zone = self
             .repository
-            .confirm_domain_hostname_verification(
-                tenant_id,
-                zone_id,
-                hostname_id,
-                verification_id,
-                observed_sha256,
-                &observation.verifier_identity,
-            )
-            .await?
-        {
-            return Ok(sdkwork_deploy_contract::DomainVerifyResponse {
-                verified: true,
-                method: crate::domain_verification::DOMAIN_VERIFICATION_METHOD_DNS_TXT.to_owned(),
-                verification_id: Some(verification_id.to_owned()),
-                record_name: challenge.record_name,
-                token: None,
-                expires_at: challenge.expires_at,
+            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
+            .await?;
+        let mut relative_names = Vec::with_capacity(request.hostnames.len());
+        for hostname in &request.hostnames {
+            let relative_name = crate::relative_name_for_hostname(&zone.apex_hostname, hostname)?;
+            if relative_names.contains(&relative_name) {
+                // Two spellings of the same name would produce one row and two
+                // identical entries in the caller's SAN plan; refusing is the
+                // only way the response can stay an honest map of the request.
+                return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                    "hostnames must be unique",
+                ));
+            }
+            relative_names.push(relative_name);
+        }
+
+        let mut items = Vec::with_capacity(relative_names.len());
+        for relative_name in &relative_names {
+            let hostname = self
+                .repository
+                .ensure_domain_hostname(tenant_id, context.actor_id, zone_id, relative_name)
+                .await?;
+            // A row that is already proven needs no lookup: DNS cannot un-verify
+            // it, and re-asking would spend the attempt's budget on an answer
+            // already known.
+            let observation = if hostname.verification_status == "VERIFIED" {
+                None
+            } else {
+                Some(
+                    self.advance_hostname_ownership(
+                        tenant_id,
+                        context.actor_id,
+                        zone_id,
+                        &hostname.id,
+                    )
+                    .await?,
+                )
+            };
+            let (verified, dns_record_name, dns_record_type, dns_record_value, expires_at) =
+                match observation {
+                    // Nothing is presented once a name is proven: there is no
+                    // record left to publish.
+                    None => (true, None, None, None, None),
+                    Some(response) => {
+                        let record_name = response.record_name;
+                        let presentable = record_name.is_some();
+                        (
+                            response.verified,
+                            record_name,
+                            presentable.then(|| "TXT".to_owned()),
+                            response.token,
+                            response.expires_at,
+                        )
+                    }
+                };
+            items.push(sdkwork_deploy_contract::DomainHostnameClaimResponse {
+                hostname,
+                verified,
+                dns_record_name,
+                dns_record_type,
+                dns_record_value,
+                expires_at,
             });
         }
-        let current = self
-            .repository
-            .domain_hostname_verification_challenge(tenant_id, zone_id, hostname_id)
-            .await?;
-        if current.verified {
-            Ok(current.response())
-        } else {
-            Err(sdkwork_deploy_contract::DeployServiceError::conflict(
-                "domain verification challenge changed; retry with the current token",
-            ))
+        Ok(sdkwork_deploy_contract::DomainHostnameClaimBatchResponse { items })
+    }
+
+    /// Accounts the caller may pick when configuring DNS automation.
+    ///
+    /// Reads the provider account center through the Deploy cloud account port, so
+    /// the same account is usable from wherever it is convenient to manage it. This
+    /// is also the "先判断是否已存在" pre-check: filtered by `dnsProvider` it answers
+    /// whether the credential inputs can be skipped in favour of pinning an account
+    /// that already exists.
+    async fn list_cloud_accounts(
+        &self,
+        context: &DeployAppRequestContext,
+        query: &sdkwork_deploy_contract::ListCloudAccountsQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CloudAccountPage> {
+        use sdkwork_deploy_cloud_account_port::{
+            dns_provider, ListCloudAccountsCommand, CAPABILITY_DNS, CLOUD_ACCOUNT_SCOPES,
+        };
+
+        let tenant_id = Self::require_tenant(context)?;
+        // An unsupported family is refused rather than ignored: silently listing every
+        // account would let the console offer, say, an object-storage account for a
+        // form that can never present through it.
+        let dns_provider = match query
+            .dns_provider
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(raw) => Some(dns_provider::normalize(raw).ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation(format!(
+                    "dnsProvider `{raw}` is not one of {}",
+                    dns_provider::ALL.join(", ")
+                ))
+            })?),
+            None => None,
+        };
+        let scope_type = query
+            .scope_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        if let Some(scope_type) = scope_type {
+            if !CLOUD_ACCOUNT_SCOPES.contains(&scope_type) {
+                return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                    format!(
+                        "scopeType must be one of {}",
+                        CLOUD_ACCOUNT_SCOPES.join(", ")
+                    ),
+                ));
+            }
         }
+        let page = self
+            .cloud_accounts
+            .list_accounts(ListCloudAccountsCommand {
+                tenant_id,
+                user_id: context.actor_id,
+                vendor_code: dns_provider
+                    .and_then(dns_provider::vendor_code_for)
+                    .map(str::to_owned),
+                scope_type: scope_type.map(str::to_owned),
+                mine: query.mine,
+                include_platform: true,
+                capability_code: Some(CAPABILITY_DNS.to_owned()),
+                search: query
+                    .keyword
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned),
+                page: query.page,
+                page_size: query.page_size,
+            })
+            .await?;
+        Ok(sdkwork_deploy_contract::CloudAccountPage {
+            items: page
+                .items
+                .iter()
+                .map(crate::cloud_accounts::cloud_account_response)
+                .collect(),
+            total: page.total,
+            page: page.page,
+            page_size: page.page_size,
+        })
+    }
+
+    /// Registers an account from console input, reusing one that already matches.
+    ///
+    /// Reuse is decided by the account port, not here, because only the account
+    /// center knows its own precedence. A reused account that already carries a
+    /// credential keeps it: the console reports both facts and the operator can see
+    /// that the secret they typed was not applied.
+    async fn create_cloud_account(
+        &self,
+        context: &DeployAppRequestContext,
+        request: &sdkwork_deploy_contract::CreateCloudAccountRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CloudAccountRegistrationResponse> {
+        use sdkwork_deploy_cloud_account_port::{dns_provider, RegisterCloudAccountCommand};
+
+        let tenant_id = Self::require_tenant(context)?;
+        let display_name = crate::cloud_accounts::required_text(
+            &request.display_name,
+            crate::cloud_accounts::MAXIMUM_DISPLAY_NAME_LENGTH,
+            "displayName",
+        )?;
+        let family = dns_provider::normalize(&request.dns_provider).ok_or_else(|| {
+            sdkwork_deploy_contract::DeployServiceError::validation(format!(
+                "dnsProvider must be one of {}",
+                dns_provider::ALL.join(", ")
+            ))
+        })?;
+        let account_code = crate::cloud_accounts::account_code(&request.account_code, family)?;
+        let registration = self
+            .cloud_accounts
+            .register_account(RegisterCloudAccountCommand {
+                tenant_id,
+                organization_id: context.organization_id.unwrap_or_default(),
+                actor_id: context.actor_id.unwrap_or_default(),
+                user_id: context.actor_id,
+                display_name,
+                account_code,
+                dns_provider: family.to_owned(),
+                scope_type: request.scope_type.clone(),
+                owner_user_id: None,
+                environment: request.environment.clone(),
+                is_default: request.is_default,
+                access_key_id: request.access_key_id.clone().unwrap_or_default(),
+                secret_access_key: request.secret_access_key.clone(),
+                session_token: request.session_token.clone(),
+            })
+            .await?;
+        Ok(sdkwork_deploy_contract::CloudAccountRegistrationResponse {
+            account: crate::cloud_accounts::cloud_account_response(&registration.account),
+            reused: registration.reused,
+            credential_applied: registration.credential_applied,
+        })
     }
 
     async fn update_app_composition(
@@ -533,14 +860,44 @@ impl DeployAppApi for DeployService {
         request: &CreateCertificateRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.repository
+        // Rejected here so the caller gets a 422 naming the field, instead of the
+        // database's CHECK constraint surfacing as an opaque internal error.
+        crate::certificate_renewal::validate_renew_before_days(request.renew_before_days)
+            .map_err(sdkwork_deploy_contract::DeployServiceError::validation)?;
+        let mut request = request.clone();
+        // Proved before the row is written, so a pin this caller cannot use fails the
+        // request the operator is looking at rather than the order that follows it.
+        request.provider_account_id = self
+            .pin_provider_account(context, tenant_id, request.provider_account_id.as_deref())
+            .await?;
+        let certificate = self
+            .repository
             .create_certificate(
                 tenant_id,
                 context.organization_id,
                 context.actor_id,
                 idempotency_key,
-                request,
+                &request,
             )
+            .await?;
+        // Creating a certificate is an accepted intent; this is what turns the intent
+        // into work. Without it the row is `PENDING` forever, because no other path
+        // advances a certificate that has never been issued.
+        self.request_first_certificate_order(tenant_id, &certificate)
+            .await;
+        Ok(certificate)
+    }
+
+    async fn list_certificate_renewals(
+        &self,
+        context: &DeployAppRequestContext,
+        certificate_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateRenewalPage> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.repository
+            .list_certificate_renewals(tenant_id, certificate_id, page, page_size)
             .await
     }
 
@@ -572,6 +929,21 @@ impl DeployAppApi for DeployService {
         certificate_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        let certificate = self
+            .repository
+            .retrieve_certificate(tenant_id, certificate_id)
+            .await?;
+        // A certificate with no version has never been issued, so asking again means
+        // "request it", not "replace it": there is no previous version to supersede and
+        // no window to move, and recording a renewal would make the ledger describe a
+        // handover that never happened. It is also the retry path for a first order that
+        // a missing ACME account deferred, and asking twice replays the same order
+        // rather than duplicating it.
+        if certificate.current_version_id.is_none() {
+            self.request_first_certificate_order(tenant_id, &certificate)
+                .await;
+            return Ok(certificate);
+        }
         self.repository
             .renew_certificate(tenant_id, certificate_id)
             .await

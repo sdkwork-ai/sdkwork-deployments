@@ -70,7 +70,9 @@ pub fn normalize_provider_contract_version(
         return Err("providerContractVersion must not be blank".into());
     }
     if value.len() > 64 {
-        return Err(format!("providerContractVersion is longer than 64 bytes: {value}"));
+        return Err(format!(
+            "providerContractVersion is longer than 64 bytes: {value}"
+        ));
     }
     let canonical = canonical_provider_contract_version(provider_type);
     if value == canonical {

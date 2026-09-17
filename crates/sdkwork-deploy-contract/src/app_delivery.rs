@@ -1649,6 +1649,12 @@ pub struct CertificateOrderResponse {
     pub attempt_count: i32,
     #[serde(rename = "lastErrorCode", skip_serializing_if = "Option::is_none")]
     pub last_error_code: Option<String>,
+    /// CAA pre-issuance decision, recorded on the order so a refusal is
+    /// auditable without re-querying DNS.
+    #[serde(rename = "caaDecision", skip_serializing_if = "Option::is_none")]
+    pub caa_decision: Option<String>,
+    #[serde(rename = "caaCheckedAt", skip_serializing_if = "Option::is_none")]
+    pub caa_checked_at: Option<String>,
     #[serde(rename = "deadlineAt")]
     pub deadline_at: String,
     #[serde(rename = "createdAt")]
@@ -1683,6 +1689,20 @@ pub struct CertificateChallengeResponse {
     pub proof_sha256: String,
     #[serde(rename = "presentationRef", skip_serializing_if = "Option::is_none")]
     pub presentation_ref: Option<String>,
+    /// Manual DNS-01 presentation. Present only while the challenge is still
+    /// presentable; the orchestrator clears these once the authorization is
+    /// validated, fails, or is cleaned up.
+    #[serde(rename = "dnsRecordName", skip_serializing_if = "Option::is_none")]
+    pub dns_record_name: Option<String>,
+    #[serde(rename = "dnsRecordType", skip_serializing_if = "Option::is_none")]
+    pub dns_record_type: Option<String>,
+    #[serde(rename = "dnsRecordValue", skip_serializing_if = "Option::is_none")]
+    pub dns_record_value: Option<String>,
+    #[serde(
+        rename = "presentationExpiresAt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub presentation_expires_at: Option<String>,
     pub status: String,
     #[serde(rename = "attemptCount")]
     pub attempt_count: i32,
@@ -1713,6 +1733,131 @@ pub const ORDER_STATUS_CHALLENGE_PRESENTING: &str = "CHALLENGE_PRESENTING";
 pub const ORDER_STATUS_CHALLENGE_VALIDATING: &str = "CHALLENGE_VALIDATING";
 pub const ORDER_STATUS_FINALIZING: &str = "FINALIZING";
 
+/// Reason codes recorded on `deploy_certificate_order.last_error_code`.
+///
+/// Codes, not sentences: an operator filters on them and the console renders them,
+/// so a message that varies per attempt would make either impossible. Each code
+/// names *who* stopped the order — the request was rejected, the CA refused, or the
+/// control plane simply ran out of time — because that is what decides whether
+/// retrying is useful.
+pub const ORDER_ERROR_VALIDATION_FAILED: &str = "ORDER_VALIDATION_FAILED";
+pub const ORDER_ERROR_CONFLICT: &str = "ORDER_CONFLICT";
+pub const ORDER_ERROR_NOT_FOUND: &str = "ORDER_NOT_FOUND";
+pub const ORDER_ERROR_FORBIDDEN: &str = "ORDER_FORBIDDEN";
+pub const ORDER_ERROR_QUOTA_EXCEEDED: &str = "ORDER_QUOTA_EXCEEDED";
+pub const ORDER_ERROR_DATABASE_UNAVAILABLE: &str = "ORDER_DATABASE_UNAVAILABLE";
+pub const ORDER_ERROR_INTERNAL: &str = "ORDER_INTERNAL_ERROR";
+/// The order outlived its deadline without reaching a stored version.
+pub const ORDER_ERROR_DEADLINE_EXCEEDED: &str = "ORDER_DEADLINE_EXCEEDED";
+
+/// CAA decisions recorded on an order before the ACME order is created
+/// (RFC 8659). Any value other than `PERMITTED` blocks issuance.
+pub const CAA_DECISION_PERMITTED: &str = "PERMITTED";
+pub const CAA_DECISION_UNAUTHORIZED_CA: &str = "UNAUTHORIZED_CA";
+pub const CAA_DECISION_LOOKUP_FAILED: &str = "LOOKUP_FAILED";
+
+/// DNS record type a DNS-01 challenge is published as.
+pub const DNS01_RECORD_TYPE: &str = "TXT";
+
+/// One renewal attempt, as returned by the certificate renewal history endpoint.
+///
+/// The previous/new window pair is the reason this record exists rather than
+/// being folded into the certificate row: it is what lets "which certificate
+/// covered this name between these two instants" be answered after the version it
+/// describes has been superseded and its own row no longer says anything about
+/// the current state.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CertificateRenewalResponse {
+    pub id: String,
+    #[serde(rename = "certificateId")]
+    pub certificate_id: String,
+    #[serde(rename = "triggerKind")]
+    pub trigger_kind: String,
+    pub status: String,
+    #[serde(rename = "attemptNo")]
+    pub attempt_no: i32,
+    #[serde(rename = "previousVersionId", skip_serializing_if = "Option::is_none")]
+    pub previous_version_id: Option<String>,
+    #[serde(rename = "resultingVersionId", skip_serializing_if = "Option::is_none")]
+    pub resulting_version_id: Option<String>,
+    /// Validity window of the version this attempt replaced, captured when the
+    /// attempt was claimed.
+    #[serde(rename = "previousNotBefore", skip_serializing_if = "Option::is_none")]
+    pub previous_not_before: Option<String>,
+    #[serde(rename = "previousNotAfter", skip_serializing_if = "Option::is_none")]
+    pub previous_not_after: Option<String>,
+    /// Validity window of the version this attempt produced; present only once
+    /// the attempt succeeded.
+    #[serde(rename = "newNotBefore", skip_serializing_if = "Option::is_none")]
+    pub new_not_before: Option<String>,
+    #[serde(rename = "newNotAfter", skip_serializing_if = "Option::is_none")]
+    pub new_not_after: Option<String>,
+    #[serde(rename = "scheduledAt")]
+    pub scheduled_at: String,
+    #[serde(rename = "startedAt", skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(rename = "finishedAt", skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(rename = "lastErrorCode", skip_serializing_if = "Option::is_none")]
+    pub last_error_code: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateRenewalPage {
+    pub items: Vec<CertificateRenewalResponse>,
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
+/// Where a renewal attempt came from.
+///
+/// The distinction is recorded rather than inferred because it changes how an
+/// operator reads a failure: a `SCHEDULED` failure is a broken automation that
+/// will keep retrying on its own, while a `MANUAL` one was a deliberate act
+/// whose result the operator is already watching.
+pub const RENEWAL_TRIGGER_SCHEDULED: &str = "SCHEDULED";
+pub const RENEWAL_TRIGGER_MANUAL: &str = "MANUAL";
+
+/// Renewal attempt lifecycle.
+///
+/// `PLANNED` and `ORDERED` are open, and at most one attempt per certificate may
+/// be open at a time; every other value is terminal and carries `finishedAt`.
+/// `PLANNED` exists separately from `ORDERED` because claiming a certificate and
+/// opening its order are two steps, and a worker that dies between them must be
+/// distinguishable from one that never claimed the certificate at all.
+pub const RENEWAL_STATUS_PLANNED: &str = "PLANNED";
+pub const RENEWAL_STATUS_ORDERED: &str = "ORDERED";
+pub const RENEWAL_STATUS_SUCCEEDED: &str = "SUCCEEDED";
+pub const RENEWAL_STATUS_FAILED: &str = "FAILED";
+pub const RENEWAL_STATUS_SKIPPED: &str = "SKIPPED";
+pub const RENEWAL_STATUS_CANCELLED: &str = "CANCELLED";
+
+/// Which part of a certificate's validity window it currently sits in.
+///
+/// Computed on read from the X.509 window and the configured lead time, never
+/// stored: a persisted phase would be wrong from the instant the clock crossed a
+/// boundary, and nothing would be around to correct it.
+pub const CERTIFICATE_VALIDITY_PHASE_NOT_YET_VALID: &str = "NOT_YET_VALID";
+pub const CERTIFICATE_VALIDITY_PHASE_VALID: &str = "VALID";
+pub const CERTIFICATE_VALIDITY_PHASE_EXPIRING_SOON: &str = "EXPIRING_SOON";
+pub const CERTIFICATE_VALIDITY_PHASE_EXPIRED: &str = "EXPIRED";
+
+/// `_acme-challenge` record name an operator (or a provider adapter) must
+/// publish for a DNS-01 challenge.
+///
+/// A wildcard identifier proves control of the base domain it expands from, so
+/// `*.example.com` and `example.com` share one TXT name. Collapsing them is
+/// deliberate: publishing two records under the same name with different values
+/// makes the ACME validation result order-dependent, which is a well-known
+/// source of intermittent DNS-01 failures.
+pub fn dns01_challenge_record_name(hostname: &str) -> String {
+    let base = crate::dto::wildcard_apex(hostname).unwrap_or(hostname);
+    format!("_acme-challenge.{base}")
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StoreCertificateVersionRequest {
     #[serde(rename = "orderId")]
@@ -1737,6 +1882,52 @@ pub struct StoreCertificateVersionRequest {
     pub not_after: String,
     #[serde(rename = "secretBundleRef")]
     pub secret_bundle_ref: String,
+    /// The PEM material itself.
+    ///
+    /// Required rather than optional: this endpoint is the only path by which a
+    /// managed certificate enters the control plane, and a version whose material
+    /// was never stored cannot be delivered to a node or audited afterwards. The
+    /// four digests above are re-derived from these bytes and a disagreement
+    /// refuses the whole request, so the recorded metadata and the stored
+    /// material can never drift apart.
+    pub material: CertificateMaterialPayload,
+}
+
+/// The PEM files of one issued certificate, as handed over by the issuance
+/// worker.
+///
+/// The worker holds no custody: it transports the material and the control plane
+/// seals it. Keeping the sealing on this side is what lets the master key exist
+/// in exactly one place.
+///
+/// The chain is one field rather than a leaf plus a separate intermediate list
+/// because that is what an ACME client actually receives, and because
+/// `chainSha256` hashes the blob verbatim — asking the worker to split it first
+/// would make the digest depend on how it chose to join the halves back
+/// together.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CertificateMaterialPayload {
+    /// The certificate chain the CA returned, leaf first, then its
+    /// intermediates — byte for byte what the client stores as `fullchain.pem`.
+    ///
+    /// The control plane splits this into `cert.pem` (first block), `chain.pem`
+    /// (the rest) and `fullchain.pem` (the whole blob), and hashes it as given
+    /// for the `chainSha256` cross-check.
+    #[serde(rename = "certificateChainPem")]
+    pub certificate_chain_pem: String,
+    /// The private key, in PKCS#8 (`PRIVATE KEY`) or SEC1/PKCS#1 form.
+    #[serde(rename = "privateKeyPem")]
+    pub private_key_pem: String,
+    /// The root certificate the chain terminates at.
+    ///
+    /// Optional, because most CAs do not send it — the anchor belongs in the
+    /// client's trust store, so a chain normally stops at an intermediate. When
+    /// this is empty the control plane establishes the anchor from the chain
+    /// itself (if it ends at a self-signed certificate) or from its configured
+    /// trust anchor bundle, and refuses the request if neither applies. It never
+    /// stores an unanchored bundle.
+    #[serde(rename = "rootPem", default)]
+    pub root_pem: String,
 }
 
 /// Canonical certificate order state machine transitions (migration 0004).

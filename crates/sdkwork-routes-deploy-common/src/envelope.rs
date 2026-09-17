@@ -7,17 +7,19 @@ use sdkwork_deploy_contract::{
     AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage, AuditLogResponse, BuildPage,
     BuildQueueItemResponse, BuildQueuePage, BuildResponse, BuildTemplatePage,
     BuildTemplateResponse, CertificateChallengePage, CertificateChallengeResponse,
-    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateResponse,
-    ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, DomainHostnamePage,
-    DomainHostnameResponse, DomainVerifyResponse, DomainZonePage, DomainZoneResponse,
-    EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage, EnvVariableResponse,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
-    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
-    PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage, RunnerHealthResponse, ServerPage,
-    ServerResponse, SigningIdentityHealthPage, SigningIdentityHealthResponse, SigningIdentityPage,
-    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
-    SourceRepositoryResponse, UsageEventPage, UsageEventResponse,
+    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
+    CertificateRenewalResponse, CertificateResponse, ChannelPage, ChannelResponse,
+    ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage, CloudAccountResponse,
+    DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse, DomainZonePage,
+    DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage,
+    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
+    HealthCheckResponse, NginxConfigPage, NginxConfigResponse, NginxReloadResponse,
+    NginxStatusResponse, NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage,
+    PackageResponse, PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage,
+    RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
+    SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
+    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, UsageEventPage,
+    UsageEventResponse,
 };
 use sdkwork_deploy_core::normalize_pagination;
 use sdkwork_utils_rust::{PageInfo, PageMode, SdkWorkPageData, SdkWorkResourceData};
@@ -161,6 +163,28 @@ pub fn certificate_page(
     offset_page(page.items, page_num, page_size, page.total)
 }
 
+pub fn certificate_renewal_page(
+    page: CertificateRenewalPage,
+    page_num: i32,
+    page_size: i32,
+) -> SdkWorkPageData<CertificateRenewalResponse> {
+    offset_page(page.items, page_num, page_size, page.total)
+}
+
+/// Envelopes a page of cloud accounts.
+///
+/// The item order is carried through untouched. `CloudAccountPage` documents
+/// narrowest-scope-first as part of the contract, and re-sorting here would make
+/// the wire order differ from the order the server resolves in — which is the one
+/// property a picker relies on to show "the account a create would reuse" first.
+pub fn cloud_account_page(
+    page: CloudAccountPage,
+    page_num: i32,
+    page_size: i32,
+) -> SdkWorkPageData<CloudAccountResponse> {
+    offset_page(page.items, page_num, page_size, page.total)
+}
+
 pub fn artifact_page(
     page: ArtifactPage,
     page_num: i32,
@@ -194,8 +218,16 @@ pub fn node_cluster_page(
     offset_page(page.items, page_num, page_size, page.total)
 }
 
+/// Offset page for the audit log surface.
+///
+/// `nextCursor` is forwarded so that a client which paged with `page` /
+/// `page_size` can switch to keyset continuation instead of walking deeper
+/// `OFFSET` windows (PAGINATION_SPEC §6); `hasMore` keeps coming from the exact
+/// count, which offset mode computes anyway.
 pub fn audit_log_page(page: AuditLogPage) -> SdkWorkPageData<AuditLogResponse> {
-    offset_page(page.items, page.page, page.page_size, page.total)
+    let mut data = offset_page(page.items, page.page, page.page_size, page.total);
+    data.page_info.next_cursor = page.next_cursor;
+    data
 }
 
 pub fn domain_verify(item: DomainVerifyResponse) -> SdkWorkResourceData<DomainVerifyResponse> {

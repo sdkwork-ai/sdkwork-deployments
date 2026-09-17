@@ -11,12 +11,15 @@ workspace = true
 async-trait.workspace = true
 sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-core.workspace = true
+sdkwork-deploy-certificate-material.workspace = true
+sdkwork-deploy-cloud-account-port.workspace = true
 sdkwork-deploy-content-provider-port.workspace = true
 sdkwork-deploy-drive-port.workspace = true
 sdkwork-deploy-runtime-compiler.workspace = true
 sdkwork-deploy-web-port.workspace = true
 sdkwork-database-id.workspace = true
 sdkwork-utils-rust.workspace = true
+sdkwork-webserver-acme-service.workspace = true
 chrono.workspace = true
 idna.workspace = true
 psl.workspace = true
@@ -24,4 +27,5 @@ serde_json.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 tokio.workspace = true

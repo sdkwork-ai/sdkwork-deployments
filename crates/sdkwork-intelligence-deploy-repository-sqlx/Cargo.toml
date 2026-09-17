@@ -15,6 +15,7 @@ serde_json.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
 
+sdkwork-deploy-certificate-material.workspace = true
 sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-content-provider-port.workspace = true
 sdkwork-deploy-core.workspace = true
@@ -26,9 +27,16 @@ sdkwork-utils-rust.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
+rcgen.workspace = true
 sdkwork-database-config.workspace = true
 sdkwork-database-drift.workspace = true
 sdkwork-database-lifecycle.workspace = true
 sdkwork-database-spi.workspace = true
 sdkwork-database-sqlx.workspace = true
+sdkwork-deploy-certificate-material.workspace = true
+sdkwork-deploy-drive-port.workspace = true
+sdkwork-deploy-service-host.workspace = true
+sdkwork-webserver-acme-service.workspace = true
 tokio.workspace = true
+tracing-subscriber.workspace = true

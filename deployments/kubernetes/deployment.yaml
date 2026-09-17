@@ -55,6 +55,12 @@ spec:
               value: https://api.sdkwork.com
             - name: SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER
               value: "false"
+            # DNS provider credentials come from the IAM cloud account center, which
+            # this process reaches through its own PostgreSQL pool. The `USE_MEMORY_*`
+            # convention above does not apply: memory is the exception here, and
+            # production refuses it even when asked for.
+            - name: SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS
+              value: "false"
             - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL
               value: https://drive-internal.sdkwork.com
             - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE

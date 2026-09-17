@@ -1,14 +1,15 @@
 //! `DeployRepositoryPort` trait implementation delegating to SQLx repository modules.
 
 use async_trait::async_trait;
+use sdkwork_deploy_certificate_material::SealedCertificateFile;
 use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage, AppReleaseResponse,
     AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage, BuildQueuePage,
     BuildResponse, BuildTemplatePage, BuildTemplateResponse, CertificateChallengePage,
-    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateResponse,
-    ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
+    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
+    CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
     CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest,
     CreateAppDeploymentRequest, CreateAppEnvironmentRequest, CreateAppReleaseRequest,
     CreateAppRequest, CreateArtifactRequest, CreateBuildRequest, CreateBuildTemplateRequest,
@@ -44,7 +45,10 @@ use sdkwork_intelligence_deploy_service::runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,
     RuntimeAssignmentState, RuntimeObservationEvidence, RuntimeObservationPersistenceResult,
 };
-use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DomainVerificationChallenge};
+use sdkwork_intelligence_deploy_service::{
+    CertificateOrderCaaSubject, CertificateOrderClaim, CertificateRenewalClaim,
+    DeployRepositoryPort, DomainVerificationChallenge, ExpiredCertificateSweep,
+};
 
 use crate::DeployRepository;
 
@@ -61,9 +65,20 @@ impl DeployRepositoryPort for DeployRepository {
     async fn list_domain_zones(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         query: &ListDomainZonesQuery,
     ) -> DeployServiceResult<DomainZonePage> {
-        self.list_domain_zones_repo(tenant_id, query).await
+        self.list_domain_zones_repo(tenant_id, owner_user_id, query)
+            .await
+    }
+
+    async fn retrieve_dns_challenge_zone(
+        &self,
+        tenant_id: i64,
+        hostname: &str,
+    ) -> DeployServiceResult<Option<sdkwork_intelligence_deploy_service::DnsChallengeZone>> {
+        self.retrieve_dns_challenge_zone_repo(tenant_id, hostname)
+            .await
     }
 
     async fn create_domain_zone(
@@ -80,9 +95,11 @@ impl DeployRepositoryPort for DeployRepository {
     async fn retrieve_domain_zone(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<DomainZoneResponse> {
-        self.retrieve_domain_zone_repo(tenant_id, zone_id).await
+        self.retrieve_domain_zone_repo(tenant_id, owner_user_id, zone_id)
+            .await
     }
 
     async fn update_domain_zone(
@@ -96,18 +113,25 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
-    async fn delete_domain_zone(&self, tenant_id: i64, zone_id: &str) -> DeployServiceResult<()> {
-        self.delete_domain_zone_repo(tenant_id, zone_id).await
+    async fn delete_domain_zone(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<()> {
+        self.delete_domain_zone_repo(tenant_id, owner_user_id, zone_id)
+            .await
     }
 
     async fn list_domain_hostnames(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainHostnamePage> {
-        self.list_domain_hostnames_repo(tenant_id, zone_id, page, page_size)
+        self.list_domain_hostnames_repo(tenant_id, owner_user_id, zone_id, page, page_size)
             .await
     }
 
@@ -122,23 +146,36 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn ensure_domain_hostname(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        zone_id: &str,
+        relative_name: &str,
+    ) -> DeployServiceResult<DomainHostnameResponse> {
+        self.ensure_domain_hostname_repo(tenant_id, actor_id, zone_id, relative_name)
+            .await
+    }
+
     async fn retrieve_domain_hostname(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainHostnameResponse> {
-        self.retrieve_domain_hostname_repo(tenant_id, zone_id, hostname_id)
+        self.retrieve_domain_hostname_repo(tenant_id, owner_user_id, zone_id, hostname_id)
             .await
     }
 
     async fn delete_domain_hostname(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<()> {
-        self.delete_domain_hostname_repo(tenant_id, zone_id, hostname_id)
+        self.delete_domain_hostname_repo(tenant_id, owner_user_id, zone_id, hostname_id)
             .await
     }
 
@@ -157,16 +194,23 @@ impl DeployRepositoryPort for DeployRepository {
     async fn domain_hostname_verification_challenge(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainVerificationChallenge> {
-        self.domain_hostname_verification_challenge_repo(tenant_id, zone_id, hostname_id)
-            .await
+        self.domain_hostname_verification_challenge_repo(
+            tenant_id,
+            owner_user_id,
+            zone_id,
+            hostname_id,
+        )
+        .await
     }
 
     async fn confirm_domain_hostname_verification(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
         verification_id: &str,
@@ -175,6 +219,7 @@ impl DeployRepositoryPort for DeployRepository {
     ) -> DeployServiceResult<bool> {
         self.confirm_domain_hostname_verification_repo(
             tenant_id,
+            owner_user_id,
             zone_id,
             hostname_id,
             verification_id,
@@ -1049,9 +1094,29 @@ impl DeployRepositoryPort for DeployRepository {
             tenant_id,
             &request.certificate_id,
             &request.idempotency_key,
-            request.challenge_type.as_deref().unwrap_or("HTTP_01"),
+            request.challenge_type.as_deref(),
         )
         .await
+    }
+
+    async fn certificate_order_caa_subject(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<CertificateOrderCaaSubject> {
+        self.certificate_order_caa_subject_repo(tenant_id, certificate_id)
+            .await
+    }
+
+    async fn record_certificate_order_caa_decision(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        decision: &str,
+        checked_at: &str,
+    ) -> DeployServiceResult<()> {
+        self.record_certificate_order_caa_decision_repo(tenant_id, order_id, decision, checked_at)
+            .await
     }
 
     async fn advance_certificate_order(
@@ -1091,6 +1156,7 @@ impl DeployRepositoryPort for DeployRepository {
     async fn store_certificate_version(
         &self,
         tenant_id: i64,
+        certificate_version_uuid: &str,
         order_id: &str,
         version_no: i64,
         serial_sha256: &str,
@@ -1103,9 +1169,11 @@ impl DeployRepositoryPort for DeployRepository {
         not_before: &str,
         not_after: &str,
         secret_bundle_ref: &str,
+        material: &[SealedCertificateFile],
     ) -> DeployServiceResult<CertificateOrderResponse> {
         self.store_certificate_version_repo(
             tenant_id,
+            certificate_version_uuid,
             order_id,
             version_no,
             serial_sha256,
@@ -1118,8 +1186,18 @@ impl DeployRepositoryPort for DeployRepository {
             not_before,
             not_after,
             secret_bundle_ref,
+            material,
         )
         .await
+    }
+
+    async fn retrieve_certificate_material(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+    ) -> DeployServiceResult<Vec<SealedCertificateFile>> {
+        self.retrieve_certificate_material_repo(tenant_id, certificate_version_uuid)
+            .await
     }
 
     async fn retrieve_certificate_order(
@@ -1150,6 +1228,94 @@ impl DeployRepositoryPort for DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<CertificateChallengePage> {
         self.list_certificate_challenges_repo(tenant_id, order_id, page, page_size)
+            .await
+    }
+
+    async fn claim_due_certificate_renewals(
+        &self,
+        worker_id: &str,
+        batch_size: i64,
+        lease_seconds: i64,
+        now: &str,
+    ) -> DeployServiceResult<Vec<CertificateRenewalClaim>> {
+        self.claim_due_certificate_renewals_repo(worker_id, batch_size, lease_seconds, now)
+            .await
+    }
+
+    async fn claim_certificate_orders(
+        &self,
+        worker_id: &str,
+        batch_size: i64,
+        lease_seconds: i64,
+        now: &str,
+    ) -> DeployServiceResult<Vec<CertificateOrderClaim>> {
+        self.claim_certificate_orders_repo(worker_id, batch_size, lease_seconds, now)
+            .await
+    }
+
+    async fn advance_leased_certificate_order(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        lease_owner: &str,
+        from_status: &str,
+        to_status: &str,
+    ) -> DeployServiceResult<String> {
+        self.advance_leased_certificate_order_repo(
+            tenant_id,
+            order_id,
+            lease_owner,
+            from_status,
+            to_status,
+        )
+        .await
+    }
+
+    async fn fail_expired_certificate_orders(
+        &self,
+        now: &str,
+        batch_size: i64,
+    ) -> DeployServiceResult<i64> {
+        self.fail_expired_certificate_orders_repo(now, batch_size)
+            .await
+    }
+
+    async fn mark_certificate_renewal_ordered(
+        &self,
+        tenant_id: i64,
+        renewal_uuid: &str,
+        order_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        self.mark_certificate_renewal_ordered_repo(tenant_id, renewal_uuid, order_uuid)
+            .await
+    }
+
+    async fn fail_certificate_renewal(
+        &self,
+        tenant_id: i64,
+        renewal_uuid: &str,
+        error_code: &str,
+    ) -> DeployServiceResult<()> {
+        self.fail_certificate_renewal_repo(tenant_id, renewal_uuid, error_code)
+            .await
+    }
+
+    async fn sweep_expired_certificates(
+        &self,
+        batch_size: i64,
+        now: &str,
+    ) -> DeployServiceResult<ExpiredCertificateSweep> {
+        self.sweep_expired_certificates_repo(batch_size, now).await
+    }
+
+    async fn list_certificate_renewals(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<CertificateRenewalPage> {
+        self.list_certificate_renewals_repo(tenant_id, certificate_id, page, page_size)
             .await
     }
 
@@ -1338,8 +1504,7 @@ impl DeployRepositoryPort for DeployRepository {
         tenant_id: i64,
         app_id: &str,
     ) -> DeployServiceResult<Option<Vec<String>>> {
-        let app_id =
-            crate::support::resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
+        let app_id = crate::support::resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
         let config = self.app_domain_config_repo(app_id).await?;
         Ok(config.override_suffixes)
     }

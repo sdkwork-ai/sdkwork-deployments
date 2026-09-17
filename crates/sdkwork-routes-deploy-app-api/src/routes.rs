@@ -7,8 +7,9 @@ use axum::{
 };
 use sdkwork_deploy_contract::{
     CompleteDeployUploadSessionRequest, CreateArtifactRequest, CreateCertificateRequest,
-    CreateDeployUploadSessionRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest,
-    CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi, DeployAppRequestContext,
+    CreateCloudAccountRequest, CreateDeployUploadSessionRequest, CreateDomainHostnameRequest,
+    CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi,
+    DeployAppRequestContext, EnsureDomainHostnameClaimsRequest, ListCloudAccountsQuery,
     ListDomainZonesQuery, UpdateAppCompositionRequest, UpdateDomainHostnameRequest,
     UpdateDomainZoneRequest,
 };
@@ -79,6 +80,10 @@ pub fn build_domain_management_router() -> Router<AppState> {
             paths::DOMAIN_ZONE_HOSTNAME_VERIFY,
             post(verify_domain_hostname),
         )
+        .route(
+            paths::DOMAIN_ZONE_HOSTNAME_CLAIMS,
+            post(ensure_domain_hostname_claims),
+        )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
         ))
@@ -96,6 +101,25 @@ pub fn build_certificate_management_router() -> Router<AppState> {
             get(retrieve_certificate).delete(delete_certificate),
         )
         .route(paths::CERTIFICATE_RENEW, post(renew_certificate))
+        .route(paths::CERTIFICATE_RENEWALS, get(list_certificate_renewals))
+        .layer(axum::middleware::from_fn(
+            sdkwork_routes_deploy_common::pagination::validate_pagination_query,
+        ))
+}
+
+/// Composable cloud account block: the collection a zone or certificate binds to.
+///
+/// Mounted alongside the domain and certificate blocks rather than under either,
+/// because both use it: a zone pins an account for every hostname it owns, and a
+/// certificate may override that pin for itself. Keeping it a sibling means the
+/// consuming hosts that mount only one of the two still get the picker's backing
+/// endpoint instead of a 404 from a route that lives in the other block.
+pub fn build_cloud_account_router() -> Router<AppState> {
+    Router::<AppState>::new()
+        .route(
+            paths::CLOUD_ACCOUNTS,
+            get(list_cloud_accounts).post(create_cloud_account),
+        )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
         ))
@@ -105,6 +129,7 @@ pub fn build_router_with_shared_app_api(api: Arc<dyn DeployAppApi>) -> Router {
     Router::<AppState>::new()
         .merge(build_domain_management_router())
         .merge(build_certificate_management_router())
+        .merge(build_cloud_account_router())
         .merge(crate::app_delivery_routes::build_app_delivery_router())
         .route(paths::UPLOAD_SESSIONS, post(create_upload_session))
         .route(paths::UPLOAD_SESSION, get(retrieve_upload_session))
@@ -154,6 +179,55 @@ fn default_page() -> i32 {
 
 fn default_page_size() -> i32 {
     20
+}
+
+/// Lists the cloud accounts the caller may bind a zone or certificate to.
+///
+/// Doubles as the console's "已存在则复用" pre-check: queried with the family the
+/// form is configuring, a non-empty page means the credential fields can be skipped
+/// in favour of pinning an account that already exists.
+async fn list_cloud_accounts(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Query(query): Query<ListCloudAccountsQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = state.api.list_cloud_accounts(&context, &query).await?;
+            ok_json(envelope::cloud_account_page(
+                page,
+                query.page,
+                query.page_size,
+            ))
+        }
+        .await,
+    )
+}
+
+/// Registers a DNS cloud account, or reuses the caller's existing one.
+///
+/// Answers `201` either way, because the endpoint is idempotent and the caller's
+/// next step is identical. The body's `reused` flag is what the console reports
+/// ("已存在，直接复用" versus "已创建"), so a `201` here never claims a row was
+/// inserted when one was merely found.
+async fn create_cloud_account(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Json(request): Json<CreateCloudAccountRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let registration = state.api.create_cloud_account(&context, &request).await?;
+            ok_json(envelope::resource(registration))
+        }
+        .await,
+    )
 }
 
 async fn list_domain_zones(
@@ -281,6 +355,36 @@ async fn create_domain_hostname(
                 .create_domain_hostname(&context, &zone_id, &request)
                 .await?;
             ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Declares whatever hostnames are missing and reports each one's ownership
+/// state, so an order covering `N` names costs one round trip instead of `2N`.
+///
+/// This is the answer-shaped half of the domain API: the caller states the SAN
+/// list it wants to be issued for and reads back what is proven, rather than
+/// driving `create` + `verify` per name and assembling the result itself.
+async fn ensure_domain_hostname_claims(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(zone_id): Path<String>,
+    Json(request): Json<EnsureDomainHostnameClaimsRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let claims = state
+                .api
+                .ensure_domain_hostname_claims(&context, &zone_id, &request)
+                .await?;
+            // The batch DTO already is the wire shape (`data.items`), so this
+            // endpoint needs no envelope mapping — unlike the item/page helpers
+            // above, there is no domain concept to translate here.
+            ok_json(claims)
         }
         .await,
     )
@@ -674,6 +778,36 @@ async fn renew_certificate(
                 .renew_certificate(&context, &certificate_id)
                 .await?;
             ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Renewal history for one certificate.
+///
+/// Returns the paged SDKWork envelope rather than a bare payload, so no
+/// `ok_json` passthrough is involved here and nothing needs an envelope mapping
+/// exemption.
+async fn list_certificate_renewals(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(certificate_id): Path<String>,
+    Query(query): Query<PageQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = state
+                .api
+                .list_certificate_renewals(&context, &certificate_id, query.page, query.page_size)
+                .await?;
+            ok_json(envelope::certificate_renewal_page(
+                page,
+                query.page,
+                query.page_size,
+            ))
         }
         .await,
     )

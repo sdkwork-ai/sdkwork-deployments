@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use http_body_util::BodyExt;
-use sdkwork_deploy_contract::{DeployAppApi, DeployAppRequestContext, DeployServiceResult};
+use sdkwork_deploy_contract::DeployAppApi;
 use sdkwork_routes_deploy_app_api::{
     build_router_with_shared_app_api, web_bootstrap::wrap_router_with_web_framework,
 };

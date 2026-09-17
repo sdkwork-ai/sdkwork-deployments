@@ -8,6 +8,7 @@ mod apps;
 mod artifacts;
 mod audit;
 mod builds;
+mod certificate_renewals;
 mod certificates;
 mod database_profiles;
 mod domain_zones;

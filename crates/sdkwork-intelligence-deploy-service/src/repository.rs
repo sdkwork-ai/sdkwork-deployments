@@ -1,6 +1,7 @@
 //! Repository port consumed by the deploy service layer.
 
 use async_trait::async_trait;
+use sdkwork_deploy_certificate_material::SealedCertificateFile;
 use sdkwork_deploy_contract::DeployServiceResult;
 use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
@@ -8,8 +9,8 @@ use sdkwork_deploy_contract::{
     AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage, AppReleaseResponse,
     AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage, BuildQueuePage,
     BuildResponse, BuildTemplatePage, BuildTemplateResponse, CertificateChallengePage,
-    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateResponse,
-    ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
+    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
+    CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
     CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest,
     CreateAppDeploymentRequest, CreateAppEnvironmentRequest, CreateAppReleaseRequest,
     CreateAppRequest, CreateArtifactRequest, CreateBuildRequest, CreateBuildTemplateRequest,
@@ -34,7 +35,7 @@ use sdkwork_deploy_contract::{
     UsageReconciliationResponse,
 };
 
-use crate::DomainVerificationChallenge;
+use crate::{CertificateOrderCaaSubject, DomainVerificationChallenge};
 use sdkwork_deploy_contract::{UsageEventIngestItem, UsageEventQuery, UsageIngestResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,13 +90,123 @@ pub struct InsertUsageEventCommand {
     pub attribution: Option<serde_json::Value>,
 }
 
+/// A certificate the renewal sweep has claimed, with everything needed to open
+/// its order and to record what was handed over.
+///
+/// `previous_*` are captured at claim time on purpose: once the replacement is
+/// stored the old version is superseded, and reading its window then would
+/// describe the wrong certificate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CertificateRenewalClaim {
+    pub tenant_id: i64,
+    /// The renewal attempt's uuid, and the idempotency key's basis: retrying the
+    /// same attempt must not open a second order.
+    pub renewal_uuid: String,
+    pub certificate_uuid: String,
+    pub attempt_no: i32,
+    pub renew_before_days: i32,
+    pub previous_version_uuid: Option<String>,
+    pub previous_not_before: Option<String>,
+    pub previous_not_after: Option<String>,
+}
+
+/// A certificate order the issuance worker has claimed.
+///
+/// Carries the certificate's public uuid rather than its internal id, so the
+/// worker reloads everything else through the same surface an HTTP request uses
+/// and no part of the executor depends on physical row identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CertificateOrderClaim {
+    pub tenant_id: i64,
+    pub order_uuid: String,
+    pub certificate_uuid: String,
+    /// The order status recorded when the claim was granted. This is the state
+    /// machine's `from` value, so a claimed order never has to guess where it
+    /// left off — and a reclaimed one resumes from wherever the previous worker
+    /// actually stopped rather than from where it was expected to stop.
+    pub status: String,
+    /// Attempts consumed so far, including the one this claim just charged.
+    pub attempt_count: i32,
+    pub requested_version_no: i64,
+}
+
+/// What one expiry sweep changed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ExpiredCertificateSweep {
+    /// Certificates moved from `ACTIVE` to `EXPIRED`.
+    pub certificates_expired: i64,
+    /// Versions moved from `ACTIVE` to `EXPIRED`.
+    pub versions_expired: i64,
+    /// Open renewal attempts cancelled because the certificate they were
+    /// replacing expired first.
+    pub renewals_cancelled: i64,
+}
+
+impl ExpiredCertificateSweep {
+    /// Whether the sweep changed nothing.
+    ///
+    /// A sweep runs on a timer for as long as the service is up, so the caller
+    /// needs to distinguish "housekeeping ran" from "something retired" before
+    /// deciding whether it is worth a log line.
+    pub fn is_empty(&self) -> bool {
+        self.certificates_expired == 0 && self.versions_expired == 0 && self.renewals_cancelled == 0
+    }
+}
+
+/// Where a hostname's `_acme-challenge` record has to be published, and which
+/// cloud account has authority to publish it.
+///
+/// Resolved from the hostname because that is what an issuance order carries: the
+/// order knows the names it must prove, and the zone that owns them is a lookup
+/// away. Looking it up here rather than threading it through the order keeps the
+/// order's own rows independent of the domain inventory, which is what lets a
+/// certificate be re-issued after its zone was re-pinned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DnsChallengeZone {
+    /// The zone apex that owns the record. `_acme-challenge` is published
+    /// relative to this, not to the requested hostname.
+    pub zone_apex: String,
+    /// The DNS family the zone declared when it was created, in the canonical
+    /// uppercase spelling. `None` when the zone never recorded one, in which case
+    /// the account's own vendor is the only statement of who serves the records.
+    pub dns_provider: Option<String>,
+    /// The provider-side zone identity, for families that address a zone by an
+    /// opaque id instead of by name.
+    pub provider_zone_ref: Option<String>,
+    /// The cloud account pinned to this zone, if any.
+    pub provider_account_id: Option<String>,
+}
+
+// The trait's methods are grouped by the aggregate they read or write.
 #[async_trait]
 pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Sync {
     async fn ready_check(&self) -> DeployServiceResult<()>;
 
+    /// Resolves the zone that owns `hostname` and the account pinned to it.
+    ///
+    /// Answers `Ok(None)` for a hostname this tenant has no zone for, which is a
+    /// normal state rather than an error: a certificate may cover a name whose zone
+    /// rows were never created here, and an issuance then falls back to the
+    /// deployment-level provider configuration.
+    async fn retrieve_dns_challenge_zone(
+        &self,
+        tenant_id: i64,
+        hostname: &str,
+    ) -> DeployServiceResult<Option<DnsChallengeZone>>;
+
+    /// Lists the root domains this caller owns, plus the tenant-level zones
+    /// that carry no owner.
+    ///
+    /// `owner_user_id` is the caller's own subject. The domain inventory is
+    /// user-private (`IAM_SPEC.md` 5.1: a personal session's data domain is the
+    /// authenticated user's own data), so a zone owned by somebody else is not
+    /// listed even though it lives in the same tenant. NULL-owner zones are the
+    /// platform's `app.<suffix>` inventory, which is tenant-level by nature and
+    /// stays visible to every member.
     async fn list_domain_zones(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         query: &ListDomainZonesQuery,
     ) -> DeployServiceResult<DomainZonePage>;
 
@@ -107,9 +218,12 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         request: &CreateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse>;
 
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
     async fn retrieve_domain_zone(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<DomainZoneResponse>;
 
@@ -121,11 +235,21 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         request: &UpdateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse>;
 
-    async fn delete_domain_zone(&self, tenant_id: i64, zone_id: &str) -> DeployServiceResult<()>;
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
+    async fn delete_domain_zone(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<()>;
 
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
     async fn list_domain_hostnames(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         page: i32,
         page_size: i32,
@@ -139,9 +263,22 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         request: &CreateDomainHostnameRequest,
     ) -> DeployServiceResult<DomainHostnameResponse>;
 
+    /// Declare-or-reuse a hostname by relative name; see
+    /// [`Self::create_domain_hostname`] for the strict, operator-driven variant.
+    async fn ensure_domain_hostname(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        zone_id: &str,
+        relative_name: &str,
+    ) -> DeployServiceResult<DomainHostnameResponse>;
+
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
     async fn retrieve_domain_hostname(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainHostnameResponse>;
@@ -155,23 +292,32 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         request: &sdkwork_deploy_contract::UpdateDomainHostnameRequest,
     ) -> DeployServiceResult<DomainHostnameResponse>;
 
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
     async fn delete_domain_hostname(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<()>;
 
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
     async fn domain_hostname_verification_challenge(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainVerificationChallenge>;
 
+    /// `owner_user_id` scopes the read to the caller's own zones; see
+    /// [`Self::list_domain_zones`].
     async fn confirm_domain_hostname_verification(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         hostname_id: &str,
         verification_id: &str,
@@ -801,6 +947,28 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         request: &RequestCertificateOrderRequest,
     ) -> DeployServiceResult<CertificateOrderResponse>;
 
+    /// The identifiers, resolved validation method, and ACME directory a
+    /// certificate order would use.
+    ///
+    /// Feeds the CAA pre-flight, which must run before an order exists. The
+    /// directory comes from the same account resolution the order itself uses,
+    /// so the CAA check and the CA that will be asked are guaranteed to agree.
+    async fn certificate_order_caa_subject(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<CertificateOrderCaaSubject>;
+
+    /// Records the CAA pre-issuance decision and the instant it was observed on
+    /// an order, so a refusal is auditable without re-querying DNS.
+    async fn record_certificate_order_caa_decision(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        decision: &str,
+        checked_at: &str,
+    ) -> DeployServiceResult<()>;
+
     async fn advance_certificate_order(
         &self,
         tenant_id: i64,
@@ -825,10 +993,17 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         error_code: Option<&str>,
     ) -> DeployServiceResult<()>;
 
+    /// Stores an issued certificate version together with its sealed material.
+    ///
+    /// `certificate_version_uuid` is supplied by the caller rather than generated
+    /// here, because the material was sealed under it: the AAD binds each file to
+    /// that uuid, so letting the repository pick a different one would produce
+    /// rows that cannot be decrypted.
     #[allow(clippy::too_many_arguments)]
     async fn store_certificate_version(
         &self,
         tenant_id: i64,
+        certificate_version_uuid: &str,
         order_id: &str,
         version_no: i64,
         serial_sha256: &str,
@@ -841,7 +1016,18 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         not_before: &str,
         not_after: &str,
         secret_bundle_ref: &str,
+        material: &[SealedCertificateFile],
     ) -> DeployServiceResult<CertificateOrderResponse>;
+
+    /// Reads back the sealed material of one certificate version.
+    ///
+    /// Returns the files still sealed; opening them is the service's job, so the
+    /// repository never needs to hold, or be trusted with, the custody key.
+    async fn retrieve_certificate_material(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+    ) -> DeployServiceResult<Vec<SealedCertificateFile>>;
 
     async fn retrieve_certificate_order(
         &self,
@@ -864,6 +1050,131 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<CertificateChallengePage>;
+
+    /// Claims due certificates for renewal, opening one renewal attempt each.
+    ///
+    /// Claiming is where duplicate issuance is prevented, so it is deliberately a
+    /// single repository call rather than a read followed by a write: the lease
+    /// and the "at most one open attempt per certificate" unique index have to be
+    /// taken in the same transaction as the choice of candidates, or two workers
+    /// can both believe they own a certificate. A certificate another worker
+    /// already holds is skipped silently, not reported as an error.
+    ///
+    /// The candidates are narrowed by the conditions that are *necessary* for
+    /// renewal to be due; whether it actually is due is decided by
+    /// [`crate::certificate_renewal`], so the window rule has exactly one
+    /// implementation.
+    async fn claim_due_certificate_renewals(
+        &self,
+        worker_id: &str,
+        batch_size: i64,
+        lease_seconds: i64,
+        now: &str,
+    ) -> DeployServiceResult<Vec<CertificateRenewalClaim>>;
+
+    /// Claims certificate orders that are ready to make progress.
+    ///
+    /// Same single-statement discipline as the renewal claim above, for the same
+    /// reason: choosing candidates and taking their lease must happen in one
+    /// statement, or two workers can both conclude they own the same order and the
+    /// CA is asked to issue twice for one intent.
+    ///
+    /// An order is claimable when it is non-terminal, past its `next_attempt_at`
+    /// backoff, inside its deadline, and either unleased or past lease expiry — so
+    /// a worker that dies mid-issuance is recovered by a later tick instead of
+    /// stranding the order forever. `attempt_count` is charged here rather than by
+    /// the caller, which is what makes bounded retries enforceable without a
+    /// second read.
+    async fn claim_certificate_orders(
+        &self,
+        worker_id: &str,
+        batch_size: i64,
+        lease_seconds: i64,
+        now: &str,
+    ) -> DeployServiceResult<Vec<CertificateOrderClaim>>;
+
+    /// Advances an order, but only while `lease_owner` still holds a live lease
+    /// on it.
+    ///
+    /// This is the fence PLAN-2026-0003 §9 asks for, and it is separate from
+    /// [`advance_certificate_order`](Self::advance_certificate_order) because the
+    /// two answer different questions. The unfenced form is an operator command:
+    /// an authenticated caller may advance an order they are looking at. This one
+    /// is a *worker* step, and a worker is only entitled to act on work whose lease
+    /// it still holds — otherwise a worker that stalled past its lease would keep
+    /// driving an order that a second worker had already taken over, and the CA
+    /// would be asked to issue twice for one intent.
+    ///
+    /// Returns the status the order is in *after* the attempt: `to_status` when the
+    /// transition landed, and otherwise whatever the order had already been moved
+    /// to. A caller that does not see `to_status` has lost the order and must leave
+    /// it alone rather than failing work another worker is actively doing.
+    async fn advance_leased_certificate_order(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        lease_owner: &str,
+        from_status: &str,
+        to_status: &str,
+    ) -> DeployServiceResult<String>;
+
+    /// Fails non-terminal orders whose `deadline_at` has passed.
+    ///
+    /// Without this an order that is neither claimable (past its deadline) nor
+    /// terminal sits in the list forever, and an operator sees a request that never
+    /// resolves. The deadline is the promise the control plane made when it accepted
+    /// the request, so passing it is a failure to record — bounded per call, and
+    /// `FOR UPDATE SKIP LOCKED` so two sweepers do not fight.
+    async fn fail_expired_certificate_orders(
+        &self,
+        now: &str,
+        batch_size: i64,
+    ) -> DeployServiceResult<i64>;
+
+    /// Records that a claimed renewal now has an order behind it.
+    ///
+    /// Separates `PLANNED` from `ORDERED` so a worker that dies between claiming
+    /// and ordering is distinguishable from one that never claimed anything.
+    async fn mark_certificate_renewal_ordered(
+        &self,
+        tenant_id: i64,
+        renewal_uuid: &str,
+        order_uuid: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Closes a renewal attempt that could not be ordered, and schedules the
+    /// retry.
+    ///
+    /// The backoff is computed inside from the certificate's failure count rather
+    /// than passed in, so the delay and the recorded severity cannot drift apart.
+    async fn fail_certificate_renewal(
+        &self,
+        tenant_id: i64,
+        renewal_uuid: &str,
+        error_code: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Marks certificates and versions whose validity window has closed.
+    ///
+    /// A certificate that is still reported `ACTIVE` after `notAfter` is worse
+    /// than one reported expired: every reader — the console, an alert rule, an
+    /// operator deciding whether to intervene — treats it as working. Open renewal
+    /// attempts are cancelled in the same pass, because an attempt to replace a
+    /// certificate that expired while the scheduler was down is no longer the
+    /// right work.
+    async fn sweep_expired_certificates(
+        &self,
+        batch_size: i64,
+        now: &str,
+    ) -> DeployServiceResult<ExpiredCertificateSweep>;
+
+    async fn list_certificate_renewals(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<CertificateRenewalPage>;
 
     async fn run_retention(
         &self,

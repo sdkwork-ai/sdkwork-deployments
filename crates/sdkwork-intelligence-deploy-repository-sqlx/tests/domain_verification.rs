@@ -28,6 +28,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
                 display_name: Some("Verification test".to_owned()),
                 dns_provider: Some("manual".to_owned()),
                 provider_zone_ref: None,
+                provider_account_id: None,
             },
         )
         .await
@@ -45,7 +46,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .expect("create pending hostname");
 
     let pending = repository
-        .domain_hostname_verification_challenge(7, &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("load pending challenge");
     let token = pending.token.expect("new challenge returns the proof once");
@@ -62,6 +63,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     assert!(!repository
         .confirm_domain_hostname_verification(
             7,
+            Some(11),
             &zone.id,
             &hostname.id,
             &verification_id,
@@ -72,7 +74,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .expect("reject mismatched observation"));
     assert!(
         !repository
-            .domain_hostname_verification_challenge(7, &zone.id, &hostname.id)
+            .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
             .await
             .expect("reload pending challenge")
             .verified
@@ -81,6 +83,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     assert!(repository
         .confirm_domain_hostname_verification(
             7,
+            Some(11),
             &zone.id,
             &hostname.id,
             &verification_id,
@@ -90,7 +93,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .await
         .expect("confirm exact observed digest"));
     let verified = repository
-        .domain_hostname_verification_challenge(7, &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("load verified hostname");
     assert!(verified.verified);
@@ -98,6 +101,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     assert!(!repository
         .confirm_domain_hostname_verification(
             7,
+            Some(11),
             &zone.id,
             &hostname.id,
             &verification_id,
@@ -106,4 +110,90 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         )
         .await
         .expect("repeat confirmation is idempotent"));
+}
+
+/// `ensure_domain_hostname` is the claim path a certificate order uses, and its
+/// whole value is that re-stating the same SAN list is not an error.
+///
+/// The strict `create_domain_hostname` next to it is the operator path, where
+/// "this already exists" is the right answer; keeping both honest is the point of
+/// this test, because collapsing them either way breaks one of the two callers.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn ensure_domain_hostname_reuses_existing_rows_and_leaves_create_strict() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let apex = format!(
+        "claim{}.dev",
+        sdkwork_database_id::uuid_v4().replace('-', "")
+    );
+    let zone = repository
+        .create_domain_zone(
+            7,
+            Some(9),
+            Some(11),
+            &CreateDomainZoneRequest {
+                apex_hostname: apex.clone(),
+                display_name: Some("Claim test".to_owned()),
+                dns_provider: Some("manual".to_owned()),
+                provider_zone_ref: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("create root domain zone");
+
+    // The apex row ships with the zone, so `@` must resolve to it rather than
+    // failing the way `create_domain_hostname` deliberately does.
+    let apex_row = repository
+        .ensure_domain_hostname(7, Some(11), &zone.id, "@")
+        .await
+        .expect("ensure the apex reuses the row the zone created");
+    assert_eq!(apex_row.hostname, apex);
+
+    let first = repository
+        .ensure_domain_hostname(7, Some(11), &zone.id, "www")
+        .await
+        .expect("ensure declares the missing hostname");
+    assert_eq!(first.hostname, format!("www.{apex}"));
+    assert_eq!(first.verification_status, "PENDING");
+
+    let second = repository
+        .ensure_domain_hostname(7, Some(11), &zone.id, "www")
+        .await
+        .expect("ensure is idempotent for an owned hostname");
+    assert_eq!(
+        first.id, second.id,
+        "re-ensuring the same name must land on the same row, not fail or duplicate"
+    );
+
+    // A wildcard keeps its leading label through the fold, which is the defect
+    // the batch endpoint exists to make impossible for callers to reintroduce.
+    let wildcard = repository
+        .ensure_domain_hostname(7, Some(11), &zone.id, "*.shop")
+        .await
+        .expect("ensure declares the wildcard hostname");
+    assert_eq!(wildcard.hostname, format!("*.shop.{apex}"));
+    assert_eq!(wildcard.hostname_type, "WILDCARD");
+
+    // Same name through the operator path: still refused, because a manual "add
+    // hostname" that silently returns someone else's row would hide the typo.
+    let strict = repository
+        .create_domain_hostname(
+            7,
+            Some(11),
+            &zone.id,
+            &CreateDomainHostnameRequest {
+                relative_name: "www".to_owned(),
+            },
+        )
+        .await;
+    assert!(
+        strict.is_err(),
+        "create_domain_hostname must stay strict while ensure stays idempotent"
+    );
 }

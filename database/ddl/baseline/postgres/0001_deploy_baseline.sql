@@ -22,7 +22,33 @@ CREATE TABLE IF NOT EXISTS deploy_dns_zone (
     display_name    VARCHAR(200),
     dns_provider    VARCHAR(64),
     provider_zone_ref VARCHAR(512),
+    -- The IAM provider account that owns DNS automation for this zone.
+    --
+    -- NULL is the pre-existing behaviour: the deployment-wide
+    -- SDKWORK_DEPLOY_DNS_* credential. An installation that never picks an
+    -- account therefore behaves exactly as it did before this column existed,
+    -- which is what lets the change ship without a data migration.
+    --
+    -- A reference, not a foreign key: `iam_provider_account` is owned by
+    -- sdkwork-iam (DATABASE_FRAMEWORK_SPEC cross-module ownership), and a hard
+    -- FK would make this module's schema depend on another module's table
+    -- lifecycle. Liveness is enforced on write by the service layer.
+    provider_account_id VARCHAR(128),
     status          VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    -- Owner of the zone, as a user subject.
+    --
+    -- A zone the console creates belongs to the user who created it, and
+    -- only that user reaches it: the domain inventory is user-private, not
+    -- tenant-wide (IAM_SPEC.md 5.1: a personal session's data domain is the
+    -- authenticated user's own data). NULL marks a zone that is not
+    -- user-private but tenant-level - the platform-owned `app.<suffix>` zones
+    -- the deployment provisions for the whole tenant - so it stays visible to
+    -- every member. `created_by` remains the audit column and carries no
+    -- authorization meaning.
+    --
+    -- Rows written before this column existed are backfilled from `created_by`,
+    -- so the user who claimed an apex keeps reaching it.
+    user_id         BIGINT,
     created_by      BIGINT,
     updated_by      BIGINT,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -31,7 +57,13 @@ CREATE TABLE IF NOT EXISTS deploy_dns_zone (
     deleted_at      TIMESTAMPTZ,
     PRIMARY KEY (id),
     CONSTRAINT uk_deploy_dns_zone_uuid UNIQUE (uuid),
-    CONSTRAINT chk_deploy_dns_zone_status CHECK (status IN ('ACTIVE', 'PAUSED'))
+    CONSTRAINT chk_deploy_dns_zone_status CHECK (status IN ('ACTIVE', 'PAUSED')),
+    -- Same shape rule the storage-provider column uses in sdkwork-drive, so an
+    -- account id that is valid there is valid here.
+    CONSTRAINT chk_deploy_dns_zone_provider_account CHECK (
+        provider_account_id IS NULL
+        OR provider_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
+    )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_dns_zone_active_apex
@@ -41,6 +73,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_dns_zone_active_apex
 CREATE INDEX IF NOT EXISTS idx_deploy_dns_zone_tenant_updated
     ON deploy_dns_zone (tenant_id, updated_at DESC, id DESC)
     WHERE deleted_at IS NULL;
+
+-- The console's domain inventory always reads "this tenant's zones owned by
+-- this user"; without the owner in the key the read scans every zone in the
+-- tenant before discarding the others.
+CREATE INDEX IF NOT EXISTS idx_deploy_dns_zone_tenant_user_updated
+    ON deploy_dns_zone (tenant_id, user_id, updated_at DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+-- Partial on purpose: the column is NULL for every zone still using the
+-- deployment-wide credential, so a full index would be almost entirely empty.
+CREATE INDEX IF NOT EXISTS idx_deploy_dns_zone_provider_account
+    ON deploy_dns_zone (provider_account_id)
+    WHERE provider_account_id IS NOT NULL;
 
 -- source: migrations/002_create_deploy_domain.sql
 -- Migration: 002_create_deploy_domain
@@ -212,6 +257,8 @@ CREATE TABLE IF NOT EXISTS deploy_certificate (
     cert_name               VARCHAR(200) NOT NULL,
     certificate_source      VARCHAR(16)  NOT NULL DEFAULT 'MANAGED',
     ca_profile              VARCHAR(32)  NOT NULL DEFAULT 'LETS_ENCRYPT_PRODUCTION',
+    certificate_scope       VARCHAR(16)  NOT NULL DEFAULT 'SINGLE_DOMAIN',
+    validation_method       VARCHAR(16)  NOT NULL DEFAULT 'AUTO',
     preferred_key_algorithm VARCHAR(16)  NOT NULL DEFAULT 'ECDSA',
     auto_renew              BOOLEAN      NOT NULL DEFAULT TRUE,
     renewal_status          VARCHAR(16)  NOT NULL DEFAULT 'NONE',
@@ -225,28 +272,123 @@ CREATE TABLE IF NOT EXISTS deploy_certificate (
     updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     version                 BIGINT       NOT NULL DEFAULT 1,
     deleted_at              TIMESTAMPTZ,
+    -- Validity and renewal control.
+    --
+    -- The authoritative window lives on deploy_certificate_version, one row per
+    -- issuance, so the history of what was served when is never lost. The two
+    -- active_* columns mirror the version that is serving right now: the renewal
+    -- sweep and the certificate list both need "when does this expire" without
+    -- joining every version row, and a mirrored column keeps that a single index
+    -- range scan. Only the statement that switches current_version_id may write
+    -- them, so the mirror cannot drift from the version it describes.
+    --
+    -- renew_before_days is the lead time; see the renewal window rule in
+    -- sdkwork-intelligence-deploy-service/src/certificate_renewal.rs, which
+    -- takes the later of this window and a third of the certificate's lifetime.
+    renew_before_days       INTEGER      NOT NULL DEFAULT 30,
+    active_not_before       TIMESTAMPTZ,
+    active_not_after        TIMESTAMPTZ,
+    -- Renewal work is leased so that two schedulers can never both order a new
+    -- certificate for the same name: a duplicate issuance burns CA rate limit
+    -- and cannot be undone.
+    renewal_lease_owner     VARCHAR(128),
+    renewal_lease_expires_at TIMESTAMPTZ,
+    -- Backoff after a failed attempt, mirroring deploy_certificate_order and
+    -- deploy_certificate_challenge: a certificate that keeps failing must not be
+    -- re-ordered on every sweep tick.
+    renewal_next_attempt_at TIMESTAMPTZ,
+    renewal_failure_count   INTEGER      NOT NULL DEFAULT 0,
+    last_renewal_at         TIMESTAMPTZ,
+    -- Overrides the zone's account for DNS-01 on this certificate.
+    --
+    -- NULL means "use whatever account the zone owning the identifier resolves
+    -- to", which keeps the common case one choice made once on the zone. A
+    -- certificate sets this only when an order must be presented through a
+    -- different account than its zone default.
+    provider_account_id     VARCHAR(128),
     PRIMARY KEY (id),
     CONSTRAINT uk_deploy_certificate_uuid UNIQUE (uuid),
     CONSTRAINT uk_deploy_certificate_idempotency UNIQUE (tenant_id, idempotency_key),
     CONSTRAINT chk_deploy_certificate_source CHECK (certificate_source IN ('MANAGED', 'CUSTOM')),
     CONSTRAINT chk_deploy_certificate_ca_profile CHECK (ca_profile IN ('LETS_ENCRYPT_STAGING', 'LETS_ENCRYPT_PRODUCTION', 'CUSTOM')),
+    CONSTRAINT chk_deploy_certificate_scope CHECK (certificate_scope IN ('SINGLE_DOMAIN', 'WILDCARD')),
+    CONSTRAINT chk_deploy_certificate_validation_method CHECK (validation_method IN ('AUTO', 'HTTP_01', 'DNS_01')),
+    -- A wildcard SAN never covers its apex, so a wildcard product scope must
+    -- present DNS-01; the edge HTTP proof path cannot authorize a wildcard.
+    CONSTRAINT chk_deploy_certificate_wildcard_requires_dns01 CHECK (
+        certificate_scope <> 'WILDCARD' OR validation_method IN ('AUTO', 'DNS_01')
+    ),
     CONSTRAINT chk_deploy_certificate_key_algorithm CHECK (preferred_key_algorithm IN ('RSA', 'ECDSA')),
     CONSTRAINT chk_deploy_certificate_renewal_status CHECK (renewal_status IN ('NONE', 'PLANNED', 'PROCESSING', 'FAILED')),
     CONSTRAINT chk_deploy_certificate_status CHECK (status IN ('PENDING', 'ISSUING', 'ACTIVE', 'EXPIRED', 'FAILED', 'REVOKED')),
-    CONSTRAINT chk_deploy_certificate_request_hash CHECK (request_sha256 ~ '^[0-9a-f]{64}$')
+    CONSTRAINT chk_deploy_certificate_request_hash CHECK (request_sha256 ~ '^[0-9a-f]{64}$'),
+    -- Bounded on both ends. Below 7 days a CA outage would leave no room to
+    -- recover before the certificate dies. Above 90 days the window would open
+    -- before any commercial CA certificate is a third of the way through its
+    -- life, which the renewal window rule already refuses. MAXIMUM_RENEW_BEFORE_DAYS
+    -- in the renewal logic mirrors the upper bound so the sweep's coarse index
+    -- filter can never exclude a certificate that is actually due.
+    CONSTRAINT chk_deploy_certificate_renew_before_days CHECK (renew_before_days BETWEEN 7 AND 90),
+    -- The mirrored window is either fully present or fully absent. A half-written
+    -- pair would make the expiry sweep disagree with the certificate that is
+    -- actually being served.
+    CONSTRAINT chk_deploy_certificate_active_validity CHECK (
+        (active_not_before IS NULL AND active_not_after IS NULL)
+        OR (active_not_before IS NOT NULL AND active_not_after IS NOT NULL
+            AND active_not_after > active_not_before)
+    ),
+    -- A serving certificate always knows how long it is valid for, so the
+    -- certificate API and the expiry sweep can never report an ACTIVE row with no
+    -- window. PENDING and ISSUING rows legitimately have none yet.
+    CONSTRAINT chk_deploy_certificate_active_window CHECK (
+        status <> 'ACTIVE' OR active_not_after IS NOT NULL
+    ),
+    CONSTRAINT chk_deploy_certificate_renewal_lease CHECK (
+        (renewal_lease_owner IS NULL AND renewal_lease_expires_at IS NULL)
+        OR (renewal_lease_owner IS NOT NULL AND renewal_lease_expires_at IS NOT NULL)
+    ),
+    CONSTRAINT chk_deploy_certificate_renewal_failures CHECK (renewal_failure_count BETWEEN 0 AND 1000),
+    CONSTRAINT chk_deploy_certificate_provider_account CHECK (
+        provider_account_id IS NULL
+        OR provider_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
+    )
 );
 
 COMMENT ON TABLE deploy_certificate IS 'TLS certificate lifecycle aggregate; hostname identifiers and immutable material versions are stored separately';
 COMMENT ON COLUMN deploy_certificate.certificate_source IS 'MANAGED ACME lifecycle or CUSTOM secret-manager lifecycle';
 COMMENT ON COLUMN deploy_certificate.preferred_key_algorithm IS 'Preferred issuance key algorithm; active RSA and ECDSA versions may coexist';
+COMMENT ON COLUMN deploy_certificate.provider_account_id IS 'Optional override of the zone DNS provider account used to present DNS-01 for this certificate; NULL falls back to the zone then to the deployment environment';
 
 CREATE INDEX IF NOT EXISTS idx_deploy_certificate_renewal
     ON deploy_certificate (tenant_id, renewal_status, updated_at, id)
     WHERE auto_renew = TRUE AND status IN ('ACTIVE', 'FAILED') AND deleted_at IS NULL;
 
+-- Global renewal sweep, used by the certificate renewal worker. The predicate is
+-- exactly the set the scheduler may claim, so the index stays small, and ordering
+-- by the expiry mirror lets the sweep range-scan from the soonest expiry instead
+-- of reading every certificate.
+--
+-- EXPIRED is included on purpose: a certificate that outlived its renewal window
+-- is the one that most needs re-issuing, and excluding it would make a scheduler
+-- outage longer than the lead time permanent. The sweep bounds the other end by
+-- refusing to retry a certificate that expired too long ago to recover
+-- automatically -- see RENEWAL_OVERDUE_GRACE_DAYS.
+--
+-- renewal_status is deliberately absent: a row left PLANNED by a crashed worker
+-- must be reclaimable once its lease expires, and filtering by status here would
+-- hide it.
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_renewal_due
+    ON deploy_certificate (active_not_after, id)
+    WHERE auto_renew = TRUE AND status IN ('ACTIVE', 'EXPIRED')
+      AND certificate_source = 'MANAGED' AND deleted_at IS NULL;
+
 CREATE INDEX IF NOT EXISTS idx_deploy_certificate_tenant_updated
     ON deploy_certificate (tenant_id, updated_at DESC, id DESC)
     WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_provider_account
+    ON deploy_certificate (provider_account_id)
+    WHERE provider_account_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS deploy_certificate_identifier (
     id              BIGINT       NOT NULL,
@@ -330,6 +472,70 @@ BEGIN
         ALTER TABLE deploy_certificate ADD CONSTRAINT fk_deploy_certificate_current_version FOREIGN KEY (current_version_id) REFERENCES deploy_certificate_version(id);
     END IF;
 END $$;
+
+-- Certificate material custody (PLAN-2026-0003 section 7): the actual PEM files
+-- of one certificate version. The private key is sealed under a custody master
+-- key that never enters this database, so the envelope columns are mandatory for
+-- it and forbidden for public material -- "no plaintext key material" is a
+-- constraint here rather than a convention a future writer has to remember.
+
+CREATE TABLE IF NOT EXISTS deploy_certificate_material (
+    id                     BIGINT       NOT NULL,
+    uuid                   VARCHAR(36)  NOT NULL,
+    tenant_id              BIGINT       NOT NULL,
+    certificate_version_id BIGINT       NOT NULL,
+    material_kind          VARCHAR(24)  NOT NULL,
+    file_name              VARCHAR(64)  NOT NULL,
+    media_type             VARCHAR(64)  NOT NULL,
+    protection             VARCHAR(24)  NOT NULL,
+    content                BYTEA        NOT NULL,
+    content_sha256         VARCHAR(64)  NOT NULL,
+    content_size_bytes     BIGINT       NOT NULL,
+    nonce                  BYTEA,
+    aad                    BYTEA        NOT NULL,
+    wrapped_dek            BYTEA,
+    kek_ref                VARCHAR(512),
+    created_at             TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_certificate_material_uuid UNIQUE (uuid),
+    CONSTRAINT uk_deploy_certificate_material_kind UNIQUE (certificate_version_id, material_kind),
+    CONSTRAINT fk_deploy_certificate_material_version FOREIGN KEY (certificate_version_id) REFERENCES deploy_certificate_version(id),
+    CONSTRAINT chk_deploy_certificate_material_kind CHECK (material_kind IN ('LEAF_CERT', 'PRIVATE_KEY', 'INTERMEDIATE_CHAIN', 'ROOT_CERT', 'FULL_CHAIN')),
+    CONSTRAINT chk_deploy_certificate_material_file CHECK (file_name IN ('cert.pem', 'privkey.pem', 'chain.pem', 'root.pem', 'fullchain.pem')),
+    CONSTRAINT chk_deploy_certificate_material_protection CHECK (protection IN ('NONE', 'ENVELOPE_AES_256_GCM')),
+    CONSTRAINT chk_deploy_certificate_material_digest CHECK (content_sha256 ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT chk_deploy_certificate_material_size CHECK (content_size_bytes >= 0),
+    CONSTRAINT chk_deploy_certificate_material_plain_size CHECK (
+        protection <> 'NONE' OR content_size_bytes = octet_length(content)
+    ),
+    CONSTRAINT chk_deploy_certificate_material_envelope CHECK (
+        (material_kind = 'PRIVATE_KEY'
+            AND protection = 'ENVELOPE_AES_256_GCM'
+            AND nonce IS NOT NULL
+            AND wrapped_dek IS NOT NULL
+            AND kek_ref IS NOT NULL)
+        OR (material_kind <> 'PRIVATE_KEY'
+            AND protection = 'NONE'
+            AND nonce IS NULL
+            AND wrapped_dek IS NULL
+            AND kek_ref IS NULL)
+    ),
+    CONSTRAINT chk_deploy_certificate_material_kek_ref CHECK (
+        kek_ref IS NULL OR kek_ref LIKE 'file:%' OR kek_ref LIKE 'kek://%'
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_material_kek
+    ON deploy_certificate_material (kek_ref, certificate_version_id)
+    WHERE kek_ref IS NOT NULL;
+
+COMMENT ON TABLE deploy_certificate_material IS 'Immutable PEM material of one certificate version (leaf, private key, intermediates, root, full chain); the private key is sealed under a custody master key held outside the database';
+COMMENT ON COLUMN deploy_certificate_material.material_kind IS 'Which file of the bundle this row is; PRIVATE_KEY is the only secret';
+COMMENT ON COLUMN deploy_certificate_material.protection IS 'NONE for public material stored verbatim; ENVELOPE_AES_256_GCM for material sealed under a per-file data key wrapped by the custody master key';
+COMMENT ON COLUMN deploy_certificate_material.content IS 'Plaintext bytes when protection is NONE, AES-256-GCM ciphertext otherwise';
+COMMENT ON COLUMN deploy_certificate_material.content_sha256 IS 'Digest of the plaintext, so integrity survives decryption';
+COMMENT ON COLUMN deploy_certificate_material.aad IS 'Additional authenticated data binding the ciphertext to this version and kind';
+COMMENT ON COLUMN deploy_certificate_material.kek_ref IS 'Which custody master key wrapped the data key, so a master-key rotation can find the rows it still owns';
 
 -- source: migrations/005_create_deploy_deployment.sql
 -- Migration: 005_create_deploy_deployment
@@ -1197,6 +1403,8 @@ CREATE TABLE IF NOT EXISTS deploy_certificate_order (
     lease_expires_at      TIMESTAMPTZ,
     deadline_at           TIMESTAMPTZ  NOT NULL,
     last_error_code       VARCHAR(64),
+    caa_decision          VARCHAR(32),
+    caa_checked_at        TIMESTAMPTZ,
     created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     version               BIGINT       NOT NULL DEFAULT 1,
@@ -1218,6 +1426,13 @@ CREATE TABLE IF NOT EXISTS deploy_certificate_order (
     CONSTRAINT chk_deploy_certificate_order_lease CHECK (
         (lease_owner IS NULL AND lease_expires_at IS NULL)
         OR (lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
+    ),
+    -- A CAA decision is recorded only with the instant it was observed, so a
+    -- refused order can be audited without re-querying DNS.
+    CONSTRAINT chk_deploy_certificate_order_caa CHECK (
+        (caa_decision IS NULL AND caa_checked_at IS NULL)
+        OR (caa_decision IS NOT NULL AND caa_checked_at IS NOT NULL
+            AND caa_decision IN ('PERMITTED', 'UNAUTHORIZED_CA', 'LOOKUP_FAILED'))
     )
 );
 
@@ -1242,6 +1457,9 @@ CREATE TABLE IF NOT EXISTS deploy_certificate_challenge (
     proof_sha256          VARCHAR(64)  NOT NULL,
     proof_secret_ref      VARCHAR(1024),
     presentation_ref      VARCHAR(1024),
+    presentation_record_name  VARCHAR(255),
+    presentation_record_value VARCHAR(512),
+    presentation_expires_at   TIMESTAMPTZ,
     status                VARCHAR(24)  NOT NULL DEFAULT 'PENDING',
     attempt_count         INTEGER      NOT NULL DEFAULT 0,
     next_attempt_at       TIMESTAMPTZ,
@@ -1261,12 +1479,198 @@ CREATE TABLE IF NOT EXISTS deploy_certificate_challenge (
     CONSTRAINT chk_deploy_certificate_challenge_hash CHECK (proof_sha256 ~ '^[0-9a-f]{64}$'),
     CONSTRAINT chk_deploy_certificate_challenge_secret_ref CHECK (
         proof_secret_ref IS NULL OR proof_secret_ref LIKE 'secret://%'
+    ),
+    -- Manual DNS-01 presentation is either fully present (record name, value and
+    -- expiry together) or fully cleared. A partial triple would render a
+    -- half-usable instruction in the operator UI.
+    CONSTRAINT chk_deploy_certificate_challenge_presentation CHECK (
+        (presentation_record_name IS NULL AND presentation_record_value IS NULL
+         AND presentation_expires_at IS NULL)
+        OR (presentation_record_name IS NOT NULL AND presentation_record_value IS NOT NULL
+            AND presentation_expires_at IS NOT NULL
+            AND presentation_record_name LIKE '_acme-challenge.%'
+            AND presentation_record_value <> '')
     )
 );
 
 CREATE INDEX IF NOT EXISTS idx_deploy_certificate_challenge_due
     ON deploy_certificate_challenge (status, next_attempt_at, id)
     WHERE status NOT IN ('VALID', 'FAILED', 'CLEANED');
+
+-- Certificate renewal ledger (PLAN-2026-0003 section 7): one row per attempt to
+-- replace a certificate version. The certificate row only holds the current
+-- state, so without this ledger "was this name covered continuously, and by
+-- which certificate" is unanswerable once a version is superseded. The
+-- previous_* / new_* window pair is the point of the table: it records the exact
+-- handover between two validity windows, which is what continuous coverage means.
+CREATE TABLE IF NOT EXISTS deploy_certificate_renewal (
+    id                    BIGINT       NOT NULL,
+    uuid                  VARCHAR(36)  NOT NULL,
+    tenant_id             BIGINT       NOT NULL,
+    certificate_id        BIGINT       NOT NULL,
+    trigger_kind          VARCHAR(16)  NOT NULL,
+    status                VARCHAR(16)  NOT NULL DEFAULT 'PLANNED',
+    attempt_no            INTEGER      NOT NULL DEFAULT 1,
+    certificate_order_id  BIGINT,
+    previous_version_id   BIGINT,
+    resulting_version_id  BIGINT,
+    previous_not_before   TIMESTAMPTZ,
+    previous_not_after    TIMESTAMPTZ,
+    new_not_before        TIMESTAMPTZ,
+    new_not_after         TIMESTAMPTZ,
+    scheduled_at          TIMESTAMPTZ  NOT NULL,
+    started_at            TIMESTAMPTZ,
+    finished_at           TIMESTAMPTZ,
+    last_error_code       VARCHAR(64),
+    lease_owner           VARCHAR(128),
+    lease_expires_at      TIMESTAMPTZ,
+    created_by            BIGINT,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    version               BIGINT       NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_certificate_renewal_uuid UNIQUE (uuid),
+    CONSTRAINT fk_deploy_certificate_renewal_certificate FOREIGN KEY (certificate_id) REFERENCES deploy_certificate(id),
+    CONSTRAINT fk_deploy_certificate_renewal_order FOREIGN KEY (certificate_order_id) REFERENCES deploy_certificate_order(id),
+    CONSTRAINT fk_deploy_certificate_renewal_previous_version FOREIGN KEY (previous_version_id) REFERENCES deploy_certificate_version(id),
+    CONSTRAINT fk_deploy_certificate_renewal_resulting_version FOREIGN KEY (resulting_version_id) REFERENCES deploy_certificate_version(id),
+    CONSTRAINT chk_deploy_certificate_renewal_trigger CHECK (trigger_kind IN ('SCHEDULED', 'MANUAL')),
+    CONSTRAINT chk_deploy_certificate_renewal_status CHECK (
+        status IN ('PLANNED', 'ORDERED', 'SUCCEEDED', 'FAILED', 'SKIPPED', 'CANCELLED')
+    ),
+    CONSTRAINT chk_deploy_certificate_renewal_attempt CHECK (attempt_no BETWEEN 1 AND 1000),
+    CONSTRAINT chk_deploy_certificate_renewal_lease CHECK (
+        (lease_owner IS NULL AND lease_expires_at IS NULL)
+        OR (lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)
+    ),
+    -- A closed attempt always carries the instant it closed, so "how long did this
+    -- renewal take" is answerable without inferring it from updated_at. An open
+    -- attempt must not carry one, or the UI would show a finish time for work
+    -- that is still running.
+    CONSTRAINT chk_deploy_certificate_renewal_finished CHECK (
+        (status IN ('SUCCEEDED', 'FAILED', 'SKIPPED', 'CANCELLED') AND finished_at IS NOT NULL)
+        OR (status IN ('PLANNED', 'ORDERED') AND finished_at IS NULL)
+    ),
+    -- A successful renewal must name the version it produced, and a failure must
+    -- name why: a terminal row that says neither leaves the operator with no
+    -- next step.
+    CONSTRAINT chk_deploy_certificate_renewal_success CHECK (
+        status <> 'SUCCEEDED' OR resulting_version_id IS NOT NULL
+    ),
+    CONSTRAINT chk_deploy_certificate_renewal_failure CHECK (
+        status <> 'FAILED' OR last_error_code IS NOT NULL
+    ),
+    -- Each window is recorded whole or not at all. Comparing a stored "before"
+    -- against a missing "after" would render a coverage gap that never happened.
+    CONSTRAINT chk_deploy_certificate_renewal_previous_window CHECK (
+        (previous_not_before IS NULL AND previous_not_after IS NULL)
+        OR (previous_not_before IS NOT NULL AND previous_not_after IS NOT NULL
+            AND previous_not_after > previous_not_before)
+    ),
+    CONSTRAINT chk_deploy_certificate_renewal_new_window CHECK (
+        (new_not_before IS NULL AND new_not_after IS NULL)
+        OR (new_not_before IS NOT NULL AND new_not_after IS NOT NULL
+            AND new_not_after > new_not_before)
+    )
+);
+
+-- At most one attempt may be in flight per certificate. This is the second half
+-- of the duplicate-issuance guard: the certificate lease stops two workers from
+-- claiming the same row, and this stops one worker from opening a second attempt
+-- for a certificate that already has an open one.
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_certificate_renewal_open
+    ON deploy_certificate_renewal (certificate_id)
+    WHERE status IN ('PLANNED', 'ORDERED');
+
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_renewal_history
+    ON deploy_certificate_renewal (tenant_id, certificate_id, created_at DESC, id DESC);
+
+COMMENT ON TABLE deploy_certificate_renewal IS 'Renewal attempt ledger: one row per attempt to replace a certificate version, recording the validity window that was handed over so continuous coverage is auditable';
+COMMENT ON COLUMN deploy_certificate_renewal.trigger_kind IS 'SCHEDULED for the due-certificate sweep, MANUAL for an operator-requested renewal';
+COMMENT ON COLUMN deploy_certificate_renewal.previous_not_after IS 'Expiry of the version being replaced, captured at claim time so the handover stays auditable after that version is superseded';
+COMMENT ON COLUMN deploy_certificate_renewal.new_not_after IS 'Expiry of the version this attempt produced; NULL until the attempt succeeds';
+
+CREATE TABLE IF NOT EXISTS deploy_dns_provider_credential (
+    id                 BIGINT        NOT NULL,
+    uuid               VARCHAR(36)   NOT NULL,
+    tenant_id          BIGINT        NOT NULL,
+    provider_kind      VARCHAR(24)   NOT NULL,
+    display_name       VARCHAR(200)  NOT NULL,
+    credential_secret_ref VARCHAR(1024) NOT NULL,
+    zone_ref           VARCHAR(512),
+    status             VARCHAR(16)   NOT NULL DEFAULT 'ACTIVE',
+    last_verified_at   TIMESTAMPTZ,
+    last_error_code    VARCHAR(64),
+    created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    version            BIGINT        NOT NULL DEFAULT 1,
+    deleted_at         TIMESTAMPTZ,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_dns_provider_credential_uuid UNIQUE (uuid),
+    CONSTRAINT uk_deploy_dns_provider_credential_name UNIQUE (tenant_id, provider_kind, display_name),
+    CONSTRAINT chk_deploy_dns_provider_credential_kind CHECK (
+        provider_kind IN ('ALIYUN_DNS', 'DNSPOD', 'CLOUDFLARE')
+    ),
+    CONSTRAINT chk_deploy_dns_provider_credential_status CHECK (
+        status IN ('ACTIVE', 'DISABLED', 'INVALID')
+    ),
+    -- Only a secret-store reference is ever stored. Provider API keys and tokens
+    -- are never a database column, matching the private-key custody rule.
+    CONSTRAINT chk_deploy_dns_provider_credential_secret_ref CHECK (
+        credential_secret_ref LIKE 'secret://%'
+    ),
+    CONSTRAINT chk_deploy_dns_provider_credential_zone_ref CHECK (
+        zone_ref IS NULL OR LENGTH(zone_ref) BETWEEN 1 AND 512
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_deploy_dns_provider_credential_active
+    ON deploy_dns_provider_credential (tenant_id, provider_kind, status, updated_at DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+-- DEPRECATED (2026-09-17): superseded by the IAM provider account center.
+--
+-- A DNS automation credential is a cloud account, not a Deploy-owned resource:
+-- the same Aliyun/DNSPod/Cloudflare key is reused across business modules, and
+-- credential custody (envelope encryption, rotation, write-only access) belongs
+-- to sdkwork-iam (`iam_provider_account` + `iam_provider_credential`).
+--
+-- The table is kept and marked `lifecycle_status: deprecated` in the database
+-- contract; no code path reads or writes it. DNS-01 credentials resolve through
+-- `deploy_dns_zone.provider_account_id` or
+-- `deploy_certificate.provider_account_id`. Do not add a reader.
+COMMENT ON TABLE deploy_dns_provider_credential IS 'DEPRECATED 2026-09-17: superseded by the IAM provider account center (iam_provider_account). Retained for schema history; no code path reads or writes it. DNS-01 credentials resolve through deploy_dns_zone.provider_account_id or deploy_certificate.provider_account_id';
+COMMENT ON COLUMN deploy_dns_provider_credential.credential_secret_ref IS 'Opaque secret-store reference; never a plaintext API key or token';
+
+CREATE TABLE IF NOT EXISTS deploy_certificate_quota_usage (
+    id            BIGINT       NOT NULL,
+    uuid          VARCHAR(36)  NOT NULL,
+    tenant_id     BIGINT       NOT NULL,
+    window_kind   VARCHAR(32)  NOT NULL,
+    window_seconds BIGINT      NOT NULL,
+    window_start  TIMESTAMPTZ  NOT NULL,
+    scope_key     VARCHAR(255) NOT NULL DEFAULT '',
+    consumed      BIGINT       NOT NULL DEFAULT 0,
+    limit_value   BIGINT       NOT NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    version       BIGINT       NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_certificate_quota_usage_uuid UNIQUE (uuid),
+    CONSTRAINT uk_deploy_certificate_quota_usage_bucket UNIQUE (tenant_id, window_kind, scope_key, window_start),
+    CONSTRAINT chk_deploy_certificate_quota_usage_kind CHECK (window_kind IN (
+        'CERTIFICATES_PER_DOMAIN', 'DUPLICATE_CERTIFICATE_SET',
+        'NEW_ORDERS', 'FAILED_VALIDATIONS', 'CONCURRENT_ORDERS'
+    )),
+    CONSTRAINT chk_deploy_certificate_quota_usage_window CHECK (window_seconds BETWEEN 60 AND 2592000),
+    CONSTRAINT chk_deploy_certificate_quota_usage_consumed CHECK (consumed >= 0 AND limit_value > 0),
+    CONSTRAINT chk_deploy_certificate_quota_usage_scope CHECK (LENGTH(scope_key) <= 255)
+);
+
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_quota_usage_window
+    ON deploy_certificate_quota_usage (tenant_id, window_kind, window_start DESC, id DESC);
+
+COMMENT ON TABLE deploy_certificate_quota_usage IS 'Rolling CA budget accounting per tenant; mirrors the public CA policy surface so a refusal is explainable before an order is created';
 
 CREATE TABLE IF NOT EXISTS deploy_certificate_distribution (
     id                    BIGINT       NOT NULL,

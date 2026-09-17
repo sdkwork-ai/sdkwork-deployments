@@ -39,6 +39,7 @@ export type { CertificateChallengeResponse } from './certificate-challenge-respo
 export type { FailCertificateOrderRequest } from './fail-certificate-order-request';
 export type { ChallengeResultRequest } from './challenge-result-request';
 export type { StoreCertificateVersionRequest } from './store-certificate-version-request';
+export type { CertificateMaterialPayload } from './certificate-material-payload';
 export type { RetentionRunRequest } from './retention-run-request';
 export type { RetentionRunResponse } from './retention-run-response';
 export type { UsageEventAttribution } from './usage-event-attribution';

@@ -387,7 +387,13 @@ async fn list_audit_logs(
                 .api
                 .list_audit_logs(&context, &query, query.cursor.as_deref())
                 .await?;
-            if page.next_cursor.is_some() || page.has_more.is_some() {
+            // The page mode follows the request: supplying a cursor selects
+            // keyset mode. It must not follow the presence of `nextCursor` /
+            // `hasMore`, because an offset page also carries them — that is how
+            // a client obtains its first cursor and switches to keyset
+            // continuation — and switching on presence would relabel that offset
+            // page as cursor mode and drop its `page` and `totalItems`.
+            if query.cursor.is_some() {
                 ok_json(envelope::cursor_page(
                     page.items,
                     page.page_size,

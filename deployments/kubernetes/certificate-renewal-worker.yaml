@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdkwork-deploy-certificate-renewal-worker
+  labels:
+    app.kubernetes.io/name: sdkwork-deploy
+    app.kubernetes.io/component: certificate-renewal-worker
+    app.kubernetes.io/part-of: sdkwork-deploy
+spec:
+  # Two replicas are safe here and nowhere near necessary: the certifying
+  # guarantee is the per-certificate database lease, so a second pod only ever
+  # shortens the time an idle tick waits. Anything more would just contend.
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sdkwork-deploy
+      app.kubernetes.io/component: certificate-renewal-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sdkwork-deploy
+        app.kubernetes.io/component: certificate-renewal-worker
+        app.kubernetes.io/part-of: sdkwork-deploy
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: certificate-renewal-worker
+          image: sdkwork-api-deployments-standalone-gateway:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sdkwork-deploy-certificate-renewal-worker
+          env:
+            - name: SDKWORK_DEPLOY_APP_ROOT
+              value: /app
+            - name: SDKWORK_DEPLOY_ENVIRONMENT
+              value: production
+            - name: SDKWORK_ENVIRONMENT
+              value: production
+            - name: SDKWORK_DEPLOY_DEPLOYMENT_PROFILE
+              value: cloud
+            - name: SDKWORK_DEPLOY_PROFILE_ID
+              value: cloud.production
+            # Pod identity, because the lease records who holds it: two processes
+            # sharing a generated name would each read the other's live lease as
+            # abandoned.
+            - name: SDKWORK_NODE_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_BATCH_SIZE
+              value: "50"
+            - name: SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_POLL_INTERVAL_MILLIS
+              value: "30000"
+            - name: SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_LEASE_SECONDS
+              value: "300"
+            - name: SDKWORK_DEPLOY_CERTIFICATE_RENEWAL_SWEEP_INTERVAL_MILLIS
+              value: "300000"
+            # A renewal re-walks the same DNS-01 chain an issuance does, so a wildcard
+            # renewal resolves its credential from the IAM cloud account center over
+            # this pod's own PostgreSQL connection — no per-pod DNS secret is needed.
+            # The deployment-level `SDKWORK_DEPLOY_DNS_PROVIDER_*` variables remain the
+            # fallback for an installation that registered no account.
+            - name: SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS
+              value: "false"
+            - name: SDKWORK_DATABASE_AUTO_MIGRATE
+              value: "false"
+            - name: SDKWORK_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sdkwork-deploy-database
+                  key: database-url
+            # Custody of certificate material at rest. The master key is mounted
+            # from a secrets store rather than passed as a value: an environment
+            # variable is readable from every process listing and container
+            # inspect, and a key stored beside the data it protects protects
+            # nothing (ADR-20260723 §4).
+            - name: SDKWORK_DEPLOY_CERTIFICATE_MASTER_KEY_FILE
+              value: /run/secrets/sdkwork-certificate/kek
+            - name: SDKWORK_DEPLOY_TRUST_ANCHOR_FILE
+              value: /run/secrets/sdkwork-certificate/trust-anchors.pem
+          volumeMounts:
+            - name: certificate-material-secrets
+              mountPath: /run/secrets/sdkwork-certificate
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: certificate-material-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: sdkwork-deploy-certificate-material

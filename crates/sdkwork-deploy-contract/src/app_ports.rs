@@ -204,6 +204,54 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    /// Declares whatever is missing from `request.hostnames` and advances each
+    /// one's ownership proof once, so a certificate order can be submitted in a
+    /// single round trip instead of `N` declarations plus `N` checks.
+    ///
+    /// This deliberately does **not** weaken ADR-20260723 §2: a certificate is
+    /// still only issuable over hostnames that are already `VERIFIED`, and the
+    /// caller cannot assert success — the response reports what the DNS lookup
+    /// actually observed.
+    async fn ensure_domain_hostname_claims(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+        _request: &EnsureDomainHostnameClaimsRequest,
+    ) -> DeployServiceResult<DomainHostnameClaimBatchResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "domain hostname claim API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Accounts the caller may pick when configuring DNS automation.
+    ///
+    /// Reads the IAM provider account center through the Deploy cloud account port,
+    /// so the same account is usable from wherever it is convenient to manage it.
+    /// This is also the "先判断是否已存在" probe behind both the zone and the
+    /// certificate form: filtered by `dnsProvider` it answers whether the credential
+    /// inputs can be skipped in favour of pinning an account that already exists, and
+    /// the returned order is the server's own resolution precedence.
+    async fn list_cloud_accounts(
+        &self,
+        _context: &DeployAppRequestContext,
+        _query: &ListCloudAccountsQuery,
+    ) -> DeployServiceResult<CloudAccountPage> {
+        Err(crate::DeployServiceError::Internal(
+            "cloud account API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Registers an account from console input, reusing one that already matches.
+    async fn create_cloud_account(
+        &self,
+        _context: &DeployAppRequestContext,
+        _request: &CreateCloudAccountRequest,
+    ) -> DeployServiceResult<CloudAccountRegistrationResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "cloud account API is not implemented".to_owned(),
+        ))
+    }
+
     async fn update_app_composition(
         &self,
         _context: &DeployAppRequestContext,
@@ -349,6 +397,18 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<CertificateResponse> {
         Err(crate::DeployServiceError::Internal(
             "certificate API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn list_certificate_renewals(
+        &self,
+        _context: &DeployAppRequestContext,
+        _certificate_id: &str,
+        _page: i32,
+        _page_size: i32,
+    ) -> DeployServiceResult<CertificateRenewalPage> {
+        Err(crate::DeployServiceError::Internal(
+            "certificate renewal history is not implemented".to_owned(),
         ))
     }
 

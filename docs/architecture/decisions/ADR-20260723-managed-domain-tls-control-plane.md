@@ -13,7 +13,7 @@ NGINX_SPEC.md, OBSERVABILITY_SPEC.md, TEST_SPEC.md
 
 The accepted cloud publishing architecture assigns domain and certificate control-plane ownership to
 SDKWork Deploy and HTTP/TLS execution to SDKWork Web Server. Deploy now has explicit root-domain
-Zones, tenant-owned hostname resources, expiring DNS TXT attempts, Site bindings, certificate
+Zones, zone-owned hostname resources, expiring DNS TXT attempts, Site bindings, certificate
 identifiers, immutable certificate versions, ACME workflow tables, distribution state, TLS runtime
 snapshots, listener bindings, and observations. Managed certificate creation is idempotent and may
 cover multiple active verified hostnames; the same hostname may be covered by multiple certificate
@@ -45,6 +45,11 @@ business storage.
    changes, certificate renewal, and certificate rollback do not create each other's revisions.
 5. Cross-repository calls use generated SDKs. Deploy publishes TLS assignments through the Web
    Internal SDK; Web nodes report observations through the same Web-owned internal surface.
+6. Root-domain zones are owned by a **user subject**, not by the tenant as a whole. The zone
+   inventory a console renders is scoped to the calling user: a session sees the zones it owns
+   plus the platform-owned tenant-level zones, and nothing else. A zone owned by another user
+   answers "not found" to every zone-scoped read and write rather than leaking its hostnames
+   or accepting a mutation. Certificate and application resources stay tenant-scoped.
 
 ### 2. Domain Identity And Anti-Takeover
 
@@ -95,20 +100,46 @@ version. Certificate Versions are immutable. Each version records only public ce
 serial digest, leaf SHA-256 fingerprint, SPKI digest, issuer, validity, identifiers, key algorithm,
 chain digest, and opaque secret-store references.
 
-Cloud private keys and ACME account keys live in an approved KMS/Secret Manager. Web nodes receive
-short-lived, target-scoped authorization and mount immutable material through an approved secret
-delivery mechanism such as Secrets Store CSI. The Web snapshot uses only
+**The certificate files themselves are also custody.** The evidence columns describe a certificate;
+they cannot reconstruct one, so a version that recorded only evidence could not be delivered to a node
+or audited after the CA stopped serving it. `deploy_certificate_material` therefore stores the
+canonical five-file set of each version: `cert.pem`, `privkey.pem`, `chain.pem`, `root.pem`, and
+`fullchain.pem`.
+
+The rule is **no plaintext key material**, not "no key columns":
+
+- Public material (leaf, intermediates, root, full chain) is stored verbatim. It is public by
+  definition, and keeping it readable is what lets an operator answer "which certificate covers this
+  name" with a query.
+- The private key is sealed by **envelope encryption**. A fresh AES-256-GCM data key (DEK) encrypts
+  the file; that data key is wrapped by the custody key-encryption key (KEK) and stored beside the
+  ciphertext. The KEK never enters the database, so the row is inert on its own.
+- Each sealed file carries AAD binding it to its version id and material kind, so a blob moved
+  between rows fails authentication instead of being served under the wrong identity.
+- `fullchain.pem` is the leaf followed by its intermediates, byte for byte as the CA returned them,
+  and deliberately **excludes the root**. The anchor belongs in the client's trust store; presenting
+  it inflates the handshake for no benefit.
+
+Cloud private keys and ACME account keys may additionally live in an approved KMS/Secret Manager. Web
+nodes receive short-lived, target-scoped authorization and mount immutable material through an
+approved secret delivery mechanism such as Secrets Store CSI. The Web snapshot uses only
 `file:<opaque-certificate-version-id>`; the configured material root maps that id to read-only
 `fullchain.pem` and `privkey.pem` files.
 
-Standalone deployments may use the approved encrypted standalone secret store. Its master key is
-loaded from a protected secret file, never an environment value or database row. Standalone
-self-signed certificates are never eligible for the cloud production profile.
+The custody master key is loaded from a protected secret file, never an environment value or database
+row. This holds for standalone deployments using the approved encrypted standalone secret store and
+for the managed control plane alike. Standalone self-signed certificates are never eligible for the
+cloud production profile.
+
+The trust anchor is resolved from three sources, in order: the root sent with the material, a
+self-signed certificate the chain already ends at, or a configured local anchor bundle matched by
+issuer name **and** signature. When none applies the request is refused — a stored bundle with an
+empty `root.pem` would look like success and validate nowhere.
 
 Custom certificate import uses a one-time secret-ingest session. The private key is streamed over a
-protected backend to the secret store, validated in memory, and zeroized. It is not uploaded to Drive.
-The public chain may be retained in the certificate secret bundle, but Drive node ids are not a
-certificate or private-key custody contract.
+protected backend, validated in memory, sealed, and zeroized. It is not uploaded to Drive. The public
+chain may be retained in the certificate secret bundle, but Drive node ids are not a certificate or
+private-key custody contract.
 
 ### 5. Managed ACME Lifecycle
 
@@ -196,7 +227,7 @@ is no compatibility table, dual write, backfill, or legacy Drive private-key pat
 
 | Table | Responsibility | Critical constraints |
 | --- | --- | --- |
-| `deploy_dns_zone` | Explicit root-domain inventory | globally exclusive active normalized apex; tenant-owned; soft delete |
+| `deploy_dns_zone` | Explicit root-domain inventory | globally exclusive active normalized apex; user-owned within a tenant, `user_id IS NULL` for platform tenant-level zones; soft delete |
 | `deploy_domain` | Canonical hostname claim and lifecycle | globally exclusive active normalized host; tenant/Zone scoped; no Site ownership |
 | `deploy_domain_verification` | Expiring proof attempt and observation | token digest only; lease/fence; bounded retry; immutable success evidence |
 | `deploy_tls_policy` | Domain/Site TLS source, challenge, renewal, rollout policy | one active policy per binding scope; no secret values |
@@ -205,7 +236,8 @@ is no compatibility table, dual write, backfill, or legacy Drive private-key pat
 | `deploy_certificate_identifier` | Exact SAN and wildcard identifiers | normalized unique position; identifier must be owned by active claim |
 | `deploy_certificate_order` | Durable ACME order workflow | idempotency, lease/fence, retry, deadline, external reference digest |
 | `deploy_certificate_challenge` | Authorization/challenge workflow | proof digest/secret reference only; presentation and cleanup state |
-| `deploy_certificate_version` | Immutable issued/imported public evidence | unique fingerprint/serial scope; KMS/secret refs only; no PEM/key columns |
+| `deploy_certificate_version` | Immutable issued/imported public evidence | unique fingerprint/serial scope; KMS/secret refs only; no plaintext PEM/key columns |
+| `deploy_certificate_material` | The version's canonical file set | one row per kind; private key wrapped by an out-of-database KEK; AAD bound to version and kind; envelope columns required exactly for the secret kind |
 | `deploy_certificate_distribution` | Version-to-node material authorization | target-scoped authorization reference, expiry, desired state |
 | `deploy_tls_runtime_snapshot` | Complete node/listener generation | unique node/listener/generation; canonical digest; bounded payload metadata |
 | `deploy_tls_runtime_assignment` | Snapshot SNI-to-version mapping | unambiguous exact/wildcard owner; expected fingerprint and material id |
@@ -228,6 +260,12 @@ certificate capability must use a separately reviewed one-time secret-ingest ses
 reuse Drive upload sessions, node identifiers, or ordinary JSON private-key fields. App OpenAPI and
 generated SDK families are materialized from this accepted contract.
 
+The console zone inventory is per-user: `domainZones.list` returns only the zones the caller owns
+plus the platform tenant-level zones, and every zone-scoped hostname read or mutation re-applies
+that same owner gate. Certificates and applications remain tenant-scoped, so a tenant member may
+still see a certificate that covers another member's hostname; only the zone inventory itself is
+restricted.
+
 Tenant UI must expose domain proof instructions, observed checks, TLS policy, certificate/version
 history, renewal, rollout quorum, expiry, rollback, and bounded failure reasons. Admin UI must expose
 claim conflicts/holds, CA/DNS/secret-provider health, stuck orders, fleet divergence, served
@@ -240,7 +278,17 @@ fingerprints, revocation, and audited recovery actions. No UI can display or dow
 2. Store custom private keys in Drive. Rejected because Drive is business file storage, not approved
    private-key custody, rotation, or target authorization.
 3. Put PEM in the TLS snapshot. Rejected because snapshots are replicated, inspected, and retained
-   runtime metadata.
+   runtime metadata. This is not in tension with §4: the snapshot still carries no material, only the
+   `file:<opaque-certificate-version-id>` reference a node resolves through authorized delivery.
+3a. Keep the material only in an external secret store and never in the database. Rejected because the
+   version would then be unreconstructable from the control plane's own records: an audit could not
+   show what was issued, a re-delivery after a store outage could not proceed, and the ordering
+   between "version committed" and "secret written" would be a distributed transaction with a real
+   window for a version that has no key. Envelope encryption keeps the rows inert without giving up
+   atomicity, and the KEK remains exactly as external as the secret store's own root key was.
+3b. Store the private key as a plaintext PEM column and rely on database access control. Rejected
+   because it converts every read permission — a backup, a replica, a support query — into key
+   disclosure. The table enforces the distinction with a CHECK constraint rather than convention.
 4. Let Web Server own ACME and certificate business state in cloud. Rejected because it creates a
    second domain/certificate authority and prevents deterministic cross-site governance.
 5. Replace the active certificate immediately after CA issuance. Rejected because issuance does not
@@ -261,16 +309,34 @@ fingerprints, revocation, and audited recovery actions. No UI can display or dow
   node/public observations, rollback, and expiry drills have evidence.
 - CA, DNS, KMS/Secret Manager, and external probe providers require explicit production configuration,
   credentials, quotas, alerts, and failure budgets.
+- Certificate material custody adds one runtime requirement and one optional one: the custody master
+  key file must exist in production-like environments and the service refuses to start without it, and
+  a local trust anchor bundle is needed whenever a CA's chain stops at an intermediate and the worker
+  did not send the root — which is the normal case for Let's Encrypt.
+- Storage now carries key material, so the database's own backup, replication, and access-control
+  posture becomes part of the certificate trust boundary. The KEK staying outside is what keeps that
+  posture's mistakes from being key disclosure.
 
 ## Verification
 
 - PostgreSQL integration tests cover current domain proof, certificate identifier cardinality,
   tenant/status boundaries, idempotency, composition transactions, outbox concurrency, and leases.
+- Certificate custody tests cover the full round trip: a real issued bundle is assembled, sealed,
+  stored, read back, opened, and compared byte for byte; the private key column is proven not to hold
+  the key; a row repointed at another version is proven not to open; a cross-tenant read fails closed;
+  a refused storage is proven to leave no material behind. Unit tests pin the digest definitions to
+  `sdkwork-webserver-acme-service`, the chain and private-key checks, the anchor precedence, and the
+  rejection of a declaration that does not describe the bytes.
 - Domain tests cover IDNA, public suffixes, exact/wildcard conflicts, DNS/HTTP proof, rebinding/SSRF,
   expiry, revalidation, hold/reclaim, and cross-tenant races.
+- Domain inventory tests prove the zone list is private to its owner: two users in one tenant each
+  see only their own zones plus the platform tenant-level zones, and a foreign zone refuses
+  retrieve, list-hostnames, update, delete, hostname create, ensure, challenge, and confirm while
+  the owner's own reads still succeed.
 - ACME tests use a controlled test CA and DNS/HTTP solvers; no production CA is used by CI.
 - Secret tests prove no private key/account key appears in SQL, API/SDK models, snapshots, events,
-  logs, metrics, traces, crash reports, support bundles, or Drive.
+  logs, metrics, traces, crash reports, support bundles, or Drive. The read path that returns opened
+  material is deliberately not reachable from any HTTP route.
 - Web tests cover material authorization, SAN/key/fingerprint/validity rejection, SNI selection,
   atomic replacement, last-known-good recovery, generation fencing, and served-fingerprint evidence.
 - End-to-end staging evidence covers browser DNS -> TLS handshake -> host/path/variant routing ->

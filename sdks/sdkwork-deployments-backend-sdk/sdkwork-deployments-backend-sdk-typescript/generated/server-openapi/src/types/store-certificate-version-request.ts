@@ -1,3 +1,5 @@
+import type { CertificateMaterialPayload } from './certificate-material-payload';
+
 export interface StoreCertificateVersionRequest {
   orderId: string;
   versionNo: string;
@@ -11,4 +13,5 @@ export interface StoreCertificateVersionRequest {
   notBefore: string;
   notAfter: string;
   secretBundleRef: string;
+  material: CertificateMaterialPayload;
 }

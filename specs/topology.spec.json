@@ -466,6 +466,14 @@
       "crate": "sdkwork-deploy-runtime-assignment-worker",
       "binary": "sdkwork-deploy-runtime-assignment-worker"
     },
+    "certificateRenewalWorker": {
+      "crate": "sdkwork-deploy-certificate-renewal-worker",
+      "binary": "sdkwork-deploy-certificate-renewal-worker"
+    },
+    "certificateIssuanceWorker": {
+      "crate": "sdkwork-deploy-certificate-worker",
+      "binary": "sdkwork-deploy-certificate-worker"
+    },
     "buildRunner": {
       "crate": "sdkwork-deploy-build-runner",
       "binary": "sdkwork-deploy-build-runner"
@@ -486,6 +494,20 @@
             "id": "runtime-assignment-worker",
             "crate": "sdkwork-deploy-runtime-assignment-worker",
             "binary": "sdkwork-deploy-runtime-assignment-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-renewal-worker",
+            "crate": "sdkwork-deploy-certificate-renewal-worker",
+            "binary": "sdkwork-deploy-certificate-renewal-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-issuance-worker",
+            "crate": "sdkwork-deploy-certificate-worker",
+            "binary": "sdkwork-deploy-certificate-worker",
             "required": true,
             "role": "worker"
           },
@@ -524,6 +546,20 @@
             "binary": "sdkwork-deploy-runtime-assignment-worker",
             "required": true,
             "role": "worker"
+          },
+          {
+            "id": "certificate-renewal-worker",
+            "crate": "sdkwork-deploy-certificate-renewal-worker",
+            "binary": "sdkwork-deploy-certificate-renewal-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-issuance-worker",
+            "crate": "sdkwork-deploy-certificate-worker",
+            "binary": "sdkwork-deploy-certificate-worker",
+            "required": true,
+            "role": "worker"
           }
         ],
         "healthSurfaces": [
@@ -546,6 +582,20 @@
             "binary": "sdkwork-deploy-runtime-assignment-worker",
             "required": true,
             "role": "worker"
+          },
+          {
+            "id": "certificate-renewal-worker",
+            "crate": "sdkwork-deploy-certificate-renewal-worker",
+            "binary": "sdkwork-deploy-certificate-renewal-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-issuance-worker",
+            "crate": "sdkwork-deploy-certificate-worker",
+            "binary": "sdkwork-deploy-certificate-worker",
+            "required": true,
+            "role": "worker"
           }
         ],
         "healthSurfaces": [
@@ -566,6 +616,20 @@
             "id": "runtime-assignment-worker",
             "crate": "sdkwork-deploy-runtime-assignment-worker",
             "binary": "sdkwork-deploy-runtime-assignment-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-renewal-worker",
+            "crate": "sdkwork-deploy-certificate-renewal-worker",
+            "binary": "sdkwork-deploy-certificate-renewal-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-issuance-worker",
+            "crate": "sdkwork-deploy-certificate-worker",
+            "binary": "sdkwork-deploy-certificate-worker",
             "required": true,
             "role": "worker"
           },
@@ -597,6 +661,20 @@
             "binary": "sdkwork-deploy-runtime-assignment-worker",
             "required": true,
             "role": "worker"
+          },
+          {
+            "id": "certificate-renewal-worker",
+            "crate": "sdkwork-deploy-certificate-renewal-worker",
+            "binary": "sdkwork-deploy-certificate-renewal-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-issuance-worker",
+            "crate": "sdkwork-deploy-certificate-worker",
+            "binary": "sdkwork-deploy-certificate-worker",
+            "required": true,
+            "role": "worker"
           }
         ],
         "healthSurfaces": [
@@ -624,6 +702,20 @@
             "id": "runtime-assignment-worker",
             "crate": "sdkwork-deploy-runtime-assignment-worker",
             "binary": "sdkwork-deploy-runtime-assignment-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-renewal-worker",
+            "crate": "sdkwork-deploy-certificate-renewal-worker",
+            "binary": "sdkwork-deploy-certificate-renewal-worker",
+            "required": true,
+            "role": "worker"
+          },
+          {
+            "id": "certificate-issuance-worker",
+            "crate": "sdkwork-deploy-certificate-worker",
+            "binary": "sdkwork-deploy-certificate-worker",
             "required": true,
             "role": "worker"
           }

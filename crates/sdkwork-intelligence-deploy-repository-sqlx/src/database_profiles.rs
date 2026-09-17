@@ -32,7 +32,8 @@ impl DeployRepository {
                 (id, uuid, tenant_id, organization_id, app_id, profile_key, db_engine,
                  catalog_name, schema_version, baseline_version, migration_strategy,
                  profile_status, created_by, updated_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'DRAFT', $12, $12, $13, $13)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'DRAFT', $12, $12,
+                     CAST($13 AS TIMESTAMPTZ), CAST($13 AS TIMESTAMPTZ))",
         )
         .bind(profile_id)
         .bind(&profile_uuid)
@@ -227,7 +228,8 @@ impl DeployRepository {
                 (id, uuid, tenant_id, organization_id, profile_id, migration_version,
                  migration_name, checksum_sha256, script_ref, migration_status,
                  created_by, updated_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING', $10, $10, $11, $11)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING', $10, $10,
+                     CAST($11 AS TIMESTAMPTZ), CAST($11 AS TIMESTAMPTZ))",
         )
         .bind(migration_id)
         .bind(&migration_uuid)

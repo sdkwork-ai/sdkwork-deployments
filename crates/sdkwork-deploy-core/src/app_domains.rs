@@ -104,7 +104,9 @@ pub fn normalize_app_domain_label(raw: &str) -> Result<String, String> {
         ));
     }
     if value.starts_with('-') || value.ends_with('-') {
-        return Err(format!("appDomainLabel must not start or end with a hyphen: {value}"));
+        return Err(format!(
+            "appDomainLabel must not start or end with a hyphen: {value}"
+        ));
     }
     Ok(value)
 }
@@ -123,7 +125,9 @@ pub fn normalize_app_domain_suffixes(raw: &[String]) -> Result<Vec<String>, Stri
             return Err(format!("appDomainSuffixes entry is not a domain: {entry}"));
         }
         if !value.split('.').all(label_is_sane) {
-            return Err(format!("appDomainSuffixes entry has an invalid label: {entry}"));
+            return Err(format!(
+                "appDomainSuffixes entry has an invalid label: {entry}"
+            ));
         }
         if !normalized.contains(&value) {
             normalized.push(value);
@@ -316,19 +320,17 @@ mod tests {
     #[test]
     fn custom_prefix_replaces_the_app_id_label() {
         // Default: the slug is the `<appId>` label.
-        assert_eq!(
-            effective_app_domain_label(None, "myapp"),
-            "myapp"
-        );
+        assert_eq!(effective_app_domain_label(None, "myapp"), "myapp");
         // Explicit prefix replaces it.
-        assert_eq!(
-            effective_app_domain_label(Some("shop"), "myapp"),
-            "shop"
-        );
+        assert_eq!(effective_app_domain_label(Some("shop"), "myapp"), "shop");
         // Blank is treated as absent, never as an empty label.
         assert_eq!(effective_app_domain_label(Some("  "), "myapp"), "myapp");
         assert_eq!(
-            default_app_hostname(effective_app_domain_label(Some("shop"), "myapp"), "sdkwork.com", "production"),
+            default_app_hostname(
+                effective_app_domain_label(Some("shop"), "myapp"),
+                "sdkwork.com",
+                "production"
+            ),
             "shop.app.sdkwork.com"
         );
         // A UUID app id is a legal prefix (the "appId" reading of the spec).
@@ -356,8 +358,10 @@ mod tests {
     fn per_app_suffix_override_replaces_the_platform_catalog() {
         let platform = effective_app_domain_suffixes(None);
         assert_eq!(platform.len(), 14);
-        let overridden =
-            effective_app_domain_suffixes(Some(&["Example.COM".to_owned(), "example.com".to_owned()]));
+        let overridden = effective_app_domain_suffixes(Some(&[
+            "Example.COM".to_owned(),
+            "example.com".to_owned(),
+        ]));
         assert_eq!(overridden, vec!["example.com".to_owned()]);
         assert_eq!(normalize_app_domain_suffixes(&[]).is_err(), true);
         assert_eq!(

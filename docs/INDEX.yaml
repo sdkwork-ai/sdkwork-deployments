@@ -25,6 +25,10 @@ entries:
     path: docs/architecture/decisions/ADR-20260804-unified-app-delivery-platform.md
     kind: adr
     status: accepted
+  - id: ADR-20260917-dns-credentials-from-iam-cloud-account-center
+    path: docs/architecture/decisions/ADR-20260917-dns-credentials-from-iam-cloud-account-center.md
+    kind: adr
+    status: proposed
   - id: PLAN-2026-0002-managed-domain-tls-control-plane
     path: docs/engineering/plans/PLAN-2026-0002-managed-domain-tls-control-plane.md
     kind: plan

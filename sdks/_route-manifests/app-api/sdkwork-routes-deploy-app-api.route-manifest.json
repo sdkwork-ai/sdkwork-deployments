@@ -36,7 +36,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.read",
       "idempotent": false
     },
     {
@@ -60,7 +60,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": true
     },
     {
@@ -84,7 +84,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.read",
       "idempotent": false
     },
     {
@@ -108,7 +108,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": false
     },
     {
@@ -132,7 +132,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": false
     },
     {
@@ -156,7 +156,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": false
     },
     {
@@ -180,7 +180,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": true
     },
     {
@@ -204,7 +204,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": false
     },
     {
@@ -228,7 +228,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": false
     },
     {
@@ -252,7 +252,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.domainZones.write",
       "idempotent": false
     },
     {
@@ -276,183 +276,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
-      "idempotent": true
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites",
-      "operationId": "sites.list",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.read",
-      "idempotent": false
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites",
-      "operationId": "sites.create",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": true
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}",
-      "operationId": "sites.retrieve",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.read",
-      "idempotent": false
-    },
-    {
-      "method": "PATCH",
-      "path": "/app/v3/api/sites/{siteId}",
-      "operationId": "sites.update",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "DELETE",
-      "path": "/app/v3/api/sites/{siteId}",
-      "operationId": "sites.delete",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/activate",
-      "operationId": "sites.activate",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": true
-    },
-    {
-      "method": "PUT",
-      "path": "/app/v3/api/sites/{siteId}/composition",
-      "operationId": "sites.composition.update",
-      "tags": [
-        "site"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
+      "permission": "deploy.domainZones.write",
       "idempotent": true
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/pause",
-      "operationId": "sites.pause",
+      "path": "/app/v3/api/domain_zones/{zoneId}/hostname_claims",
+      "operationId": "domainZones.hostnameClaims.ensure",
       "tags": [
-        "site"
+        "domain"
       ],
       "auth": {
         "mode": "dual-token",
@@ -468,15 +300,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
+      "permission": "deploy.domainZones.write",
       "idempotent": true
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/deployments",
-      "operationId": "sites.deployments.list",
+      "path": "/app/v3/api/cloud_accounts",
+      "operationId": "cloudAccounts.list",
       "tags": [
-        "deployment"
+        "domain"
       ],
       "auth": {
         "mode": "dual-token",
@@ -492,15 +324,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
+      "permission": "deploy.cloudAccounts.read",
       "idempotent": false
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/deployments",
-      "operationId": "sites.deployments.create",
+      "path": "/app/v3/api/cloud_accounts",
+      "operationId": "cloudAccounts.create",
       "tags": [
-        "deployment"
+        "domain"
       ],
       "auth": {
         "mode": "dual-token",
@@ -516,175 +348,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": true
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/deployments/{deploymentId}",
-      "operationId": "sites.deployments.retrieve",
-      "tags": [
-        "deployment"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/deployments/{deploymentId}/rollback",
-      "operationId": "sites.deployments.rollback",
-      "tags": [
-        "deployment"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": true
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/releases",
-      "operationId": "sites.releases.list",
-      "tags": [
-        "release"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/releases",
-      "operationId": "sites.releases.create",
-      "tags": [
-        "release"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": true
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/releases/{releaseId}",
-      "operationId": "sites.releases.retrieve",
-      "tags": [
-        "release"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/env_variables",
-      "operationId": "sites.envVariables.list",
-      "tags": [
-        "envVariable"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/env_variables",
-      "operationId": "sites.envVariables.create",
-      "tags": [
-        "envVariable"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
+      "permission": "deploy.cloudAccounts.write",
       "idempotent": true
     },
     {
@@ -708,7 +372,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.certificates.read",
       "idempotent": false
     },
     {
@@ -732,7 +396,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.certificates.write",
       "idempotent": true
     },
     {
@@ -756,7 +420,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.certificates.read",
       "idempotent": false
     },
     {
@@ -780,7 +444,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.certificates.write",
       "idempotent": false
     },
     {
@@ -804,8 +468,32 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.certificates.write",
       "idempotent": true
+    },
+    {
+      "method": "GET",
+      "path": "/app/v3/api/certificates/{certificateId}/renewals",
+      "operationId": "certificates.renewals.list",
+      "tags": [
+        "certificate"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.certificates.write",
+      "idempotent": false
     },
     {
       "method": "POST",
@@ -1001,54 +689,6 @@
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/sites/{siteId}/health_checks",
-      "operationId": "sites.healthChecks.list",
-      "tags": [
-        "monitor"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": false
-    },
-    {
-      "method": "POST",
-      "path": "/app/v3/api/sites/{siteId}/health_checks",
-      "operationId": "sites.healthChecks.create",
-      "tags": [
-        "monitor"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.sites.write",
-      "idempotent": true
-    },
-    {
-      "method": "GET",
       "path": "/app/v3/api/apps",
       "operationId": "apps.list",
       "tags": [
@@ -1068,7 +708,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -1092,7 +732,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.apps.write",
       "idempotent": true
     },
     {
@@ -1116,7 +756,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -1140,8 +780,176 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.apps.write",
       "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/apps/{appId}/activate",
+      "operationId": "apps.activate",
+      "tags": [
+        "app"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": true
+    },
+    {
+      "method": "PUT",
+      "path": "/app/v3/api/apps/{appId}/composition",
+      "operationId": "apps.composition.update",
+      "tags": [
+        "app"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": true
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/apps/{appId}/pause",
+      "operationId": "apps.pause",
+      "tags": [
+        "app"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": true
+    },
+    {
+      "method": "GET",
+      "path": "/app/v3/api/apps/{appId}/env_variables",
+      "operationId": "apps.envVariables.list",
+      "tags": [
+        "envVariable"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/apps/{appId}/env_variables",
+      "operationId": "apps.envVariables.create",
+      "tags": [
+        "envVariable"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": true
+    },
+    {
+      "method": "GET",
+      "path": "/app/v3/api/apps/{appId}/health_checks",
+      "operationId": "apps.healthChecks.list",
+      "tags": [
+        "monitor"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/apps/{appId}/health_checks",
+      "operationId": "apps.healthChecks.create",
+      "tags": [
+        "monitor"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": true
     },
     {
       "method": "GET",
@@ -1164,7 +972,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.platformTargets.read",
       "idempotent": false
     },
     {
@@ -1188,7 +996,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.platformTargets.write",
       "idempotent": true
     },
     {
@@ -1212,7 +1020,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.platformTargets.read",
       "idempotent": false
     },
     {
@@ -1236,7 +1044,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.sourceRepositories.read",
       "idempotent": false
     },
     {
@@ -1260,7 +1068,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.sourceRepositories.write",
       "idempotent": true
     },
     {
@@ -1284,7 +1092,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.sourceRepositories.read",
       "idempotent": false
     },
     {
@@ -1308,7 +1116,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.buildTemplates.read",
       "idempotent": false
     },
     {
@@ -1332,7 +1140,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.buildTemplates.write",
       "idempotent": true
     },
     {
@@ -1356,7 +1164,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.buildTemplates.read",
       "idempotent": false
     },
     {
@@ -1380,7 +1188,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.builds.read",
       "idempotent": false
     },
     {
@@ -1404,7 +1212,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.builds.write",
       "idempotent": true
     },
     {
@@ -1428,7 +1236,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.builds.read",
       "idempotent": false
     },
     {
@@ -1452,7 +1260,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.builds.write",
       "idempotent": false
     },
     {
@@ -1476,7 +1284,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.packages.read",
       "idempotent": false
     },
     {
@@ -1500,7 +1308,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.packages.write",
       "idempotent": true
     },
     {
@@ -1524,7 +1332,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.packages.read",
       "idempotent": false
     },
     {
@@ -1548,7 +1356,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.releases.read",
       "idempotent": false
     },
     {
@@ -1572,7 +1380,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.releases.write",
       "idempotent": true
     },
     {
@@ -1596,7 +1404,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.releases.read",
       "idempotent": false
     },
     {
@@ -1620,7 +1428,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.channels.read",
       "idempotent": false
     },
     {
@@ -1644,7 +1452,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.channels.read",
       "idempotent": false
     },
     {
@@ -1668,7 +1476,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.channels.write",
       "idempotent": true
     },
     {
@@ -1692,7 +1500,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.channels.write",
       "idempotent": false
     },
     {
@@ -1716,7 +1524,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.deployments.read",
       "idempotent": false
     },
     {
@@ -1740,7 +1548,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.deployments.write",
       "idempotent": true
     },
     {
@@ -1764,7 +1572,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.deployments.read",
       "idempotent": false
     },
     {
@@ -1788,7 +1596,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.signingIdentities.read",
       "idempotent": false
     },
     {
@@ -1812,7 +1620,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.signingIdentities.write",
       "idempotent": true
     },
     {
@@ -1836,7 +1644,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.signingIdentities.read",
       "idempotent": false
     },
     {
@@ -1860,7 +1668,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.usageEvents.read",
       "idempotent": false
     },
     {
@@ -1884,7 +1692,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseProfiles.read",
       "idempotent": false
     },
     {
@@ -1908,7 +1716,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseProfiles.write",
       "idempotent": true
     },
     {
@@ -1932,7 +1740,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseProfiles.read",
       "idempotent": false
     },
     {
@@ -1956,7 +1764,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseProfiles.write",
       "idempotent": true
     },
     {
@@ -1980,7 +1788,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseMigrations.read",
       "idempotent": false
     },
     {
@@ -2004,7 +1812,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseMigrations.write",
       "idempotent": true
     },
     {
@@ -2028,7 +1836,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appDatabaseMigrations.read",
       "idempotent": false
     },
     {
@@ -2052,7 +1860,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appEnvironments.read",
       "idempotent": false
     },
     {
@@ -2076,7 +1884,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appEnvironments.write",
       "idempotent": true
     },
     {
@@ -2100,7 +1908,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appEnvironments.read",
       "idempotent": false
     },
     {
@@ -2124,7 +1932,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appEnvironments.write",
       "idempotent": true
     },
     {
@@ -2148,7 +1956,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appEnvironments.read",
       "idempotent": false
     },
     {
@@ -2172,7 +1980,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": null,
+      "permission": "deploy.appEnvironments.write",
       "idempotent": true
     }
   ]

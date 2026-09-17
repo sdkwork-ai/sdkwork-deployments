@@ -91,11 +91,14 @@ async fn ensure_platform_zone_in_tx(
         return Ok((zone_id, false));
     }
     let zone_id = next_id(id_generator)?;
+    // `user_id` stays NULL on purpose: a platform zone is tenant-level
+    // infrastructure rather than any one user's domain, which is exactly what
+    // keeps it visible to every member of the tenant (see `zone_owner_gate`).
     sqlx::query(
         "INSERT INTO deploy_dns_zone (
             id, uuid, tenant_id, organization_id, apex_hostname, display_name,
-            dns_provider, provider_zone_ref, status, created_by, updated_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'platform', $7, 'ACTIVE', $8, $8)",
+            dns_provider, provider_zone_ref, status, user_id, created_by, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, 'platform', $7, 'ACTIVE', NULL, $8, $8)",
     )
     .bind(zone_id)
     .bind(new_uuid())
@@ -297,8 +300,7 @@ pub(crate) async fn reconcile_app_default_domains_tx(
     // inserting the current ones. A changed `appDomainLabel` reuses the same
     // `appd-<environmentLabel>-<index>` binding keys, so the stale rows must
     // release the key first (the unique index only covers live rows).
-    retire_stale_default_bindings_tx(transaction, app_id, environment, &expected_hostnames)
-        .await?;
+    retire_stale_default_bindings_tx(transaction, app_id, environment, &expected_hostnames).await?;
     for (index, suffix) in config.suffixes.iter().enumerate() {
         let hostname = expected_hostnames[index].clone();
         let (zone_id, zone_created) = ensure_platform_zone_in_tx(

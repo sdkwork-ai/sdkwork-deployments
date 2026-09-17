@@ -1,0 +1,19 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-certificate-material"
+version.workspace = true
+edition.workspace = true
+description = "Certificate material custody: bundle assembly, chain proof, and envelope encryption for managed TLS certificates"
+
+
+[lints]
+workspace = true
+[dependencies]
+base64.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+aes-gcm.workspace = true
+sha2.workspace = true
+x509-parser.workspace = true
+rcgen.workspace = true

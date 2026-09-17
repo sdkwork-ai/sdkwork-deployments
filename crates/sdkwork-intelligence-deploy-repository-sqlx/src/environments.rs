@@ -30,7 +30,8 @@ impl DeployRepository {
             "INSERT INTO deploy_app_environment
                 (id, uuid, tenant_id, organization_id, app_id, env_key, env_name, env_level,
                  approval_required, env_status, created_by, updated_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'DRAFT', $10, $10, $11, $11)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'DRAFT', $10, $10,
+                     CAST($11 AS TIMESTAMPTZ), CAST($11 AS TIMESTAMPTZ))",
         )
         .bind(environment_id)
         .bind(&environment_uuid)

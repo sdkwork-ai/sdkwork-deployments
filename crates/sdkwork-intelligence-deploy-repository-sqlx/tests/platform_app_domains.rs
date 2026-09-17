@@ -392,7 +392,9 @@ async fn app_nginx_conf_and_environment_override_are_resolved() {
             $1,$2,TRUE,1,1,'{}',NOW(),NOW(),1)",
     )
     .bind(override_conf)
-    .bind(sdkwork_utils_rust::crypto::sha256_hash(override_conf.as_bytes()))
+    .bind(sdkwork_utils_rust::crypto::sha256_hash(
+        override_conf.as_bytes(),
+    ))
     .execute(&pool)
     .await
     .expect("insert nginx override");
@@ -414,7 +416,9 @@ async fn app_nginx_conf_and_environment_override_are_resolved() {
             'shop host override',$1,$2,TRUE,1,1,'{}',NOW(),NOW(),1)",
     )
     .bind(host_conf)
-    .bind(sdkwork_utils_rust::crypto::sha256_hash(host_conf.as_bytes()))
+    .bind(sdkwork_utils_rust::crypto::sha256_hash(
+        host_conf.as_bytes(),
+    ))
     .execute(&pool)
     .await
     .expect("insert hostname nginx override");

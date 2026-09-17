@@ -1,7 +1,7 @@
 mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
-use sdkwork_deploy_contract::CreateCertificateRequest;
+use sdkwork_deploy_contract::{CertificateScope, CreateCertificateRequest, ValidationMethod};
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
 
@@ -19,7 +19,8 @@ async fn seed_domains(pool: &sqlx::PgPool) {
             (20,'domain-apex',7,9,10,'example.com','EXACT','VERIFIED',NOW(),'ACTIVE'),
             (21,'domain-docs',7,9,10,'docs.example.com','EXACT','VERIFIED',NOW(),'ACTIVE'),
             (22,'domain-pending',7,9,10,'pending.example.com','EXACT','PENDING',NULL,'ACTIVE'),
-            (23,'domain-foreign',8,9,11,'foreign.example','EXACT','VERIFIED',NOW(),'ACTIVE');",
+            (23,'domain-foreign',8,9,11,'foreign.example','EXACT','VERIFIED',NOW(),'ACTIVE'),
+            (24,'domain-wildcard',7,9,10,'*.example.com','WILDCARD','VERIFIED',NOW(),'ACTIVE');",
     )
     .execute(pool)
     .await
@@ -27,17 +28,35 @@ async fn seed_domains(pool: &sqlx::PgPool) {
 }
 
 fn request(cert_name: &str, domain_ids: &[&str]) -> CreateCertificateRequest {
+    scoped_request(cert_name, domain_ids, CertificateScope::SingleDomain)
+}
+
+fn scoped_request(
+    cert_name: &str,
+    domain_ids: &[&str],
+    certificate_scope: CertificateScope,
+) -> CreateCertificateRequest {
     CreateCertificateRequest {
         cert_name: cert_name.to_owned(),
         domain_ids: domain_ids.iter().map(|value| (*value).to_owned()).collect(),
         ca_profile: "LETS_ENCRYPT_STAGING".to_owned(),
+        certificate_scope,
+        validation_method: ValidationMethod::Auto,
         preferred_key_algorithm: "ECDSA".to_owned(),
+        // Spelled out rather than left to `Default`, because these are the values
+        // the scheduling tests below depend on: a certificate created here has to
+        // be renewable on the same terms one created through the API would be.
+        auto_renew: true,
+        renew_before_days: sdkwork_deploy_core::CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS,
+        // Left unset: resolution then walks past the pin to the zone and the
+        // deployment-level configuration, which is the path these tests exercise.
+        provider_account_id: None,
     }
 }
 
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
-async fn certificates_support_many_to_many_hostnames_and_strict_creation_boundaries() {
+async fn certificates_enforce_scope_identifier_shapes_and_creation_boundaries() {
     let pool = common::postgres_pool().await;
     seed_domains(&pool).await;
     let repository = DeployRepository::new(
@@ -46,21 +65,33 @@ async fn certificates_support_many_to_many_hostnames_and_strict_creation_boundar
         common::test_secret_key(),
     );
 
-    let multi_hostname_request = request("Primary ECDSA", &["domain-apex", "domain-docs"]);
+    // The only multi-identifier shape the scope model allows is a wildcard
+    // certificate: `*.example.com` does not cover `example.com`, so the apex is
+    // planned in addition (§5.1). A single-domain request is pinned to exactly
+    // one hostname, which the invalid-request block below asserts.
+    let wildcard_request = scoped_request(
+        "Primary ECDSA",
+        &["domain-wildcard"],
+        CertificateScope::Wildcard,
+    );
     let first = repository
         .create_certificate(
             7,
             Some(9),
             Some(11),
             "certificate-primary-ecdsa",
-            &multi_hostname_request,
+            &wildcard_request,
         )
         .await
-        .expect("create one certificate for multiple hostnames");
+        .expect("create one wildcard certificate covering its apex");
     assert_eq!(
         first.identifiers,
-        vec!["docs.example.com".to_owned(), "example.com".to_owned()]
+        vec!["*.example.com".to_owned(), "example.com".to_owned()]
     );
+    assert_eq!(first.certificate_scope, CertificateScope::Wildcard);
+    // A wildcard cannot be authorized over HTTP-01, so `AUTO` has to resolve to
+    // DNS-01 instead of keeping a preference the order could never use.
+    assert_eq!(first.validation_method, ValidationMethod::Dns01);
     assert_eq!(first.status, "PENDING");
 
     let replay = repository
@@ -69,7 +100,7 @@ async fn certificates_support_many_to_many_hostnames_and_strict_creation_boundar
             Some(9),
             Some(11),
             "certificate-primary-ecdsa",
-            &multi_hostname_request,
+            &wildcard_request,
         )
         .await
         .expect("replay identical certificate request");
@@ -116,6 +147,18 @@ async fn certificates_support_many_to_many_hostnames_and_strict_creation_boundar
         (
             "certificate-duplicate-domain",
             request("Duplicate", &["domain-apex", "domain-apex"]),
+        ),
+        // §5.2 rule 3: a single-domain certificate covers exactly one hostname,
+        // so a second one is refused rather than shipped under a scope that
+        // claims a single domain.
+        (
+            "certificate-single-scope-multiple-hostnames",
+            request("Two hostnames", &["domain-apex", "domain-docs"]),
+        ),
+        // §5.2 rule 2: a wildcard identifier needs the WILDCARD scope.
+        (
+            "certificate-single-scope-wildcard",
+            request("Wildcard under single scope", &["domain-wildcard"]),
         ),
         (
             "certificate-pending-domain",
