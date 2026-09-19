@@ -1478,6 +1478,61 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/domains:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: apps.domains.list
+      summary: List an app's publishing domains
+      description: Returns every hostname the app publishes on — the default
+        `<appDomainLabel>.app[-<env>].<suffix>` hostnames across all lifecycle
+        environments, plus the custom hostnames bound to the app — each with its
+        binding state and, for custom hostnames, its DNS ownership verification
+        state.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/AppDomainResponse'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/apps/{appId}/composition:
     parameters:
     - name: appId
@@ -4923,9 +4978,14 @@ components:
         recordName:
           type: string
           description: 需要配置 TXT 记录的完整规范名称；域名已验证时可省略。
+        recordRelativeName:
+          type: string
+          description: 同一记录相对于其所属 zone 的主机记录名（即 DNS 服务商控制台的「主机记录」/「Host」字段值）；
+            记录不在该 zone 内或 zone 未知时可省略。服务商控制台会自动追加自己的 zone，因此把完整名称填入该字段会发布错误的双域名记录。
         token:
           type: string
           description: 仅在创建验证尝试时返回一次的明文 proof；后续查询和验证响应不会再次返回。
+            遵循 RFC 8555 §8.4 的通用形态 base64url(sha256(secret))，为 43 个字符、无填充、不含品牌前缀。
         expiresAt:
           type: string
           format: date-time
@@ -4972,6 +5032,10 @@ components:
           type: string
           description: Canonical TXT record name to publish; omitted once the hostname
             is verified.
+        dnsRecordRelativeName:
+          type: string
+          description: 同一记录相对于其所属 zone 的主机记录名（DNS 服务商控制台的「主机记录」/「Host」
+            字段值）；记录不在已知 zone 内时省略。服务商控制台会自动追加自己的 zone。
         dnsRecordType:
           type: string
           enum:
@@ -5871,6 +5935,7 @@ components:
       - IOS_APP
       - ANDROID_APP
       - HARMONYOS_APP
+      - DESKTOP_APP
     AppStatus:
       type: string
       enum:
@@ -6041,6 +6106,22 @@ components:
           type: object
           additionalProperties: true
           description: Free-form JSONB persisted into deploy_app.metadata (category, media, version, releaseNotes).
+        appDomainLabel:
+          type: string
+          maxLength: 63
+          description: 'The `<appId>` prefix of the app''s default publishing hostnames
+            (`<appDomainLabel>.app[-<env>].<suffix>`). Must be one lowercase DNS label
+            (alphanumeric plus interior hyphens); absent means the slug is used.'
+        appDomainSuffixes:
+          type: array
+          minItems: 1
+          maxItems: 32
+          description: 'Per-app override of the platform app-domain suffix catalog.
+            Each entry is a lowercase dotted domain without a leading dot; absent
+            means the platform catalog applies.'
+          items:
+            type: string
+            maxLength: 253
         idempotencyKey:
           type: string
           maxLength: 128
@@ -6084,6 +6165,17 @@ components:
           type: string
           format: int64
           x-sdkwork-int64-string: true
+        appDomainLabel:
+          type: string
+          description: 'The effective `<appId>` prefix used in the app''s default
+            publishing hostnames (`<appDomainLabel>.app[-<env>].<suffix>`): the
+            explicit override when set, otherwise the slug.'
+        appDomainSuffixes:
+          type: array
+          description: 'The effective app-domain suffix catalog the app publishes on:
+            the per-app override when set, otherwise the platform catalog.'
+          items:
+            type: string
         latestReleaseTag:
           type: string
         createdAt:
@@ -6094,6 +6186,65 @@ components:
           format: date-time
         version:
           type: string
+    AppDomainResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - hostname
+      - kind
+      - environment
+      - bindingStatus
+      - verificationStatus
+      properties:
+        hostname:
+          type: string
+          description: 'Fully-qualified hostname the app answers on.'
+        kind:
+          type: string
+          enum:
+          - DEFAULT
+          - CUSTOM
+          description: '`DEFAULT` for platform-provisioned
+            `<appDomainLabel>.app[-<env>].<suffix>` hostnames, `CUSTOM` for
+            user-registered hostnames.'
+        environment:
+          type: string
+          description: Lifecycle environment the hostname serves.
+        bindingStatus:
+          type: string
+          description: '`deploy_app_binding.status`: PENDING / VERIFIED / ACTIVE /
+            PAUSED / FAILED / ARCHIVED. Distinct from the DNS ownership state.'
+        verificationStatus:
+          type: string
+          enum:
+          - NOT_REQUIRED
+          - PENDING
+          - VERIFIED
+          - FAILED
+          - EXPIRED
+          description: DNS ownership verification of the hostname itself.
+            `NOT_REQUIRED` for default hostnames — the platform owns the apex.
+        isCanonical:
+          type: boolean
+          description: Whether this is the app's canonical hostname in its environment.
+        pathPrefix:
+          type: string
+        domainId:
+          type: string
+          format: uuid
+          description: 'Present for CUSTOM hostnames: the `deploy_domain` row id.'
+        dnsRecordName:
+          type: string
+          description: 'Present while a CUSTOM hostname is unverified: the TXT record
+            name the operator must publish to prove ownership.'
+        dnsRecordValue:
+          type: string
+          description: 'Present while a CUSTOM hostname is unverified: the TXT record
+            value to publish.'
+        cnameTarget:
+          type: string
+          description: 'Present for CUSTOM hostnames: the platform hostname the
+            operator points the domain at.'
     UpdateAppRequest:
       type: object
       additionalProperties: false
@@ -6113,6 +6264,22 @@ components:
           type: object
           additionalProperties: true
           description: Free-form JSONB merged into deploy_app.metadata.
+        appDomainLabel:
+          type: ['string', 'null']
+          maxLength: 63
+          description: 'The `<appId>` prefix of the app''s default publishing hostnames.
+            Must be one lowercase DNS label (alphanumeric plus interior hyphens).
+            `null` clears the override so the slug is used again.'
+        appDomainSuffixes:
+          type: ['array', 'null']
+          minItems: 1
+          maxItems: 32
+          description: 'Per-app override of the platform app-domain suffix catalog.
+            Each entry is a lowercase dotted domain without a leading dot. `null`
+            clears the override so the platform catalog applies.'
+          items:
+            type: string
+            maxLength: 253
     CreatePlatformTargetRequest:
       type: object
       additionalProperties: false

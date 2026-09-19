@@ -12,8 +12,6 @@ import { deploymentsModule as delivery } from "@sdkwork/deployments-pc-console-d
 import { deploymentsModule as monitoring } from "@sdkwork/deployments-pc-console-monitoring";
 import { deploymentsModule as publishing, PublishingAppsPage } from "@sdkwork/deployments-pc-console-publishing";
 import { DeploymentsConsoleShell } from "@sdkwork/deployments-pc-console-shell";
-import { deploymentsModule as configuration } from "@sdkwork/deployments-pc-console-site-configuration";
-import { deploymentsModule as sites } from "@sdkwork/deployments-pc-console-sites";
 import { createDriveSandboxExplorerSdkPort } from "@sdkwork/drive-pc-sandbox-explorer-sdk-adapter";
 import { lazy, Suspense, useMemo } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -21,7 +19,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { DeploymentsAuthGate } from "./auth/DeploymentsAuthGate.tsx";
 import type { BootstrappedDeploymentsRuntime } from "./bootstrap/runtime.ts";
 
-const consoleModules = [sites, configuration, delivery, publishing, monitoring] satisfies readonly DeploymentsPcModuleDefinition[];
+const consoleModules = [publishing, delivery, monitoring] satisfies readonly DeploymentsPcModuleDefinition[];
 const LazyDomainManagementPage = lazy(() => import("@sdkwork/deployments-pc-console-delivery/management").then((module) => ({ default: module.DomainManagementPage })));
 const LazyCertificateManagementPage = lazy(() => import("@sdkwork/deployments-pc-console-delivery/management").then((module) => ({ default: module.CertificateManagementPage })));
 

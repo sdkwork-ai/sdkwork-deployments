@@ -20,6 +20,7 @@ import {
 } from "@sdkwork/deployments-app-sdk";
 import { createDriveAppClient, type SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import {
+  DEPLOY_ARTIFACT_UPLOAD,
   normalizeDeploymentsPage,
   type DeploymentsAction,
   type DeploymentsActionContext,
@@ -197,8 +198,8 @@ export function useDeploymentsDeliveryService(): DeploymentsDeliveryService {
 export function createDeploymentsConsoleRegistry(clients: DeploymentsConsoleClients): DeploymentsRegistry {
   const client = clients.deploy;
   return {
-    sites: source(
-      (query) => client.site.list({
+    apps: source(
+      (query) => client.app.list({
         page: query.page,
         pageSize: query.pageSize,
         // Generated request params keep `keyword?: string`; unset members are
@@ -207,35 +208,39 @@ export function createDeploymentsConsoleRegistry(clients: DeploymentsConsoleClie
         ...(query.search === undefined ? {} : { keyword: query.search }),
       }),
       [
-        action("create", "Create application", { name: "", slug: "", description: "", siteType: 1 }, (context) =>
-          client.site.create(
-            context.body as unknown as Parameters<typeof client.site.create>[0],
+        action("create", "Create application", { name: "", slug: "", description: "", appKind: "WEB" }, (context) =>
+          client.app.create(
+            context.body as unknown as Parameters<typeof client.app.create>[0],
             idempotencyParams(),
           )),
         action("update", "Update", { name: "", description: "" }, (context) =>
-          client.site.update(selected(context, "id"), context.body as unknown as Parameters<typeof client.site.update>[1]), { selection: true }),
-        action("activate", "Activate", {}, (context) =>
-          client.site.activate(selected(context, "id"), idempotencyParams()), { selection: true }),
-        action("pause", "Disable", {}, (context) =>
-          client.site.pause(selected(context, "id"), idempotencyParams()), { dangerous: true, selection: true }),
-        action("delete", "Delete", {}, (context) => client.site.delete(selected(context, "id")), { dangerous: true, selection: true }),
+          client.app.update(selected(context, "id"), context.body as unknown as Parameters<typeof client.app.update>[1]), { selection: true }),
+        action("activate", "Activate", { appStatus: "ACTIVE" }, (context) =>
+          client.app.update(selected(context, "id"), context.body as unknown as Parameters<typeof client.app.update>[1]), { selection: true }),
+        action("pause", "Disable", { appStatus: "PAUSED" }, (context) =>
+          client.app.update(selected(context, "id"), context.body as unknown as Parameters<typeof client.app.update>[1]), { dangerous: true, selection: true }),
+        // Retirement is an archive transition, not a hard delete: the app-API
+        // exposes `PATCH /apps/{appId}` with `AppStatus.ARCHIVED` (§ applications
+        // convergence) and deliberately has no `DELETE /apps/{appId}`.
+        action("delete", "Archive", { appStatus: "ARCHIVED" }, (context) =>
+          client.app.update(selected(context, "id"), context.body as unknown as Parameters<typeof client.app.update>[1]), { dangerous: true, selection: true }),
       ],
     ),
     configuration: scoped(
-      (query) => client.envVariable.sites.envVariables.list(requiredSiteId(query.scopeId), {
+      (query) => client.envVariable.apps.envVariables.list(requiredAppId(query.scopeId), {
         ...(query.search === undefined ? {} : { environment: query.search }),
       }),
       [
         action("variable", "Add variable", { key: "", value: "", environment: "production", isSecret: false }, (context) =>
-          client.envVariable.sites.envVariables.create(
-            requiredSiteId(context.scopeId),
-            context.body as unknown as Parameters<typeof client.envVariable.sites.envVariables.create>[1],
+          client.envVariable.apps.envVariables.create(
+            requiredAppId(context.scopeId),
+            context.body as unknown as Parameters<typeof client.envVariable.apps.envVariables.create>[1],
             idempotencyParams(),
           ), { scope: true }),
         action("check", "Add health check", { name: "", url: "", checkInterval: 30 }, (context) =>
-          client.monitor.sites.healthChecks.create(
-            requiredSiteId(context.scopeId),
-            context.body as unknown as Parameters<typeof client.monitor.sites.healthChecks.create>[1],
+          client.monitor.apps.healthChecks.create(
+            requiredAppId(context.scopeId),
+            context.body as unknown as Parameters<typeof client.monitor.apps.healthChecks.create>[1],
             idempotencyParams(),
           ), { scope: true }),
       ],
@@ -254,15 +259,17 @@ export function createDeploymentsConsoleRegistry(clients: DeploymentsConsoleClie
       [
         action("upload", "Upload application", { packageType: 1, checksumSha256: "" }, async (context) => {
           const file = context.file;
-          const siteId = requiredSiteId(context.scopeId);
+          const appId = requiredAppId(context.scopeId);
           if (!file) throw new Error("Package file is required");
           const idempotencyKey = uuid();
           const uploaded = await clients.drive.uploader.uploadArchive({
             file,
-            appResourceType: "deploy.artifact",
-            appResourceId: siteId,
-            scene: "deployment-package",
-            source: "sdkwork-deployments-pc",
+            // Upload identity comes from the application upload declaration
+            // (`DRIVE_SPEC.md` §18); do not inline these values here.
+            appResourceType: DEPLOY_ARTIFACT_UPLOAD.appResourceType,
+            appResourceId: appId,
+            scene: DEPLOY_ARTIFACT_UPLOAD.scene,
+            source: DEPLOY_ARTIFACT_UPLOAD.source,
             originalFileName: file.name,
             contentType: file.type || "application/octet-stream",
           });
@@ -270,7 +277,9 @@ export function createDeploymentsConsoleRegistry(clients: DeploymentsConsoleClie
           // member entirely when neither source produced one.
           const checksumSha256 = stringValue(context.body.checksumSha256) || uploaded.uploadItem.checksumSha256Hex;
           return client.artifact.create({
-            siteId,
+            // `CreateArtifactRequest.siteId` carries the owning application id; the
+            // backend DTO has not been renamed yet (see § applications convergence).
+            siteId: appId,
             packageType: Number(context.body.packageType ?? 1),
             fileName: file.name,
             contentType: file.type || "application/octet-stream",
@@ -287,41 +296,51 @@ export function createDeploymentsConsoleRegistry(clients: DeploymentsConsoleClie
       ],
     ),
     releases: scoped(
-      (query) => client.release.sites.releases.list(requiredSiteId(query.scopeId), { page: query.page, pageSize: query.pageSize }),
+      (query) => client.release.list(requiredAppId(query.scopeId), { page: query.page, pageSize: query.pageSize }),
       [action("create", "Create release", { artifactId: "", versionTag: "" }, (context) => {
         const idempotencyKey = uuid();
-        return client.release.sites.releases.create(
-          requiredSiteId(context.scopeId),
-          { ...context.body, idempotencyKey } as unknown as Parameters<typeof client.release.sites.releases.create>[1],
+        return client.release.create(
+          requiredAppId(context.scopeId),
+          { ...context.body, idempotencyKey } as unknown as Parameters<typeof client.release.create>[1],
           { idempotencyKey },
         );
       }, { scope: true })],
     ),
     deployments: scoped(
-      (query) => client.deployment.sites.deployments.list(requiredSiteId(query.scopeId), { page: query.page, pageSize: query.pageSize }),
+      (query) => client.deployment.list(requiredAppId(query.scopeId), { page: query.page, pageSize: query.pageSize }),
       [
-        action("deploy", "Start deployment", { deployType: 1, releaseId: "", environment: "production" }, (context) => {
+        action("deploy", "Start deployment", { deploymentKind: "FULL", deploymentTarget: "CLOUD", releaseId: "", platformTargetId: "", environment: "production" }, (context) => {
           const idempotencyKey = uuid();
-          return client.deployment.sites.deployments.create(
-            requiredSiteId(context.scopeId),
-            { ...context.body, idempotencyKey } as unknown as Parameters<typeof client.deployment.sites.deployments.create>[1],
+          return client.deployment.create(
+            requiredAppId(context.scopeId),
+            { ...context.body, idempotencyKey } as unknown as Parameters<typeof client.deployment.create>[1],
             { idempotencyKey },
           );
         }, { scope: true }),
+        // Rollback is a forward fix, not an in-place restore: the app-API records
+        // lineage in `rollbackFromDeploymentId` (response-only) and there is no
+        // `deployments.rollback` operation. Redeploying the previous release's
+        // artifact produces a new deployment that carries the rollback lineage.
         action("rollback", "Rollback", {}, (context) =>
-          client.deployment.sites.deployments.rollback(
-            requiredSiteId(context.scopeId),
-            selected(context, "id"),
+          client.deployment.create(
+            requiredAppId(context.scopeId),
+            {
+              platformTargetId: String(context.selectedItem?.platformTargetId ?? ""),
+              releaseId: String(context.selectedItem?.rollbackReleaseId ?? context.selectedItem?.releaseId ?? ""),
+              deploymentKind: "FULL",
+              deploymentTarget: "CLOUD",
+              idempotencyKey: uuid(),
+            } as unknown as Parameters<typeof client.deployment.create>[1],
             idempotencyParams(),
           ), { dangerous: true, scope: true, selection: true }),
       ],
     ),
     monitoring: scoped(
-      (query) => client.monitor.sites.healthChecks.list(requiredSiteId(query.scopeId)),
+      (query) => client.monitor.apps.healthChecks.list(requiredAppId(query.scopeId)),
       [action("create", "Add health check", { name: "", url: "", checkInterval: 30 }, (context) =>
-        client.monitor.sites.healthChecks.create(
-          requiredSiteId(context.scopeId),
-          context.body as unknown as Parameters<typeof client.monitor.sites.healthChecks.create>[1],
+        client.monitor.apps.healthChecks.create(
+          requiredAppId(context.scopeId),
+          context.body as unknown as Parameters<typeof client.monitor.apps.healthChecks.create>[1],
           idempotencyParams(),
         ), { scope: true })],
     ),
@@ -363,8 +382,10 @@ function action(
   };
 }
 
-function requiredSiteId(value: string | undefined): string {
-  if (!value?.trim()) throw new Error("Site ID is required");
+// The scope id is the `deploy_app` application id: the `deploy_site` surface was
+// retired in favour of the `apps` surface (see § applications convergence).
+function requiredAppId(value: string | undefined): string {
+  if (!value?.trim()) throw new Error("Application ID is required");
   return value.trim();
 }
 

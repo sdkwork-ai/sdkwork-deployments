@@ -37,11 +37,11 @@ function publishRequest(
 ): ApplicationPublishRequest {
   const { deployment, ...rest } = overrides;
   return {
-    site: {
+    app: {
       kind: 'resolveOrCreate',
       name: 'BirdCoder',
       slug: 'birdcoder',
-      siteType: 1,
+      appKind: 'SPA_WEB',
     },
     artifact: {
       file: packageFile(),
@@ -51,20 +51,31 @@ function publishRequest(
       checksumSha256: CHECKSUM_SHA256,
       source: 'sdkwork-birdcoder-pc',
     },
-    release: { versionTag: '1.2.3' },
+    release: {
+      platformTargetId: 'target-1',
+      packageId: 'package-1',
+      semanticVersion: '1.2.3',
+    },
     ...(deployment !== undefined
       ? { deployment }
       : 'deployment' in overrides
         ? {}
-        : { deployment: { deployType: 1, environment: 'production' } }),
+        : {
+            deployment: {
+              platformTargetId: 'target-1',
+              deploymentKind: 'ARTIFACT_RELEASE',
+              deploymentTarget: 'WEB_NODE',
+              environment: 'production',
+            },
+          }),
     ...rest,
   };
 }
 
 interface MockClientOptions {
-  siteList?: (keyword: string | undefined) => Promise<unknown>;
-  siteRetrieve?: () => Promise<unknown>;
-  siteCreate?: () => Promise<unknown>;
+  appList?: (page: number) => Promise<unknown>;
+  appRetrieve?: () => Promise<unknown>;
+  appCreate?: () => Promise<unknown>;
   upload?: (request: DriveUploaderRequest) => Promise<unknown>;
   artifactCreate?: () => Promise<unknown>;
   releaseCreate?: () => Promise<unknown>;
@@ -73,22 +84,23 @@ interface MockClientOptions {
 
 function createMockClients(options: MockClientOptions = {}) {
   const calls: string[] = [];
-  const siteList = vi.fn(async (params: { keyword?: string }) => {
-    calls.push(`site.list:${params.keyword ?? ''}`);
+  const appList = vi.fn(async (params: { page?: number }) => {
+    const page = params.page ?? 1;
+    calls.push(`app.list:${page}`);
     return (
-      (await options.siteList?.(params.keyword)) ?? {
-        items: [{ id: 'site-1', name: 'BirdCoder', slug: 'birdcoder' }],
-        pageInfo: { mode: 'offset', page: 1, pageSize: 50, hasMore: false },
+      (await options.appList?.(page)) ?? {
+        items: [{ id: 'app-1', name: 'BirdCoder', slug: 'birdcoder' }],
+        pageInfo: { mode: 'offset', page, pageSize: 50, hasMore: false },
       }
     );
   });
-  const siteRetrieve = vi.fn(async () => {
-    calls.push('site.retrieve');
-    return (await options.siteRetrieve?.()) ?? { id: 'site-1', name: 'BirdCoder' };
+  const appRetrieve = vi.fn(async () => {
+    calls.push('app.retrieve');
+    return (await options.appRetrieve?.()) ?? { id: 'app-1', name: 'BirdCoder' };
   });
-  const siteCreate = vi.fn(async () => {
-    calls.push('site.create');
-    return (await options.siteCreate?.()) ?? { id: 'site-1', name: 'BirdCoder' };
+  const appCreate = vi.fn(async () => {
+    calls.push('app.create');
+    return (await options.appCreate?.()) ?? { id: 'app-1', name: 'BirdCoder' };
   });
   const uploadArchive = vi.fn(async (request: DriveUploaderRequest) => {
     calls.push('drive.uploadArchive');
@@ -129,14 +141,14 @@ function createMockClients(options: MockClientOptions = {}) {
   });
 
   const deployClient = {
-    site: {
-      list: siteList,
-      retrieve: siteRetrieve,
-      create: siteCreate,
+    app: {
+      list: appList,
+      retrieve: appRetrieve,
+      create: appCreate,
     },
     artifact: { create: artifactCreate },
-    release: { sites: { releases: { create: releaseCreate } } },
-    deployment: { sites: { deployments: { create: deploymentCreate } } },
+    release: { create: releaseCreate },
+    deployment: { create: deploymentCreate },
   } as unknown as ApplicationPublisherDeployClient;
   const driveClient = {
     uploader: { uploadArchive },
@@ -147,9 +159,9 @@ function createMockClients(options: MockClientOptions = {}) {
     deployClient,
     driveClient,
     mocks: {
-      siteList,
-      siteRetrieve,
-      siteCreate,
+      appList,
+      appRetrieve,
+      appCreate,
       uploadArchive,
       artifactCreate,
       releaseCreate,
@@ -170,7 +182,7 @@ function publisher(
 }
 
 describe('createDeployApplicationPublisher', () => {
-  it('publishes in the frozen site, upload, artifact, release, deployment order', async () => {
+  it('publishes in the frozen app, upload, artifact, release, deployment order', async () => {
     const clients = createMockClients();
     const progress: ApplicationPublishProgress[] = [];
 
@@ -179,14 +191,14 @@ describe('createDeployApplicationPublisher', () => {
     );
 
     expect(clients.calls).toEqual([
-      'site.list:birdcoder',
+      'app.list:1',
       'drive.uploadArchive',
       'artifact.create',
       'release.create',
       'deployment.create',
     ]);
     expect(result).toMatchObject({
-      site: { id: 'site-1', resolution: 'existingBySlug' },
+      app: { id: 'app-1', resolution: 'existingBySlug' },
       upload: {
         uploadItemId: 'upload-item-1',
         uploadSessionId: 'upload-session-1',
@@ -200,14 +212,15 @@ describe('createDeployApplicationPublisher', () => {
     expect(clients.mocks.uploadArchive).toHaveBeenCalledWith(
       expect.objectContaining({
         appResourceType: 'deploy.artifact',
-        appResourceId: 'site-1',
+        appResourceId: 'app-1',
         checksumSha256Hex: CHECKSUM_SHA256,
         source: 'sdkwork-birdcoder-pc',
       }),
     );
     expect(clients.mocks.artifactCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        siteId: 'site-1',
+        // `CreateArtifactRequest.siteId` still carries the application id.
+        siteId: 'app-1',
         driveUploadSessionId: 'upload-session-1',
         driveUploadItemId: 'upload-item-1',
         idempotencyKey: 'idempotency-1',
@@ -226,13 +239,12 @@ describe('createDeployApplicationPublisher', () => {
     );
   });
 
-  it('falls back from an exact slug lookup to an exact name lookup', async () => {
+  it('falls back from an exact slug match to an exact name match', async () => {
     const clients = createMockClients({
-      siteList: async (keyword) => ({
-        items:
-          keyword === 'BirdCoder'
-            ? [{ id: 'site-by-name', name: 'BirdCoder', slug: 'legacy-slug' }]
-            : [{ id: 'unrelated', name: 'Other', slug: 'other' }],
+      // The replacement `app.list` has no `keyword` filter, so resolution pages
+      // through once and filters both fields client-side.
+      appList: async () => ({
+        items: [{ id: 'app-by-name', name: 'BirdCoder', slug: 'legacy-slug' }],
         pageInfo: { mode: 'offset', page: 1, pageSize: 50, hasMore: false },
       }),
     });
@@ -241,69 +253,65 @@ describe('createDeployApplicationPublisher', () => {
       publishRequest({ deployment: undefined }),
     );
 
-    expect(clients.calls.slice(0, 2)).toEqual([
-      'site.list:birdcoder',
-      'site.list:BirdCoder',
-    ]);
-    expect(result.site).toMatchObject({
-      id: 'site-by-name',
+    expect(clients.calls.slice(0, 1)).toEqual(['app.list:1']);
+    expect(result.app).toMatchObject({
+      id: 'app-by-name',
       resolution: 'existingByName',
     });
     expect(result.deployment).toBeUndefined();
     expect(clients.mocks.deploymentCreate).not.toHaveBeenCalled();
   });
 
-  it('creates a Site only after both exact lookups return no match', async () => {
+  it('creates an Application only after both exact lookups return no match', async () => {
     const clients = createMockClients({
-      siteList: async () => ({
+      appList: async () => ({
         items: [],
         pageInfo: { mode: 'offset', page: 1, pageSize: 50, hasMore: false },
       }),
-      siteCreate: async () => ({ id: 'created-site' }),
+      appCreate: async () => ({ id: 'created-app' }),
     });
 
     const result = await publisher(clients).publish(publishRequest());
 
-    expect(clients.calls.slice(0, 4)).toEqual([
-      'site.list:birdcoder',
-      'site.list:BirdCoder',
-      'site.create',
+    expect(clients.calls.slice(0, 3)).toEqual([
+      'app.list:1',
+      'app.create',
       'drive.uploadArchive',
     ]);
-    expect(result.site).toMatchObject({ id: 'created-site', resolution: 'created' });
-    expect(clients.mocks.siteCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'BirdCoder', slug: 'birdcoder' }),
+    expect(result.app).toMatchObject({ id: 'created-app', resolution: 'created' });
+    expect(clients.mocks.appCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'BirdCoder', slug: 'birdcoder', appKind: 'SPA_WEB' }),
       { idempotencyKey: 'idempotency-1' },
       { signal: undefined, timeout: undefined },
     );
   });
 
-  it('rejects an incomplete exact lookup instead of creating a duplicate Site', async () => {
+  it('rejects an unbounded scan instead of creating a duplicate Application', async () => {
     const clients = createMockClients({
-      siteList: async () => ({
+      appList: async (page) => ({
         items: [],
-        pageInfo: { mode: 'offset', page: 1, pageSize: 50, hasMore: true },
+        pageInfo: { mode: 'offset', page, pageSize: 50, hasMore: true },
       }),
     });
 
     await expect(publisher(clients).publish(publishRequest())).rejects.toMatchObject({
-      code: 'SITE_RESOLUTION_AMBIGUOUS',
-      stage: 'resolveSite',
+      code: 'APP_RESOLUTION_AMBIGUOUS',
+      stage: 'resolveApp',
     });
-    expect(clients.mocks.siteCreate).not.toHaveBeenCalled();
+    expect(clients.mocks.appCreate).not.toHaveBeenCalled();
     expect(clients.mocks.uploadArchive).not.toHaveBeenCalled();
   });
 
-  it('fails closed when a resolved Site response omits its id', async () => {
-    const clients = createMockClients({ siteRetrieve: async () => ({ name: 'BirdCoder' }) });
+  it('fails closed when a resolved Application response omits its id', async () => {
+    const clients = createMockClients({ appRetrieve: async () => ({ name: 'BirdCoder' }) });
 
     await expect(
       publisher(clients).publish(
-        publishRequest({ site: { kind: 'existing', siteId: 'site-1' } }),
+        publishRequest({ app: { kind: 'existing', appId: 'app-1' } }),
       ),
     ).rejects.toMatchObject({
-      code: 'SITE_RESPONSE_MISSING_ID',
-      stage: 'resolveSite',
+      code: 'APP_RESPONSE_MISSING_ID',
+      stage: 'resolveApp',
     });
     expect(clients.mocks.uploadArchive).not.toHaveBeenCalled();
   });

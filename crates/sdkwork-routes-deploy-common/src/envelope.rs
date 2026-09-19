@@ -3,20 +3,20 @@
 use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
-    AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage, AppReleaseResponse,
-    AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage, AuditLogResponse, BuildPage,
-    BuildQueueItemResponse, BuildQueuePage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, CertificateChallengePage, CertificateChallengeResponse,
-    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
-    CertificateRenewalResponse, CertificateResponse, ChannelPage, ChannelResponse,
-    ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage, CloudAccountResponse,
-    DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse, DomainZonePage,
-    DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage,
-    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
-    HealthCheckResponse, NginxConfigPage, NginxConfigResponse, NginxReloadResponse,
-    NginxStatusResponse, NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage,
-    PackageResponse, PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage,
-    RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
+    AppDomainPage, AppDomainResponse, AppEnvironmentPage, AppEnvironmentResponse, AppPage,
+    AppReleasePage, AppReleaseResponse, AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage,
+    AuditLogResponse, BuildPage, BuildQueueItemResponse, BuildQueuePage, BuildResponse,
+    BuildTemplatePage, BuildTemplateResponse, CertificateChallengePage,
+    CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
+    CertificateRenewalPage, CertificateRenewalResponse, CertificateResponse, ChannelPage,
+    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage,
+    CloudAccountResponse, DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse,
+    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse,
+    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
+    HealthCheckPage, HealthCheckResponse, NginxConfigPage, NginxConfigResponse,
+    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
+    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
+    RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
     SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
     SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, UsageEventPage,
     UsageEventResponse,
@@ -30,6 +30,14 @@ pub fn resource<T>(item: T) -> SdkWorkResourceData<T> {
 
 pub fn app_page(page: AppPage) -> SdkWorkPageData<AppResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+/// App domains are returned whole (an app has at most a few dozen hostnames),
+/// so the page envelope carries `page`/`pageSize` 1/`total` purely to satisfy
+/// the v3 list shape consumers already parse.
+pub fn app_domain_page(page: AppDomainPage) -> SdkWorkPageData<AppDomainResponse> {
+    let total = page.total;
+    offset_page(page.items, 1, total.max(1) as i32, total)
 }
 
 pub fn platform_target_page(page: PlatformTargetPage) -> SdkWorkPageData<PlatformTargetResponse> {

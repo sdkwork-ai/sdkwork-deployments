@@ -808,6 +808,30 @@
       "idempotent": true
     },
     {
+      "method": "GET",
+      "path": "/app/v3/api/apps/{appId}/domains",
+      "operationId": "apps.domains.list",
+      "tags": [
+        "app"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.apps.write",
+      "idempotent": false
+    },
+    {
       "method": "PUT",
       "path": "/app/v3/api/apps/{appId}/composition",
       "operationId": "apps.composition.update",

@@ -8,40 +8,114 @@ use sdkwork_deploy_contract::{
     PlatformTargetResponse, SigningIdentityPage, SigningIdentityResponse, SourceRepositoryPage,
     SourceRepositoryResponse, UpdateAppRequest,
 };
+use sdkwork_deploy_core::{
+    effective_app_domain_label, effective_app_domain_suffixes, normalize_app_domain_label,
+    normalize_app_domain_suffixes,
+};
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
 use crate::support::{
     new_uuid, next_id, optional_datetime, pagination, required_datetime, resolve_app_internal_id,
-    store_error,
+    sha256_hex, store_error,
 };
 use crate::DeployRepository;
 
 const APP_SELECT: &str = "a.uuid, a.name, a.slug, a.app_kind, a.app_status, a.type,
-    a.description, a.runtime_config, a.current_revision_id, a.desired_revision_id,
+    a.description, a.runtime_config, a.metadata, a.current_revision_id, a.desired_revision_id,
     a.default_environment,
     (SELECT COUNT(*) FROM deploy_app_platform_target t
       WHERE t.app_id = a.id AND t.deleted_at IS NULL) AS platform_target_count,
     (SELECT r.semantic_version FROM deploy_release r
       WHERE r.app_id = a.id AND r.release_status = 'ACTIVE'
       ORDER BY r.created_at DESC LIMIT 1) AS latest_release_tag,
+    a.app_domain_label, a.app_domain_suffixes,
     a.created_at, a.updated_at, a.version";
+
+/// Mirrors the DDL default for `deploy_app.type` (`DEFAULT 1`,
+/// `CHECK (type BETWEEN 1 AND 6)`). Kept in lockstep with
+/// `database/ddl/baseline/postgres/0001_deploy_baseline.sql`; the repository
+/// must never write a NULL here because the column is NOT NULL and PostgreSQL
+/// treats an explicitly bound NULL as an override of the column DEFAULT.
+const DEFAULT_APP_TYPE: i32 = 1;
+
+/// Longest slug the DDL accepts (`slug VARCHAR(120)`), kept in lockstep with the
+/// contract's `slug: maxLength: 120`.
+const MAX_SLUG_LEN: usize = 120;
+
+/// Prefix of the generated slug when the name carries no ASCII to derive one
+/// from (see [`resolve_app_slug`]).
+const GENERATED_SLUG_PREFIX: &str = "app";
+
+/// Resolve the slug actually written to `deploy_app.slug`.
+///
+/// `deploy_app.slug` is `VARCHAR(120) NOT NULL` with a partial unique index
+/// (`uk_deploy_app_tenant_slug`), and it is *also* the fallback label of the
+/// app's default publishing domain (`<app_domain_label|slug>.app[-<env>].<suffix>`).
+/// So the column can never be empty and never repeated within a tenant.
+///
+/// Both RFC-1123-style derivation paths used by clients collapse a non-ASCII
+/// name to the empty string — `sdkwork_utils_rust::slugify` filters to
+/// `[a-z0-9-]`, and the console's `deriveAppSlug` does the same. A Chinese-only
+/// name such as `放大` therefore used to fall through to `slug = ''`, which the
+/// **first** app happily claimed and every later app then collided with on
+/// `uk_deploy_app_tenant_slug`: the tenant could only ever create one such app,
+/// and the caller saw a permanent, unexplained `409 conflict: app slug  already
+/// exists in this tenant`.
+///
+/// Deriving a stable, unique, ASCII slug here (rather than rejecting the
+/// request) keeps the name free-form while the slug stays a valid DNS label.
+/// A caller-supplied slug is always authoritative and never rewritten.
+fn resolve_app_slug(requested: Option<&str>, name: &str, app_uuid: &str) -> String {
+    let explicit = requested.map(str::trim).filter(|slug| !slug.is_empty());
+    let candidate = explicit
+        .map(str::to_owned)
+        .unwrap_or_else(|| sdkwork_utils_rust::slugify(name));
+    if !candidate.is_empty() {
+        return candidate;
+    }
+    // Deterministic per app, so a retried `apps.create` derives the same slug
+    // instead of losing its own row to a fresh random suffix.
+    let uuid_tail: String = app_uuid
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(8)
+        .collect();
+    format!("{GENERATED_SLUG_PREFIX}-{uuid_tail}")
+        .chars()
+        .take(MAX_SLUG_LEN)
+        .collect()
+}
 
 fn map_app_row(row: &PgRow) -> Result<AppResponse, DeployServiceError> {
     let created_at = required_datetime(row, "created_at")?;
     let updated_at = required_datetime(row, "updated_at")?;
+    let slug: String = row.try_get("slug").unwrap_or_default();
+    // `app_domain_label` / `app_domain_suffixes` are the app's *overrides*; the
+    // response carries the *effective* values so the console can render the
+    // real hostname without re-implementing the fallback (and without drifting
+    // from what `provision_app_default_domains*` actually wrote).
+    let app_domain_label_override: Option<String> = row.try_get("app_domain_label").ok().flatten();
+    let app_domain_suffixes_override: Option<Vec<String>> =
+        row.try_get("app_domain_suffixes").ok().flatten();
+    let effective_label =
+        effective_app_domain_label(app_domain_label_override.as_deref(), &slug).to_owned();
+    let effective_suffixes = effective_app_domain_suffixes(app_domain_suffixes_override.as_deref());
     Ok(AppResponse {
         id: row.try_get("uuid").unwrap_or_default(),
         name: row.try_get("name").unwrap_or_default(),
-        slug: row.try_get("slug").unwrap_or_default(),
+        slug,
         app_kind: row.try_get("app_kind").unwrap_or_default(),
         app_status: row.try_get("app_status").unwrap_or_default(),
         app_type: row.try_get("type").unwrap_or(1),
         description: row.try_get("description").ok(),
         runtime_config: row.try_get("runtime_config").ok(),
+        metadata: row.try_get("metadata").ok(),
         current_revision_id: row.try_get("current_revision_id").ok(),
         desired_revision_id: row.try_get("desired_revision_id").ok(),
         default_environment: row.try_get("default_environment").unwrap_or_default(),
         platform_target_count: row.try_get("platform_target_count").unwrap_or(0),
+        app_domain_label: effective_label,
+        app_domain_suffixes: effective_suffixes,
         latest_release_tag: row.try_get("latest_release_tag").ok(),
         created_at,
         updated_at,
@@ -55,14 +129,12 @@ impl DeployRepository {
         tenant_id: i64,
         organization_id: Option<i64>,
         actor_id: Option<i64>,
+        idempotency_key: Option<&str>,
         request: &CreateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         let app_id = next_id(self.id_generator())?;
         let app_uuid = new_uuid();
-        let slug = request
-            .slug
-            .clone()
-            .unwrap_or_else(|| sdkwork_utils_rust::slugify(&request.name));
+        let slug = resolve_app_slug(request.slug.as_deref(), &request.name, &app_uuid);
         let app_kind = request.app_kind.as_str();
         let default_environment = request
             .default_environment
@@ -70,12 +142,104 @@ impl DeployRepository {
             .unwrap_or("production")
             .to_owned();
 
+        // `deploy_app.type` is `INTEGER NOT NULL DEFAULT 1 CHECK (type BETWEEN 1 AND 6)`
+        // (DDL 0001_deploy_baseline.sql:1798/1834). Binding a bare `Option<i32>`
+        // would turn `None` into an *explicit* NULL, which **overrides the column
+        // DEFAULT** and fails the NOT NULL constraint — the caller then sees an
+        // opaque `insert deploy_app` 500. `apps.create` in the contract does not
+        // even declare `type` (`CreateAppRequest` carries only name/appKind/
+        // metadata/…), so `None` is the normal case, not an edge case.
+        // COALESCE keeps the column DEFAULT authoritative while still honouring
+        // an explicit value when a caller does send one.
+        let app_type = request.app_type.unwrap_or(DEFAULT_APP_TYPE);
+
+        // `metadata` is `JSONB NOT NULL DEFAULT '{}'` — same NULL-override trap
+        // as `type` above, so an absent payload must fall back to `{}`.
+        let metadata = request
+            .metadata
+            .clone()
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        // Idempotent replay. `apps.create` is `x-sdkwork-idempotent: true` and the
+        // contract calls `Idempotency-Key` required, so the same key must yield
+        // the row the first attempt created rather than a `409 conflict` from
+        // `uk_deploy_app_tenant_slug`. Resolved *before* the INSERT: a replay
+        // cannot be detected from a unique violation alone, because the insert
+        // that lost also left `deploy_app_platform_target` / default-domain
+        // side effects to reconcile.
+        let idempotency_key = idempotency_key.map(str::trim).filter(|key| !key.is_empty());
+        let request_sha256 = idempotency_key.map(|_| {
+            // Hash only the fields the create actually persists, so a retry that
+            // differs in a purely-presentational field still counts as the same
+            // command.
+            sha256_hex(
+                &serde_json::json!({
+                    "name": &request.name,
+                    "slug": request.slug.as_deref(),
+                    "appKind": request.app_kind.as_str(),
+                    "description": request.description.as_deref(),
+                    "defaultEnvironment": request.default_environment.as_deref(),
+                    "metadata": metadata,
+                })
+                .to_string(),
+            )
+        });
+        if let (Some(key), Some(request_sha256)) = (idempotency_key, request_sha256.as_deref()) {
+            if let Some(existing) = sqlx::query(
+                "SELECT uuid, request_sha256 FROM deploy_app
+                 WHERE tenant_id = $1 AND idempotency_key = $2",
+            )
+            .bind(tenant_id)
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| store_error("load idempotent deploy_app", error))?
+            {
+                let stored_hash: Option<String> = existing.try_get("request_sha256").ok().flatten();
+                // Only compare when the earlier row recorded a hash; rows written
+                // before this column existed must still replay rather than 409.
+                if let Some(stored_hash) = stored_hash {
+                    if stored_hash != request_sha256 {
+                        return Err(DeployServiceError::conflict(
+                            "Idempotency-Key was already used with another app create request",
+                        ));
+                    }
+                }
+                let existing_uuid: String = existing.try_get("uuid").map_err(|error| {
+                    DeployServiceError::Internal(format!("read deploy_app uuid: {error}"))
+                })?;
+                return self.retrieve_app_repo(tenant_id, &existing_uuid).await;
+            }
+        }
+
+        // Default publishing-domain overrides. Validated here rather than at the
+        // HTTP edge so a value that reaches the DB is always a valid DNS label /
+        // suffix list — `provision_app_default_domains*` composes hostnames from
+        // them without re-validating.
+        let app_domain_label = match request.app_domain_label.as_deref() {
+            Some(raw) if !raw.trim().is_empty() => Some(
+                normalize_app_domain_label(raw)
+                    .map_err(|reason| DeployServiceError::validation(reason))?,
+            ),
+            _ => None,
+        };
+        let app_domain_suffixes = match request.app_domain_suffixes.as_deref() {
+            Some(suffixes) if !suffixes.is_empty() => Some(
+                normalize_app_domain_suffixes(suffixes)
+                    .map_err(|reason| DeployServiceError::validation(reason))?,
+            ),
+            _ => None,
+        };
+
         let result = sqlx::query(
             "INSERT INTO deploy_app
                 (id, uuid, tenant_id, organization_id, name, slug, app_kind, description,
-                 app_status, type, default_environment, created_by, updated_by,
-                 created_at, updated_at, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW(), 1)
+                 app_status, type, metadata, default_environment,
+                 app_domain_label, app_domain_suffixes,
+                 created_by, updated_by,
+                 idempotency_key, request_sha256, created_at, updated_at, version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                     $15, $16, $17, $18, NOW(), NOW(), 1)
              ON CONFLICT (tenant_id, slug) WHERE deleted_at IS NULL DO NOTHING
              RETURNING uuid",
         )
@@ -88,10 +252,15 @@ impl DeployRepository {
         .bind(app_kind)
         .bind(request.description.as_deref())
         .bind(AppStatus::Draft.as_str())
-        .bind(request.app_type)
+        .bind(app_type)
+        .bind(&metadata)
         .bind(&default_environment)
+        .bind(app_domain_label.as_deref())
+        .bind(app_domain_suffixes.as_ref())
         .bind(actor_id)
         .bind(actor_id)
+        .bind(idempotency_key)
+        .bind(request_sha256.as_deref())
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("insert deploy_app", error))?;
@@ -185,12 +354,39 @@ impl DeployRepository {
             .app_status
             .map(|status| status.as_str())
             .unwrap_or_default();
+        // Default-domain overrides. `Some(inner)` means the field was on the
+        // wire: `Some(None)` is the declared `null` and clears the override,
+        // while `None` (absent) leaves the column untouched — hence the two
+        // separate booleans rather than a single `COALESCE`.
+        let has_domain_label = request.app_domain_label.is_some();
+        let domain_label = match request.app_domain_label.as_ref() {
+            Some(Some(raw)) if !raw.trim().is_empty() => Some(
+                normalize_app_domain_label(raw)
+                    .map_err(|reason| DeployServiceError::validation(reason))?,
+            ),
+            _ => None,
+        };
+        let has_domain_suffixes = request.app_domain_suffixes.is_some();
+        let domain_suffixes = match request.app_domain_suffixes.as_ref() {
+            Some(Some(suffixes)) if !suffixes.is_empty() => Some(
+                normalize_app_domain_suffixes(suffixes)
+                    .map_err(|reason| DeployServiceError::validation(reason))?,
+            ),
+            _ => None,
+        };
+        // `metadata` arrives as the *complete* object the console wants stored
+        // (`{...existing, media}`), so it replaces the column rather than being
+        // shallow-merged server-side — merging here would resurrect keys the
+        // caller intentionally dropped. A NULL payload leaves the column alone.
         let updated = sqlx::query(
             "UPDATE deploy_app SET
                 name = COALESCE($3, name),
                 description = COALESCE($4, description),
                 app_status = CASE WHEN $5 = '' THEN app_status ELSE $5 END,
                 default_environment = COALESCE($6, default_environment),
+                metadata = COALESCE($8, metadata),
+                app_domain_label = CASE WHEN $9 THEN $10 ELSE app_domain_label END,
+                app_domain_suffixes = CASE WHEN $11 THEN $12 ELSE app_domain_suffixes END,
                 updated_by = $7, updated_at = NOW(),
                 version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
@@ -203,6 +399,11 @@ impl DeployRepository {
         .bind(app_status)
         .bind(request.default_environment.as_deref())
         .bind(actor_id)
+        .bind(request.metadata.as_ref())
+        .bind(has_domain_label)
+        .bind(domain_label.as_deref())
+        .bind(has_domain_suffixes)
+        .bind(domain_suffixes.as_ref())
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("update deploy_app", error))?;
@@ -875,4 +1076,72 @@ fn map_signing_identity_row(row: &PgRow) -> Result<SigningIdentityResponse, Depl
         updated_at,
         version: row.try_get::<i64, _>("version").unwrap_or(1).to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_app_slug, GENERATED_SLUG_PREFIX, MAX_SLUG_LEN};
+
+    const UUID: &str = "1b5eb653-9c2e-4f1a-8b77-2c4d5e6f7a8b";
+
+    #[test]
+    fn explicit_slug_is_authoritative() {
+        assert_eq!(resolve_app_slug(Some("my-app"), "放大", UUID), "my-app");
+    }
+
+    #[test]
+    fn blank_explicit_slug_falls_back_to_derivation() {
+        // The console sends `slug: ""` when the operator clears the field; an
+        // empty string must not be treated as a real slug.
+        assert_eq!(resolve_app_slug(Some("   "), "My App", UUID), "my-app");
+    }
+
+    #[test]
+    fn ascii_names_keep_the_historical_derivation() {
+        assert_eq!(resolve_app_slug(None, "My App", UUID), "my-app");
+        // Mirrors the shared conformance fixture
+        // (`sdkwork-utils/specs/conformance/fixtures.json` → `string.slugify[0]`),
+        // so the app slug keeps matching every other SDKWork slug field.
+        assert_eq!(
+            resolve_app_slug(None, "Hello, SDKWork!", UUID),
+            "hello-sdk-work"
+        );
+    }
+
+    #[test]
+    fn non_ascii_name_never_produces_an_empty_slug() {
+        // The regression this guard exists for: `slugify("放大")` is `""`, and
+        // persisting that made every later Chinese-named app collide on
+        // `uk_deploy_app_tenant_slug`.
+        for name in ["放大", "我的应用", "放大 测试", "   "] {
+            let slug = resolve_app_slug(None, name, UUID);
+            assert!(!slug.is_empty(), "name {name:?} produced an empty slug");
+            assert!(
+                slug.bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'),
+                "name {name:?} produced a non-DNS-safe slug {slug:?}"
+            );
+            assert!(slug.len() <= MAX_SLUG_LEN);
+        }
+    }
+
+    #[test]
+    fn generated_slug_is_stable_for_the_same_app() {
+        // Determinism matters: a retried `apps.create` must derive the same slug,
+        // otherwise each retry would reserve a fresh one.
+        assert_eq!(
+            resolve_app_slug(None, "放大", UUID),
+            resolve_app_slug(None, "放大", UUID)
+        );
+        assert!(resolve_app_slug(None, "放大", UUID).starts_with(GENERATED_SLUG_PREFIX));
+    }
+
+    #[test]
+    fn distinct_apps_get_distinct_generated_slugs() {
+        let other = "9f8e7d6c-5b4a-3928-1706-0f1e2d3c4b5a";
+        assert_ne!(
+            resolve_app_slug(None, "放大", UUID),
+            resolve_app_slug(None, "放大", other)
+        );
+    }
 }

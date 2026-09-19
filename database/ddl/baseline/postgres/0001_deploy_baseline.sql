@@ -1804,6 +1804,18 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     current_revision_id BIGINT,
     desired_revision_id BIGINT,
     default_environment VARCHAR(16) NOT NULL DEFAULT 'production',
+    -- Idempotent-create identity. `apps.create` is declared
+    -- `x-sdkwork-idempotent: true` and requires an `Idempotency-Key` header, so a
+    -- retried create (double click, network replay) must return the row the first
+    -- attempt produced instead of colliding on `uk_deploy_app_tenant_slug`.
+    -- `request_sha256` pins the payload: reusing a key with a *different* body is
+    -- a client bug and is rejected, matching `deploy_certificate`.
+    -- NULL keeps the column optional for rows created before the key existed and
+    -- for internal callers (seeds, provisioning) that have no command identity.
+    idempotency_key VARCHAR(128),
+    request_sha256  VARCHAR(64),
+    CONSTRAINT chk_deploy_app_request_hash
+        CHECK (request_sha256 IS NULL OR request_sha256 ~ '^[0-9a-f]{64}$'),
     -- App publishing domain configuration.
     --
     -- `app_domain_label` is the `<appId>` prefix of the default hostnames
@@ -1875,6 +1887,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_uuid
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_tenant_slug
     ON deploy_app (tenant_id, slug)
     WHERE deleted_at IS NULL;
+
+-- Command identity for `apps.create`. Partial so the many rows without a key
+-- (internal provisioning, migrations, seeds) do not all collide on NULL.
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_idempotency
+    ON deploy_app (tenant_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
 
 -- Governed build recipe. Created before deploy_app_platform_target /
 -- deploy_build below: PostgreSQL validates FK target relations at

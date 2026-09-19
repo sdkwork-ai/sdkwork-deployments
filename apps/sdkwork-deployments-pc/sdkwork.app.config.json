@@ -29,8 +29,8 @@
     "tenantId": "100001",
     "organizationId": "0",
     "accessTokenPermissionScope": [
-      "deploy.sites.read",
-      "deploy.sites.write",
+      "deploy.apps.read",
+      "deploy.apps.write",
       "deploy.domains.read",
       "deploy.certificates.read",
       "deploy.certificates.write",

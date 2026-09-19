@@ -4,16 +4,16 @@
 
 use sdkwork_deploy_contract::{
     AppDatabaseMigrationPage, AppDatabaseMigrationResponse, AppDatabaseProfilePage,
-    AppDatabaseProfileResponse, AppEnvironmentPage, AppEnvironmentResponse, AppKind, AppPage,
-    AppReleasePage, AppReleaseResponse, AppResponse, BuildPage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, ChannelKey, ChannelPage, ChannelResponse, ChannelRolloutPage,
-    ChannelRolloutResponse, CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest,
-    CreateAppDeploymentRequest, CreateAppEnvironmentRequest, CreateAppReleaseRequest,
-    CreateAppRequest, CreateBuildRequest, CreateBuildTemplateRequest, CreatePlatformTargetRequest,
-    CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DeployAppRequestContext,
-    DeployServiceError, DeployServiceResult, DeploymentStatus, EnvironmentPromotionPage,
-    EnvironmentPromotionResponse, PackagePage, PackageResponse, PlatformTargetPage,
-    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    AppDatabaseProfileResponse, AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppKind,
+    AppPage, AppReleasePage, AppReleaseResponse, AppResponse, BuildPage, BuildResponse,
+    BuildTemplatePage, BuildTemplateResponse, ChannelKey, ChannelPage, ChannelResponse,
+    ChannelRolloutPage, ChannelRolloutResponse, CreateAppDatabaseMigrationRequest,
+    CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
+    CreateAppReleaseRequest, CreateAppRequest, CreateBuildRequest, CreateBuildTemplateRequest,
+    CreatePlatformTargetRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
+    DeployAppRequestContext, DeployServiceError, DeployServiceResult, DeploymentStatus,
+    EnvironmentPromotionPage, EnvironmentPromotionResponse, PackagePage, PackageResponse,
+    PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
     RegisterPackageRequest, ReleaseStatus, SigningIdentityPage, SigningIdentityResponse,
     SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
     UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateBuildStateRequest, UsageEventPage,
@@ -100,6 +100,7 @@ impl DeployService {
     pub async fn create_app(
         &self,
         context: &DeployAppRequestContext,
+        idempotency_key: Option<&str>,
         request: &CreateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         let tenant_id = Self::tenant_id(context)?;
@@ -121,6 +122,7 @@ impl DeployService {
                 tenant_id,
                 context.organization_id,
                 context.actor_id,
+                idempotency_key,
                 request,
             )
             .await?;
@@ -167,13 +169,34 @@ impl DeployService {
                 return Err(DeployServiceError::validation("app name must not be empty"));
             }
         }
+        // Changing the publishing-domain configuration must reconcile the
+        // provisioned hostnames, otherwise the app keeps answering on the old
+        // `<label>.app[-<env>].<suffix>` rows while the console advertises the
+        // new ones. `reconcile` also retires the stale `appd-*` bindings, so
+        // this is a rename rather than an addition.
+        let domain_config_changed =
+            request.app_domain_label.is_some() || request.app_domain_suffixes.is_some();
         let app = self
             .repository
             .update_app(tenant_id, context.actor_id, app_id, request)
             .await?;
+        if domain_config_changed {
+            self.provision_app_default_domains_all_environments(context, &app.id)
+                .await?;
+        }
         self.audit_app_action(context, "app.update", &app.id)
             .await?;
         Ok(app)
+    }
+
+    /// The app's publishing domains: default hostnames plus bound custom ones.
+    pub async fn list_app_domains(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppDomainPage> {
+        let tenant_id = Self::tenant_id(context)?;
+        self.repository.list_app_domains(tenant_id, app_id).await
     }
 
     // -- platform targets ------------------------------------------------------

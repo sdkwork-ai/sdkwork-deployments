@@ -536,12 +536,34 @@ pub struct CreateAppRequest {
     #[serde(default)]
     pub description: Option<String>,
     /// Web publishing type (1..6, was `deploy_app.type`).
+    ///
+    /// Optional on the wire: the published contract (`apps.create`) does not
+    /// declare it, so callers normally omit it and the DB column default
+    /// applies. The repository must never bind a NULL here — see
+    /// `DEFAULT_APP_TYPE` in `sdkwork-intelligence-deploy-repository-sqlx`.
     #[serde(rename = "type", default)]
     pub app_type: Option<i32>,
     #[serde(rename = "runtimeConfig", default)]
     pub runtime_config: Option<Value>,
+    /// Free-form JSONB persisted into `deploy_app.metadata` (category, media,
+    /// version, releaseNotes). Declared by the published contract and typed by
+    /// the generated SDK as `metadata?: Record<string, unknown>`; without this
+    /// field serde silently discarded it, so the console's app category and
+    /// store media never reached the database.
+    #[serde(default)]
+    pub metadata: Option<Value>,
     #[serde(rename = "defaultEnvironment", default)]
     pub default_environment: Option<String>,
+    /// Explicit `<appId>` label of the app's default publishing hostnames
+    /// (`<appDomainLabel>.app[-<env>].<suffix>`). One lowercase DNS label;
+    /// absent means the slug is used, which is why a Chinese-named app used to
+    /// publish on a degenerate hostname. See `sdkwork-deploy-core::app_domains`.
+    #[serde(rename = "appDomainLabel", default)]
+    pub app_domain_label: Option<String>,
+    /// Per-app override of the platform app-domain suffix catalog
+    /// (`PLATFORM_APP_DOMAIN_SUFFIXES`). Absent means the catalog applies.
+    #[serde(rename = "appDomainSuffixes", default)]
+    pub app_domain_suffixes: Option<Vec<String>>,
     #[serde(rename = "idempotencyKey", default)]
     pub idempotency_key: Option<String>,
 }
@@ -556,10 +578,45 @@ pub struct UpdateAppRequest {
     pub app_type: Option<i32>,
     #[serde(rename = "runtimeConfig", default)]
     pub runtime_config: Option<Value>,
+    /// Free-form JSONB merged into `deploy_app.metadata`. Declared by the
+    /// published contract (`UpdateAppRequest.metadata`) and used by the console
+    /// to write back `metadata.media` after the Drive upload completes.
+    #[serde(default)]
+    pub metadata: Option<Value>,
     #[serde(rename = "appStatus", default)]
     pub app_status: Option<AppStatus>,
     #[serde(rename = "defaultEnvironment", default)]
     pub default_environment: Option<String>,
+    /// Replaces the app's default-hostname label. The outer `Option` is "was
+    /// the field present on the wire"; the inner one is the declared `null`.
+    /// `Some(None)` therefore clears the override so the slug applies again,
+    /// while `None` leaves the stored override untouched — a plain
+    /// `Option<String>` would collapse those two into the same value and make
+    /// `apps.update` unable to distinguish "leave alone" from "remove".
+    #[serde(
+        rename = "appDomainLabel",
+        default,
+        deserialize_with = "deserialize_double_option"
+    )]
+    pub app_domain_label: Option<Option<String>>,
+    /// Same double-`Option` shape as `app_domain_label`: `null` restores the
+    /// platform suffix catalog.
+    #[serde(
+        rename = "appDomainSuffixes",
+        default,
+        deserialize_with = "deserialize_double_option"
+    )]
+    pub app_domain_suffixes: Option<Option<Vec<String>>>,
+}
+
+/// Distinguishes "field absent" (`None`) from "field present and `null`"
+/// (`Some(None)`) for PATCH-style optional clears.
+fn deserialize_double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -577,6 +634,11 @@ pub struct AppResponse {
     pub description: Option<String>,
     #[serde(rename = "runtimeConfig", skip_serializing_if = "Option::is_none")]
     pub runtime_config: Option<Value>,
+    /// Echo of `deploy_app.metadata`. The contract and the generated SDK both
+    /// expose this (`AppResponse.metadata`), and the console reads it back to
+    /// merge `metadata.media` after uploading store assets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
     #[serde(rename = "currentRevisionId", skip_serializing_if = "Option::is_none")]
     pub current_revision_id: Option<String>,
     #[serde(rename = "desiredRevisionId", skip_serializing_if = "Option::is_none")]
@@ -585,6 +647,15 @@ pub struct AppResponse {
     pub default_environment: String,
     #[serde(rename = "platformTargetCount")]
     pub platform_target_count: i64,
+    /// The **effective** label: the explicit override when set, otherwise the
+    /// slug. Computed in the service, never in the client, so the console's
+    /// hostname preview and the provisioned DNS record always agree.
+    #[serde(rename = "appDomainLabel")]
+    pub app_domain_label: String,
+    /// The **effective** suffix catalog: the per-app override when set,
+    /// otherwise the platform catalog.
+    #[serde(rename = "appDomainSuffixes")]
+    pub app_domain_suffixes: Vec<String>,
     #[serde(rename = "latestReleaseTag", skip_serializing_if = "Option::is_none")]
     pub latest_release_tag: Option<String>,
     #[serde(rename = "createdAt")]
@@ -600,6 +671,48 @@ pub struct AppPage {
     pub total: i64,
     pub page: i32,
     pub page_size: i32,
+}
+
+// ---------------------------------------------------------------------------
+// App domain (default publishing hostnames + bound custom hostnames)
+// ---------------------------------------------------------------------------
+
+/// One hostname the app answers on, with the state needed to render a domain
+/// column and a CNAME instruction. `DEFAULT` rows come from
+/// `provision_app_default_domains*` (`<label>.app[-<env>].<suffix>`, already
+/// verified because the platform owns the zone); `CUSTOM` rows are the
+/// app's own `deploy_app_binding` rows pointing at user-owned zones.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct AppDomainResponse {
+    pub hostname: String,
+    /// `DEFAULT` | `CUSTOM`.
+    pub kind: String,
+    pub environment: String,
+    #[serde(rename = "bindingStatus")]
+    pub binding_status: String,
+    #[serde(rename = "verificationStatus")]
+    pub verification_status: String,
+    #[serde(rename = "isCanonical", skip_serializing_if = "Option::is_none")]
+    pub is_canonical: Option<bool>,
+    #[serde(rename = "pathPrefix", skip_serializing_if = "Option::is_none")]
+    pub path_prefix: Option<String>,
+    #[serde(rename = "domainId", skip_serializing_if = "Option::is_none")]
+    pub domain_id: Option<String>,
+    /// The record the user must create for a `CUSTOM` hostname.
+    #[serde(rename = "dnsRecordName", skip_serializing_if = "Option::is_none")]
+    pub dns_record_name: Option<String>,
+    #[serde(rename = "dnsRecordValue", skip_serializing_if = "Option::is_none")]
+    pub dns_record_value: Option<String>,
+    /// Populated for `DEFAULT` hostnames: what the user should CNAME their own
+    /// domain at to alias this app.
+    #[serde(rename = "cnameTarget", skip_serializing_if = "Option::is_none")]
+    pub cname_target: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct AppDomainPage {
+    pub items: Vec<AppDomainResponse>,
+    pub total: i64,
 }
 
 // ---------------------------------------------------------------------------

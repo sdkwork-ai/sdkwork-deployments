@@ -105,7 +105,6 @@ function humanize(value: string): string { return value.replace(/([a-z])([A-Z])/
 function sensitive(value: string): boolean { return /secret|password|token|private|key/i.test(value); }
 function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
   const icons = {
-    sites: AppWindow,
     configuration: Settings2,
     domains: Globe2,
     certificates: FileKey2,

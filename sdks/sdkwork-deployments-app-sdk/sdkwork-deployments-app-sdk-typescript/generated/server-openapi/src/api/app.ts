@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppResponse, CreateAppRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppRequest } from '../types';
+import type { AppCompositionResponse, AppDomainResponse, AppResponse, CreateAppRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRequest } from '../types';
 
 
 export interface AppSourceRepositoriesCreateParams {
@@ -72,6 +72,46 @@ export class AppPlatformTargetsApi {
   }
 }
 
+export interface AppCompositionUpdateParams {
+  ifMatch: string;
+  idempotencyKey: string;
+}
+
+export class AppCompositionApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Replace and publish the complete live app composition */
+  async update(appId: string, body: UpdateAppCompositionRequest, params: AppCompositionUpdateParams, requestOptions?: ApiRequestOptions): Promise<AppCompositionResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'If-Match': { value: params.ifMatch, style: 'simple', explode: false },
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<AppCompositionResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/composition`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export class AppDomainsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List an app's publishing domains */
+  async list(appId: string, requestOptions?: ApiRequestOptions): Promise<{ items: AppDomainResponse[]; }> {
+    return this.client.request<{ items: AppDomainResponse[]; }>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/domains`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'data' });
+  }
+}
+
 export interface AppListParams {
   page?: number;
   pageSize?: number;
@@ -81,13 +121,25 @@ export interface AppCreateParams {
   idempotencyKey: string;
 }
 
+export interface AppActivateParams {
+  idempotencyKey: string;
+}
+
+export interface AppPauseParams {
+  idempotencyKey: string;
+}
+
 export class AppApi {
   private client: HttpClient;
+  public readonly domains: AppDomainsApi;
+  public readonly composition: AppCompositionApi;
   public readonly platformTargets: AppPlatformTargetsApi;
   public readonly sourceRepositories: AppSourceRepositoriesApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.domains = new AppDomainsApi(client);
+    this.composition = new AppCompositionApi(client);
     this.platformTargets = new AppPlatformTargetsApi(client);
     this.sourceRepositories = new AppSourceRepositoriesApi(client);
   }
@@ -121,6 +173,28 @@ export class AppApi {
 /** Update a tenant app */
   async update(appId: string, body: UpdateAppRequest, requestOptions?: ApiRequestOptions): Promise<AppResponse> {
     return this.client.request<AppResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+
+/** 激活应用 */
+  async activate(appId: string, params: AppActivateParams, requestOptions?: ApiRequestOptions): Promise<AppResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<AppResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/activate`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** 暂停应用 */
+  async pause(appId: string, params: AppPauseParams, requestOptions?: ApiRequestOptions): Promise<AppResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<AppResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/pause`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 

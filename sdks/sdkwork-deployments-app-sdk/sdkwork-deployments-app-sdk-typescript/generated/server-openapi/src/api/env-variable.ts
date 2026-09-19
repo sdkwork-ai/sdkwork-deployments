@@ -4,15 +4,15 @@ import type { ApiRequestOptions, HttpClient } from '../http/client';
 import type { CreateEnvVariableRequest, EnvVariableResponse, PageInfo } from '../types';
 
 
-export interface EnvVariableSitesEnvVariablesListParams {
+export interface EnvVariableAppsEnvVariablesListParams {
   environment?: string;
 }
 
-export interface EnvVariableSitesEnvVariablesCreateParams {
+export interface EnvVariableAppsEnvVariablesCreateParams {
   idempotencyKey: string;
 }
 
-export class EnvVariableSitesEnvVariablesApi {
+export class EnvVariableAppsEnvVariablesApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -21,39 +21,39 @@ export class EnvVariableSitesEnvVariablesApi {
 
 
 /** 获取环境变量列表 */
-  async list(siteId: string, params?: EnvVariableSitesEnvVariablesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: EnvVariableResponse[]; pageInfo: PageInfo; }> {
+  async list(appId: string, params?: EnvVariableAppsEnvVariablesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: EnvVariableResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'environment', value: params?.environment, style: 'form', explode: true, allowReserved: false },
     ]);
-    return this.client.request<{ items: EnvVariableResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/env_variables`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+    return this.client.request<{ items: EnvVariableResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/env_variables`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
 /** 创建环境变量 */
-  async create(siteId: string, body: CreateEnvVariableRequest, params: EnvVariableSitesEnvVariablesCreateParams, requestOptions?: ApiRequestOptions): Promise<EnvVariableResponse> {
+  async create(appId: string, body: CreateEnvVariableRequest, params: EnvVariableAppsEnvVariablesCreateParams, requestOptions?: ApiRequestOptions): Promise<EnvVariableResponse> {
     const requestHeaders = buildRequestHeaders(
       {
         'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
       },
       {}
     );
-    return this.client.request<EnvVariableResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/env_variables`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+    return this.client.request<EnvVariableResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/env_variables`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
-export class EnvVariableSitesApi {
-  public readonly envVariables: EnvVariableSitesEnvVariablesApi;
+export class EnvVariableAppsApi {
+  public readonly envVariables: EnvVariableAppsEnvVariablesApi;
 
   constructor(client: HttpClient) {
-    this.envVariables = new EnvVariableSitesEnvVariablesApi(client);
+    this.envVariables = new EnvVariableAppsEnvVariablesApi(client);
   }
 
 }
 
 export class EnvVariableApi {
-  public readonly sites: EnvVariableSitesApi;
+  public readonly apps: EnvVariableAppsApi;
 
   constructor(client: HttpClient) {
-    this.sites = new EnvVariableSitesApi(client);
+    this.apps = new EnvVariableAppsApi(client);
   }
 
 }

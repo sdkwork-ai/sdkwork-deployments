@@ -488,6 +488,7 @@ pub trait DeployAppApi: Send + Sync {
     async fn create_app(
         &self,
         _context: &DeployAppRequestContext,
+        _idempotency_key: Option<&str>,
         _request: &CreateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         Err(crate::DeployServiceError::Internal(
@@ -513,6 +514,16 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<AppResponse> {
         Err(crate::DeployServiceError::Internal(
             "update_app API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn list_app_domains(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<AppDomainPage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_app_domains API is not implemented".to_owned(),
         ))
     }
 

@@ -10,9 +10,10 @@
  * `data-theme="dark"` attribute still flips the fallbacks. No globals leak
  * out of the `.publishDialog` root.
  */
-/* 调色板同时作用于对话框根与级联面板 —— 面板经 portal 渲染在 body 下，
+/* 调色板同时作用于对话框根、抽屉根与级联面板 —— 面板经 portal 渲染在 body 下，
    脱离 .publishDialog 作用域，必须自带同一套 --pda-* 变量。 */
 .publishDialog,
+.drawerRoot,
 .cascaderPanel {
   --pda-bg: var(--dsw-specific-menu, #ffffff);
   --pda-surface: var(--dsw-specific-input-major, #f7f8fa);
@@ -24,11 +25,16 @@
   --pda-accent-soft: var(--dsw-alias-interactive-bg-hover-accent, #eff4ff);
   --pda-danger: var(--dsw-alias-state-error-primary, #dc2626);
   --pda-focus: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 35%, transparent);
+  /* 级联列表滚动条：常态极淡只在需要时被感知，悬停加深提示可拖拽。 */
+  --pda-scroll-thumb: rgba(15, 23, 42, 0.16);
+  --pda-scroll-thumb-hover: rgba(15, 23, 42, 0.34);
+  --pda-scroll-thumb-active: rgba(15, 23, 42, 0.50);
   --pda-radius: 12px;
   --pda-shadow: var(--dsw-shadow-lv3, 0 24px 60px rgba(15, 23, 42, 0.28));
 }
 
 .publishDialog[data-theme="dark"],
+.drawerRoot[data-theme="dark"],
 .cascaderPanel[data-theme="dark"] {
   --pda-bg: var(--dsw-specific-menu, #1e2430);
   --pda-surface: var(--dsw-specific-input-major, #161b26);
@@ -40,6 +46,10 @@
   --pda-accent-soft: var(--dsw-alias-interactive-bg-hover-accent, rgba(79, 140, 255, 0.14));
   --pda-danger: var(--dsw-alias-state-error-primary, #f87171);
   --pda-focus: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f8cff) 40%, transparent);
+  /* 深色下用浅色 thumb：同一 alpha 在深底上会更「消失」，故取更亮的基色 + 略高不透明度。 */
+  --pda-scroll-thumb: rgba(230, 233, 239, 0.20);
+  --pda-scroll-thumb-hover: rgba(230, 233, 239, 0.40);
+  --pda-scroll-thumb-active: rgba(230, 233, 239, 0.58);
   --pda-shadow: var(--dsw-shadow-lv3, 0 24px 60px rgba(0, 0, 0, 0.55));
 }
 
@@ -66,6 +76,70 @@
   border-radius: var(--pda-radius);
   box-shadow: var(--pda-shadow);
   overflow: hidden;
+}
+
+/* --- 抽屉形态（新增应用）：区别于居中模态，从右侧滑入 ---
+   高内聚：与 .publishDialog 共用同一套 --pda-* 令牌与 data-theme 翻转，
+   但根/面板是独立类名 —— 同一个对话框组件既可作为居中模态
+   （CreateDeployAppDialog 发布流程），也可作为右侧抽屉（新增应用）。 */
+
+.drawerRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: var(--dsw-alias-bg-mask-3, rgba(15, 23, 42, 0.45));
+  color: var(--pda-text);
+  font-family: var(--dsw-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.drawerPanel {
+  width: min(560px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--pda-bg);
+  border-left: 1px solid var(--pda-border);
+  box-shadow: var(--pda-shadow);
+  animation: pdaDrawerSlideIn 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.drawerPanelLg {
+  width: min(680px, 100vw);
+}
+
+@keyframes pdaDrawerSlideIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawerPanel {
+    animation: none;
+  }
+}
+
+/* 面板内三段（header / body / footer）复用对话框同名类；
+   抽屉的 header 与 footer 需贴边、body 独占剩余高度。 */
+.drawerPanel .header {
+  padding: 18px 20px 14px;
+}
+
+.drawerPanel .body {
+  padding: 18px 20px;
+}
+
+.drawerPanel .footer {
+  padding: 14px 20px;
 }
 
 .header {
@@ -435,6 +509,40 @@
   gap: 16px;
 }
 
+/* 当前应用类型的商店素材规范说明：跨两列，作为整个媒体区的抬头。 */
+.mediaSpecNote {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--pda-border);
+  border-left: 3px solid var(--pda-accent);
+  border-radius: 7px;
+  background: var(--pda-surface);
+  color: var(--pda-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.mediaSpecNoteLabel {
+  flex: none;
+  font-weight: 600;
+  color: var(--pda-accent);
+}
+
+/* 档位按钮上的「至少 N 张」徽标：让最低张数要求在上传前就可见。 */
+.targetChipBadge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pda-accent) 16%, transparent);
+  color: var(--pda-accent);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .mediaField {
   display: flex;
   flex-direction: column;
@@ -498,6 +606,8 @@
 }
 
 .targetChip {
+  display: inline-flex;
+  align-items: center;
   padding: 4px 10px;
   border: 1px solid var(--pda-border);
   border-radius: 999px;
@@ -633,6 +743,263 @@
 .uploadingText {
   font-size: 11px;
   color: var(--pda-accent);
+}
+
+/* Upload-progress track: 4px bar, tinted with the accent so it reads as the
+   same affordance as the primary button that started it. */
+.progressTrack {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--pda-border);
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--pda-accent);
+  transition: width 160ms ease-out;
+}
+
+/* --- 域名对话框 ------------------------------------------------------ */
+
+/* 字段内联校验：与 fieldHint 区分开，错误必须是红的而不是灰的。 */
+.fieldErrorInline {
+  font-size: 11px;
+  color: var(--pda-danger);
+}
+
+.modeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 后缀 chip 行 + 录入行 */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chipAdder {
+  display: flex;
+  gap: 8px;
+}
+
+.chipRemove {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.chipRemove:hover {
+  opacity: 1;
+}
+
+/* 主机名清单 */
+.domainTable {
+  border: 1px solid var(--pda-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--pda-surface);
+}
+
+.domainTableHead {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--pda-border);
+  background: var(--pda-accent-soft);
+  color: var(--pda-accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.domainRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--pda-border);
+}
+
+.domainRow:last-child {
+  border-bottom: none;
+}
+
+.domainRowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.domainHost {
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--pda-text);
+  overflow-wrap: anywhere;
+}
+
+.domainRowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 状态药丸：绑定状态与 DNS 状态各自着色 */
+.statusPill {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.statusOk {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #16a34a;
+}
+
+.statusWarn {
+  background: rgba(217, 119, 6, 0.12);
+  border-color: rgba(217, 119, 6, 0.35);
+  color: #d97706;
+}
+
+.statusBad {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.35);
+  color: var(--pda-danger);
+}
+
+.statusNeutral {
+  background: var(--pda-surface);
+  border-color: var(--pda-border);
+  color: var(--pda-text-muted);
+}
+
+.copyButton {
+  padding: 3px 8px;
+  border: 1px solid var(--pda-border);
+  border-radius: 6px;
+  background: var(--pda-surface);
+  color: var(--pda-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copyButton:hover {
+  border-color: var(--pda-accent);
+  color: var(--pda-accent);
+}
+
+/* CNAME 指引块：DNS 记录的 <dt>/<dd> 两列栅格 */
+.dnsGuide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--pda-border);
+  border-radius: 8px;
+  background: var(--pda-surface);
+}
+
+.dnsGuideTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pda-text);
+}
+
+.dnsRecord {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  align-items: center;
+}
+
+.dnsRecord dt {
+  font-size: 11px;
+  color: var(--pda-text-muted);
+}
+
+.dnsRecord dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dnsRecord code {
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
+/* --- 详情抽屉 -------------------------------------------------------- */
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detailSectionTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pda-text);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* 详情是「读」的界面：值用 <dl>/<dt>/<dd> 而不是表单控件。 */
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.detailField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.detailFieldLabel {
+  font-size: 11px;
+  color: var(--pda-text-muted);
+}
+
+.detailFieldValue {
+  margin: 0;
+  font-size: 13px;
+  color: var(--pda-text);
+  overflow-wrap: anywhere;
+}
+
+.detailFieldValueMono {
+  margin: 0;
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--pda-text);
+  overflow-wrap: anywhere;
 }
 
 /* --- v2 第 1 步: 应用类型 grid (icon + 名称) --- */
@@ -1151,6 +1518,27 @@
   color: var(--pda-text);
 }
 
+/* ── 级联列表滚动条：悬浮细条 + 悬停加深 ──────────────────────────────────
+ *
+ * 原生 Windows 滚动条（3D 立体槽 + 上下箭头按钮）在扁平面板里观感极其突兀，
+ * 故这里自绘。**方案选择有实测依据，不是凭直觉**（Chrome 实测 A/B 对照）：
+ *
+ *   | 写法                        | 箭头按钮 | 占位 |
+ *   |-----------------------------|---------|------|
+ *   | 仅 scrollbar-color/width    | **仍在** | 12px |
+ *   | 仅 ::-webkit-scrollbar-*    | 消失     | 10px |
+ *   | 两者都写                    | **仍在** | 12px |
+ *
+ * ⇒ `scrollbar-color` 一旦为非 auto，就会**整体接管**并压掉 ::-webkit-scrollbar-*
+ *   （与 MDN 记载一致）。而能把那对箭头按钮干掉的只有
+ *   `::-webkit-scrollbar-button { display:none }`，所以本处**刻意只用 WebKit
+ *   伪元素**，并显式把标准属性置回 auto 以免被祖先继承值污染。
+ *   ⚠️ 代价：仅 WebKit/Blink 内核生效；Firefox 会回落原生滚动条（视觉略不同，
+ *      但功能完整，且不会出现箭头按钮的老式外观）。
+ *
+ * 「悬停加深」也只有 WebKit 伪元素支持 —— 标准属性没有 hover 态，
+ * 这是必须放弃它的第二个理由。
+ */
 .cascaderColumn {
   flex: 1 1 0;
   min-width: 150px;
@@ -1159,6 +1547,59 @@
   padding: 4px;
   list-style: none;
   overflow-y: auto;
+  /* 显式 auto：抵消可能从祖先继承来的 scrollbar-color/width，
+     否则非 auto 值会让下面整组 ::-webkit-scrollbar-* 静默失效。 */
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+/* 老内核/新内核都走 WebKit 伪元素（Chrome/Edge/Safari）。
+   用 @supports 限定在「支持 ::-webkit-scrollbar」的引擎，避免其他引擎
+   看到一堆无法解析的伪元素选择器。 */
+@supports selector(::-webkit-scrollbar) {
+  /* 8px 总宽 = 4px 可见细条 + 两侧各 2px 透明边框 ⇒ 视觉纤细、命中区域仍 8px
+     （MDN 强调自定义滚动条必须保住可拖拽的命中面积）。 */
+  .cascaderColumn::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  /* 干掉上下箭头按钮 —— 截图里那个 1998 观感元凶。 */
+  .cascaderColumn::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* 透明槽：让滚动条「浮」在面板底色上，而不是切出一条灰槽。 */
+  .cascaderColumn::-webkit-scrollbar-track,
+  .cascaderColumn::-webkit-scrollbar-track-piece {
+    background: transparent;
+  }
+
+  /* 角落（同时出现横竖滚动条处）也保持透明，避免出现白色小方块。 */
+  .cascaderColumn::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .cascaderColumn::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: var(--pda-scroll-thumb);
+    background-clip: padding-box;
+  }
+
+  /* 悬停整列时加深，提示「此处可拖拽」。 */
+  .cascaderColumn:hover::-webkit-scrollbar-thumb {
+    background: var(--pda-scroll-thumb-hover);
+    background-clip: padding-box;
+  }
+
+  /* 正在拖拽滑块时进一步加深，给出明确的抓取反馈。 */
+  .cascaderColumn::-webkit-scrollbar-thumb:active {
+    background: var(--pda-scroll-thumb-active);
+    background-clip: padding-box;
+  }
 }
 
 .cascaderColumn + .cascaderColumn {

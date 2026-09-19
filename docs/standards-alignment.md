@@ -19,13 +19,13 @@ SDKWork Deploy standards alignment for `sdkwork-deployments`, updated 2026-07-23
 
 The active mutation is `apps.composition.update` on
 `PUT /app/v3/api/apps/{appId}/composition`. It requires dual-token authentication,
-`deploy.sites.write`, `If-Match`, and `Idempotency-Key`.
+`deploy.apps.write`, `If-Match`, and `Idempotency-Key`.
 
 Provider calls complete before database locking. PostgreSQL and SQLite then use the same atomic
-sequence: idempotency replay check, tenant Site lock/version check, target validation, normalized
-composition replacement, descriptor compilation, immutable SiteRevision insert,
+sequence: idempotency replay check, tenant Application lock/version check, target validation, normalized
+composition replacement, descriptor compilation, immutable AppRevision insert,
 `desired_revision_id` update, complete runtime assignment insert, replay result, and audit commit.
-The Site version is a decimal string. `current_revision_id` is reserved for verified Web
+The Application version is a decimal string. `current_revision_id` is reserved for verified Web
 observation/quorum and is not advanced by the composition transaction.
 
 Ordinary Drive and Knowledgebase content changes never call this mutation and do not create

@@ -13,6 +13,10 @@ export interface AppResponse {
   /** Echo of deploy_app.metadata. */
   metadata?: Record<string, unknown>;
   platformTargetCount?: string;
+  /** The effective `<appId>` prefix used in the app's default publishing hostnames (`<appDomainLabel>.app[-<env>].<suffix>`): the explicit override when set, otherwise the slug. */
+  appDomainLabel?: string;
+  /** The effective app-domain suffix catalog the app publishes on: the per-app override when set, otherwise the platform catalog. */
+  appDomainSuffixes?: string[];
   latestReleaseTag?: string;
   createdAt: string;
   updatedAt: string;

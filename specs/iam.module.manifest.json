@@ -7,8 +7,8 @@
   "permissions": {
     "catalog": [
       {
-        "code": "deploy.sites.read",
-        "description": "Read application (site) lifecycle and availability state"
+        "code": "deploy.apps.read",
+        "description": "Read application lifecycle and availability state"
       },
       {
         "code": "deploy.artifacts.read",

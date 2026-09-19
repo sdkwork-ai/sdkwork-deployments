@@ -45,6 +45,7 @@ import {
 import { Link, Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 
 import { deliveryText, type DeliveryMessageKey } from "./i18n.ts";
+import { relativeRecordName } from "./dns-record-name.ts";
 import { type RootDomainIssue, validateRootDomain } from "./root-domain.ts";
 
 type Translator = (key: DeliveryMessageKey, values?: Record<string, string | number>) => string;
@@ -1036,7 +1037,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     {createOpen && <HostnameFormDialog t={t} close={() => setCreateOpen(false)} submit={async (relativeName) => { await service.createDomainHostname(zoneId, { relativeName }); setCreateOpen(false); reload(); }} />}
     {editTarget && <HostnameFormDialog hostname={editTarget} t={t} close={() => setEditTarget(undefined)} submit={async (relativeName) => { await service.updateDomainHostname(zoneId, editTarget.id, { relativeName }); setEditTarget(undefined); reload(); }} />}
     {deleteTarget && <ConfirmDialog title={t("deleteHostnameTitle")} message={t("deleteHostnameConfirm")} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await service.deleteDomainHostname(zoneId, deleteTarget.id); setDeleteTarget(undefined); reload(); }} />}
-    {verification && <VerificationDialog result={verification} t={t} close={() => setVerification(undefined)} />}
+    {verification && <VerificationDialog result={verification} t={t} zoneApex={zone?.apexHostname} close={() => setVerification(undefined)} />}
   </section>;
 }
 
@@ -1063,13 +1064,21 @@ function HostnameFormDialog({ close, hostname, note, submit, t }: { close(): voi
   </form></Modal>;
 }
 
-function VerificationDialog({ close, result, t }: { close(): void; result: DomainVerifyResponse; t: Translator }) {
+function VerificationDialog({ close, result, t, zoneApex }: { close(): void; result: DomainVerifyResponse; t: Translator; zoneApex?: string | undefined }) {
   const [copied, setCopied] = useState<string>();
   async function copy(name: string, value: string) {
     try { await navigator.clipboard.writeText(value); setCopied(name); } catch { setCopied(undefined); }
   }
+  // Providers' consoles ask for the record owner relative to the zone they
+  // already know. The server resolves it authoritatively (it owns the zone
+  // apex); the local fold is only a fallback for a response that predates the
+  // `recordRelativeName` field, and it is not even attempted without an apex.
+  const relative = result.recordRelativeName ?? (result.recordName === undefined
+    ? undefined
+    : relativeRecordName(result.recordName, zoneApex));
   return <Modal close={close} closeLabel={t("close")} title={t("verificationTitle")}>
     <div className={result.verified ? "verification-success" : "verification-pending"}><BadgeCheck size={19} />{result.verified ? t("verificationComplete") : t("verificationInstructions")}</div>
+    {relative !== undefined && <CopyField label={t("relativeName")} value={relative} copied={copied === "relative"} copy={() => void copy("relative", relative)} t={t} hint={t("relativeNameHint")} />}
     {result.recordName && <CopyField label={t("recordName")} value={result.recordName} copied={copied === "name"} copy={() => void copy("name", result.recordName!)} t={t} />}
     {result.token && <CopyField label={t("recordValue")} value={result.token} copied={copied === "token"} copy={() => void copy("token", result.token!)} t={t} />}
     {result.expiresAt && <div className="verification-expiry"><span>{t("expiresAt")}</span><strong>{result.expiresAt}</strong></div>}
@@ -1077,8 +1086,8 @@ function VerificationDialog({ close, result, t }: { close(): void; result: Domai
   </Modal>;
 }
 
-function CopyField({ copied, copy, label, t, value }: { copied: boolean; copy(): void; label: string; t: Translator; value: string }) {
-  return <div className="copy-field"><span>{label}</span><code>{value}</code><button className="table-action" type="button" title={copied ? t("copied") : t("copy")} onClick={copy}><Clipboard size={16} /></button></div>;
+function CopyField({ copied, copy, hint, label, t, value }: { copied: boolean; copy(): void; hint?: string | undefined; label: string; t: Translator; value: string }) {
+  return <div className="copy-field"><span>{label}</span><code>{value}</code><button className="table-action" type="button" title={copied ? t("copied") : t("copy")} onClick={copy}><Clipboard size={16} /></button>{hint !== undefined && <small className="form-hint">{hint}</small>}</div>;
 }
 
 export function CertificateManagementPage({ locale }: DeploymentsResourcePageProps) {
@@ -1673,7 +1682,7 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
       await reloadZone(activeZoneId);
       setDeleteTarget(undefined);
     }} />}
-    {verification && <VerificationDialog result={verification} t={t} close={() => setVerification(undefined)} />}
+    {verification && <VerificationDialog result={verification} t={t} zoneApex={activeZone?.apexHostname} close={() => setVerification(undefined)} />}
   </Modal>;
 }
 
@@ -2225,8 +2234,15 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
           <small className="form-hint">{t("ownershipRequiredHint")}</small>
           {pendingClaims.map((claim, index) => {
             const row = claim.hostname;
+            // The server resolves the provider-facing host record (it owns the
+            // zone); the local fold is only a fallback for a response that
+            // predates `dnsRecordRelativeName`.
+            const relative = claim.dnsRecordRelativeName ?? (claim.dnsRecordName === undefined
+              ? undefined
+              : relativeRecordName(claim.dnsRecordName, selectedZone?.apexHostname));
             return <div key={row.id}>
               <small className="form-hint">{row.hostname}</small>
+              {relative !== undefined && <CopyField label={t("relativeName")} value={relative} copied={copiedField === `relative-${index}`} copy={() => void copyValue(`relative-${index}`, relative)} t={t} hint={t("relativeNameHint")} />}
               {claim.dnsRecordName && <CopyField label={t("recordName")} value={claim.dnsRecordName} copied={copiedField === `name-${index}`} copy={() => void copyValue(`name-${index}`, claim.dnsRecordName!)} t={t} />}
               {claim.dnsRecordValue && <CopyField label={t("recordValue")} value={claim.dnsRecordValue} copied={copiedField === `token-${index}`} copy={() => void copyValue(`token-${index}`, claim.dnsRecordValue!)} t={t} />}
             </div>;

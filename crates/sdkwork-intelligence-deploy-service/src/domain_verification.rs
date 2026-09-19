@@ -4,6 +4,8 @@ use std::{net::IpAddr, str::FromStr};
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult, DomainVerifyResponse};
+use sdkwork_utils_rust::crypto::sha256_digest;
+use sdkwork_utils_rust::encoding::base64url_encode;
 
 pub const DOMAIN_VERIFICATION_METHOD_DNS_TXT: &str = "DNS_TXT";
 const DOMAIN_VERIFICATION_RECORD_LABEL: &str = "_sdkwork-verification";
@@ -13,6 +15,10 @@ pub struct DomainVerificationChallenge {
     pub verification_id: Option<String>,
     pub hostname: String,
     pub record_name: Option<String>,
+    /// The same record reduced against its zone, i.e. what the provider's
+    /// "host"/"主机记录" field wants. `None` when the zone is unknown or the
+    /// record is not inside it.
+    pub record_relative_name: Option<String>,
     pub verified: bool,
     pub proof_sha256: Option<String>,
     pub token: Option<String>,
@@ -26,6 +32,7 @@ impl DomainVerificationChallenge {
             method: DOMAIN_VERIFICATION_METHOD_DNS_TXT.to_owned(),
             verification_id: self.verification_id.clone(),
             record_name: self.record_name.clone(),
+            record_relative_name: self.record_relative_name.clone(),
             token: if self.verified {
                 None
             } else {
@@ -146,11 +153,80 @@ pub fn dns_txt_record_name(hostname: &str) -> DeployServiceResult<String> {
     Ok(record_name)
 }
 
+/// The owner label a DNS provider's console asks for, i.e. the record name
+/// reduced against the zone that owns it.
+///
+/// Providers label the field "host" / "name" / "主机记录" and append their own
+/// zone, so handing them the fully qualified name publishes
+/// `_sdkwork-verification.birdcoder.com.birdcoder.com`, which never resolves.
+/// The reduction is the same one [`crate::relative_name_for_hostname`] performs;
+/// it is repeated here for the verification label specifically because that
+/// label carries a leading underscore, which [`normalize_domain_hostname`]
+/// rejects — `idna::domain_to_ascii_strict` only accepts hostnames, and an
+/// underscore is legal in a DNS owner name but not in a hostname (RFC 1035
+/// §2.3.1 permits it; the IDNA/hostname profiles do not).
+///
+/// Returns `None` rather than guessing when the record is not inside `zone`:
+/// a prefix the operator cannot use fails silently at the provider, which is
+/// worse than showing no row at all.
+pub fn dns_txt_relative_name(record_name: &str, zone_apex: &str) -> Option<String> {
+    // Compare on the DNS owner-name alphabet, not the hostname alphabet: fold
+    // case and the UTS #46 full stops, drop a trailing dot, and keep `_`.
+    let record = fold_dns_owner_name(record_name)?;
+    let zone = fold_dns_owner_name(zone_apex)?;
+    let suffix = format!(".{zone}");
+    let relative = record.strip_suffix(&suffix)?;
+    (!relative.is_empty()).then(|| relative.to_owned())
+}
+
+/// Folds a DNS *owner* name for comparison: lowercases, maps the UTS #46 full
+/// stops, strips one trailing dot, and validates the 253/63 length limits.
+///
+/// Deliberately stricter than a hostname check in exactly one direction — it
+/// accepts a leading underscore, which every ownership-verification label uses
+/// — and looser in none.
+fn fold_dns_owner_name(raw: &str) -> Option<String> {
+    let folded = raw
+        .trim()
+        .replace(['\u{3002}', '\u{ff0e}', '\u{ff61}'], ".");
+    let body = folded
+        .strip_suffix('.')
+        .unwrap_or(&folded)
+        .to_ascii_lowercase();
+    if body.is_empty() || body.len() > 253 || body.contains('*') {
+        return None;
+    }
+    let labels = body.split('.');
+    if labels
+        .into_iter()
+        .any(|label| label.is_empty() || label.len() > 63)
+    {
+        return None;
+    }
+    Some(body)
+}
+
+/// Builds the TXT record value the operator must publish, following RFC 8555
+/// §8.4 the way every mainstream CA and DNS provider does.
+///
+/// The wire format is `base64url(sha256(secret))`: 43 characters over the
+/// base64url alphabet with no padding, carrying the full 256 bits of the digest
+/// rather than the 122 bits a bare UUIDv4 spells out. It is deliberately opaque
+/// — no brand prefix, no structuring — because the value's only job is to be
+/// unique and unguessable, and a decorative prefix invites operators to edit it.
+///
+/// The secret is passed in rather than generated here so the caller keeps the
+/// single source of entropy; only the digest ever reaches the database, exactly
+/// as the verifier later recomputes it from the published TXT contents.
+pub fn dns_txt_record_value(secret: &str) -> String {
+    base64url_encode(&sha256_digest(secret.as_bytes()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        dns_txt_record_name, normalize_domain_hostname, normalize_zone_apex,
-        relative_name_for_hostname,
+        dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name,
+        normalize_domain_hostname, normalize_zone_apex, relative_name_for_hostname,
     };
 
     #[test]
@@ -246,5 +322,55 @@ mod tests {
         for hostname in ["www.example.com", "co.uk", "*.example.com"] {
             assert!(normalize_zone_apex(hostname).is_err(), "{hostname}");
         }
+    }
+
+    #[test]
+    fn reduces_the_verification_label_to_the_providers_host_field() {
+        // The operator's console appends its own zone, so the bare label is what
+        // belongs in the "host"/"主机记录" box.
+        assert_eq!(
+            dns_txt_relative_name("_sdkwork-verification.birdcoder.com", "birdcoder.com")
+                .as_deref(),
+            Some("_sdkwork-verification")
+        );
+        // Deeper zones keep their intermediate labels: the record is still one
+        // label inside `eu.example.com`.
+        assert_eq!(
+            dns_txt_relative_name("_sdkwork-verification.eu.example.com", "eu.example.com")
+                .as_deref(),
+            Some("_sdkwork-verification")
+        );
+        // A record the zone does not own must refuse, never guess: a wrong
+        // prefix fails silently at the provider.
+        assert_eq!(
+            dns_txt_relative_name("_sdkwork-verification.other.example.com", "birdcoder.com"),
+            None
+        );
+        // The apex itself is not a relative name.
+        assert_eq!(
+            dns_txt_relative_name("birdcoder.com", "birdcoder.com"),
+            None
+        );
+    }
+
+    #[test]
+    fn dns_txt_record_values_follow_the_base64url_digest_shape() {
+        // RFC 8555 §8.4: base64url(sha256(secret)), no padding. A 32-byte digest
+        // is 43 base64url characters.
+        assert_eq!(
+            dns_txt_record_value("hello"),
+            "LPJNul-wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ"
+        );
+        let value = dns_txt_record_value("6f1a3c2e-0000-4000-8000-000000000000");
+        assert_eq!(value.len(), 43);
+        assert!(!value.contains('='), "{value}");
+        assert!(
+            value
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+            "{value}"
+        );
+        // Distinct secrets must not collide.
+        assert_ne!(dns_txt_record_value("a"), dns_txt_record_value("b"));
     }
 }

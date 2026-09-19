@@ -774,12 +774,6 @@ importers:
       '@sdkwork/deployments-pc-console-shell':
         specifier: workspace:*
         version: link:packages/sdkwork-deployments-pc-console-shell
-      '@sdkwork/deployments-pc-console-site-configuration':
-        specifier: workspace:*
-        version: link:packages/sdkwork-deployments-pc-console-site-configuration
-      '@sdkwork/deployments-pc-console-sites':
-        specifier: workspace:*
-        version: link:packages/sdkwork-deployments-pc-console-sites
       '@sdkwork/deployments-pc-core':
         specifier: workspace:*
         version: link:packages/sdkwork-deployments-pc-core
@@ -1004,18 +998,6 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.14
-
-  apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-site-configuration:
-    dependencies:
-      '@sdkwork/deployments-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-deployments-pc-commons
-
-  apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-sites:
-    dependencies:
-      '@sdkwork/deployments-pc-commons':
-        specifier: workspace:*
-        version: link:../sdkwork-deployments-pc-commons
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-core: {}
 

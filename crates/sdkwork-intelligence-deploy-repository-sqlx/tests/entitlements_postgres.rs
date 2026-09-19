@@ -94,6 +94,7 @@ fn app_request(name: &str) -> CreateAppRequest {
         app_kind: sdkwork_deploy_contract::AppKind::ApiService,
         app_type: Some(2),
         runtime_config: None,
+        metadata: None,
         description: None,
         default_environment: None,
         idempotency_key: None,
@@ -125,13 +126,13 @@ async fn entitlement_enforcement_blocks_capacity_over_the_limit() {
     // Tenant 7 has a plan limiting it to one active app; the first app fits.
     insert_entitlement_projection(&repository, 7, r#"{"active_apps": 1}"#).await;
     let first = service
-        .create_app(&context(7), &app_request("first-app"))
+        .create_app(&context(7), None, &app_request("first-app"))
         .await
         .expect("first app within the plan limit");
 
     // The second app exceeds the plan: quota exceeded (429 semantics).
     let second = service
-        .create_app(&context(7), &app_request("second-app"))
+        .create_app(&context(7), None, &app_request("second-app"))
         .await;
     let error = second.expect_err("second app must exceed the plan limit");
     assert_eq!(error.kind(), DeployServiceErrorKind::QuotaExceeded);
@@ -139,7 +140,7 @@ async fn entitlement_enforcement_blocks_capacity_over_the_limit() {
 
     // A tenant without any projection fails closed when enforcement is on.
     let unplanned = service
-        .create_app(&context(8), &app_request("unplanned-app"))
+        .create_app(&context(8), None, &app_request("unplanned-app"))
         .await;
     let error = unplanned.expect_err("unplanned tenant must fail closed");
     assert_eq!(error.kind(), DeployServiceErrorKind::Forbidden);
@@ -161,12 +162,14 @@ async fn entitlement_usage_aggregates_and_management_surfaces_work() {
             7,
             Some(9),
             Some(11),
+            None,
             &CreateAppRequest {
                 name: "usage-app".to_owned(),
                 slug: Some("usage-app".to_owned()),
                 app_kind: sdkwork_deploy_contract::AppKind::ApiService,
                 app_type: Some(2),
                 runtime_config: None,
+                metadata: None,
                 description: None,
                 default_environment: None,
                 idempotency_key: None,

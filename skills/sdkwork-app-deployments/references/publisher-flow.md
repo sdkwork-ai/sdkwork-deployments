@@ -47,7 +47,7 @@ The result contains stable evidence:
 
 ```ts
 const {
-  site,
+  app,
   upload,
   artifact,
   release,
@@ -58,20 +58,30 @@ const {
 When a deployment was requested, retrieve it through the generated facade:
 
 ```ts
-const current = await deployClient.deployment.sites.deployments.retrieve(
-  site.id,
+const current = await deployClient.deployment.retrieve(
+  app.id,
   deployment.id,
 );
 ```
 
 Do not map numeric deployment statuses to names unless the active API contract defines that mapping. Preserve the raw status and timestamps in completion evidence.
 
-Rollback is a separate confirmed action:
+Rollback is a separate confirmed action. There is no `deployments.rollback` operation: create a new
+deployment against the release you want to return to, and read the lineage back from the
+response-only `rollbackFromDeploymentId` field.
 
 ```ts
-const rollback = await deployClient.deployment.sites.deployments.rollback(
-  site.id,
-  deployment.id,
+const rollback = await deployClient.deployment.create(
+  app.id,
+  {
+    platformTargetId,
+    releaseId: previousReleaseId,
+    deploymentKind: 'ARTIFACT_RELEASE',
+    deploymentTarget: 'WEB_NODE',
+    environment: 'production',
+    idempotencyKey,
+  },
+  { idempotencyKey },
 );
 ```
 

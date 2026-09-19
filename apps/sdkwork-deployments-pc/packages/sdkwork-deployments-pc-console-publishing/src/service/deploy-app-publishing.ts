@@ -30,6 +30,7 @@ import type {
   DriveUploaderUploadResult,
   SdkworkDriveAppClient,
 } from "@sdkwork/drive-app-sdk";
+import { DEPLOY_APP_MEDIA_UPLOAD } from "@sdkwork/deployments-pc-commons";
 import { uuid } from "@sdkwork/utils/id";
 import {
   APP_SURFACE_DIRECTORY_SUFFIX,
@@ -549,14 +550,75 @@ export interface CreateDeployAppInput {
   readonly buildOutputPath?: string | undefined
 }
 
-/** 需求 7: 语义化版本校验。 */
-const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+/**
+ * v5: 「只创建应用」的输入模型。
+ *
+ * 与 {@link CreateDeployAppInput} 的区别就是生命周期阶段：这里没有
+ * `sourceDirectory` / `version` / `environment` / `framework` / `buildOutputPath`
+ * 等发布参数 —— 创建一个应用不需要用户先想清楚怎么发布它。
+ */
+export interface CreateAppRecordInput {
+  /** 应用名称（deploy_app.name，必填）。 */
+  readonly name: string
+  /** 应用标识（deploy_app.slug）；留空时由名称推导。 */
+  readonly slug?: string | undefined
+  /** 应用类型 → deploy_app.app_kind。 */
+  readonly appKind: DeployAppKind
+  /** 应用描述（deploy_app.description）。 */
+  readonly description?: string | undefined
+  /** 多级分类（deploy_app.metadata.category）。 */
+  readonly category?: DeployAppCategorySelection | undefined
+  /** 可选：关联站点。 */
+  readonly siteId?: string | undefined
+}
+
+/** 需求 7: 语义化版本校验。 */const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
 
 export function isValidSemver(version: string): boolean {
   return SEMVER_PATTERN.test(version.trim())
 }
 
-/** Derive a slug from a name: lowercase, ascii, dash-separated. */
+/**
+ * Whether an error from `apps.create` is the slug-uniqueness conflict.
+ *
+ * `deploy_app` carries a partial unique index on `(tenant_id, slug)`, and the
+ * server answers a violation with a `409 / 40901` problem whose `detail` is the
+ * raw English rule text (`conflict: app slug aaa already exists in this
+ * tenant`). That string is not operator-facing copy, so the dialogs must
+ * recognise the condition and render a localised, actionable message instead of
+ * echoing the detail.
+ *
+ * Duck-typed on purpose: the generated SDK surfaces problems as plain objects,
+ * and the exact wrapper differs between the app SDK and a host-injected client.
+ */
+export function isAppSlugConflictError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false
+  }
+  const record = error as { status?: unknown; code?: unknown; message?: unknown }
+  if (record.status === 409) {
+    return true
+  }
+  if (typeof record.code === "number") {
+    return record.code === 40901 || (record.code >= 40900 && record.code < 41000)
+  }
+  if (typeof record.code === "string") {
+    return /(?:conflict|already_exists|duplicate|40901)/i.test(record.code)
+  }
+  // Last resort: the problem detail survives into `message` when a host
+  // re-wraps the original error.
+  return typeof record.message === "string" && /already exists/i.test(record.message)
+}
+
+/**
+ * Derive a slug from a name: lowercase, ascii, dash-separated.
+ *
+ * Returns `""` when the name carries no ASCII (a Chinese-only name such as
+ * `放大`), because every such name maps to the same empty string and
+ * `deploy_app.slug` is unique per tenant. Callers must therefore treat `""` as
+ * "no slug derivable" and leave the field out — the server then derives a
+ * `<prefix>-<uuid-tail>` slug instead of persisting an empty one.
+ */
 export function deriveAppSlug(name: string): string {
   const normalized = name
     .trim()
@@ -591,6 +653,11 @@ export interface DeployAppPublishingService {
   uploadMedia(input: DeployAppMediaUpload, appResourceId: string): Promise<DeployAppMediaRef>
   /** 需求 1/7/8/9: 创建（或更新元数据）应用并写平台目标。 */
   createApp(input: CreateDeployAppInput): Promise<AppResponse>
+  /**
+   * v5: 只登记应用身份 —— 名称 / 类型 / 分类 / 描述 / 资料，**不**发布、
+   * 不写平台目标。应用必须先存在，发布流程才把它作为目标。
+   */
+  createAppRecord(input: CreateAppRecordInput): Promise<AppResponse>
   /** 给已有应用追加平台目标。 */
   createPlatformTarget(appId: string, request: CreatePlatformTargetRequest): Promise<unknown>
   /** 组装 deploy_app.metadata JSONB。 */
@@ -639,12 +706,16 @@ export function createDeployAppPublishingService(
     },
 
     async uploadMedia(input, appResourceId) {
+      // Upload identity comes from the application upload declaration
+      // (`DRIVE_SPEC.md` §18). `kind` is a closed media dimension and does not
+      // enter `scene`, so one upload origin is not split into one statistic row
+      // per media kind.
       const uploaded = await driveClient.uploader.uploadArchive({
         file: input.file,
-        appResourceType: "deploy.app.media",
+        appResourceType: DEPLOY_APP_MEDIA_UPLOAD.appResourceType,
         appResourceId,
-        scene: `deploy-app-${input.kind}`,
-        source: "@sdkwork/deployments-pc-console-publishing",
+        scene: DEPLOY_APP_MEDIA_UPLOAD.scene,
+        source: DEPLOY_APP_MEDIA_UPLOAD.source,
         originalFileName: input.fileName,
         contentType: input.contentType,
       })
@@ -678,6 +749,29 @@ export function createDeployAppPublishingService(
       return Object.fromEntries(
         Object.entries(metadata).filter(([, value]) => value !== undefined),
       )
+    },
+
+    async createAppRecord(input) {
+      const idempotencyKey = createIdempotencyKey()
+      const name = input.name.trim()
+      const slug = input.slug?.trim() || deriveAppSlug(name) || undefined
+      const description = input.description?.trim() || undefined
+      // 创建阶段的 metadata 只承载分类；媒体由对话框在 app 存在后回写
+      // （Drive 上传需要 appResourceId），发布元数据留给发布流程。
+      const metadata: Record<string, unknown> = input.category
+        ? { category: { id: input.category.id, path: input.category.path } }
+        : {}
+      const request: CreateAppRequest = {
+        name,
+        appKind: toSdkAppKind(input.appKind),
+        idempotencyKey,
+        ...(slug === undefined ? {} : { slug }),
+        ...(description === undefined ? {} : { description }),
+        ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
+        ...(input.siteId === undefined ? {} : { siteId: input.siteId }),
+      }
+      // 只登记 deploy_app 本身 —— 平台目标由发布流程按实际发布的表面写入。
+      return deployClient.app.create(request, { idempotencyKey })
     },
 
     async createApp(input) {

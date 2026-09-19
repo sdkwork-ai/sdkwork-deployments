@@ -1351,7 +1351,7 @@ async fn insert_composition_audit(
         "INSERT INTO deploy_audit_log (
             id,uuid,tenant_id,organization_id,operator_id,operator_type,action,target_type,
             target_id,target_uuid,metadata,created_at
-         ) VALUES ($1,$2,$3,$4,$5,'USER','sites.composition.update','app',$6,$7,
+         ) VALUES ($1,$2,$3,$4,$5,'USER','apps.composition.update','app',$6,$7,
             CAST($8 AS JSONB),CAST($9 AS TIMESTAMPTZ))",
     )
     .bind(audit_id)

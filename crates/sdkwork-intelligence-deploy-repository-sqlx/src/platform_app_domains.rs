@@ -1,4 +1,4 @@
-﻿//! Platform app publishing domains: idempotent provisioning of every app's
+//! Platform app publishing domains: idempotent provisioning of every app's
 //! default publishable hostnames (`<appDomainLabel>.app[-<env>].<suffix>`) and
 //! the hostname → app resolution the Web Server fallback uses.
 //!
@@ -22,12 +22,13 @@
 //! precedence hostname+environment → environment → app base.
 
 use sdkwork_deploy_contract::{
-    DeployServiceError, DeployServiceResult, ProvisionAppDomainsResult, ResolvedDeployServer,
+    AppDomainPage, AppDomainResponse, DeployServiceError, DeployServiceResult,
+    ProvisionAppDomainsResult, ResolvedDeployServer,
 };
 use sdkwork_deploy_core::{app_domain_label, default_app_hostname};
 use sqlx::Row;
 
-use crate::support::{new_uuid, next_id, now_rfc3339, store_error};
+use crate::support::{new_uuid, next_id, now_rfc3339, resolve_app_internal_id, store_error};
 use crate::DeployRepository;
 
 /// Batch traffic usage ingest for the Web Server usage metering
@@ -190,6 +191,125 @@ impl DeployRepository {
             ),
             override_suffixes,
         })
+    }
+
+    /// Every hostname the app answers on, ordered default-first.
+    ///
+    /// Reads `deploy_app_binding` — the same rows the Web Server hostname
+    /// lookup matches on — so the console's domain column cannot disagree with
+    /// what is actually routable. A hostname whose binding key starts with
+    /// [`DEFAULT_BINDING_KEY_PREFIX`] is an auto-provisioned platform domain
+    /// (hence `DEFAULT` and already `VERIFIED`, because the platform owns the
+    /// zone); anything else is a user-owned custom hostname and carries the
+    /// `CNAME` target the user has to create.
+    pub(super) async fn list_app_domains_repo(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<AppDomainPage> {
+        let internal_id = resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
+        // The CNAME target for custom hostnames is the app's own canonical
+        // default hostname: aliasing to a hostname rather than to an IP keeps
+        // the certificate (issued for the platform wildcard) valid and lets the
+        // platform move servers without asking users to re-point DNS.
+        let config = self.app_domain_config_repo(internal_id).await?;
+        let suffix = config
+            .suffixes
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "sdkwork.com".to_owned());
+        let rows = sqlx::query(
+            "SELECT b.hostname_ascii, b.binding_key, b.environment, b.path_prefix,
+                    b.action_type, b.status, b.is_canonical,
+                    b.verified_at IS NOT NULL AS binding_verified,
+                    d.uuid AS domain_uuid, d.hostname_type,
+                    d.verification_status AS domain_verification_status,
+                    z.apex AS zone_apex
+             FROM deploy_app_binding b
+             LEFT JOIN deploy_domain d ON d.id = b.domain_id AND d.deleted_at IS NULL
+             LEFT JOIN deploy_dns_zone z ON z.id = d.zone_id AND z.deleted_at IS NULL
+             WHERE b.app_id = $1 AND b.deleted_at IS NULL
+             ORDER BY (b.binding_key NOT LIKE $2) ASC,
+                      b.environment, b.hostname_ascii, b.path_prefix",
+        )
+        .bind(internal_id)
+        .bind(format!("{DEFAULT_BINDING_KEY_PREFIX}%"))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list app binding rows", error))?;
+
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let hostname: String = row
+                .try_get("hostname_ascii")
+                .map_err(|error| DeployServiceError::Internal(format!("read hostname: {error}")))?;
+            let binding_key: Option<String> = row.try_get("binding_key").ok().flatten();
+            let is_default = binding_key
+                .as_deref()
+                .map(|key| key.starts_with(DEFAULT_BINDING_KEY_PREFIX))
+                .unwrap_or(false);
+            let environment: String = row.try_get("environment").unwrap_or_default();
+            let binding_status: String = row.try_get("status").unwrap_or_default();
+            let domain_verification: Option<String> =
+                row.try_get("domain_verification_status").ok().flatten();
+            let binding_verified: bool = row.try_get("binding_verified").unwrap_or(false);
+            // A default hostname lives in a platform-owned zone, so verification
+            // is *not required* — reporting it as PENDING would show the user a
+            // DNS step that does not exist. A custom hostname falls back to the
+            // binding's own verification when the domain row was not joined.
+            let verification_status = if is_default {
+                "NOT_REQUIRED".to_owned()
+            } else {
+                match domain_verification.as_deref() {
+                    Some("VERIFIED") => "VERIFIED".to_owned(),
+                    Some("FAILED") => "FAILED".to_owned(),
+                    Some("EXPIRED") => "EXPIRED".to_owned(),
+                    Some(_) => "PENDING".to_owned(),
+                    None if binding_verified => "VERIFIED".to_owned(),
+                    None => "PENDING".to_owned(),
+                }
+            };
+            let zone_apex: Option<String> = row.try_get("zone_apex").ok().flatten();
+            let hostname_type: Option<String> = row.try_get("hostname_type").ok().flatten();
+            // Only a custom label under a zone the *user* owns needs a DNS
+            // record; `WILDCARD` rows are platform-managed. The record name is
+            // the label with the zone apex stripped.
+            let dns_record_name = if !is_default && hostname_type.as_deref() != Some("WILDCARD") {
+                zone_apex
+                    .as_deref()
+                    .and_then(|apex| {
+                        hostname
+                            .strip_suffix(apex)
+                            .map(|label| label.trim_end_matches('.'))
+                    })
+                    .map(str::to_owned)
+                    .filter(|label| !label.is_empty())
+                    .or_else(|| Some(hostname.clone()))
+            } else {
+                None
+            };
+            items.push(AppDomainResponse {
+                hostname: hostname.clone(),
+                kind: if is_default { "DEFAULT" } else { "CUSTOM" }.to_owned(),
+                environment: environment.clone(),
+                binding_status,
+                verification_status: verification_status.clone(),
+                is_canonical: row.try_get("is_canonical").ok(),
+                path_prefix: row.try_get("path_prefix").ok().flatten(),
+                domain_id: row.try_get("domain_uuid").ok().flatten(),
+                // Only a custom hostname still awaiting verification needs the
+                // instruction; a verified one must not keep showing a stale CNAME.
+                dns_record_value: if verification_status == "PENDING" {
+                    Some(hostname.clone())
+                } else {
+                    None
+                },
+                dns_record_name,
+                cname_target: Some(default_app_hostname(&config.label, &suffix, "production")),
+            });
+        }
+        let total = items.len() as i64;
+        Ok(AppDomainPage { items, total })
     }
 
     /// Create the platform app-domain DNS zones for a tenant for the supplied

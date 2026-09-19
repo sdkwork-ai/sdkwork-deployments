@@ -76,6 +76,12 @@ Deploy stores stable business references. Raw HTTP, manual authorization headers
 forks, generated output edits, and cross-surface business imports are forbidden. Generated SDK
 output must not be hand-edited; regenerate through the owned materializers.
 
+Upload uses the Drive App SDK `uploader.*` surface only. This root's upload identity is declared in
+`specs/upload.declaration.json` and each declared entry is a distinct upload purpose. `source` is
+this application's code, never a package name. `scene` is a stable workflow label, never composed
+from a runtime value. `uploadProfileCode` is a standard Drive profile. Feature services, not UI
+components, pass these values, and they import the declaration rather than repeating its literals.
+
 ## Required Specs By Task Type
 
 - Agent/workflow changes: `../../../sdkwork-specs/SOUL.md`, `../../../sdkwork-specs/AGENTS_SPEC.md`,
@@ -84,6 +90,12 @@ output must not be hand-edited; regenerate through the owned materializers.
   `../../../sdkwork-specs/NAMING_SPEC.md`, plus only the touched language/framework spec.
 - API/SDK changes: `../../../sdkwork-specs/API_SPEC.md`, `../../../sdkwork-specs/SDK_SPEC.md`,
   `../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md`, and `../../../sdkwork-specs/TEST_SPEC.md`.
+- Upload, file-storage, or app-upload changes: `../../../sdkwork-specs/DRIVE_SPEC.md` and
+  `../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md`. Upload identity is declared in
+  [`specs/upload.declaration.json`](specs/upload.declaration.json) per `DRIVE_SPEC.md` §18 and the
+  declaration is the single authority for this root's `appResourceType`, `scene`, `source`,
+  `uploadProfileCode`, and retention values. Upload call sites import the declaration instead of
+  repeating its literals.
 - List/search work: `../../../sdkwork-specs/PAGINATION_SPEC.md` and `check-pagination.mjs`.
 - Source configuration changes: `../../../sdkwork-specs/SOURCE_CONFIG_SPEC.md`,
   `../../../sdkwork-specs/CONFIG_SPEC.md`, and `../../../sdkwork-specs/ENVIRONMENT_SPEC.md`.

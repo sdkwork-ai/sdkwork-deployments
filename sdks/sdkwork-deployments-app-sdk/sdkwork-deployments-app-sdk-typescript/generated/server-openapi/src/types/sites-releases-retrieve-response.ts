@@ -1,8 +1,0 @@
-import type { ReleaseResponse } from './release-response';
-
-export interface SitesReleasesRetrieveResponse {
-  code: 0;
-  data: unknown & { item: ReleaseResponse; };
-  /** Server-owned request correlation id. */
-  traceId: string;
-}

@@ -17,7 +17,10 @@ pub const APP_COMPOSITION: &str = "/app/v3/api/apps/{appId}/composition";
 pub const APP_ACTIVATE: &str = "/app/v3/api/apps/{appId}/activate";
 pub const APP_PAUSE: &str = "/app/v3/api/apps/{appId}/pause";
 pub const APP_ENV_VARIABLES: &str = "/app/v3/api/apps/{appId}/env_variables";
-
+/// The app's publishing domains: every default hostname
+/// (`<appDomainLabel>.app[-<env>].<suffix>`) plus the custom hostnames bound
+/// to the app, with each one's binding/verification state.
+pub const APP_DOMAINS: &str = "/app/v3/api/apps/{appId}/domains";
 pub const APP_HEALTH_CHECKS: &str = "/app/v3/api/apps/{appId}/health_checks";
 pub const CERTIFICATES: &str = "/app/v3/api/certificates";
 pub const CERTIFICATE: &str = "/app/v3/api/certificates/{certificateId}";

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "appId": "sdkwork-deployments-pc",
+  "declarations": [
+    {
+      "appResourceType": "deploy.artifact",
+      "appResourceIdKind": "application",
+      "scene": "deployment-package",
+      "source": "sdkwork-deployments-pc",
+      "uploadProfileCode": "archive",
+      "retention": "long_term",
+      "purpose": "Application deployment package (local archive, Git checkout, or Drive-picked archive) uploaded so a release can reference a built artifact."
+    },
+    {
+      "appResourceType": "deploy.app.media",
+      "appResourceIdKind": "application",
+      "scene": "deploy-app-media",
+      "source": "sdkwork-deployments-pc",
+      "uploadProfileCode": "image",
+      "retention": "long_term",
+      "purpose": "App-store preview media (icon, cover, screenshots) attached to an application after the application record exists."
+    }
+  ]
+}

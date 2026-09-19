@@ -210,6 +210,7 @@ impl DeployService {
                 method: crate::domain_verification::DOMAIN_VERIFICATION_METHOD_DNS_TXT.to_owned(),
                 verification_id: Some(verification_id.to_owned()),
                 record_name: challenge.record_name,
+                record_relative_name: challenge.record_relative_name,
                 token: None,
                 expires_at: challenge.expires_at,
             });
@@ -551,27 +552,37 @@ impl DeployAppApi for DeployService {
                     .await?,
                 )
             };
-            let (verified, dns_record_name, dns_record_type, dns_record_value, expires_at) =
-                match observation {
-                    // Nothing is presented once a name is proven: there is no
-                    // record left to publish.
-                    None => (true, None, None, None, None),
-                    Some(response) => {
-                        let record_name = response.record_name;
-                        let presentable = record_name.is_some();
-                        (
-                            response.verified,
-                            record_name,
-                            presentable.then(|| "TXT".to_owned()),
-                            response.token,
-                            response.expires_at,
-                        )
-                    }
-                };
+            let (
+                verified,
+                dns_record_name,
+                dns_record_relative_name,
+                dns_record_type,
+                dns_record_value,
+                expires_at,
+            ) = match observation {
+                // Nothing is presented once a name is proven: there is no
+                // record left to publish.
+                None => (true, None, None, None, None, None),
+                Some(response) => {
+                    let record_name = response.record_name;
+                    let presentable = record_name.is_some();
+                    (
+                        response.verified,
+                        record_name,
+                        // A record the zone does not own yields nothing to
+                        // publish, so the relative name disappears with it.
+                        response.record_relative_name,
+                        presentable.then(|| "TXT".to_owned()),
+                        response.token,
+                        response.expires_at,
+                    )
+                }
+            };
             items.push(sdkwork_deploy_contract::DomainHostnameClaimResponse {
                 hostname,
                 verified,
                 dns_record_name,
+                dns_record_relative_name,
                 dns_record_type,
                 dns_record_value,
                 expires_at,
@@ -1138,9 +1149,10 @@ impl DeployAppApi for DeployService {
     async fn create_app(
         &self,
         context: &DeployAppRequestContext,
+        idempotency_key: Option<&str>,
         request: &CreateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
-        self.create_app(context, request).await
+        self.create_app(context, idempotency_key, request).await
     }
 
     async fn retrieve_app(

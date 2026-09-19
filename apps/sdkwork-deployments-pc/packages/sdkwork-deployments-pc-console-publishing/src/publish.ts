@@ -6,9 +6,11 @@
  */
 export { CreateDeployAppDialog } from "./components/CreateDeployAppDialog.tsx";
 export type { CreateDeployAppDialogProps, DeployAppPublishResult } from "./components/CreateDeployAppDialog.tsx";
+export { CreateAppDialog } from "./components/CreateAppDialog.tsx";
+export type { CreateAppDialogProps } from "./components/CreateAppDialog.tsx";
 export { BuildProgressDialog } from "./components/BuildProgressDialog.tsx";
 export type { BuildProgressDialogProps, DeployDialogBuildFrame, DeployDialogBuildPort } from "./components/BuildProgressDialog.tsx";
-export { PublishingAppsPage } from "./components/PublishingAppsPage.tsx";
+export { PublishingAppsPage, primaryHostname } from "./components/PublishingAppsPage.tsx";
 export type { PublishingAppsPageProps } from "./components/PublishingAppsPage.tsx";
 export { CategoryCascadeSelect } from "./components/CategoryCascadeSelect.tsx";
 export { DeployAppTypeSelect } from "./components/DeployAppTypeSelect.tsx";
@@ -19,8 +21,37 @@ export { DeployProjectPathBar } from "./components/DeployProjectPathBar.tsx";
 export type { DeployProjectPathBarProps } from "./components/DeployProjectPathBar.tsx";
 export { DeployProjectDirectoryFields } from "./components/DeployProjectDirectoryFields.tsx";
 export { DeployEnvironmentSelect } from "./components/DeployEnvironmentSelect.tsx";
-export { DeployAppMediaFields, screenshotTargets } from "./components/DeployAppMediaFields.tsx";
+export { DeployAppMediaFields } from "./components/DeployAppMediaFields.tsx";
 export type { DeployAppMediaFiles, DeployAppMediaFieldsProps } from "./components/DeployAppMediaFields.tsx";
+export { UploadSourceDialog } from "./components/UploadSourceDialog.tsx";
+export type { UploadSourceDialogProps } from "./components/UploadSourceDialog.tsx";
+export { AppDomainDialog } from "./components/AppDomainDialog.tsx";
+export type { AppDomainDialogProps } from "./components/AppDomainDialog.tsx";
+export { AppDetailDrawer } from "./components/AppDetailDrawer.tsx";
+export type { AppDetailDrawerProps } from "./components/AppDetailDrawer.tsx";
+export {
+  compositionKey,
+  createDeployAppOperationsService,
+  DEPLOY_PACKAGE_TYPE_OPTIONS,
+  relativeNameInZone,
+} from "./service/deploy-app-operations.ts";
+export type {
+  DeployAppDetail,
+  DeployAppDomain,
+  DeployAppDomainState,
+  DeployAppOperationsService,
+  DeployAppOperationsServiceOptions,
+  DeployCodeArchiveUpload,
+  DeployCodeSource,
+  DeployCustomHostnameInput,
+  DeployCustomHostnameResult,
+  DeployDriveArchiveOption,
+  DeployGitSourceInput,
+  DeployPackageTypeOption,
+  DeployUploadCodeFromArchiveInput,
+  DeployUploadCodeResult,
+  DeployUploadProgress,
+} from "./service/deploy-app-operations.ts";
 export {
   classifyAppTypeCards,
   classifyFrameworks,
@@ -112,10 +143,25 @@ export {
   MAX_SCREENSHOTS_TOTAL,
   MEDIA_ACCEPTED_TYPES,
   PREVIEW_ASPECT_TOLERANCE,
+  countScreenshots,
+  mediaSpecForAppKind,
+  missingRequiredScreenshots,
   previewTargetsForAppKind,
+  validateCover,
+  validateIcon,
   validatePreviewSize,
 } from "./service/app-store-preview-spec.ts";
-export type { PreviewSizeTarget, PreviewValidationResult } from "./service/app-store-preview-spec.ts";
+export type {
+  AppMediaSpec,
+  AspectBand,
+  CoverSpec,
+  IconSpec,
+  PreviewDevice,
+  PreviewFailureReason,
+  PreviewSizeTarget,
+  PreviewValidationResult,
+  StoreId,
+} from "./service/app-store-preview-spec.ts";
 export {
   publishingText,
   publishingTranslator,

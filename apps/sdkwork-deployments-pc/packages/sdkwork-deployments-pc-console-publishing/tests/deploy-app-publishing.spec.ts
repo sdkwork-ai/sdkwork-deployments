@@ -18,6 +18,7 @@ import {
   DEPLOY_APP_TYPE_OPTIONS,
   deriveAppSlug,
   frameworksOfCard,
+  isAppSlugConflictError,
   isValidSemver,
   requiredSurfaceDirectory,
   resolveDeployAppType,
@@ -25,6 +26,7 @@ import {
   type CreateDeployAppInput,
   type DeployAppTypeOption,
 } from "../src/service/deploy-app-publishing.ts";
+import type { CreateAppRequest } from "@sdkwork/deployments-app-sdk";
 import {
   APP_SURFACE_DIRECTORY_SUFFIX,
   detectSdkworkProject,
@@ -73,6 +75,43 @@ describe("deriveAppSlug", () => {
 
   it("trims leading/trailing separators", () => {
     expect(deriveAppSlug("- App -")).toBe("app");
+  });
+
+  it("returns an empty slug for a name with no ascii, so callers omit the field", () => {
+    // `deploy_app.slug` is unique per tenant, so persisting "" would let the
+    // first Chinese-named app claim it and make every later one a permanent 409.
+    expect(deriveAppSlug("放大")).toBe("");
+    expect(deriveAppSlug("我的应用")).toBe("");
+  });
+});
+
+describe("isAppSlugConflictError", () => {
+  it("recognises the server conflict problem by status", () => {
+    expect(isAppSlugConflictError({ status: 409, code: 40901 })).toBe(true);
+  });
+
+  it("recognises it by numeric code alone", () => {
+    expect(isAppSlugConflictError({ code: 40901 })).toBe(true);
+    expect(isAppSlugConflictError({ code: 40999 })).toBe(true);
+  });
+
+  it("recognises it by symbolic code", () => {
+    expect(isAppSlugConflictError({ code: "already_exists" })).toBe(true);
+    expect(isAppSlugConflictError({ code: "CONFLICT" })).toBe(true);
+  });
+
+  it("falls back to the raw problem detail when a host re-wraps the error", () => {
+    expect(isAppSlugConflictError(new Error("conflict: app slug aaa already exists in this tenant"))).toBe(
+      true,
+    );
+  });
+
+  it("does not misclassify validation or transport failures", () => {
+    expect(isAppSlugConflictError({ status: 422, code: 42201 })).toBe(false);
+    expect(isAppSlugConflictError({ status: 500, code: 50001 })).toBe(false);
+    expect(isAppSlugConflictError(new Error("network unreachable"))).toBe(false);
+    expect(isAppSlugConflictError(undefined)).toBe(false);
+    expect(isAppSlugConflictError(null)).toBe(false);
   });
 });
 
@@ -159,6 +198,124 @@ describe("createDeployAppPublishingService metadata assembly", () => {
     expect(metadata.framework).toBe("flutter");
     // Trailing separators are trimmed so the stored path stays canonical.
     expect(metadata.buildOutputPath).toBe("build/ios/iphoneos");
+  });
+});
+
+/**
+ * v5 lifecycle split: registering an application must NOT publish anything.
+ *
+ * These tests pin the two invariants the applications page depends on:
+ *   - `createAppRecord` writes only `deploy_app` identity (name / app_kind /
+ *     description / category) and never touches a platform target.
+ *   - a publish run (`createApp` with `associateAppId`) goes through
+ *     `app.update`, so the publish path can never smuggle in a create.
+ */
+describe("createAppRecord (v5 create-only lifecycle step)", () => {
+  function spyDeployClient() {
+    const calls: { create: CreateAppRequest[]; update: unknown[]; platformTargets: unknown[] } = {
+      create: [],
+      update: [],
+      platformTargets: [],
+    };
+    const client = {
+      app: {
+        async create(request: CreateAppRequest) {
+          calls.create.push(request);
+          return { id: "app-created", name: request.name, slug: request.slug, appKind: request.appKind, metadata: request.metadata };
+        },
+        async update(appId: string, request: unknown) {
+          calls.update.push({ appId, request });
+          return { id: appId, metadata: {} };
+        },
+        platformTargets: {
+          async create(...args: unknown[]) {
+            calls.platformTargets.push(args);
+            return {};
+          },
+        },
+      },
+    };
+    return { calls, client };
+  }
+
+  it("registers only the application record — no platform target is written", async () => {
+    const { calls, client } = spyDeployClient();
+    const service = createDeployAppPublishingService({
+      deployClient: client as never,
+      driveClient: undefined as never,
+      createIdempotencyKey: () => "idem-1",
+    });
+
+    const created = await service.createAppRecord({
+      name: "My Store App",
+      appKind: "SPA_WEB",
+      category: {
+        id: "shopping",
+        path: [{ id: "shopping", label: "购物" }, { id: "retail", label: "零售" }],
+      },
+    });
+
+    expect(created.id).toBe("app-created");
+    expect(calls.create).toHaveLength(1);
+    expect(calls.create[0]).toMatchObject({
+      name: "My Store App",
+      appKind: "SPA_WEB",
+      slug: "my-store-app",
+      idempotencyKey: "idem-1",
+      metadata: { category: { id: "shopping", path: [{ id: "shopping", label: "购物" }, { id: "retail", label: "零售" }] } },
+    });
+    // The whole point of the split: creating an app must not publish it.
+    expect(calls.platformTargets).toHaveLength(0);
+    expect(calls.update).toHaveLength(0);
+  });
+
+  it("omits metadata entirely when no category was chosen", async () => {
+    const { calls, client } = spyDeployClient();
+    const service = createDeployAppPublishingService({
+      deployClient: client as never,
+      driveClient: undefined as never,
+      createIdempotencyKey: () => "idem-2",
+    });
+
+    await service.createAppRecord({ name: "API Service", appKind: "API_SERVICE" });
+
+    expect(calls.create[0]).not.toHaveProperty("metadata");
+    expect(calls.create[0]).not.toHaveProperty("description");
+  });
+
+  it("trims the name and derives the slug when none was supplied", async () => {
+    const { calls, client } = spyDeployClient();
+    const service = createDeployAppPublishingService({
+      deployClient: client as never,
+      driveClient: undefined as never,
+      createIdempotencyKey: () => "idem-3",
+    });
+
+    await service.createAppRecord({ name: "  商城 App__v1  ", appKind: "SPA_WEB", slug: "   " });
+
+    expect(calls.create).toHaveLength(1);
+    expect(calls.create[0]?.name).toBe("商城 App__v1");
+    expect(calls.create[0]?.slug).toBe("app-v1");
+  });
+
+  it("publishes onto an existing app via update, never creating a second record", async () => {
+    const { calls, client } = spyDeployClient();
+    const service = createDeployAppPublishingService({
+      deployClient: client as never,
+      driveClient: undefined as never,
+      createIdempotencyKey: () => "idem-4",
+    });
+
+    await service.createApp({
+      sourceDirectory: "/workspace/apps/sdkwork-shop-h5",
+      associateAppId: "app-existing",
+      type: staticWeb as DeployAppTypeOption,
+      version: "1.0.0",
+    });
+
+    expect(calls.create).toHaveLength(0);
+    expect(calls.update).toHaveLength(1);
+    expect((calls.update[0] as { appId: string }).appId).toBe("app-existing");
   });
 });
 

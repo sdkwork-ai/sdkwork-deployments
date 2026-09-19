@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use axum::{
     extract::{Path, Query, State},
+    http::HeaderMap,
     response::Response,
     routing::{get, patch, post},
     Extension, Json, Router,
@@ -23,7 +24,7 @@ use sdkwork_routes_deploy_common::{envelope, finish_api_json, finish_created_api
 use sdkwork_web_core::WebRequestContext;
 use serde::Deserialize;
 
-use crate::{auth::require_app_context, paths, routes::AppState};
+use crate::{auth::require_app_context, paths, routes::required_header, routes::AppState};
 
 #[derive(Deserialize)]
 struct PageQuery {
@@ -40,6 +41,7 @@ pub fn build_app_delivery_router() -> Router<AppState> {
     Router::<AppState>::new()
         .route(paths::APPS, get(list_apps).post(create_app))
         .route(paths::APP, get(retrieve_app).patch(update_app))
+        .route(paths::APP_DOMAINS, get(list_app_domains))
         .route(
             paths::APP_PLATFORM_TARGETS,
             get(list_platform_targets).post(create_platform_target),
@@ -143,13 +145,23 @@ async fn create_app(
     ctx: WebRequestContext,
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
+    headers: HeaderMap,
     Json(request): Json<CreateAppRequest>,
 ) -> Response {
     finish_created_api_json(
         &ctx,
         async {
             let context = require_app_context(context)?;
-            let result = state.api.create_app(&context, &request).await?;
+            // `apps.create` is declared `x-sdkwork-idempotent: true` and
+            // `IdempotencyKeyParam` is `required: true`, so the header is
+            // validated here (422 naming the header) and forwarded to the
+            // repository, which replays the original row for a repeated key
+            // instead of colliding on `uk_deploy_app_tenant_slug`.
+            let idempotency_key = required_header(&headers, "idempotency-key")?;
+            let result = state
+                .api
+                .create_app(&context, Some(&idempotency_key), &request)
+                .await?;
             ok_json(envelope::resource(result))
         }
         .await,
@@ -186,6 +198,23 @@ async fn update_app(
             let context = require_app_context(context)?;
             let result = state.api.update_app(&context, &app_id, &request).await?;
             ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn list_app_domains(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state.api.list_app_domains(&context, &app_id).await?;
+            ok_json(envelope::app_domain_page(result))
         }
         .await,
     )

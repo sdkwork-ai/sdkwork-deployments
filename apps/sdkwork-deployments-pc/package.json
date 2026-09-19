@@ -43,8 +43,6 @@
     "@sdkwork/deployments-pc-console-monitoring": "workspace:*",
     "@sdkwork/deployments-pc-console-publishing": "workspace:*",
     "@sdkwork/deployments-pc-console-shell": "workspace:*",
-    "@sdkwork/deployments-pc-console-site-configuration": "workspace:*",
-    "@sdkwork/deployments-pc-console-sites": "workspace:*",
     "@sdkwork/deployments-pc-core": "workspace:*",
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/drive-pc-sandbox-contracts": "workspace:*",

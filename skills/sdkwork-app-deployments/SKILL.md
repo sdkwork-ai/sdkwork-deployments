@@ -40,8 +40,8 @@ Read [references/publisher-flow.md](references/publisher-flow.md) before impleme
 
 - Stop at the failed stage and preserve all evidence returned by earlier completed stages.
 - Reuse stable idempotency keys when retrying the same artifact, release, or deployment intent.
-- Never create a second Site to work around ambiguous resolution.
-- Roll back only when the user explicitly approves the Site and deployment id. Use the generated `deployment.sites.deployments.rollback` method and verify the returned evidence.
+- Never create a second Application to work around ambiguous resolution.
+- Roll back only when the user explicitly approves the Application and deployment id. There is no `deployments.rollback` operation: rollback is a forward fix that creates a new deployment against the previously released release id, and the app-API records lineage in the response-only `rollbackFromDeploymentId` field.
 
 ## Completion Evidence
 
@@ -49,7 +49,7 @@ Report:
 
 - application root, build target, environment, and deployment profile
 - archive name, byte size, and SHA-256 digest
-- Site id and whether it was reused or created
+- Application id and whether it was reused or created
 - Drive upload item and session ids
 - artifact, release, and deployment ids
 - deployment status, timestamps, and health result

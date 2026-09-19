@@ -3,7 +3,9 @@
     DomainHostnamePage, DomainHostnameResponse, DomainZonePage, DomainZoneResponse,
     ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
 };
-use sdkwork_intelligence_deploy_service::{dns_txt_record_name, DomainVerificationChallenge};
+use sdkwork_intelligence_deploy_service::{
+    dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, DomainVerificationChallenge,
+};
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
@@ -424,7 +426,7 @@ impl DeployRepository {
         hostname_id: &str,
     ) -> DeployServiceResult<DomainVerificationChallenge> {
         let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT d.id, d.hostname_ascii, d.verification_status
+            "SELECT d.id, d.hostname_ascii, d.verification_status, z.apex_hostname
              FROM deploy_domain d JOIN deploy_dns_zone z ON z.id = d.zone_id
              WHERE z.tenant_id = $1 AND z.uuid = $2 AND d.uuid = $3 AND {}
                AND z.deleted_at IS NULL AND d.deleted_at IS NULL",
@@ -447,11 +449,15 @@ impl DeployRepository {
         let status: String = row.try_get("verification_status").map_err(|error| {
             DeployServiceError::Internal(format!("map deploy_domain verification: {error}"))
         })?;
+        let apex_hostname: String = row.try_get("apex_hostname").map_err(|error| {
+            DeployServiceError::Internal(format!("map deploy_dns_zone apex: {error}"))
+        })?;
         if status == "VERIFIED" {
             return Ok(DomainVerificationChallenge {
                 verification_id: None,
                 hostname,
                 record_name: None,
+                record_relative_name: None,
                 verified: true,
                 proof_sha256: None,
                 token: None,
@@ -498,14 +504,20 @@ impl DeployRepository {
                     DeployServiceError::Internal(format!("map verification expiry: {error}"))
                 })?;
             if expires_at > now {
+                let active_record_name: String =
+                    active.try_get("record_name").map_err(|error| {
+                        DeployServiceError::Internal(format!("map verification record: {error}"))
+                    })?;
                 let result = DomainVerificationChallenge {
                     verification_id: Some(active.try_get("uuid").map_err(|error| {
                         DeployServiceError::Internal(format!("map verification uuid: {error}"))
                     })?),
                     hostname,
-                    record_name: Some(active.try_get("record_name").map_err(|error| {
-                        DeployServiceError::Internal(format!("map verification record: {error}"))
-                    })?),
+                    record_relative_name: dns_txt_relative_name(
+                        &active_record_name,
+                        &apex_hostname,
+                    ),
+                    record_name: Some(active_record_name),
                     verified: false,
                     proof_sha256: Some(active.try_get("proof_sha256").map_err(|error| {
                         DeployServiceError::Internal(format!("map verification proof: {error}"))
@@ -532,9 +544,15 @@ impl DeployRepository {
         }
 
         let verification_id = new_uuid();
-        let token = format!("sdkwork-domain-verification={}", new_uuid());
+        // The operator publishes exactly this string, so it has to be the
+        // RFC 8555 §8.4 shape: base64url(sha256(secret)), 43 characters, no
+        // padding, no brand prefix. The secret stays server-side — only the
+        // digest is persisted, and the verifier recomputes it from whatever the
+        // TXT record actually contains.
+        let token = dns_txt_record_value(&verification_id);
         let proof_sha256 = sha256_hash(token.as_bytes());
         let record_name = dns_txt_record_name(&hostname)?;
+        let record_relative_name = dns_txt_relative_name(&record_name, &apex_hostname);
         let expires_at = now + chrono::Duration::minutes(30);
         sqlx::query(
             "INSERT INTO deploy_domain_verification (
@@ -561,6 +579,7 @@ impl DeployRepository {
             verification_id: Some(verification_id),
             hostname,
             record_name: Some(record_name),
+            record_relative_name,
             verified: false,
             proof_sha256: Some(proof_sha256),
             token: Some(token),

@@ -1,10 +1,11 @@
 import type {
-  CreateDeploymentRequest,
-  CreateSiteRequest,
-  DeploymentResponse,
+  AppDeploymentResponse,
+  AppReleaseResponse,
+  AppResponse,
   ArtifactResponse,
-  ReleaseResponse,
-  SiteResponse,
+  CreateAppDeploymentRequest,
+  CreateAppReleaseRequest,
+  CreateAppRequest,
 } from '../../generated/server-openapi/src/types';
 import type { SdkworkDeployAppClient } from '../../generated/server-openapi/src/sdk';
 import type {
@@ -15,8 +16,8 @@ import type {
 } from '@sdkwork/drive-app-sdk';
 
 export type ApplicationPublishStage =
-  | 'resolveSite'
-  | 'createSite'
+  | 'resolveApp'
+  | 'createApp'
   | 'uploadArchive'
   | 'registerArtifact'
   | 'createRelease'
@@ -25,9 +26,9 @@ export type ApplicationPublishStage =
 
 export type ApplicationPublishErrorCode =
   | 'INVALID_REQUEST'
-  | 'SITE_RESOLUTION_AMBIGUOUS'
-  | 'SITE_RESPONSE_MISSING_ID'
-  | 'SITE_ID_MISMATCH'
+  | 'APP_RESOLUTION_AMBIGUOUS'
+  | 'APP_RESPONSE_MISSING_ID'
+  | 'APP_ID_MISMATCH'
   | 'UPLOAD_RESPONSE_INCOMPLETE'
   | 'ARTIFACT_RESPONSE_MISSING_ID'
   | 'RELEASE_RESPONSE_MISSING_ID'
@@ -36,18 +37,18 @@ export type ApplicationPublishErrorCode =
   | 'ABORTED'
   | 'STAGE_FAILED';
 
-export interface ExistingApplicationPublishSite {
+export interface ExistingApplicationPublishApp {
   kind: 'existing';
-  siteId: string;
+  appId: string;
 }
 
-export interface ResolveOrCreateApplicationPublishSite extends CreateSiteRequest {
+export interface ResolveOrCreateApplicationPublishApp extends CreateAppRequest {
   kind: 'resolveOrCreate';
 }
 
-export type ApplicationPublishSite =
-  | ExistingApplicationPublishSite
-  | ResolveOrCreateApplicationPublishSite;
+export type ApplicationPublishApp =
+  | ExistingApplicationPublishApp
+  | ResolveOrCreateApplicationPublishApp;
 
 export interface ApplicationPublishArtifact {
   file: DriveUploaderBlobLike;
@@ -61,24 +62,22 @@ export interface ApplicationPublishArtifact {
   source?: string;
 }
 
-export interface ApplicationPublishRelease {
-  versionTag?: string;
-}
+export type ApplicationPublishRelease = Omit<CreateAppReleaseRequest, 'idempotencyKey'>;
 
 export type ApplicationPublishDeployment = Omit<
-  CreateDeploymentRequest,
+  CreateAppDeploymentRequest,
   'releaseId' | 'idempotencyKey'
 >;
 
 export interface ApplicationPublishIdempotencyKeys {
-  site?: string;
+  app?: string;
   artifact?: string;
   release?: string;
   deployment?: string;
 }
 
 export interface ApplicationPublishRequest {
-  site: ApplicationPublishSite;
+  app: ApplicationPublishApp;
   artifact: ApplicationPublishArtifact;
   release?: ApplicationPublishRelease;
   deployment?: ApplicationPublishDeployment;
@@ -87,16 +86,16 @@ export interface ApplicationPublishRequest {
   onProgress?: ApplicationPublishProgressCallback;
 }
 
-export type ApplicationPublishSiteResolution =
+export type ApplicationPublishAppResolution =
   | 'existingById'
   | 'existingBySlug'
   | 'existingByName'
   | 'created';
 
-export interface ApplicationPublishSiteEvidence {
+export interface ApplicationPublishAppEvidence {
   id: string;
-  resolution: ApplicationPublishSiteResolution;
-  value: SiteResponse;
+  resolution: ApplicationPublishAppResolution;
+  value: AppResponse;
 }
 
 export interface ApplicationPublishUploadEvidence {
@@ -114,16 +113,16 @@ export interface ApplicationPublishArtifactEvidence {
 
 export interface ApplicationPublishReleaseEvidence {
   id: string;
-  value: ReleaseResponse;
+  value: AppReleaseResponse;
 }
 
 export interface ApplicationPublishDeploymentEvidence {
   id: string;
-  value: DeploymentResponse;
+  value: AppDeploymentResponse;
 }
 
 export interface ApplicationPublishResult {
-  site: ApplicationPublishSiteEvidence;
+  app: ApplicationPublishAppEvidence;
   upload: ApplicationPublishUploadEvidence;
   artifact: ApplicationPublishArtifactEvidence;
   release: ApplicationPublishReleaseEvidence;
@@ -131,7 +130,7 @@ export interface ApplicationPublishResult {
 }
 
 export interface ApplicationPublishProgressEvidence {
-  siteId?: string;
+  appId?: string;
   uploadItemId?: string;
   uploadSessionId?: string;
   artifactId?: string;
@@ -179,24 +178,10 @@ export type ApplicationPublishProgressCallback = (
 ) => void;
 
 export interface ApplicationPublisherDeployClient {
-  readonly site: Pick<SdkworkDeployAppClient['site'], 'create' | 'list' | 'retrieve'>;
+  readonly app: Pick<SdkworkDeployAppClient['app'], 'create' | 'list' | 'retrieve'>;
   readonly artifact: Pick<SdkworkDeployAppClient['artifact'], 'create'>;
-  readonly release: {
-    readonly sites: {
-      readonly releases: Pick<
-        SdkworkDeployAppClient['release']['sites']['releases'],
-        'create'
-      >;
-    };
-  };
-  readonly deployment: {
-    readonly sites: {
-      readonly deployments: Pick<
-        SdkworkDeployAppClient['deployment']['sites']['deployments'],
-        'create'
-      >;
-    };
-  };
+  readonly release: Pick<SdkworkDeployAppClient['release'], 'create'>;
+  readonly deployment: Pick<SdkworkDeployAppClient['deployment'], 'create'>;
 }
 
 export interface ApplicationPublisherDriveClient {

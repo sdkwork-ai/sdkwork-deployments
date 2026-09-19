@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 
 export type DeploymentsSurface = "app-console" | "backend-admin";
-export type DeploymentsResourceKey = "sites" | "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects";
+export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects";
 export interface DeploymentsModuleEntry { description: string; label: string; order: number; permission?: string | undefined; resource: DeploymentsResourceKey; }
 export interface DeploymentsPcModuleDefinition { entries: readonly DeploymentsModuleEntry[]; id: string; label: string; surface: DeploymentsSurface; }
 export interface DeploymentsQuery { page: number; pageSize: number; scopeId?: string | undefined; search?: string | undefined; }

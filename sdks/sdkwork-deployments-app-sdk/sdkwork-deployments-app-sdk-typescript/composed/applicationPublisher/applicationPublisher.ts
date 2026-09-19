@@ -1,17 +1,17 @@
 import { uuid } from '@sdkwork/utils/id';
 import { ApplicationPublishError, toApplicationPublishError } from './errors';
 import {
-  createdApplicationPublishSiteEvidence,
-  findExactApplicationPublishSite,
-  retrieveApplicationPublishSite,
-} from './siteResolver';
+  createdApplicationPublishAppEvidence,
+  findExactApplicationPublishApp,
+  retrieveApplicationPublishApp,
+} from './appResolver';
 import type {
   ApplicationPublishArtifact,
+  ApplicationPublishAppEvidence,
   ApplicationPublishProgress,
   ApplicationPublishProgressEvidence,
   ApplicationPublishRequest,
   ApplicationPublishResult,
-  ApplicationPublishSiteEvidence,
   ApplicationPublishStage,
   DeployApplicationPublisher,
   DeployApplicationPublisherOptions,
@@ -29,7 +29,7 @@ export function createDeployApplicationPublisher(
 
   return {
     async publish(request): Promise<ApplicationPublishResult> {
-      let currentStage: ApplicationPublishStage = 'resolveSite';
+      let currentStage: ApplicationPublishStage = 'resolveApp';
       const evidence: ApplicationPublishProgressEvidence = {};
       const emit = (progress: ApplicationPublishProgress): void => {
         try {
@@ -50,54 +50,64 @@ export function createDeployApplicationPublisher(
         const normalizedArtifact = validateRequest(request);
         throwIfAborted(request.signal, currentStage);
 
-        startStage('resolveSite');
-        let siteEvidence: ApplicationPublishSiteEvidence;
-        if (request.site.kind === 'existing') {
-          siteEvidence = await retrieveApplicationPublishSite(
+        startStage('resolveApp');
+        let appEvidence: ApplicationPublishAppEvidence;
+        if (request.app.kind === 'existing') {
+          appEvidence = await retrieveApplicationPublishApp(
             options.deployClient,
-            request.site.siteId.trim(),
+            request.app.appId.trim(),
             request.signal,
           );
         } else {
-          const existing = await findExactApplicationPublishSite(
+          const existing = await findExactApplicationPublishApp(
             options.deployClient,
-            request.site,
+            request.app,
             request.signal,
           );
           if (existing) {
-            siteEvidence = existing;
+            appEvidence = existing;
           } else {
-            completeStage('resolveSite');
-            startStage('createSite');
-            const siteName = request.site.name.trim();
-            const siteSlug = normalizedOptionalText(request.site.slug);
-            const siteDescription = normalizedOptionalText(request.site.description);
-            const siteRuntimeConfig = request.site.runtimeConfig;
-            const created = await options.deployClient.site.create(
+            completeStage('resolveApp');
+            startStage('createApp');
+            const appName = request.app.name.trim();
+            const appSlug = normalizedOptionalText(request.app.slug);
+            const appDescription = normalizedOptionalText(request.app.description);
+            const appDefaultEnvironment = normalizedOptionalText(
+              request.app.defaultEnvironment,
+            );
+            const appSiteId = normalizedOptionalText(request.app.siteId);
+            const appMetadata = request.app.metadata;
+            // The body's `idempotencyKey` and the `Idempotency-Key` header MUST carry
+            // the same value, so resolve it once and reuse it for both.
+            const appIdempotencyKey = resolveIdempotencyKey(
+              request.idempotencyKeys?.app,
+              createIdempotencyKey,
+              'createApp',
+            );
+            const created = await options.deployClient.app.create(
               {
-                name: siteName,
-                siteType: request.site.siteType,
-                ...(siteSlug !== undefined ? { slug: siteSlug } : {}),
-                ...(siteDescription !== undefined ? { description: siteDescription } : {}),
-                ...(siteRuntimeConfig !== undefined ? { runtimeConfig: siteRuntimeConfig } : {}),
+                name: appName,
+                appKind: request.app.appKind,
+                ...(appSlug !== undefined ? { slug: appSlug } : {}),
+                ...(appDescription !== undefined ? { description: appDescription } : {}),
+                ...(appSiteId !== undefined ? { siteId: appSiteId } : {}),
+                ...(appDefaultEnvironment !== undefined
+                  ? { defaultEnvironment: appDefaultEnvironment }
+                  : {}),
+                ...(appMetadata !== undefined ? { metadata: appMetadata } : {}),
+                idempotencyKey: appIdempotencyKey,
               },
-              {
-                idempotencyKey: resolveIdempotencyKey(
-                  request.idempotencyKeys?.site,
-                  createIdempotencyKey,
-                  'createSite',
-                ),
-              },
+              { idempotencyKey: appIdempotencyKey },
               apiRequestOptions(request.signal),
             );
-            siteEvidence = createdApplicationPublishSiteEvidence(created);
-            evidence.siteId = siteEvidence.id;
-            completeStage('createSite');
+            appEvidence = createdApplicationPublishAppEvidence(created);
+            evidence.appId = appEvidence.id;
+            completeStage('createApp');
           }
         }
-        evidence.siteId = siteEvidence.id;
-        if (currentStage === 'resolveSite') {
-          completeStage('resolveSite');
+        evidence.appId = appEvidence.id;
+        if (currentStage === 'resolveApp') {
+          completeStage('resolveApp');
         }
 
         throwIfAborted(request.signal, 'uploadArchive');
@@ -106,7 +116,7 @@ export function createDeployApplicationPublisher(
         const upload = await options.driveClient.uploader.uploadArchive({
           file: normalizedArtifact.file,
           appResourceType: 'deploy.artifact',
-          appResourceId: siteEvidence.id,
+          appResourceId: appEvidence.id,
           scene: normalizedOptionalText(normalizedArtifact.scene) ?? DEFAULT_UPLOAD_SCENE,
           source: normalizedOptionalText(normalizedArtifact.source) ?? DEFAULT_UPLOAD_SOURCE,
           originalFileName: normalizedArtifact.fileName,
@@ -147,7 +157,9 @@ export function createDeployApplicationPublisher(
         );
         const artifact = await options.deployClient.artifact.create(
           {
-            siteId: siteEvidence.id,
+            // `CreateArtifactRequest.siteId` still carries the owning application id:
+            // the backend DTO has not been renamed yet (see § applications convergence).
+            siteId: appEvidence.id,
             packageType: normalizedArtifact.packageType,
             fileName: normalizedArtifact.fileName,
             contentType: normalizedArtifact.contentType,
@@ -178,12 +190,27 @@ export function createDeployApplicationPublisher(
           createIdempotencyKey,
           'createRelease',
         );
-        const releaseVersionTag = normalizedOptionalText(request.release?.versionTag);
-        const release = await options.deployClient.release.sites.releases.create(
-          siteEvidence.id,
+        const release = await options.deployClient.release.create(
+          appEvidence.id,
           {
-            artifactId,
-            ...(releaseVersionTag !== undefined ? { versionTag: releaseVersionTag } : {}),
+            platformTargetId: requireText(
+              request.release?.platformTargetId ?? '',
+              'release.platformTargetId',
+            ),
+            packageId: requireText(
+              request.release?.packageId ?? artifactId,
+              'release.packageId',
+            ),
+            semanticVersion: requireText(
+              request.release?.semanticVersion ?? '',
+              'release.semanticVersion',
+            ),
+            ...(request.release?.releaseNotes !== undefined
+              ? { releaseNotes: request.release.releaseNotes }
+              : {}),
+            ...(request.release?.releaseStatus !== undefined
+              ? { releaseStatus: request.release.releaseStatus }
+              : {}),
             idempotencyKey: releaseIdempotencyKey,
           },
           { idempotencyKey: releaseIdempotencyKey },
@@ -207,17 +234,16 @@ export function createDeployApplicationPublisher(
             createIdempotencyKey,
             'createDeployment',
           );
-          const deployment =
-            await options.deployClient.deployment.sites.deployments.create(
-              siteEvidence.id,
-              {
-                ...request.deployment,
-                releaseId,
-                idempotencyKey: deploymentIdempotencyKey,
-              },
-              { idempotencyKey: deploymentIdempotencyKey },
-              apiRequestOptions(request.signal),
-            );
+          const deployment = await options.deployClient.deployment.create(
+            appEvidence.id,
+            {
+              ...request.deployment,
+              releaseId,
+              idempotencyKey: deploymentIdempotencyKey,
+            },
+            { idempotencyKey: deploymentIdempotencyKey },
+            apiRequestOptions(request.signal),
+          );
           const deploymentId = requireResponseId(
             deployment.id,
             'DEPLOYMENT_RESPONSE_MISSING_ID',
@@ -231,7 +257,7 @@ export function createDeployApplicationPublisher(
 
         startStage('complete');
         const result: ApplicationPublishResult = {
-          site: siteEvidence,
+          app: appEvidence,
           upload: uploadEvidence,
           artifact: { id: artifactId, value: artifact },
           release: { id: releaseId, value: release },
@@ -259,17 +285,11 @@ export function createDeployApplicationPublisher(
 }
 
 function validateRequest(request: ApplicationPublishRequest): ApplicationPublishArtifact {
-  if (request.site.kind === 'existing') {
-    requireText(request.site.siteId, 'site.siteId');
+  if (request.app.kind === 'existing') {
+    requireText(request.app.appId, 'app.appId');
   } else {
-    requireText(request.site.name, 'site.name');
-    if (
-      !Number.isInteger(request.site.siteType) ||
-      request.site.siteType < 1 ||
-      request.site.siteType > 6
-    ) {
-      throw invalidRequest('site.siteType must be a supported Site type.');
-    }
+    requireText(request.app.name, 'app.name');
+    requireText(request.app.appKind, 'app.appKind');
   }
 
   const artifact = request.artifact;
@@ -293,14 +313,6 @@ function validateRequest(request: ApplicationPublishRequest): ApplicationPublish
     (!Number.isInteger(artifact.chunkSizeBytes) || artifact.chunkSizeBytes <= 0)
   ) {
     throw invalidRequest('artifact.chunkSizeBytes must be a positive integer when provided.');
-  }
-  if (
-    request.deployment &&
-    (!Number.isInteger(request.deployment.deployType) ||
-      request.deployment.deployType < 1 ||
-      request.deployment.deployType > 4)
-  ) {
-    throw invalidRequest('deployment.deployType must be between 1 and 4.');
   }
 
   return {
@@ -359,7 +371,7 @@ function requireResponseId(
 function resolveIdempotencyKey(
   value: string | undefined,
   createIdempotencyKey: () => string,
-  stage: 'createSite' | 'registerArtifact' | 'createRelease' | 'createDeployment',
+  stage: 'createApp' | 'registerArtifact' | 'createRelease' | 'createDeployment',
 ): string {
   if (value !== undefined) {
     return requireText(value, 'idempotency key');
@@ -415,7 +427,7 @@ function apiRequestOptions(
 function invalidRequest(message: string): ApplicationPublishError {
   return new ApplicationPublishError(
     'INVALID_REQUEST',
-    'resolveSite',
+    'resolveApp',
     message,
   );
 }

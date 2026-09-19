@@ -41,7 +41,8 @@ the Nginx, server, and audit operations currently defined by the Deploy Backend 
 Application package bytes are uploaded through `@sdkwork/drive-app-sdk`. Deploy receives stable
 Drive upload, space, and node references through `artifacts.create`, then owns immutable artifact,
 release, deployment, and runtime-assignment business state. Disabling an application is the
-recoverable `sites.pause` command; re-enabling it is `sites.activate`.
+recoverable `apps.pause` command; re-enabling it is `apps.activate`; retiring it is `apps.delete`
+(which archives the application rather than hard-deleting its history).
 
 Console packages must consume `@sdkwork/deployments-app-sdk` and `@sdkwork/drive-app-sdk` through
 console-core. Backend-admin packages must consume `@sdkwork/deployments-backend-sdk` through the lazy

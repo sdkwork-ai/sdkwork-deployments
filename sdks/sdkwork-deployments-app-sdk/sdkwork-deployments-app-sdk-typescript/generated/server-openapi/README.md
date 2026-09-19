@@ -59,17 +59,16 @@ const client = new SdkworkDeployAppClient({
 ## API Modules
 
 - `client.domain` - domain API
-- `client.site` - site API
-- `client.deployment` - deployment API
-- `client.release` - release API
-- `client.envVariable` - env_variable API
 - `client.certificate` - certificate API
 - `client.uploadSession` - upload_session API
 - `client.artifact` - artifact API
-- `client.monitor` - monitor API
 - `client.app` - app API
+- `client.envVariable` - env_variable API
+- `client.monitor` - monitor API
 - `client.build` - build API
 - `client.package` - package API
+- `client.release` - release API
+- `client.deployment` - deployment API
 - `client.signing` - signing API
 - `client.usage` - usage API
 - `client.appDatabase` - app_database API
@@ -88,51 +87,6 @@ const params = {
   keyword: 'keyword',
 };
 const result = await client.domain.domainZones.list(params);
-```
-
-### site
-
-```typescript
-// 获取站点列表
-const params = {
-  page: 1,
-  page_size: 2,
-  status: 0,
-  site_type: 1,
-  keyword: 'keyword',
-};
-const result = await client.site.list(params);
-```
-
-### deployment
-
-```typescript
-// List deployments of an app
-const appId = '1';
-const params = {
-  page: 1,
-  page_size: 2,
-};
-const result = await client.deployment.list(appId, params);
-```
-
-### release
-
-```typescript
-// List release channels of an app
-const appId = '1';
-const result = await client.release.channels.list(appId);
-```
-
-### env_variable
-
-```typescript
-// 获取环境变量列表
-const siteId = '1';
-const params = {
-  environment: 'environment',
-};
-const result = await client.envVariable.sites.envVariables.list(siteId, params);
 ```
 
 ### certificate
@@ -165,14 +119,6 @@ const params = {
 const result = await client.artifact.list(params);
 ```
 
-### monitor
-
-```typescript
-// 获取健康检查配置
-const siteId = '1';
-const result = await client.monitor.sites.healthChecks.list(siteId);
-```
-
 ### app
 
 ```typescript
@@ -182,6 +128,25 @@ const params = {
   page_size: 2,
 };
 const result = await client.app.list(params);
+```
+
+### env_variable
+
+```typescript
+// 获取环境变量列表
+const appId = '1';
+const params = {
+  environment: 'environment',
+};
+const result = await client.envVariable.apps.envVariables.list(appId, params);
+```
+
+### monitor
+
+```typescript
+// 获取健康检查配置
+const appId = '1';
+const result = await client.monitor.apps.healthChecks.list(appId);
 ```
 
 ### build
@@ -205,6 +170,26 @@ const params = {
   page_size: 2,
 };
 const result = await client.package.list(appId, params);
+```
+
+### release
+
+```typescript
+// List release channels of an app
+const appId = '1';
+const result = await client.release.channels.list(appId);
+```
+
+### deployment
+
+```typescript
+// List deployments of an app
+const appId = '1';
+const params = {
+  page: 1,
+  page_size: 2,
+};
+const result = await client.deployment.list(appId, params);
 ```
 
 ### signing

@@ -1,79 +1,8 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppDeploymentResponse, CreateAppDeploymentRequest, CreateDeploymentRequest, DeploymentResponse, PageInfo } from '../types';
+import type { AppDeploymentResponse, CreateAppDeploymentRequest, PageInfo } from '../types';
 
-
-export interface DeploymentSitesDeploymentsListParams {
-  page?: number;
-  pageSize?: number;
-  status?: 0 | 1 | 2 | 3 | 4 | 5 | 6;
-  cursor?: string;
-}
-
-export interface DeploymentSitesDeploymentsCreateParams {
-  idempotencyKey: string;
-}
-
-export interface DeploymentSitesDeploymentsRollbackParams {
-  idempotencyKey: string;
-}
-
-export class DeploymentSitesDeploymentsApi {
-  private client: HttpClient;
-
-  constructor(client: HttpClient) {
-    this.client = client;
-  }
-
-
-/** 获取部署历史 */
-  async list(siteId: string, params?: DeploymentSitesDeploymentsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DeploymentResponse[]; pageInfo: PageInfo; }> {
-    const query = buildQueryString([
-      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
-      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
-      { name: 'cursor', value: params?.cursor, style: 'form', explode: true, allowReserved: false },
-    ]);
-    return this.client.request<{ items: DeploymentResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/deployments`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
-  }
-
-/** 发起部署 */
-  async create(siteId: string, body: CreateDeploymentRequest, params: DeploymentSitesDeploymentsCreateParams, requestOptions?: ApiRequestOptions): Promise<DeploymentResponse> {
-    const requestHeaders = buildRequestHeaders(
-      {
-        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
-      },
-      {}
-    );
-    return this.client.request<DeploymentResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/deployments`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
-  }
-
-/** 获取部署详情 */
-  async retrieve(siteId: string, deploymentId: string, requestOptions?: ApiRequestOptions): Promise<DeploymentResponse> {
-    return this.client.request<DeploymentResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/deployments/${serializePathParameter(deploymentId, { name: 'deploymentId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
-  }
-
-/** 回滚部署 */
-  async rollback(siteId: string, deploymentId: string, params: DeploymentSitesDeploymentsRollbackParams, requestOptions?: ApiRequestOptions): Promise<DeploymentResponse> {
-    const requestHeaders = buildRequestHeaders(
-      {
-        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
-      },
-      {}
-    );
-    return this.client.request<DeploymentResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/deployments/${serializePathParameter(deploymentId, { name: 'deploymentId', style: 'simple', explode: false })}/rollback`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
-  }
-}
-
-export class DeploymentSitesApi {
-  public readonly deployments: DeploymentSitesDeploymentsApi;
-
-  constructor(client: HttpClient) {
-    this.deployments = new DeploymentSitesDeploymentsApi(client);
-  }
-
-}
 
 export interface DeploymentListParams {
   page?: number;
@@ -86,11 +15,9 @@ export interface DeploymentCreateParams {
 
 export class DeploymentApi {
   private client: HttpClient;
-  public readonly sites: DeploymentSitesApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.sites = new DeploymentSitesApi(client);
   }
 
 

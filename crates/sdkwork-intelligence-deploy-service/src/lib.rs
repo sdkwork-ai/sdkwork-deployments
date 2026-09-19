@@ -43,9 +43,10 @@ pub use certificate_renewal::{
     SWEEP_LOOKAHEAD_DAYS,
 };
 pub use domain_verification::{
-    dns_txt_record_name, normalize_domain_hostname, normalize_zone_apex,
-    relative_name_for_hostname, DomainOwnershipVerifierPort, DomainVerificationChallenge,
-    DomainVerificationObservation, UnconfiguredDomainOwnershipVerifier,
+    dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, normalize_domain_hostname,
+    normalize_zone_apex, relative_name_for_hostname, DomainOwnershipVerifierPort,
+    DomainVerificationChallenge, DomainVerificationObservation,
+    UnconfiguredDomainOwnershipVerifier,
 };
 pub use repository::{
     CertificateOrderClaim, CertificateRenewalClaim, DeployRepositoryPort, DnsChallengeZone,

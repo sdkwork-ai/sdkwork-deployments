@@ -238,6 +238,13 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.apps.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/domains",
+        "app",
+        "apps.domains.list",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
         HttpMethod::Put,
         "/app/v3/api/apps/{appId}/composition",
         "app",

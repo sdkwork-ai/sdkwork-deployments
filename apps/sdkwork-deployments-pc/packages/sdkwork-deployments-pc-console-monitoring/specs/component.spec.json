@@ -73,7 +73,8 @@
     "events": [],
     "configKeys": [],
     "permissions": [
-      "deploy.healthChecks.read"
+      "deploy.healthChecks.read",
+      "deploy.apps.read"
     ]
   },
   "integration": {

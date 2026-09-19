@@ -70,14 +70,14 @@ ingress-token-file settings.
 ## Artifact And Release Pipeline
 
 1. Complete a package upload to create `deploy_artifact`.
-2. Call `sites.releases.create` with `artifactId` and `idempotencyKey` to create an immutable release.
-3. Call `sites.deployments.create` with `releaseId` to deploy the frozen artifact path and checksum.
+2. Call `apps.releases.create` with the platform target, package, and `semanticVersion` to create an immutable release.
+3. Call `apps.deployments.create` with `releaseId` to deploy the frozen artifact path and checksum.
 
 | Operation | Notes |
 | --- | --- |
 | `artifacts.list` / `retrieve` | Tenant-scoped immutable upload outputs |
 | `artifacts.retain` | Marks the artifact retained; does not delete Drive nodes |
-| `sites.releases.list` / `retrieve` / `create` | Site-scoped immutable releases |
+| `apps.releases.list` / `retrieve` / `create` | Application-scoped immutable releases |
 
 Use this pipeline for Git, package, image, and frozen-bundle delivery. Do not use it for ordinary
 Drive WebsiteRoot or Knowledgebase Wiki content changes.

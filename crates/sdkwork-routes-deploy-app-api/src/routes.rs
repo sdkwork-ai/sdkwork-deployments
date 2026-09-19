@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use crate::{auth::require_app_context, paths};
 
-fn required_header(
+pub(crate) fn required_header(
     headers: &HeaderMap,
     name: &str,
 ) -> Result<String, sdkwork_deploy_contract::DeployServiceError> {

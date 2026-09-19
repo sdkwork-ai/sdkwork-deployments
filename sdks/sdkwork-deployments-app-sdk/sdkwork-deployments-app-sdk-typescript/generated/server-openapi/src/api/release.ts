@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppReleaseResponse, ChannelResponse, ChannelRolloutResponse, CreateAppReleaseRequest, CreateReleaseRequest, PageInfo, PromoteChannelRequest, ReleaseResponse } from '../types';
+import type { AppReleaseResponse, ChannelResponse, ChannelRolloutResponse, CreateAppReleaseRequest, PageInfo, PromoteChannelRequest } from '../types';
 
 
 export interface ReleaseChannelsRolloutsListParams {
@@ -63,58 +63,6 @@ export class ReleaseChannelsApi {
   }
 }
 
-export interface ReleaseSitesReleasesListParams {
-  page?: number;
-  pageSize?: number;
-}
-
-export interface ReleaseSitesReleasesCreateParams {
-  idempotencyKey: string;
-}
-
-export class ReleaseSitesReleasesApi {
-  private client: HttpClient;
-
-  constructor(client: HttpClient) {
-    this.client = client;
-  }
-
-
-/** 获取站点发布版本列表 */
-  async list(siteId: string, params?: ReleaseSitesReleasesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ReleaseResponse[]; pageInfo: PageInfo; }> {
-    const query = buildQueryString([
-      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
-      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-    ]);
-    return this.client.request<{ items: ReleaseResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/releases`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
-  }
-
-/** 从制品创建不可变发布版本 */
-  async create(siteId: string, body: CreateReleaseRequest, params: ReleaseSitesReleasesCreateParams, requestOptions?: ApiRequestOptions): Promise<ReleaseResponse> {
-    const requestHeaders = buildRequestHeaders(
-      {
-        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
-      },
-      {}
-    );
-    return this.client.request<ReleaseResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/releases`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
-  }
-
-/** 获取发布版本详情 */
-  async retrieve(siteId: string, releaseId: string, requestOptions?: ApiRequestOptions): Promise<ReleaseResponse> {
-    return this.client.request<ReleaseResponse>(appApiPath(`/sites/${serializePathParameter(siteId, { name: 'siteId', style: 'simple', explode: false })}/releases/${serializePathParameter(releaseId, { name: 'releaseId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
-  }
-}
-
-export class ReleaseSitesApi {
-  public readonly releases: ReleaseSitesReleasesApi;
-
-  constructor(client: HttpClient) {
-    this.releases = new ReleaseSitesReleasesApi(client);
-  }
-
-}
-
 export interface ReleaseListParams {
   page?: number;
   pageSize?: number;
@@ -126,12 +74,10 @@ export interface ReleaseCreateParams {
 
 export class ReleaseApi {
   private client: HttpClient;
-  public readonly sites: ReleaseSitesApi;
   public readonly channels: ReleaseChannelsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.sites = new ReleaseSitesApi(client);
     this.channels = new ReleaseChannelsApi(client);
   }
 

@@ -86,6 +86,11 @@ Language-specific specs are on-demand. Load only the touched language or framewo
 - Database changes: `../sdkwork-specs/DATABASE_SPEC.md`,
   `../sdkwork-specs/DATABASE_FRAMEWORK_SPEC.md`, `../sdkwork-specs/PRIVACY_SPEC.md`, and
   `../sdkwork-specs/TEST_SPEC.md`.
+- Upload, file storage, download, or app-upload changes: `../sdkwork-specs/DRIVE_SPEC.md`,
+  `../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md`, `../sdkwork-specs/SDK_SPEC.md`, and
+  `../sdkwork-specs/TEST_SPEC.md`. Upload identity is declared per `DRIVE_SPEC.md` §18 in
+  each uploading application root's `specs/upload.declaration.json`; add
+  `../sdkwork-specs/MEDIA_RESOURCE_SPEC.md` when a media representation contract is touched.
 - Source configuration changes: `../sdkwork-specs/SOURCE_CONFIG_SPEC.md`,
   `../sdkwork-specs/CONFIG_SPEC.md`, `../sdkwork-specs/ENVIRONMENT_SPEC.md`,
   `../sdkwork-specs/DEPLOYMENT_SPEC.md`, and `../sdkwork-specs/TEST_SPEC.md`.
@@ -148,8 +153,12 @@ API work loads `../sdkwork-specs/API_SPEC.md` and its response-envelope and oper
 validators. App/backend SDK consumer work loads `../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md`,
 `../sdkwork-specs/SDK_SPEC.md`, and `../sdkwork-specs/SDK_WORKSPACE_GENERATION_SPEC.md`. List/search
 work loads `../sdkwork-specs/PAGINATION_SPEC.md` and `check-pagination.mjs`. Source configuration
-work loads `../sdkwork-specs/SOURCE_CONFIG_SPEC.md` and `check-source-config-standard.mjs`. Link
-these authorities instead of copying their normative bodies into `AGENTS.md`.
+work loads `../sdkwork-specs/SOURCE_CONFIG_SPEC.md` and `check-source-config-standard.mjs`. Upload
+work loads `../sdkwork-specs/DRIVE_SPEC.md` and the uploading app root's
+`specs/upload.declaration.json`; upload is a platform capability owned by Drive Uploader, so this
+repository declares its upload identity rather than creating app-local upload sessions, presign
+services, object-key builders, or duplicate `/upload` endpoints. Link these authorities instead of
+copying their normative bodies into `AGENTS.md`.
 
 ## Human Review Rules
 

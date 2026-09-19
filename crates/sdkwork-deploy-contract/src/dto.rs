@@ -246,6 +246,11 @@ pub struct DomainVerifyResponse {
     pub verification_id: Option<String>,
     #[serde(rename = "recordName", skip_serializing_if = "Option::is_none")]
     pub record_name: Option<String>,
+    /// The same record relative to its zone, which is the value a DNS
+    /// provider's "host"/"主机记录" field expects. Omitted when the zone is
+    /// unknown or the record is not inside it.
+    #[serde(rename = "recordRelativeName", skip_serializing_if = "Option::is_none")]
+    pub record_relative_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     #[serde(rename = "expiresAt", skip_serializing_if = "Option::is_none")]
@@ -278,6 +283,14 @@ pub struct DomainHostnameClaimResponse {
     pub verified: bool,
     #[serde(rename = "dnsRecordName", skip_serializing_if = "Option::is_none")]
     pub dns_record_name: Option<String>,
+    /// The same record relative to the zone that owns it — the value a DNS
+    /// provider's "host"/"主机记录" field expects. Omitted when the record is
+    /// not inside a known zone.
+    #[serde(
+        rename = "dnsRecordRelativeName",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub dns_record_relative_name: Option<String>,
     #[serde(rename = "dnsRecordType", skip_serializing_if = "Option::is_none")]
     pub dns_record_type: Option<String>,
     #[serde(rename = "dnsRecordValue", skip_serializing_if = "Option::is_none")]

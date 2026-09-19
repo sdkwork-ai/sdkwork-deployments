@@ -1,7 +1,12 @@
 /**
- * CreateDeployAppDialog — 创建/发布 deploy_app 应用对话框（v3）。
+ * CreateDeployAppDialog — 发布（发布 deploy_app 应用）对话框（v5）。
  *
- * 交互流程（v3.4：环境/部署形态前移到目录步骤，参照 sdkwork-specs）：
+ * v5 职责收敛：**本对话框只负责发布，不再创建应用**。应用必须先在
+ * `CreateAppDialog` 里创建（名称/类型/图标/封面/预览图），因此这里的
+ * 应用步骤退化为「本次发布的目标应用」——由宿主通过 `publishAppId` /
+ * `publishAppName`（或关联模式）指定，默认即为入口行上的那个应用。
+ *
+ * 交互流程：
  *   1. 应用类型 grid（icon + 应用类型名称）
  *   2. 环境与目录：ENVIRONMENT_SPEC 规范环境（开发/测试/预发/演示/线上）+
  *      standalone|cloud 部署形态（决定 dist/<mode>/<envAlias> 产物子树）+
@@ -9,7 +14,7 @@
  *      并自动完善，无宿主时按 APPLICATION_SPEC 从路径推导）+ 构建产物相对
  *      路径（浏览器类表面随环境/形态联动）+ 框架架构（目录标记自动检测，
  *      带徽标，路径下方手动可改）；「下一步」校验源目录与产物目录存在性
- *   3. 应用：按当前登录用户，搜索关联已有应用或新建应用（含分类级联）
+ *   3. 应用：确认发布到哪个应用（默认入口带入的已建应用；也可改关联其他应用）
  *   4. 应用资料（可选）：图标/封面/截图
  *   5. 发布：版本/描述/release notes
  *
@@ -32,12 +37,13 @@ import {
   classifyAppTypeCards,
   classifyFrameworks,
   detectFrameworkId,
-  deriveAppSlug,
   frameworksOfCard,
+  isAppSlugConflictError,
   isValidSemver,
   resolveDeployAppType,
   DEPLOY_APP_TYPE_CARDS,
   type CreateDeployAppInput,
+  type DeployAppKind,
   type DeployAppMediaGroup,
   type DeployAppTypeOption,
 } from "../service/deploy-app-publishing.ts";
@@ -81,6 +87,14 @@ export interface CreateDeployAppDialogProps {
   readonly deployClient: SdkworkDeployAppClient
   readonly driveClient: SdkworkDriveAppClient
   readonly locale: DeploymentsLocale
+  /**
+   * v5: 本次发布的**目标应用** —— 由宿主从列表行带入。应用必须先经
+   * `CreateAppDialog` 创建；本对话框只负责把选定的源码目录发布到它上面。
+   * 未提供时退回「关联已有应用」选择列表（兼容旧宿主）。
+   */
+  readonly publishAppId?: string | undefined
+  /** v5: 目标应用名称（展示用，缺省时取列表里的名称）。 */
+  readonly publishApp?: AppResponse | undefined
   /** v2: 显式初始目录（deployments 控制台直传）。 */
   readonly initialDirectory?: string | undefined
   /** v2: 当前会话/项目的默认目录（宿主下发，自动检测的第一候选）。 */
@@ -112,6 +126,8 @@ export function CreateDeployAppDialog({
   deployClient,
   driveClient,
   locale,
+  publishAppId,
+  publishApp,
   initialDirectory,
   defaultDirectory,
   inspectDirectory,
@@ -136,13 +152,12 @@ export function CreateDeployAppDialog({
   const [detection, setDetection] = useState<DeployProjectDetection>()
   const [detectionRoot, setDetectionRoot] = useState<string>()
   const [inspecting, setInspecting] = useState(false)
-  const [mode, setMode] = useState<"associate" | "create">("create")
+  // v5: 应用已在上游创建好；这里只确定「发布到哪个应用」。宿主带入目标应用时
+  // 直接锁定；未带入时保留搜索列表让用户挑一个（不再新建）。
   const [apps, setApps] = useState<AppResponse[]>([])
   const [appsSearch, setAppsSearch] = useState("")
   const [appsLoading, setAppsLoading] = useState(false)
-  const [associateId, setAssociateId] = useState<string>()
-  const [name, setName] = useState("")
-  const [slug, setSlug] = useState("")
+  const [associateId, setAssociateId] = useState<string | undefined>(publishAppId)
   const [category, setCategory] = useState<CreateDeployAppInput["category"]>()
   const [media, setMedia] = useState<DeployAppMediaFiles>({ screenshots: {} })
   const [version, setVersion] = useState("1.0.0")
@@ -263,6 +278,14 @@ export function CreateDeployAppDialog({
     const framework = frameworks.find((candidate) => candidate.id === nextFrameworkId)
     setBuildOutputPath(framework?.buildOutputPath ?? "")
   }
+
+  // v5: 目标应用 —— 宿主带入的应用优先；否则取关联列表中被选中的那条。
+  const targetApp = useMemo<AppResponse | undefined>(
+    () => publishApp ?? apps.find((candidate) => candidate.id === associateId),
+    [publishApp, apps, associateId],
+  )
+  const targetAppId = publishApp?.id ?? associateId
+  const targetAppName = targetApp?.name ?? associateId
 
   const loadApps = async (keyword: string) => {
     setAppsLoading(true)
@@ -408,10 +431,8 @@ export function CreateDeployAppDialog({
   const canNext = (): boolean => {
     if (step === 1) return cardId !== undefined && cardSupported(cardId)
     if (step === 2) return Boolean(directory?.trim()) && frameworkId !== undefined
-    if (step === 3) {
-      if (mode === "associate") return Boolean(associateId)
-      return Boolean(name.trim())
-    }
+    // v5: 第 3 步只确认发布目标应用 —— 应用必须已存在（由上游创建或列表中选中）。
+    if (step === 3) return Boolean(targetAppId)
     if (step === 4) return true
     return isValidSemver(version)
   }
@@ -499,6 +520,12 @@ export function CreateDeployAppDialog({
       setError(t("publishRequiredFields"))
       return
     }
+    // v5: 发布只针对已存在的应用 —— 没有目标应用就没有可发布的对象。
+    // 缺目标应用时不动「创建」，而是把用户指回创建入口（职责分离）。
+    if (targetAppId === undefined) {
+      setError(t("publishDisabledNoApp"))
+      return
+    }
     // 发布前复检目录存在性（第 2 步校验的兜底，防止后续步骤中目录被删）。
     const directoryProblem = stepTwoDirectoryProblem()
     if (directoryProblem !== undefined) {
@@ -511,9 +538,8 @@ export function CreateDeployAppDialog({
     try {
       const base: CreateDeployAppInput = {
         sourceDirectory: directory,
-        associateAppId: mode === "associate" ? associateId : undefined,
-        name: mode === "create" ? name.trim() : undefined,
-        slug: mode === "create" ? slug.trim() || deriveAppSlug(name) : undefined,
+        // 应用已存在：一律走关联更新，绝不在此新建应用。
+        associateAppId: targetAppId,
         type,
         framework: frameworkId,
         buildOutputPath: buildOutputPath.trim(),
@@ -526,16 +552,16 @@ export function CreateDeployAppDialog({
         applicationCode: detection?.applicationCode,
       }
 
-      // 1) 创建（或关联更新）deploy_app。
+      // 1) 更新目标应用的发布元数据（版本/环境/产物/框架/分类）。
       const app = await service.createApp(base)
 
       // 2) 上传媒体（图标/封面/截图 → Drive），app 存在后以 appId 为资源锚点。
       let mediaGroup: DeployAppMediaGroup = { screenshots: {} }
       if (media.icon || media.cover || Object.keys(media.screenshots).length > 0) {
         mediaGroup = await uploadMedia(app.id, media)
-        // 3) 回写 metadata.media。
+        // 3) 回写 metadata.media（保留原有 metadata，避免清掉创建阶段写入的字段）。
         await deployClient.app.update(app.id, {
-          metadata: { ...service.buildMetadata(base), media: mediaGroup },
+          metadata: { ...(app.metadata ?? {}), ...service.buildMetadata(base), media: mediaGroup },
         })
       }
 
@@ -661,24 +687,21 @@ export function CreateDeployAppDialog({
                   <span>{currentUser?.displayName ?? currentUser?.id ?? t("userUnknown")}</span>
                 </span>
               </div>
-              <StepApplication
-                mode={mode}
+              {/* v5: 应用只读确认 —— 应用已在创建流程登记，这里只显示发布目标；
+                  未带入目标应用时（兼容旧宿主）允许从已建应用里挑一个，但仍不新建。 */}
+              <StepPublishTarget
+                targetApp={targetApp}
+                targetAppId={targetAppId}
+                targetAppName={targetAppName}
                 apps={apps}
                 appsLoading={appsLoading}
                 appsSearch={appsSearch}
-                associateId={associateId}
-                name={name}
-                slug={slug}
-                suggestedName={detection?.applicationCode}
                 pickedRef={pickedAppsRef}
                 t={t}
-                onModeChange={setMode}
                 onAppsSearchChange={setAppsSearch}
                 onSearchApps={searchApps}
                 onLoadApps={(keyword) => { void loadApps(keyword) }}
                 onAssociateChange={setAssociateId}
-                onNameChange={setName}
-                onSlugChange={setSlug}
               />
               <div className={css.field}>
                 <span className={css.fieldLabel}>{t("category")}</span>
@@ -688,7 +711,14 @@ export function CreateDeployAppDialog({
             </>
           )}
 
-          {step === 4 && <DeployAppMediaFields value={media} onChange={setMedia} t={t} />}
+          {step === 4 && (
+            <DeployAppMediaFields
+              value={media}
+              onChange={setMedia}
+              t={t}
+              appKind={(type?.appKind as DeployAppKind | undefined) ?? publishApp?.appKind}
+            />
+          )}
 
           {step === 5 && (
             <>
@@ -772,136 +802,100 @@ export function CreateDeployAppDialog({
   )
 }
 
-interface StepApplicationProps {
-  mode: "associate" | "create"
+interface StepPublishTargetProps {
+  targetApp: AppResponse | undefined
+  targetAppId: string | undefined
+  targetAppName: string | undefined
   apps: readonly AppResponse[]
   appsLoading: boolean
   appsSearch: string
-  associateId: string | undefined
-  name: string
-  slug: string
-  /** 目录检测得到的应用代码，用于预填新应用名称。 */
-  suggestedName: string | undefined
   pickedRef: { current: boolean }
   t: PublishingTranslator
-  onModeChange: (mode: "associate" | "create") => void
   onAppsSearchChange: (value: string) => void
   onSearchApps: (event: FormEvent) => void
   onLoadApps: (keyword: string) => void
   onAssociateChange: (value: string) => void
-  onNameChange: (value: string) => void
-  onSlugChange: (value: string) => void
 }
 
-function StepApplication(props: StepApplicationProps) {
+/**
+ * v5 第 3 步：确认本次发布的目标应用。
+ *
+ * 应用已在 `CreateAppDialog` 里登记好（名称 / 图标 / 封面 / 预览图），因此这里
+ * 是**只读确认**：显示应用名称、类型与 slug。只有在宿主没有带入目标应用时
+ * （兼容旧宿主调用），才退回已建应用的搜索列表让用户挑一个 —— 任何情况下
+ * 都不在这里新建应用，从而保证「先创建，再发布」的顺序不可绕过。
+ */
+function StepPublishTarget(props: StepPublishTargetProps) {
   const {
-    mode, apps, appsLoading, appsSearch, associateId, name, slug, suggestedName, pickedRef,
-    t, onModeChange, onAppsSearchChange, onSearchApps,
-    onLoadApps, onAssociateChange, onNameChange, onSlugChange,
+    targetApp, targetAppId, targetAppName, apps, appsLoading, appsSearch, pickedRef,
+    t, onAppsSearchChange, onSearchApps, onLoadApps, onAssociateChange,
   } = props
+  const locked = targetApp !== undefined
 
   return (
     <div className={css.field}>
-      <span className={css.fieldLabel}>{t("appAssociation")}</span>
-      <div className={css.radioGroup}>
-        {/* 两个模式选项固定一行展示，详情面板（输入框/搜索列表）在行下方切换。 */}
-        <div className={css.modeRow}>
-          <label className={css.radioRow} data-selected={mode === "create"}>
-            <input
-              type="radio"
-              name="app-mode"
-              checked={mode === "create"}
-              onChange={() => {
-                onModeChange("create")
-                // 检测到应用代码时预填名称，减少一次输入。
-                if (name === "" && suggestedName !== undefined) onNameChange(suggestedName)
-              }}
-            />
-            <span className={css.radioLabel}>
-              <strong>{t("createNew")}</strong>
-              <small>{t("applicationNameHint")}</small>
+      <span className={css.fieldLabel}>{t("publishTargetApp")}</span>
+      {locked ? (
+        <div className={css.appList}>
+          <div className={css.appRow} data-selected="true">
+            <span className={css.appRowMeta}>
+              <strong>{targetApp.name}</strong>
+              <small>{appKindLabel(targetApp.appKind, t)}{targetApp.slug ? ` · ${targetApp.slug}` : ""}</small>
             </span>
-          </label>
-
-          <label className={css.radioRow} data-selected={mode === "associate"}>
-            <input
-              type="radio"
-              name="app-mode"
-              checked={mode === "associate"}
-              onChange={() => {
-                onModeChange("associate")
-                if (!pickedRef.current) {
-                  pickedRef.current = true
-                  onLoadApps("")
-                }
-              }}
-            />
-            <span className={css.radioLabel}>
-              <strong>{t("associateExisting")}</strong>
-              <small>{t("associateHint")}</small>
-            </span>
-          </label>
+          </div>
         </div>
-
-        {mode === "create" && (
-          <>
-            <div className={css.field}>
-              <input
-                className={css.input}
-                value={name}
-                placeholder={t("applicationNamePlaceholder")}
-                onChange={(event) => { onNameChange(event.target.value) }}
-              />
-            </div>
-            <div className={css.field}>
-              <input
-                className={css.input}
-                value={slug}
-                placeholder={t("appSlug")}
-                onChange={(event) => { onSlugChange(event.target.value) }}
-              />
-              <span className={css.fieldHint}>{t("appSlugHint")}</span>
-            </div>
-          </>
-        )}
-
-        {mode === "associate" && (
-          <>
-            <form className={css.appSearch} onSubmit={onSearchApps}>
-              <input
-                className={css.input}
-                value={appsSearch}
-                placeholder={t("searchApps")}
-                onChange={(event) => { onAppsSearchChange(event.target.value) }}
-              />
-              <button type="submit" className={css.secondaryButton}>{t("searchApps")}</button>
-            </form>
-            <div className={css.appList} aria-busy={appsLoading}>
-              {appsLoading && <div className={css.appEmpty}>{t("appSearching")}</div>}
-              {!appsLoading && apps.length === 0 && <div className={css.appEmpty}>{t("noApps")}</div>}
-              {!appsLoading && apps.map((app) => (
-                <button
-                  key={app.id}
-                  type="button"
-                  className={css.appRow}
-                  data-selected={associateId === app.id}
-                  onClick={() => { onAssociateChange(app.id) }}
-                >
-                  <span className={css.appRowMeta}>
-                    <strong>{app.name}</strong>
-                    <small>{appKindLabel(app.appKind, t)}{app.slug ? ` · ${app.slug}` : ""}</small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+      ) : (
+        <>
+          <span className={css.fieldHint}>{t("publishTargetPickHint")}</span>
+          {targetAppId !== undefined && targetAppName === undefined && (
+            <div className={css.appEmpty}>{targetAppId}</div>
+          )}
+          <form className={css.appSearch} onSubmit={onSearchApps}>
+            <input
+              className={css.input}
+              value={appsSearch}
+              placeholder={t("searchApps")}
+              onChange={(event) => { onAppsSearchChange(event.target.value) }}
+            />
+            <button type="submit" className={css.secondaryButton}>{t("searchApps")}</button>
+          </form>
+          <div className={css.appList} aria-busy={appsLoading}>
+            {appsLoading && <div className={css.appEmpty}>{t("appSearching")}</div>}
+            {!appsLoading && apps.length === 0 && <div className={css.appEmpty}>{t("noApps")}</div>}
+            {!appsLoading && apps.map((app) => (
+              <button
+                key={app.id}
+                type="button"
+                className={css.appRow}
+                data-selected={targetAppId === app.id}
+                onClick={() => { onAssociateChange(app.id) }}
+                onFocus={() => {
+                  // 首次展开即拉取一次列表，避免用户还得先点一次「搜索」。
+                  if (!pickedRef.current) {
+                    pickedRef.current = true
+                    onLoadApps("")
+                  }
+                }}
+              >
+                <span className={css.appRowMeta}>
+                  <strong>{app.name}</strong>
+                  <small>{appKindLabel(app.appKind, t)}{app.slug ? ` · ${app.slug}` : ""}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
 function errorText(cause: unknown, t: PublishingTranslator): string {
+  // Same routine conflict as in CreateAppDialog: an app whose slug is already
+  // taken must tell the operator what to change, not echo the server's rule text.
+  if (isAppSlugConflictError(cause)) {
+    return t("appSlugConflict")
+  }
   const message = cause instanceof Error && cause.message ? cause.message : String(cause)
   return t("publishFailed", { message })
 }
