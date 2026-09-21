@@ -97,6 +97,8 @@ fn app_request(name: &str) -> CreateAppRequest {
         metadata: None,
         description: None,
         default_environment: None,
+        app_domain_label: None,
+        app_domain_suffixes: None,
         idempotency_key: None,
     }
 }
@@ -172,6 +174,8 @@ async fn entitlement_usage_aggregates_and_management_surfaces_work() {
                 metadata: None,
                 description: None,
                 default_environment: None,
+                app_domain_label: None,
+                app_domain_suffixes: None,
                 idempotency_key: None,
             },
         )

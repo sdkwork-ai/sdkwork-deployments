@@ -84,6 +84,8 @@ async fn create_app(repository: &DeployRepository, tenant_id: i64, slug: &str) -
                 metadata: None,
                 description: None,
                 default_environment: None,
+                app_domain_label: None,
+                app_domain_suffixes: None,
                 idempotency_key: None,
             },
         )

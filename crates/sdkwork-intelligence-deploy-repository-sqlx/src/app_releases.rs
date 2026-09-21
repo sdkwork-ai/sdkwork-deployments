@@ -57,11 +57,14 @@ impl DeployRepository {
             return Ok(existing);
         }
 
-        // The package pins the (app, platform target) scope.
+        // The package pins the (app, platform target) scope; `build_number`
+        // lives on the build the package was produced by (`deploy_package`
+        // carries only `build_id`), so it has to be joined in.
         let package_row = sqlx::query(
-            "SELECT p.app_id, p.platform_target_id, p.build_number,
+            "SELECT p.app_id, p.platform_target_id, b.build_number,
                     p.semantic_version AS package_version, p.package_status
              FROM deploy_package p
+             LEFT JOIN deploy_build b ON b.id = p.build_id AND b.deleted_at IS NULL
              WHERE p.tenant_id = $1 AND p.uuid = $2 AND p.deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -75,7 +78,19 @@ impl DeployRepository {
         };
         let app_internal_id: i64 = package_row.try_get("app_id").unwrap_or(0);
         let target_internal_id: i64 = package_row.try_get("platform_target_id").unwrap_or(0);
-        let build_number: i64 = package_row.try_get("build_number").unwrap_or(0);
+        // `deploy_package.build_id` is `NOT NULL`, but the build row itself is
+        // soft-deleted rather than removed, so the `LEFT JOIN` above can still
+        // miss. Surfacing that as a validation error beats writing a bogus `0`
+        // into `deploy_release.build_number`, where nothing downstream could
+        // tell it apart from a real build #0.
+        let build_number: i64 = package_row.try_get::<Option<i64>, _>("build_number").map_err(
+            |error| DeployServiceError::Internal(format!("read package build number: {error}")),
+        )?
+        .ok_or_else(|| {
+            DeployServiceError::validation(
+                "package build is missing or deleted; cannot derive the build number",
+            )
+        })?;
         let package_version: String = package_row.try_get("package_version").unwrap_or_default();
         let package_status: String = package_row.try_get("package_status").unwrap_or_default();
         if !matches!(package_status.as_str(), "VALIDATED" | "READY") {

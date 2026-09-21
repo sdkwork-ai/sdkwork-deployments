@@ -104,11 +104,63 @@ impl std::fmt::Display for ValidationMethod {
     }
 }
 
+/// Who owns a domain zone, and therefore what the zone means.
+///
+/// The domain inventory holds two kinds of row that look alike but answer
+/// different questions, and a reader that cannot tell them apart will show a
+/// platform publishing zone as if the operator had registered it:
+///
+/// * [`ZoneScope::User`] — a root domain an operator defined, with an owner
+///   (`deploy_dns_zone.user_id`) and a DNS zone they control.
+/// * [`ZoneScope::Platform`] — the tenant-level `app.<suffix>` zone the
+///   deployment provisions so apps get default publishing hostnames. It has no
+///   owner (`user_id IS NULL`), is visible to every tenant member, and its apex
+///   is *derived* from a suffix rather than declared by anyone.
+///
+/// See `TECH-cloud-site-publishing-control-plane.md` §`deploy_dns_zone`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ZoneScope {
+    /// An operator-defined root domain owned by `user_id`.
+    #[default]
+    #[serde(rename = "USER")]
+    User,
+    /// A platform-provisioned `app.<suffix>` zone (`user_id IS NULL`).
+    #[serde(rename = "PLATFORM")]
+    Platform,
+}
+
+impl ZoneScope {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "USER",
+            Self::Platform => "PLATFORM",
+        }
+    }
+
+    /// The scope of a zone carrying this `user_id`.
+    pub const fn for_owner(user_id: Option<i64>) -> Self {
+        match user_id {
+            Some(_) => Self::User,
+            None => Self::Platform,
+        }
+    }
+}
+
+impl std::fmt::Display for ZoneScope {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DomainZoneResponse {
     pub id: String,
     #[serde(rename = "apexHostname")]
     pub apex_hostname: String,
+    /// `USER` for an operator-defined root domain, `PLATFORM` for a
+    /// provisioned `app.<suffix>` zone. Lets a console keep the root-domain
+    /// inventory honest instead of presenting both as user domains.
+    pub scope: ZoneScope,
     #[serde(rename = "displayName", skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(rename = "dnsProvider", skip_serializing_if = "Option::is_none")]

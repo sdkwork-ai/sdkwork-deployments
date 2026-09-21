@@ -120,14 +120,23 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
     {error && <ErrorBanner message={error} t={t} />}
     <div className="table-frame domain-table-frame" aria-busy={busy}>
       <table className="domain-table"><thead><tr>
-        <th>{t("rootDomain")}</th><th>{t("status")}</th><th>{t("hostnames")}</th><th>{t("certificates")}</th><th>{t("appBindings")}</th><th>{t("updated")}</th><th className="operations-column">{t("operations")}</th>
+        <th>{t("rootDomain")}</th><th>{t("scope")}</th><th>{t("status")}</th><th>{t("hostnames")}</th><th>{t("certificates")}</th><th>{t("appBindings")}</th><th>{t("updated")}</th><th className="operations-column">{t("operations")}</th>
       </tr></thead><tbody>{zones.map((zone) => {
         // hostnameCount includes the apex hostname row every zone owns, so
         // only counts above 1 represent user-added subdomains that block
         // zone deletion.
         const deleteBlocked = Number(zone.hostnameCount) > 1 || Number(zone.certificateCount) > 0 || Number(zone.bindingCount) > 0;
+        // The inventory mixes two kinds of row that both look like "a domain":
+        // a root domain an operator defined, and the tenant-level `app.<suffix>`
+        // zone the deployment provisions so apps get publishing hostnames. The
+        // second has no owner and is not the operator's to manage, so the table
+        // says which is which instead of presenting both as root domains.
+        const isPlatform = zone.scope === "PLATFORM";
         return <tr key={zone.id}>
           <td><Link className="primary-cell-link" to={zone.id}><Globe2 size={17} /><span><strong>{zone.apexHostname}</strong><small>{zone.displayName || zone.dnsProvider || "-"}</small></span></Link></td>
+          <td>{isPlatform
+            ? <span className="scope-badge scope-badge-platform" title={t("scopePlatformHint")}>{t("scopePlatform")}</span>
+            : <span className="scope-badge scope-badge-user">{t("scopeUser")}</span>}</td>
           <td><StatusBadge value={zone.status} t={t} /></td>
           <td><strong>{zone.hostnameCount}</strong><small className="cell-subtitle">{t("verifiedSummary", { verified: zone.verifiedHostnameCount, total: zone.hostnameCount })}</small></td>
           <td>{zone.certificateCount}</td><td>{zone.bindingCount}</td><td>{formatDate(zone.updatedAt, locale)}</td>

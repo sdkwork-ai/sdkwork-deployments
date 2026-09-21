@@ -4636,6 +4636,7 @@ components:
       required:
       - id
       - apexHostname
+      - scope
       - status
       - hostnameCount
       - verifiedHostnameCount
@@ -4649,6 +4650,17 @@ components:
           format: uuid
         apexHostname:
           type: string
+        scope:
+          type: string
+          enum:
+          - USER
+          - PLATFORM
+          description: >-
+            Who owns the zone. `USER` is a root domain an operator defined and
+            owns; `PLATFORM` is the tenant-level `app.<suffix>` zone the
+            deployment provisions for app publishing hostnames, which has no
+            owner and is visible to every tenant member. A client that lists
+            "my root domains" must not present a `PLATFORM` zone as one.
         displayName:
           type: string
         dnsProvider:

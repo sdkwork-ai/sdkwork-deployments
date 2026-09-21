@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use sdkwork_deploy_contract::{
     is_deploy_package_artifact_type, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
-    AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage, AppReleaseResponse,
+    AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
+    AppReleaseResponse,
     AppResponse, BuildPage, BuildResponse, BuildTemplatePage, BuildTemplateResponse, ChannelPage,
     ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
     CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
@@ -1170,6 +1171,14 @@ impl DeployAppApi for DeployService {
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         self.update_app(context, app_id, request).await
+    }
+
+    async fn list_app_domains(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppDomainPage> {
+        self.list_app_domains(context, app_id).await
     }
 
     async fn create_platform_target(

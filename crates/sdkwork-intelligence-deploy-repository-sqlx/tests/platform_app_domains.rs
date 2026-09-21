@@ -255,6 +255,212 @@ async fn per_app_suffix_override_replaces_the_platform_catalog() {
     assert_eq!(zones, 2);
 }
 
+/// Regression: the per-app suffix override could only ever be *seeded*, never
+/// *written*. Every existing test sets `app_domain_suffixes` with a raw
+/// `UPDATE ... $1` bound to a `serde_json::Value`, which never exercises the
+/// repository's own INSERT/UPDATE. Those bound a bare `Vec<String>`, so sqlx
+/// inferred `TEXT[]` against a `JSONB` column and PostgreSQL rejected the
+/// statement with
+///
+/// ```text
+/// column "app_domain_suffixes" is of type jsonb but expression is of type text[]
+/// ```
+///
+/// `apps.create` / `apps.update` therefore returned a masked 500 for any payload
+/// carrying `appDomainSuffixes`. This drives both writes through the real port
+/// and asserts the value round-trips out of the JSONB column.
+#[tokio::test]
+async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
+    use sdkwork_deploy_contract::{CreateAppRequest, DeployAppRequestContext, UpdateAppRequest};
+    use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
+    use sdkwork_intelligence_deploy_service::DeployService;
+    use std::sync::Arc;
+
+    let (repository, pool) = test_repository().await;
+    let service = DeployService::new(Arc::new(repository), Arc::new(MemoryDeployDrivePort));    let context = DeployAppRequestContext {
+        tenant_id: 7,
+        actor_id: Some(1),
+        organization_id: Some(9),
+        ..DeployAppRequestContext::default()
+    };
+
+    // `apps.create` with an explicit override: the INSERT JSONB write path.
+    let created = service
+        .create_app(
+            &context,
+            Some("create-with-override"),
+            &CreateAppRequest {
+                name: "With Override".to_owned(),
+                slug: Some("with-override".to_owned()),
+                app_kind: sdkwork_deploy_contract::AppKind::StaticWeb,
+                app_type: None,
+                runtime_config: None,
+                metadata: None,
+                description: None,
+                default_environment: None,
+                app_domain_label: Some("with-override".to_owned()),
+                app_domain_suffixes: Some(vec![
+                    "example.com".to_owned(),
+                    "example.cn".to_owned(),
+                ]),
+                idempotency_key: Some("create-with-override".to_owned()),
+            },
+        )
+        .await
+        .expect("creating an app with appDomainSuffixes must not fail on the JSONB bind");
+
+    // The effective catalog comes back out of the JSONB column. The read path
+    // re-normalizes (lowercase, deduplicate, sort), so the assertion is on the
+    // set the app will actually publish on rather than on insertion order.
+    assert_eq!(
+        created.app_domain_suffixes,
+        vec!["example.cn".to_owned(), "example.com".to_owned()],
+        "the override survives the JSONB round trip (normalized and sorted)"
+    );
+
+    // And the column really holds a JSON array — not a text-array-shaped value.
+    let stored_kind: String = sqlx::query_scalar(
+        "SELECT jsonb_typeof(app_domain_suffixes) FROM deploy_app WHERE uuid = $1",
+    )
+    .bind(&created.id)
+    .fetch_one(&pool)
+    .await
+    .expect("read the stored JSONB type");
+    assert_eq!(
+        stored_kind, "array",
+        "the column must hold a JSON array, not a text array"
+    );
+
+    // The override actually drives provisioning (the reason the column exists).
+    let provisioned = service
+        .provision_app_default_domains(&context, &created.id, "production")
+        .await
+        .expect("provision from the override");
+    assert!(
+        provisioned
+            .hostnames
+            .contains(&"with-override.app.example.com".to_owned()),
+        "the override catalog composes the hostnames; got {:?}",
+        provisioned.hostnames
+    );
+
+    // `apps.update` is the second, independent JSONB write site. A payload that
+    // replaces the list must persist the replacement...
+    let updated = service
+        .update_app(
+            &context,
+            &created.id,
+            &UpdateAppRequest {
+                name: None,
+                description: None,
+                app_type: None,
+                runtime_config: None,
+                metadata: None,
+                app_status: None,
+                default_environment: None,
+                app_domain_label: None,
+                app_domain_suffixes: Some(Some(vec!["updated.example.net".to_owned()])),
+            },
+        )
+        .await
+        .expect("updating appDomainSuffixes must not fail on the JSONB bind");
+    assert_eq!(
+        updated.app_domain_suffixes,
+        vec!["updated.example.net".to_owned()],
+        "the update replaced the override"
+    );
+
+    // ...and `Some(None)` means "clear the override", which restores the
+    // platform catalog rather than leaving an empty array behind.
+    let cleared = service
+        .update_app(
+            &context,
+            &created.id,
+            &UpdateAppRequest {
+                name: None,
+                description: None,
+                app_type: None,
+                runtime_config: None,
+                metadata: None,
+                app_status: None,
+                default_environment: None,
+                app_domain_label: None,
+                app_domain_suffixes: Some(None),
+            },
+        )
+        .await
+        .expect("clearing appDomainSuffixes must not fail");
+    assert_eq!(
+        cleared.app_domain_suffixes,
+        platform_app_domain_suffixes(),
+        "clearing falls back to the platform catalog"
+    );
+}
+
+/// Regression: `apps.domains.list` (`GET /app/v3/api/apps/{appId}/domains`)
+/// returned a masked 500 because the read projection selected `z.apex`, a
+/// column `deploy_dns_zone` never had (it is `apex_hostname`). The handler is
+/// the only consumer of `list_app_domains_repo`, so nothing but a direct call
+/// catches a typo here — every other test in this file exercises provisioning
+/// and hostname resolution instead.
+#[tokio::test]
+async fn lists_app_domains_with_the_zone_apex_projected() {
+    let (repository, _pool) = test_repository().await;
+    repository
+        .ensure_platform_app_zones(7, 9, Some(1), &platform_app_domain_suffixes())
+        .await
+        .expect("ensure zones");
+    repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
+        .await
+        .expect("provision");
+
+    let page = repository
+        .list_app_domains(7, "site-10")
+        .await
+        .expect("list app domains must not fail on the zone apex projection");
+
+    assert_eq!(
+        page.total, 14,
+        "every provisioned publishing hostname is listed"
+    );
+    assert_eq!(page.items.len(), 14);
+
+    // A default hostname is platform-owned: no DNS step, and its `dnsRecordName`
+    // is derived by stripping the zone apex (an `apex_hostname`, not `apex`).
+    let default_host = page
+        .items
+        .iter()
+        .find(|item| item.hostname == "shop.app.sdkwork.com")
+        .expect("the canonical default hostname is listed");
+    assert_eq!(default_host.kind, "DEFAULT");
+    assert_eq!(default_host.verification_status, "NOT_REQUIRED");
+    assert_eq!(default_host.dns_record_name, None);
+    assert_eq!(
+        default_host.cname_target.as_deref(),
+        Some("shop.app.sdkwork.com")
+    );
+    assert_eq!(default_host.environment, "production");
+    assert!(default_host.domain_id.is_some());
+    assert_eq!(default_host.is_canonical, Some(true));
+
+    // Every provisioned hostname is a DEFAULT (platform-owned) row, and they
+    // sort alphabetically by hostname.
+    assert!(page.items.iter().all(|item| item.kind == "DEFAULT"));
+    let mut sorted = page
+        .items
+        .iter()
+        .map(|item| item.hostname.clone())
+        .collect::<Vec<_>>();
+    sorted.sort();
+    let listed = page
+        .items
+        .iter()
+        .map(|item| item.hostname.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(listed, sorted, "defaults sort by hostname");
+}
+
 #[tokio::test]
 async fn resolves_the_newest_valid_revision_of_the_matching_environment() {
     let (repository, pool) = test_repository().await;
@@ -486,4 +692,73 @@ async fn resolves_custom_domains_and_respects_environment() {
         .await
         .expect("resolve");
     assert!(other_env.is_none());
+}
+
+/// Regression: `POST /backend/v3/api/nginx/configs/{configId}/deploy` failed
+/// before doing anything because `load_nginx_publish_context` resolved the
+/// publish domain with `SELECT d.hostname ... FROM deploy_domain d WHERE
+/// d.app_id = s.id AND d.is_primary = 1` — none of which `deploy_domain` has.
+/// The table carries `hostname_ascii` and reaches the app through
+/// `deploy_app_binding`, so the projection has to come from the binding row.
+///
+/// The site file is redirected to a temp path so the test exercises the real
+/// read + publish path without touching an nginx installation.
+#[tokio::test]
+async fn deploy_nginx_config_projects_the_primary_hostname_from_the_binding() {
+    let (repository, pool) = test_repository().await;
+    repository
+        .ensure_platform_app_zones(7, 9, Some(1), &platform_app_domain_suffixes())
+        .await
+        .expect("ensure zones");
+    repository
+        .provision_app_default_domains(7, 9, Some(1), "site-10", "production")
+        .await
+        .expect("provision default domains");
+
+    // A hostname-scoped deployed config so `deploy_nginx_config` finds a row.
+    let conf = "server {\n  listen 80;\n  server_name shop.app.sdkwork.com;\n  return 200;\n}\n";
+    sqlx::query(
+        "INSERT INTO deploy_nginx_config (
+            id,uuid,tenant_id,app_id,environment,hostname_ascii,config_type,config_name,
+            config_content,config_hash,is_active,version_no,status,metadata,created_at,
+            updated_at,version
+         ) VALUES (810,'nginx-810',7,10,'production','shop.app.sdkwork.com',1,
+            'shop production',$1,$2,FALSE,1,0,'{}',NOW(),NOW(),1)",
+    )
+    .bind(conf)
+    .bind(sdkwork_utils_rust::crypto::sha256_hash(conf.as_bytes()))
+    .execute(&pool)
+    .await
+    .expect("insert nginx config to deploy");
+
+    let site_dir = std::env::temp_dir().join(format!("sdkwork-nginx-{}", std::process::id()));
+    std::fs::create_dir_all(&site_dir).expect("create temp site dir");
+    let site_file = site_dir.join("shop.app.sdkwork.com.conf");
+    // SAFETY: the test process is single-threaded for this binary
+    // (`--test-threads=1` is the documented way to run this suite), and the
+    // value is removed again below.
+    unsafe {
+        std::env::set_var("SDKWORK_DEPLOY_NGINX_SITE_FILE", &site_file);
+        std::env::set_var("SDKWORK_DEPLOY_NGINX_RELOAD", "false");
+        std::env::set_var("SDKWORK_DEPLOY_NGINX_ORCHESTRATION", "false");
+    }
+
+    let deployed = repository
+        .deploy_nginx_config(Some(7), "nginx-810")
+        .await
+        .expect("deploying an nginx config must not fail on the primary-domain projection");
+    assert_eq!(deployed.id, "nginx-810");
+    assert!(deployed.is_active, "the config is activated");
+    assert_eq!(
+        std::fs::read_to_string(&site_file).expect("the published site file exists"),
+        conf,
+        "the published content is the stored config"
+    );
+
+    unsafe {
+        std::env::remove_var("SDKWORK_DEPLOY_NGINX_SITE_FILE");
+        std::env::remove_var("SDKWORK_DEPLOY_NGINX_RELOAD");
+        std::env::remove_var("SDKWORK_DEPLOY_NGINX_ORCHESTRATION");
+    }
+    let _ = std::fs::remove_dir_all(&site_dir);
 }

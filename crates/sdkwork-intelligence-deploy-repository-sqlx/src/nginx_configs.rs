@@ -316,8 +316,8 @@ impl DeployRepository {
         let now = now_rfc3339();
 
         sqlx::query(
-            "UPDATE deploy_nginx_config SET is_active = 0, updated_at = CAST($2 AS TIMESTAMPTZ), version = version + 1
-             WHERE app_id = $1 AND is_active = 1",
+            "UPDATE deploy_nginx_config SET is_active = FALSE, updated_at = CAST($2 AS TIMESTAMPTZ), version = version + 1
+             WHERE app_id = $1 AND is_active",
         )
         .bind(app_internal_id)
         .bind(&now)
@@ -328,7 +328,7 @@ impl DeployRepository {
         let result = if let Some(tenant_id) = tenant_id {
             sqlx::query(
                 "UPDATE deploy_nginx_config
-                 SET is_active = 1, status = 1, deployed_at = CAST($3 AS TIMESTAMPTZ), updated_at = CAST($3 AS TIMESTAMPTZ), version = version + 1
+                 SET is_active = TRUE, status = 1, deployed_at = CAST($3 AS TIMESTAMPTZ), updated_at = CAST($3 AS TIMESTAMPTZ), version = version + 1
                  WHERE tenant_id = $1 AND uuid = $2",
             )
             .bind(tenant_id)
@@ -340,7 +340,7 @@ impl DeployRepository {
         } else {
             sqlx::query(
                 "UPDATE deploy_nginx_config
-                 SET is_active = 1, status = 1, deployed_at = CAST($2 AS TIMESTAMPTZ), updated_at = CAST($2 AS TIMESTAMPTZ), version = version + 1
+                 SET is_active = TRUE, status = 1, deployed_at = CAST($2 AS TIMESTAMPTZ), updated_at = CAST($2 AS TIMESTAMPTZ), version = version + 1
                  WHERE uuid = $1",
             )
             .bind(config_id)
@@ -366,13 +366,12 @@ impl DeployRepository {
             sqlx::query(
                 "SELECT nc.config_content, s.uuid AS app_uuid, s.runtime_config,
                         (
-                            SELECT d.hostname
-                            FROM deploy_domain d
-                            WHERE d.app_id = s.id
-                              AND d.tenant_id = s.tenant_id
-                              AND d.deleted_at IS NULL
-                              AND d.is_primary = 1
-                            ORDER BY d.created_at ASC
+                            SELECT b.hostname_ascii
+                            FROM deploy_app_binding b
+                            WHERE b.app_id = s.id
+                              AND b.tenant_id = s.tenant_id
+                              AND b.deleted_at IS NULL
+                            ORDER BY b.is_canonical DESC, b.created_at ASC
                             LIMIT 1
                         ) AS primary_domain
                  FROM deploy_nginx_config nc
@@ -388,13 +387,12 @@ impl DeployRepository {
             sqlx::query(
                 "SELECT nc.config_content, s.uuid AS app_uuid, s.runtime_config,
                         (
-                            SELECT d.hostname
-                            FROM deploy_domain d
-                            WHERE d.app_id = s.id
-                              AND d.tenant_id = s.tenant_id
-                              AND d.deleted_at IS NULL
-                              AND d.is_primary = 1
-                            ORDER BY d.created_at ASC
+                            SELECT b.hostname_ascii
+                            FROM deploy_app_binding b
+                            WHERE b.app_id = s.id
+                              AND b.tenant_id = s.tenant_id
+                              AND b.deleted_at IS NULL
+                            ORDER BY b.is_canonical DESC, b.created_at ASC
                             LIMIT 1
                         ) AS primary_domain
                  FROM deploy_nginx_config nc
@@ -439,7 +437,7 @@ impl DeployRepository {
         let active_configs = if let Some(tenant_id) = tenant_id {
             let row = sqlx::query(
                 "SELECT COUNT(*) AS total FROM deploy_nginx_config
-                 WHERE tenant_id = $1 AND is_active = 1 AND status = 1",
+                 WHERE tenant_id = $1 AND is_active AND status = 1",
             )
             .bind(tenant_id)
             .fetch_one(&self.pool)
@@ -448,7 +446,7 @@ impl DeployRepository {
             row.try_get::<i64, _>("total").unwrap_or(0)
         } else {
             let row = sqlx::query(
-                "SELECT COUNT(*) AS total FROM deploy_nginx_config WHERE is_active = 1 AND status = 1",
+                "SELECT COUNT(*) AS total FROM deploy_nginx_config WHERE is_active AND status = 1",
             )
             .fetch_one(&self.pool)
             .await

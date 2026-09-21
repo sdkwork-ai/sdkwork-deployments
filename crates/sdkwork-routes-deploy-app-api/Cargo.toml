@@ -22,3 +22,9 @@ sdkwork-web-core.workspace = true
 http-body-util.workspace = true
 tokio.workspace = true
 tower.workspace = true
+# Scratch live-schema probe for `apps.domains.list`; remove with the probe test.
+sdkwork-intelligence-deploy-service.workspace = true
+sdkwork-intelligence-deploy-repository-sqlx.workspace = true
+sdkwork-database-id.workspace = true
+sdkwork-deploy-drive-port.workspace = true
+sqlx.workspace = true

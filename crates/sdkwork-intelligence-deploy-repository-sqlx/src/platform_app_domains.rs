@@ -70,6 +70,18 @@ fn platform_zone_apex(suffix: &str) -> String {
 /// names a suffix outside the platform catalog must create the zone it needs
 /// rather than fail with a not-found error, so this is shared by the explicit
 /// tenant pre-provisioning entry point and by the per-app reconcile path.
+///
+/// Because it *creates* a zone, it has to answer the two questions the
+/// operator-facing `create_domain_zone_repo` answers before it writes, or it
+/// corrupts the inventory instead of refusing:
+///
+/// 1. the apex is already taken — possibly by another tenant, because
+///    `uk_deploy_dns_zone_active_apex` is a *global* unique index; and
+/// 2. the apex overlaps an existing zone, which happens as soon as an operator
+///    has defined the bare `example.com` that the platform now wants
+///    `app.example.com` under. Nesting zones silently makes DNS-01 challenge
+///    resolution ambiguous and mints `VERIFIED` hostnames inside a domain the
+///    operator owns.
 async fn ensure_platform_zone_in_tx(
     id_generator: &sdkwork_database_id::SnowflakeIdGenerator,
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -79,17 +91,47 @@ async fn ensure_platform_zone_in_tx(
     suffix: &str,
 ) -> DeployServiceResult<(i64, bool)> {
     let apex = platform_zone_apex(suffix);
-    let exists: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM deploy_dns_zone
-         WHERE tenant_id = $1 AND apex_hostname = $2 AND deleted_at IS NULL",
+    // Looked up by apex alone, across tenants, for the same reason the unique
+    // index is global: a tenant-scoped lookup answers "free" for an apex another
+    // tenant holds, and the INSERT that follows dies as a raw constraint
+    // violation (a masked 500) instead of a diagnosable conflict.
+    let existing: Option<(i64, i64, Option<i64>)> = sqlx::query_as(
+        "SELECT id, tenant_id, user_id FROM deploy_dns_zone
+         WHERE apex_hostname = $1 AND deleted_at IS NULL",
     )
-    .bind(tenant_id)
     .bind(&apex)
     .fetch_optional(&mut **transaction)
     .await
     .map_err(|error| store_error("lookup platform app zone", error))?;
-    if let Some(zone_id) = exists {
-        return Ok((zone_id, false));
+    if let Some((zone_id, owner_tenant_id, owner_user_id)) = existing {
+        // Only a platform-scoped zone of this tenant is reused. Anything else —
+        // another tenant's zone, or an operator's own root domain — is a real
+        // conflict: reusing it would bind this app's publishing domains into a
+        // namespace this tenant does not own.
+        if owner_tenant_id == tenant_id && owner_user_id.is_none() {
+            return Ok((zone_id, false));
+        }
+        return Err(DeployServiceError::conflict(format!(
+            "platform publishing zone {apex} is already registered by another tenant or by a user-defined root domain"
+        )));
+    }
+    // No zone owns the apex, but an existing zone may still contain it or be
+    // contained by it. Refusing here preserves the "zones never overlap"
+    // invariant that `create_domain_zone_repo` enforces for operator zones.
+    let overlapping: Option<String> = sqlx::query_scalar(
+        "SELECT apex_hostname FROM deploy_dns_zone
+         WHERE deleted_at IS NULL
+           AND (apex_hostname LIKE '%.' || $1 OR $1 LIKE '%.' || apex_hostname)
+         LIMIT 1",
+    )
+    .bind(&apex)
+    .fetch_optional(&mut **transaction)
+    .await
+    .map_err(|error| store_error("check platform app zone overlap", error))?;
+    if let Some(existing_apex) = overlapping {
+        return Err(DeployServiceError::conflict(format!(
+            "platform publishing zone {apex} overlaps the existing domain zone {existing_apex}"
+        )));
     }
     let zone_id = next_id(id_generator)?;
     // `user_id` stays NULL on purpose: a platform zone is tenant-level
@@ -163,22 +205,15 @@ impl DeployRepository {
             .try_get("slug")
             .map_err(|error| DeployServiceError::Internal(format!("read app slug: {error}")))?;
         let app_domain_label: Option<String> = row.try_get("app_domain_label").ok().flatten();
-        let override_suffixes: Option<serde_json::Value> =
-            row.try_get("app_domain_suffixes").ok().flatten();
-        let override_suffixes = match override_suffixes {
-            Some(serde_json::Value::Array(entries)) => {
-                let parsed = entries
-                    .into_iter()
-                    .filter_map(|entry| entry.as_str().map(str::to_owned))
-                    .collect::<Vec<_>>();
-                if parsed.is_empty() {
-                    None
-                } else {
-                    Some(parsed)
-                }
-            }
-            _ => None,
-        };
+        // Decoded through the JSONB helper (not `try_get::<Option<Vec<String>>>`,
+        // which sqlx maps onto `TEXT[]` and which therefore fails against this
+        // `JSONB` column). An empty array means "no override", matching the
+        // writer, which never stores one.
+        let override_suffixes = crate::support::string_list_from_row(&row, "app_domain_suffixes")
+            .map_err(|error| DeployServiceError::Internal(format!(
+                "read app domain suffixes: {error}"
+            )))?
+            .filter(|suffixes| !suffixes.is_empty());
         Ok(AppDomainConfig {
             label: sdkwork_deploy_core::effective_app_domain_label(
                 app_domain_label.as_deref(),
@@ -224,7 +259,7 @@ impl DeployRepository {
                     b.verified_at IS NOT NULL AS binding_verified,
                     d.uuid AS domain_uuid, d.hostname_type,
                     d.verification_status AS domain_verification_status,
-                    z.apex AS zone_apex
+                    z.apex_hostname AS zone_apex
              FROM deploy_app_binding b
              LEFT JOIN deploy_domain d ON d.id = b.domain_id AND d.deleted_at IS NULL
              LEFT JOIN deploy_dns_zone z ON z.id = d.zone_id AND z.deleted_at IS NULL
@@ -444,6 +479,25 @@ pub(crate) async fn reconcile_app_default_domains_tx(
         .fetch_optional(&mut **transaction)
         .await
         .map_err(|error| store_error("lookup app default domain", error))?;
+        // The lookup above keys on `hostname_ascii` alone, because that is the
+        // column the global unique index covers. The row it finds must sit in
+        // *this* platform zone: reusing one that lives under an operator's own
+        // zone would bind the app to a hostname the operator controls while the
+        // platform reports the domain as provisioned, and would silently make
+        // the operator's zone undeletable.
+        if let Some(existing_id) = domain_id {
+            let existing_zone_id: i64 =
+                sqlx::query_scalar("SELECT zone_id FROM deploy_domain WHERE id = $1")
+                    .bind(existing_id)
+                    .fetch_one(&mut **transaction)
+                    .await
+                    .map_err(|error| store_error("read app default domain zone", error))?;
+            if existing_zone_id != zone_id {
+                return Err(DeployServiceError::conflict(format!(
+                    "default publishing hostname {hostname} is already registered under a different domain zone"
+                )));
+            }
+        }
         // `hostname_ascii` is unique across all active domains, so a
         // default publishing hostname claimed by another tenant must
         // fail with a clear conflict instead of a generic constraint

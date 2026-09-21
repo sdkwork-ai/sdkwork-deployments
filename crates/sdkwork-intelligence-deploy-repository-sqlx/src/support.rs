@@ -58,6 +58,76 @@ pub(crate) fn json_from_row(
     row.try_get(column)
 }
 
+/// Read a string list out of a `JSONB` column.
+///
+/// The read-side counterpart of [`string_list_to_json`], and it exists for the
+/// same reason: sqlx maps `Vec<String>` to `TEXT[]`, so
+/// `try_get::<Option<Vec<String>>, _>` on a `JSONB` column fails with
+///
+/// ```text
+/// mismatched types; Rust type `Option<Vec<String>>` (as SQL type `TEXT[]`)
+/// is not compatible with SQL type `JSONB`
+/// ```
+///
+/// Decoding through `serde_json::Value` is the only correct route. Doing it here
+/// also keeps callers from writing `row.try_get("col").ok().flatten()`, which
+/// turns a real decode failure into a silent `None` — the override then looks
+/// unset and the platform catalog is used instead, with nothing in the logs.
+///
+/// A column that is `NULL` decodes to `None`; a value that is not a JSON array of
+/// strings is a decode error and is surfaced rather than swallowed.
+pub(crate) fn string_list_from_row(
+    row: &PgRow,
+    column: &str,
+) -> Result<Option<Vec<String>>, SqlxError> {
+    let Some(value) = json_from_row(row, column)? else {
+        return Ok(None);
+    };
+    let malformed = || {
+        SqlxError::Decode(
+            format!("column `{column}` must hold a JSON array of strings, got {value}").into(),
+        )
+    };
+    let array = value.as_array().ok_or_else(malformed)?;
+    // A `null` entry is a corruption signal, not a value to skip: the writer
+    // only ever emits strings.
+    array
+        .iter()
+        .map(|entry| entry.as_str().map(str::to_owned).ok_or_else(malformed))
+        .collect::<Result<Vec<String>, SqlxError>>()
+        .map(Some)
+}
+
+/// Encode a string list for a `JSONB` column.
+///
+/// The write-side counterpart of [`string_list_from_row`], and the reason it
+/// exists: binding a bare `Vec<String>` makes sqlx infer `TEXT[]` from the Rust
+/// type, so a `JSONB` target is rejected at execution time with
+///
+/// ```text
+/// column "<col>" is of type jsonb but expression is of type text[]
+/// ```
+///
+/// That failure only surfaces when the statement actually runs, so it hides
+/// behind `Option::None` in unit tests and reaches production as a masked 500.
+/// Routing every `Vec<String>` → JSONB write through this helper keeps the
+/// `JSONB` contract in one place instead of restating `Value::Array(..)` at each
+/// call site, where it is easy to forget.
+///
+/// `None` stays `None` — the caller decides whether that means "leave the column
+/// alone" or "fall back to the column DEFAULT".
+pub(crate) fn string_list_to_json(value: Option<&Vec<String>>) -> Option<serde_json::Value> {
+    value.map(|items| {
+        serde_json::Value::Array(
+            items
+                .iter()
+                .cloned()
+                .map(serde_json::Value::String)
+                .collect(),
+        )
+    })
+}
+
 pub(crate) fn datetime_from_row(row: &PgRow, column: &str) -> Result<String, SqlxError> {
     row.try_get::<chrono::DateTime<Utc>, _>(column)
         .map(|value| value.to_rfc3339_opts(SecondsFormat::Millis, true))
@@ -282,6 +352,63 @@ pub(crate) fn decode_keyset_cursor(token: &str) -> Option<(String, i64)> {
         return None;
     }
     Some((created_at.to_string(), id))
+}
+
+#[cfg(test)]
+mod json_write_tests {
+    use super::string_list_to_json;
+
+    /// A JSONB write must produce a JSON *array*, never a `TEXT[]`-shaped value.
+    /// This is the invariant the sqlx binding depends on, and the one whose
+    /// absence produced `column "app_domain_suffixes" is of type jsonb but
+    /// expression is of type text[]`.
+    #[test]
+    fn string_list_encodes_as_a_json_array() {
+        let suffixes = vec!["sdkwork.com".to_owned(), "sdkwork.dev".to_owned()];
+        let encoded = string_list_to_json(Some(&suffixes)).expect("Some encodes to Some");
+        assert!(
+            encoded.is_array(),
+            "a JSONB column needs a JSON array, got {encoded}"
+        );
+        assert_eq!(
+            encoded,
+            serde_json::json!(["sdkwork.com", "sdkwork.dev"]),
+            "order is preserved verbatim"
+        );
+    }
+
+    /// `None` must stay `None`: the caller uses it to mean "leave the column
+    /// alone" (update) or "fall back to the column DEFAULT" (insert).
+    #[test]
+    fn absent_list_stays_none_rather_than_encoding_null() {
+        assert_eq!(string_list_to_json(None), None);
+    }
+
+    /// An empty list is a real value (an empty JSON array), not `None` — the
+    /// callers filter emptiness out before this point, so encoding must not
+    /// silently collapse it.
+    #[test]
+    fn empty_list_encodes_as_an_empty_array() {
+        let empty = Vec::new();
+        let encoded = string_list_to_json(Some(&empty)).expect("Some encodes to Some");
+        assert_eq!(encoded, serde_json::json!([]));
+    }
+
+    /// The write helper's output must be exactly what the read helper accepts —
+    /// that round trip is the contract both call sites depend on.
+    #[test]
+    fn encoded_json_decodes_back_to_the_same_list() {
+        let suffixes = vec!["sdkwork.com".to_owned(), "sdkwork.cn".to_owned()];
+        let encoded = string_list_to_json(Some(&suffixes)).expect("encodes");
+        // `string_list_from_row` reads `serde_json::Value` and requires a JSON
+        // array of strings; assert the shape it will see.
+        let array = encoded.as_array().expect("a JSON array");
+        let decoded = array
+            .iter()
+            .map(|entry| entry.as_str().expect("every entry is a string").to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(decoded, suffixes);
+    }
 }
 
 #[cfg(test)]

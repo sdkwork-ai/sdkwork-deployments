@@ -183,3 +183,15 @@
 .domain-more{flex:0 0 auto;padding:1px 6px;border-radius:999px;background:#e7ecef;color:#536067;font-size:11px;font-weight:650}
 .muted{color:#8a949a}
 .row-actions .command-button{min-height:28px;padding:0 9px;font-size:12px;font-weight:500;white-space:nowrap}
+
+/* Ownership badge on the root-domain ledger.
+   The inventory mixes operator-defined root domains with the tenant-level
+   `app.<suffix>` zones the deployment provisions for app publishing. Both look
+   like "a domain" in the first column, so the table has to say which is which
+   or a platform zone reads as the operator's own root domain. */
+.scope-badge{display:inline-flex;align-items:center;min-height:22px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:650;white-space:nowrap}
+/* Operator-defined: neutral, matches the table's inert text. */
+.scope-badge-user{background:#e7ecef;color:#46545b}
+/* Platform-provisioned: the same amber the console uses for machine-managed
+   state it did not author, so it is visibly not the operator's to edit. */
+.scope-badge-platform{background:#fff0c7;color:#755407}

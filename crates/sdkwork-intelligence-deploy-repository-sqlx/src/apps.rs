@@ -16,7 +16,7 @@ use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
 use crate::support::{
     new_uuid, next_id, optional_datetime, pagination, required_datetime, resolve_app_internal_id,
-    sha256_hex, store_error,
+    sha256_hex, store_error, string_list_from_row, string_list_to_json,
 };
 use crate::DeployRepository;
 
@@ -95,8 +95,14 @@ fn map_app_row(row: &PgRow) -> Result<AppResponse, DeployServiceError> {
     // real hostname without re-implementing the fallback (and without drifting
     // from what `provision_app_default_domains*` actually wrote).
     let app_domain_label_override: Option<String> = row.try_get("app_domain_label").ok().flatten();
-    let app_domain_suffixes_override: Option<Vec<String>> =
-        row.try_get("app_domain_suffixes").ok().flatten();
+    // Decoded through the JSONB helper, not `try_get::<Option<Vec<String>>>`: sqlx
+    // maps `Vec<String>` onto `TEXT[]`, so the direct decode fails against a
+    // `JSONB` column. Swallowing that with `.ok()` silently discarded the
+    // override and made every app look like it used the platform catalog.
+    let app_domain_suffixes_override =
+        string_list_from_row(row, "app_domain_suffixes").map_err(|error| {
+            DeployServiceError::Internal(format!("read app domain suffixes: {error}"))
+        })?;
     let effective_label =
         effective_app_domain_label(app_domain_label_override.as_deref(), &slug).to_owned();
     let effective_suffixes = effective_app_domain_suffixes(app_domain_suffixes_override.as_deref());
@@ -230,6 +236,12 @@ impl DeployRepository {
             ),
             _ => None,
         };
+        // `deploy_app.app_domain_suffixes` is `JSONB`, not `TEXT[]`. Binding the
+        // `Vec<String>` directly makes sqlx infer a text array and PostgreSQL
+        // rejects the insert with `column "app_domain_suffixes" is of type jsonb
+        // but expression is of type text[]` — a masked 500 on `apps.create`.
+        // `None` keeps meaning "no override; use the platform catalog".
+        let app_domain_suffixes_json = string_list_to_json(app_domain_suffixes.as_ref());
 
         let result = sqlx::query(
             "INSERT INTO deploy_app
@@ -256,7 +268,7 @@ impl DeployRepository {
         .bind(&metadata)
         .bind(&default_environment)
         .bind(app_domain_label.as_deref())
-        .bind(app_domain_suffixes.as_ref())
+        .bind(&app_domain_suffixes_json)
         .bind(actor_id)
         .bind(actor_id)
         .bind(idempotency_key)
@@ -374,6 +386,10 @@ impl DeployRepository {
             ),
             _ => None,
         };
+        // Same JSONB-vs-text-array contract as `apps.create`: the override list
+        // has to reach the column as a JSON array, and `has_domain_suffixes`
+        // still distinguishes "field absent" (leave the column) from "cleared".
+        let domain_suffixes_json = string_list_to_json(domain_suffixes.as_ref());
         // `metadata` arrives as the *complete* object the console wants stored
         // (`{...existing, media}`), so it replaces the column rather than being
         // shallow-merged server-side — merging here would resurrect keys the
@@ -403,7 +419,7 @@ impl DeployRepository {
         .bind(has_domain_label)
         .bind(domain_label.as_deref())
         .bind(has_domain_suffixes)
-        .bind(domain_suffixes.as_ref())
+        .bind(&domain_suffixes_json)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("update deploy_app", error))?;

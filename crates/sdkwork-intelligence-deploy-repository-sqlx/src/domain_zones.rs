@@ -1,7 +1,7 @@
-﻿use sdkwork_deploy_contract::{
+use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployServiceError, DeployServiceResult,
     DomainHostnamePage, DomainHostnameResponse, DomainZonePage, DomainZoneResponse,
-    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
+    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
 };
 use sdkwork_intelligence_deploy_service::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, DomainVerificationChallenge,
@@ -16,7 +16,7 @@ use crate::DeployRepository;
 
 const ZONE_SELECT: &str =
     "z.uuid, z.apex_hostname, z.display_name, z.dns_provider, z.provider_account_id, z.status,
-     z.updated_at, z.version,
+     z.user_id, z.updated_at, z.version,
      (SELECT COUNT(*) FROM deploy_domain d WHERE d.zone_id = z.id AND d.deleted_at IS NULL) AS hostname_count,
      (SELECT COUNT(*) FROM deploy_domain d WHERE d.zone_id = z.id AND d.verification_status = 'VERIFIED' AND d.deleted_at IS NULL) AS verified_hostname_count,
      (SELECT COUNT(DISTINCT ci.certificate_id) FROM deploy_certificate_identifier ci JOIN deploy_domain d ON d.id = ci.domain_id WHERE d.zone_id = z.id AND d.deleted_at IS NULL) AS certificate_count,
@@ -77,7 +77,7 @@ impl DeployRepository {
         .map_err(|error| store_error("count deploy_dns_zone", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ZONE_SELECT} FROM deploy_dns_zone z WHERE {predicate}
-             ORDER BY z.updated_at DESC, z.id DESC LIMIT $5 OFFSET $6"
+             ORDER BY (z.user_id IS NULL) ASC, z.updated_at DESC, z.id DESC LIMIT $5 OFFSET $6"
         )))
         .bind(tenant_id)
         .bind(owner_user_id)
@@ -1216,9 +1216,14 @@ fn hostname_from_relative_name(
 }
 
 fn map_zone_row(row: &PgRow) -> Result<DomainZoneResponse, sqlx::Error> {
+    // `user_id` is the only thing that separates an operator's root domain from
+    // the tenant-level `app.<suffix>` zones, so the scope is derived from it
+    // here rather than being stored twice.
+    let user_id: Option<i64> = row.try_get("user_id").ok().flatten();
     Ok(DomainZoneResponse {
         id: row.try_get("uuid")?,
         apex_hostname: row.try_get("apex_hostname")?,
+        scope: ZoneScope::for_owner(user_id),
         display_name: row.try_get("display_name").ok(),
         dns_provider: row.try_get("dns_provider").ok(),
         provider_account_id: row.try_get("provider_account_id").ok(),

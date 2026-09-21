@@ -586,3 +586,111 @@ async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
     assert_eq!(alice_still_there.id, alice.id);
     assert_eq!(alice_still_there.status, "ACTIVE");
 }
+
+/// The console's root-domain list must show the operator's own zones *first*,
+/// and label which zones are the operator's and which the deployment
+/// provisioned.
+///
+/// Two separate failures are covered here, because the page looked equally
+/// wrong for both reasons:
+///
+/// 1. `scope` did not exist, so the console could not tell an operator's
+///    `example.com` from the platform's provisioned `app.example.com` and
+///    presented them as if both were the operator's.
+/// 2. the listing ordered by `updated_at DESC` alone. The platform provisions
+///    its entire `app.<suffix>` catalog in one transaction, so every such zone
+///    shares an `updated_at` *newer* than any operator zone typed by hand —
+///    which pushed the operator's own root domains off the first page.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn domain_zone_listing_puts_operator_zones_first_and_labels_their_scope() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(6).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let request = |apex: &str| CreateDomainZoneRequest {
+        apex_hostname: apex.to_owned(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    let listing = || ListDomainZonesQuery {
+        page: 1,
+        page_size: 50,
+        status: None,
+        keyword: None,
+    };
+
+    // The operator's own root domain, created first.
+    let operator_apex = format!("operator{suffix}.dev");
+    repository
+        .create_domain_zone(7, Some(9), Some(11), &request(&operator_apex))
+        .await
+        .expect("create the operator's root domain");
+
+    // The platform's provisioned zone, created second. Written directly so the
+    // row carries the same shape the provisioner writes (`user_id` NULL,
+    // `dns_provider` platform), and a *newer* `updated_at` than the operator's.
+    let platform_apex = format!("app.{operator_apex}");
+    sqlx::query(
+        "INSERT INTO deploy_dns_zone (
+            id, uuid, tenant_id, organization_id, apex_hostname, display_name,
+            dns_provider, provider_zone_ref, status, user_id, created_by, updated_by
+         ) VALUES (
+            90001, 'zone-90001', 7, 9, $1, 'Platform app domain zone', 'platform', $2,
+            'ACTIVE', NULL, 1, 1
+         )",
+    )
+    .bind(&platform_apex)
+    .bind(format!("app.*.{suffix}.dev"))
+    .execute(repository.pool())
+    .await
+    .expect("seed the platform zone");
+
+    let page = repository
+        .list_domain_zones(7, Some(11), &listing())
+        .await
+        .expect("list the operator's zones");
+
+    let seen: Vec<(String, String)> = page
+        .items
+        .iter()
+        .map(|zone| (zone.scope.as_str().to_owned(), zone.apex_hostname.clone()))
+        .collect();
+
+    let operator_index = seen
+        .iter()
+        .position(|(_, apex)| *apex == operator_apex)
+        .unwrap_or_else(|| panic!("the operator's root domain is missing from {seen:?}"));
+    let platform_index = seen
+        .iter()
+        .position(|(_, apex)| *apex == platform_apex)
+        .unwrap_or_else(|| panic!("the platform zone is missing from {seen:?}"));
+
+    // This is the regression the console reported: the operator's own zone was
+    // sorted behind the platform catalog and fell off page one.
+    assert!(
+        operator_index < platform_index,
+        "an operator zone must precede every platform zone; got {seen:?}"
+    );
+
+    // The labels have to be right, or the console shows the platform's zones as
+    // the operator's own inventory.
+    assert_eq!(seen[operator_index].0, "USER", "got {seen:?}");
+    assert_eq!(seen[platform_index].0, "PLATFORM", "got {seen:?}");
+
+    // Every platform zone in the page carries PLATFORM, and every USER zone is
+    // one the operator owns (never a bare `app.*` provisioning apex).
+    for (scope, apex) in &seen {
+        if scope == "PLATFORM" {
+            assert!(
+                apex.starts_with("app."),
+                "a PLATFORM zone must be a provisioning apex; got {apex}"
+            );
+        }
+    }
+}

@@ -164,7 +164,7 @@ impl DeployRepository {
             let row = sqlx::query(
                 "SELECT b.tenant_id, b.app_id, b.id AS binding_id,
                         (SELECT app.uuid FROM deploy_app app
-                         WHERE app.app_id = b.app_id AND app.deleted_at IS NULL
+                         WHERE app.id = b.app_id AND app.deleted_at IS NULL
                          LIMIT 1) AS app_uuid
                  FROM deploy_app_binding b
                  WHERE b.uuid = $1 AND b.deleted_at IS NULL
@@ -188,7 +188,7 @@ impl DeployRepository {
             let row = sqlx::query(
                 "SELECT tenant_id, id,
                         (SELECT app.uuid FROM deploy_app app
-                         WHERE app.app_id = deploy_app.id AND app.deleted_at IS NULL
+                         WHERE app.id = deploy_app.id AND app.deleted_at IS NULL
                          LIMIT 1) AS app_uuid
                  FROM deploy_app
                  WHERE uuid = $1 AND deleted_at IS NULL LIMIT 1",

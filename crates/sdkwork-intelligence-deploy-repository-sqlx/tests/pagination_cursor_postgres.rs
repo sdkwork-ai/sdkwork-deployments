@@ -43,6 +43,8 @@ async fn create_app(repo: &DeployRepository, tenant_id: i64, name: &str) -> Stri
                 metadata: Some(serde_json::json!({ "category": { "id": "cat-1" } })),
                 description: None,
                 default_environment: None,
+                app_domain_label: None,
+                app_domain_suffixes: None,
                 idempotency_key: None,
             },
         )
@@ -182,6 +184,8 @@ fn create_request(name: &str, slug: Option<&str>) -> CreateAppRequest {
         metadata: None,
         description: None,
         default_environment: None,
+        app_domain_label: None,
+        app_domain_suffixes: None,
         idempotency_key: None,
     }
 }

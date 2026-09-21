@@ -3294,13 +3294,18 @@ dependencies = [
  "async-trait",
  "axum",
  "http-body-util",
+ "sdkwork-database-id",
  "sdkwork-deploy-contract",
+ "sdkwork-deploy-drive-port",
  "sdkwork-iam-web-adapter",
+ "sdkwork-intelligence-deploy-repository-sqlx",
+ "sdkwork-intelligence-deploy-service",
  "sdkwork-routes-deploy-common",
  "sdkwork-web-axum",
  "sdkwork-web-core",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tower",
 ]
@@ -3481,6 +3486,7 @@ dependencies = [
  "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "sdkwork-webserver-resolver-cache",
+ "sdkwork-webserver-tunnel-core",
  "serde",
  "serde_json",
  "sha1 0.10.6",
@@ -3541,6 +3547,16 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sdkwork-webserver-tunnel-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ipnet",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
