@@ -455,10 +455,14 @@ pub struct ListCloudAccountsQuery {
 
 /// Registers a DNS cloud account from console input.
 ///
-/// The fields are the union of what the supported families need, so the console
-/// renders one form: `accessKeyId` is the public half (Aliyun AccessKeyId, DNSPod
-/// LoginId) and is unused by Cloudflare, and `secretAccessKey` is always the secret
-/// half (Aliyun AccessKeySecret, DNSPod ApiToken, Cloudflare ApiToken).
+/// The credential halves are what the chosen family needs, so the console renders
+/// the vendor's own field names for that family rather than a union of every
+/// family's: `accessKeyId` is the public half (Aliyun AccessKeyId, DNSPod LoginId)
+/// and is absent for Cloudflare, and `secretAccessKey` is always the secret half
+/// (Aliyun AccessKeySecret, DNSPod ApiToken, Cloudflare ApiToken). A
+/// `dns_provider` that names no supported family is refused rather than stored,
+/// because a credential whose vendor does not match the domain it will publish for
+/// fails at the first order.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateCloudAccountRequest {
     #[serde(rename = "displayName")]
@@ -489,6 +493,17 @@ pub struct CreateCloudAccountRequest {
     pub secret_access_key: String,
     #[serde(rename = "sessionToken", default)]
     pub session_token: Option<String>,
+    /// The operator's own statement that the credential is an active one for the
+    /// declared vendor with permission to edit the zones it will publish into.
+    ///
+    /// The console cannot probe a credential — that would mean dispatching it to
+    /// the vendor from the read path — so it asks the operator instead, and this
+    /// is what records that they were asked. `false` is refused rather than
+    /// silently defaulted, so a caller cannot store an unattested credential by
+    /// omission. Unlike the optional fields above it is therefore *not* `default`
+    /// in the accepting sense: the service reads an absent value as `false`.
+    #[serde(rename = "confirmsCredential", default)]
+    pub confirms_credential: bool,
 }
 
 /// What registering produced.

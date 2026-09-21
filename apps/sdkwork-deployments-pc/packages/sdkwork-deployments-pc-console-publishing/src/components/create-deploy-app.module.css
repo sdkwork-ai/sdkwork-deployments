@@ -120,8 +120,14 @@
   animation: pdaDrawerSlideIn 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+/* `lg` 档从 680px 放宽到 880px。
+ * 依据是应用类型网格的「提示单行」分档（见 `.typeCardGrid` 的实测数据）：
+ *   680px ⇒ 可用 640px ⇒ 4 列 ⇒ 列宽 153px ⇒ 提示 2 行 ⇒ 网格 341px；
+ *   880px ⇒ 可用 840px ⇒ 3 列 ⇒ 列宽 273px ⇒ 提示 1 行 ⇒ 网格 275px。
+ * 取 880 而非更大：860–880 已是 275px 的最小档，再宽不会更矮
+ * （920px 附近反而掉进 4 列回到 303px），只会压缩背后列表的可见区域。 */
 .drawerPanelLg {
-  width: min(680px, 100vw);
+  width: min(880px, 100vw);
 }
 
 @keyframes pdaDrawerSlideIn {
@@ -153,6 +159,54 @@
 
 .drawerPanel .footer {
   padding: 14px 20px;
+}
+
+/* ── 抽屉固定的「保存区」 ──────────────────────────────────────────────────
+ *
+ * 抽屉是「边翻边改」的形态：域名设置里有自定义域名清单、平台域名表单、5 环境
+ * 预览三张长表，正文必然滚动。行业做法（GitHub 设置页、Vercel / Netlify /
+ * Cloudflare 的域名页、Shoelace / Radix 的 drawer 示例）一致把**提交动作留在
+ * 视口内**：正文滚到哪里，保存按钮都在。把保存键留在正文里，用户翻到平台域名
+ * 表单时它已经滚出屏幕，只能猜「改完到底怎么生效」。
+ *
+ * 做法是 `position: sticky` 而不是 `position: fixed`：sticky 仍参与
+ * `.body` 的 flex 布局，占住自己的高度，因此
+ *   · 正文滚动到底时它会**停在正文末尾**，不会盖住最后一行预览（fixed 的经典
+ *     缺陷，需要给正文补 padding-bottom 来绕）；
+ *   · 无需按面板宽度/抽屉动画计算 left/right（fixed 在 transform 祖先里还会
+ *     被切成相对该祖先定位）；
+ *   · 正文不滚动（内容比视口短）时它就落在原位，正是想要的底部对齐观感。
+ *
+ * 底色 + 上边框 + 上方渐隐：让「浮」在正文之上的这一条读起来是一个明确的
+ * 操作区，而不是压住内容的浮层；渐隐避免生硬的分割线切断文字。
+ */
+.saveBar {
+  position: sticky;
+  bottom: -18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px -20px -18px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--pda-border);
+  background: var(--pda-bg);
+  box-shadow: 0 -12px 16px -12px rgba(15, 23, 42, 0.35);
+}
+
+.drawerRoot[data-theme="dark"] .saveBar {
+  box-shadow: 0 -12px 16px -12px rgba(0, 0, 0, 0.75);
+}
+
+.saveBarSpacer {
+  flex: 1;
+}
+
+/* 保存区左侧的「有无未保存改动」提示：让禁用态的保存键**有原因**。
+   禁止点击却不说明为什么，是最典型的可访问性缺陷之一。 */
+.saveBarHint {
+  font-size: 11px;
+  color: var(--pda-text-muted);
 }
 
 .header {
@@ -727,6 +781,39 @@
   flex: 1;
 }
 
+/* ── 页脚状态行 ───────────────────────────────────────────────────────────
+ *
+ * banner 形态（`.errorBanner` / `.successBanner`）在抽屉里有个必须避开的缺陷：
+ * 它们挂在正文末尾。操作者点完保存，结果行会出现在正文**已经滚过**的位置，
+ * 他要么看不见，要么得往回翻 —— 「操作没反应」的感觉就是这么来的。
+ * 失败态更糟：它会换行占据页脚整行高度，把动作按钮挤下去。
+ *
+ * 因此结果摘要统一走页脚的**常驻状态行**：始终在视口内、固定位置、单行省略。
+ * 完整报错仍走 `role="alert"`，只是从正文搬到了页脚 —— 断言消息是否出现依然成立。
+ */
+.footerStatus {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.footerStatus[data-tone="success"] {
+  color: #16a34a;
+}
+
+.footerStatus[data-tone="error"] {
+  color: var(--pda-danger);
+  /* 报错是唯一允许撑高页脚的情形：截断的错误等于没有错误。 */
+  white-space: normal;
+}
+
+.drawerRoot[data-theme="dark"] .footerStatus[data-tone="success"] {
+  color: #4ade80;
+}
+
 .primaryButton {
   padding: 7px 16px;
   border: none;
@@ -1191,20 +1278,43 @@
 
 /* --- v2 第 1 步: 应用类型 grid (icon + 名称) --- */
 
+/*
+ * 密度预算（v5）。抽屉可用宽 = 面板宽 − 2×20px 内边距；
+ * 列数 = floor((可用宽 + gap) / (最小轨道 + gap))。
+ *
+ * 🔴 关键约束不是列数（9 张卡片在 3–4 列下**始终**占 3 行），而是**卡片高度**，
+ * 而卡片高度由提示文本折几行决定。最长的两条提示是 Android / iOS 的
+ * 「原生、Flutter、React Native 或 uni-app」，其「单行所需列宽」决定分档。
+ *
+ * 实测（Chrome + CDP，headless，1280×900）：
+ *   修复前 padding 12 / gap 4 / minmax(150px) + 面板 680px ⇒ 4 列、列宽 153px
+ *     ⇒ 提示折 2 行 ⇒ 卡片高 91–123px ⇒ 网格 640×**341px**
+ *   修复后 padding 10 / gap 3 / minmax(210px) + 面板 880px ⇒ 3 列、列宽 273px
+ *     ⇒ 提示 1 行 ⇒ 卡片高 85px ⇒ 网格 840×**275px**（省 66px，−19%）
+ *
+ * 为什么落在 210px + 880px 这一档：列宽 ≥ 254px（= 240 文本 + 12 padding
+ * + 2 border）时提示才收成 1 行；840px 可用宽在该档下正好给到 273px 列宽，
+ * 且这是第一个能做到的面板宽度（860/880/1040 同为 275px，900 附近反而因
+ * 掉进 4 列而回到 303px）。再宽不会更矮，只会压缩背后列表的可见区域。
+ */
 .typeCardGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 10px;
   margin-top: 6px;
 }
 
+/*
+ * padding 12 → 10px、gap 4 → 3px：让出 8px 竖向空间，配合图标 26 → 22px，
+ * 卡片从「2 行提示时 107px / 1 行时 91px」两级统一压到 85px。
+ */
 .typeCardTile {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 12px;
+  gap: 3px;
+  padding: 10px;
   border: 1px solid var(--pda-border);
   border-radius: 10px;
   background: var(--pda-surface);
@@ -1288,6 +1398,95 @@
   background: var(--pda-accent-soft);
   color: var(--pda-accent);
   font-size: 10px;
+  font-weight: 600;
+}
+
+/* --- v6 第 1 步: 应用类型只读展示 ---
+ *
+ * 与 `.typeCardTile` 的关键区别是**没有 cursor: pointer、没有 hover 边框、
+ * 没有 data-selected 的高亮条**：这三样都是「可点」的可供性。只读区一旦
+ * 带上它们，用户会先点一下才发现点不动。
+ *
+ * 视觉上刻意矮于网格：一条横向卡片（图标 + 两行文字 + 右侧徽标）≈ 54px，
+ * 而 9 张卡的网格是 275px。发布阶段不再需要那一整片，省下的高度还给
+ * 下方真正要填的字段（目录 / 框架 / 版本）。 */
+.typeLockedTile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--pda-border);
+  border-radius: 10px;
+  background: var(--pda-surface);
+  color: var(--pda-text);
+}
+
+/* 未识别枚举：虚线而非实线，与「已确认」的实线卡片区分开，且同样不可点。 */
+.typeLockedTile[data-unknown="true"] {
+  border-style: dashed;
+}
+
+.typeLockedText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.typeLockedText strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.typeLockedText small {
+  font-size: 11px;
+  color: var(--pda-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 徽标钉在右端（`margin-left: auto`）而不是绝对定位：这条卡是单行弹性
+   布局，绝对定位会需要一个相对定位容器，而容器宽度随内容变 —— 标签会
+   在长文案下压到文字上。 */
+.typeLockedBadge {
+  margin-left: auto;
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--pda-accent-soft);
+  color: var(--pda-accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* 多候选时的表面选择（SPA_WEB ⊃ H5 / PC 网页）：两张等价卡，不是类型重选。 */
+.typeLockedChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.typeLockedChoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--pda-border);
+  border-radius: 8px;
+  background: var(--pda-surface);
+  color: var(--pda-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.typeLockedChoice:hover {
+  border-color: var(--pda-accent);
+}
+
+.typeLockedChoice[data-selected="true"] {
+  border-color: var(--pda-accent);
+  background: var(--pda-accent-soft);
+  color: var(--pda-accent);
   font-weight: 600;
 }
 

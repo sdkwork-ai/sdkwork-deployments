@@ -71,6 +71,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
   const [zones, setZones] = useState<DomainZoneResponse[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo>({ mode: "offset", page: 1, pageSize: 20, hasMore: false });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [searchDraft, setSearchDraft] = useState("");
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState<"ALL" | "ACTIVE" | "PAUSED">("ALL");
@@ -92,7 +93,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
     // by opening the root domain, not by showing up as siblings of it.
     void service.listDomainZones({
       page,
-      pageSize: 20,
+      pageSize,
       keyword: keyword || undefined,
       status: status === "ALL" ? undefined : status,
       scope: "USER",
@@ -112,7 +113,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       if (active) setBusy(false);
     });
     return () => { active = false; };
-  }, [keyword, page, refreshVersion, service, status]);
+  }, [keyword, page, pageSize, refreshVersion, service, status]);
 
   const reload = () => setRefreshVersion((value) => value + 1);
   const closeAndReload = () => { setDialog(undefined); reload(); };
@@ -173,7 +174,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       emptyState={<span><Globe2 size={24} />{t("noRootDomains")}</span>}
       getRowId={(zone) => zone.id}
       loading={busy && zones.length === 0}
-      pagination={serverPagination(page, pageInfo, busy, setPage)}
+      pagination={serverPagination(page, pageInfo, busy, setPage, setPageSize)}
       rowActions={(zone) => {
         // hostnameCount includes the apex hostname row every zone owns, so
         // only counts above 1 represent user-added subdomains that block
@@ -646,12 +647,60 @@ function CloudAccountGroup({ accounts, label, selectedId, t, use }: {
 }
 
 /**
- * Registers a cloud account from the console.
+ * What the form asks for, decided by the family the operator picked.
  *
- * One form for every family, because the account center stores one shape: an
- * optional public identifier plus a secret. The contract's own words are used
- * for the two halves rather than each vendor's, and the identifier is dropped
- * for Cloudflare, which authenticates with the token alone.
+ * The account center stores one credential shape per family — a key pair for
+ * Aliyun and DNSPod, a bearer token for Cloudflare — so the form is a projection
+ * of that shape rather than a union of every family's fields. Rendering the
+ * union is what made an Aliyun operator read "Aliyun AccessKeyId or DNSPod
+ * LoginId" and guess which half was theirs, and what asked Cloudflare for an
+ * identifier it cannot supply.
+ *
+ * Two things beyond the shape are decided here. The *words* are the vendor's own
+ * — AccessKey ID / AccessKey Secret, Login ID / API Token, API Token — because
+ * the console is meant to match the page the operator copies them from. The
+ * *capability* is derived the same way the server derives it
+ * (`dns_provider.vendor_code_for`), which is what lets the server refuse a
+ * credential that has drifted away from the vendor it is sent for.
+ */
+interface CloudAccountCredentialFields {
+  /** The vendor's own name for the public half; absent when the family has none. */
+  identifierLabel: DeliveryMessageKey | undefined;
+  identifierHint: DeliveryMessageKey | undefined;
+  secretLabel: DeliveryMessageKey;
+  secretHint: DeliveryMessageKey;
+  /** What the operator affirms about the pair, so the server can record consent. */
+  confirmsValue: DeliveryMessageKey;
+}
+
+const CLOUD_ACCOUNT_CREDENTIAL_FIELDS: Record<CloudAccountDnsProvider, CloudAccountCredentialFields> = {
+  ALIYUN_DNS: {
+    identifierLabel: "cloudAccountIdentifierAliyun",
+    identifierHint: "cloudAccountIdentifierHint",
+    secretLabel: "cloudAccountSecretAliyun",
+    secretHint: "cloudAccountSecretHint",
+    confirmsValue: "cloudAccountConfirmAliyun",
+  },
+  DNSPOD: {
+    identifierLabel: "cloudAccountIdentifierDnspod",
+    identifierHint: "cloudAccountIdentifierHint",
+    secretLabel: "cloudAccountSecretDnspod",
+    secretHint: "cloudAccountSecretHint",
+    confirmsValue: "cloudAccountConfirmDnspod",
+  },
+  // No identifier: Cloudflare has no public half, so a field for it would be one
+  // the operator could never fill correctly.
+  CLOUDFLARE: {
+    identifierLabel: undefined,
+    identifierHint: undefined,
+    secretLabel: "cloudAccountSecretCloudflare",
+    secretHint: "cloudAccountSecretCloudflareHint",
+    confirmsValue: "cloudAccountConfirmCloudflare",
+  },
+};
+
+/**
+ * Registers a cloud account from the console.
  *
  * Its environment attribute is deliberately not asked for. Deploy configures
  * credentials for certificates it issues through a publicly trusted CA, and the
@@ -676,14 +725,15 @@ function CloudAccountFormDialog({ close, dnsFamily, registered, t }: {
   const [isDefault, setIsDefault] = useState(false);
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
+  const [attested, setAttested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const fields = CLOUD_ACCOUNT_CREDENTIAL_FIELDS[family];
   // Cloudflare has no public half, so requiring an identifier there would block
   // the one family that cannot supply one.
-  const requiresIdentifier = family !== "CLOUDFLARE";
-  const incomplete = !displayName.trim()
-    || !secretAccessKey.trim()
-    || (requiresIdentifier && !accessKeyId.trim());
+  const requiresIdentifier = fields.identifierLabel !== undefined;
+  const identifierMissing = requiresIdentifier && accessKeyId.trim() === "";
+  const incomplete = !displayName.trim() || !secretAccessKey.trim() || identifierMissing || !attested;
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -698,6 +748,7 @@ function CloudAccountFormDialog({ close, dnsFamily, registered, t }: {
         isDefault,
         ...(accessKeyId.trim() === "" ? {} : { accessKeyId: accessKeyId.trim() }),
         secretAccessKey: secretAccessKey.trim(),
+        confirmsCredential: true,
       }));
     } catch (cause) { setError(errorText(cause)); setBusy(false); }
   }
@@ -720,16 +771,27 @@ function CloudAccountFormDialog({ close, dnsFamily, registered, t }: {
             <option value="user">{t("cloudAccountScopeUser")}</option>
           </select>
         </label>
+        {/* Rendered only where the family has a public half. The key is the
+            family, so switching provider swaps the pair rather than leaving the
+            previous vendor's words above the new vendor's field. */}
+        {fields.identifierLabel !== undefined && <label className="form-field-wide">
+          <span>{t(fields.identifierLabel)}</span>
+          <input value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} autoComplete="off" aria-invalid={identifierMissing} />
+          {fields.identifierHint !== undefined && <small className="form-hint">{t(fields.identifierHint)}</small>}
+        </label>}
         <label className="form-field-wide">
-          <span>{t("cloudAccountIdentifier")}</span>
-          <input value={accessKeyId} onChange={(event) => setAccessKeyId(event.target.value)} autoComplete="off" aria-invalid={requiresIdentifier && accessKeyId.trim() === ""} />
-          <small className="form-hint">{t("cloudAccountIdentifierHint")}</small>
-        </label>
-        <label className="form-field-wide">
-          <span>{t("cloudAccountSecret")}</span>
+          <span>{t(fields.secretLabel)}</span>
           <input type="password" required value={secretAccessKey} onChange={(event) => setSecretAccessKey(event.target.value)} autoComplete="new-password" />
-          <small className="form-hint">{t("cloudAccountSecretHint")}</small>
+          <small className="form-hint">{t(fields.secretHint)}</small>
         </label>
+        {/* Stated rather than implied: the console cannot probe a credential, so
+            the operator affirms it and the account center records who said so. */}
+        <div className="form-field-wide">
+          <label className="checkbox-field">
+            <input type="checkbox" checked={attested} onChange={(event) => setAttested(event.target.checked)} />
+            <span>{t(fields.confirmsValue)}</span>
+          </label>
+        </div>
         <div className="form-field-wide">
           <label className="checkbox-field">
             <input type="checkbox" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} />
@@ -1018,6 +1080,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
   const [hostnames, setHostnames] = useState<DomainHostnameResponse[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo>({ mode: "offset", page: 1, pageSize: 20, hasMore: false });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -1031,7 +1094,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     setBusy(true); setError(undefined);
     void Promise.all([
       service.retrieveDomainZone(zoneId),
-      service.listDomainHostnames(zoneId, { page, pageSize: 20 }),
+      service.listDomainHostnames(zoneId, { page, pageSize }),
     ]).then(([zoneResult, hostnameResult]) => {
       if (!active) return;
       setZone(zoneResult);
@@ -1039,10 +1102,9 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
       setPageInfo(hostnameResult.pageInfo);
     }).catch((cause) => { if (active) setError(errorText(cause)); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [page, refreshVersion, service, zoneId]);
+  }, [page, pageSize, refreshVersion, service, zoneId]);
 
   const reload = () => setRefreshVersion((value) => value + 1);
-  if (!zone && busy) return <section className="resource-page"><div className="empty-state">{t("loading")}</div></section>;
 
   /**
    * 子域名台账列。rename/delete 的锁定规则来自 `rowLocks`（与向导的覆盖域名
@@ -1061,6 +1123,18 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     { id: "bindingCount", header: t("appBindings"), cell: (hostname) => hostname.bindingCount, width: 110 },
     { id: "updatedAt", header: t("updated"), cell: (hostname) => formatDate(hostname.updatedAt, locale), width: 180 },
   ], [locale, t]);
+
+  // The loading guard sits *after* every hook, not before them. It used to sit
+  // above `hostnameColumns`, which made the hook count depend on the state it
+  // tests: the first render reaches here with `busy` still false (the effect
+  // that flips it runs after render), so the hook ran; the render the effect
+  // itself schedules arrives with `busy` true and `zone` still undefined, so
+  // the early return skipped the hook — one hook fewer than the previous
+  // render. React reports that as "Rendered fewer hooks than expected" and
+  // unmounts the subtree, which is why opening a root domain's 子域名 list
+  // crashed the page. A guard is a render decision, so it belongs with the
+  // render it guards, below anything that registers a hook.
+  if (!zone && busy) return <section className="resource-page"><div className="empty-state">{t("loading")}</div></section>;
 
   return <section className="resource-page domain-page">
     <Link className="back-link" to="/console/domains"><ArrowLeft size={16} />{t("backDomains")}</Link>
@@ -1081,7 +1155,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
       emptyState={<span><Globe2 size={24} />{t("noHostnames")}</span>}
       getRowId={(hostname) => hostname.id}
       loading={busy && hostnames.length === 0}
-      pagination={serverPagination(page, pageInfo, busy, setPage)}
+      pagination={serverPagination(page, pageInfo, busy, setPage, setPageSize)}
       rowActions={(hostname) => {
         // The apex hostname row is owned by the zone itself and can only be
         // removed together with the whole zone; hostnames with active
@@ -1179,6 +1253,7 @@ export function CertificateManagementPage({ locale }: DeploymentsResourcePagePro
   const [certificates, setCertificates] = useState<CertificateResponse[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo>({ mode: "offset", page: 1, pageSize: 20, hasMore: false });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -1194,12 +1269,12 @@ export function CertificateManagementPage({ locale }: DeploymentsResourcePagePro
   useEffect(() => {
     let active = true;
     setBusy(true); setError(undefined);
-    void service.listCertificates({ page, pageSize: 20 }).then((result) => {
+    void service.listCertificates({ page, pageSize }).then((result) => {
       if (!active) return;
       setCertificates(result.items); setPageInfo(result.pageInfo);
     }).catch((cause) => { if (active) setError(errorText(cause)); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [page, refreshVersion, service]);
+  }, [page, pageSize, refreshVersion, service]);
 
   const reload = () => setRefreshVersion((value) => value + 1);
   const closeCreate = () => { setCreateOpen(false); setSearchParams({}, { replace: true }); };
@@ -1242,7 +1317,7 @@ export function CertificateManagementPage({ locale }: DeploymentsResourcePagePro
       emptyState={<span><FileKey2 size={24} />{t("noCertificates")}</span>}
       getRowId={(certificate) => certificate.id}
       loading={busy && certificates.length === 0}
-      pagination={serverPagination(page, pageInfo, busy, setPage)}
+      pagination={serverPagination(page, pageInfo, busy, setPage, setPageSize)}
       rowActions={(certificate) => (
         <div className="row-actions">
           <button className="table-action" type="button" disabled={certificate.certificateSource !== "MANAGED" || certificate.status === "REVOKED"} title={t("renew")} aria-label={`${t("renew")} ${certificate.certName}`} onClick={() => setRenewTarget(certificate)}><RotateCw size={16} /></button>
@@ -2421,12 +2496,24 @@ function DialogFooter({ busy, close, disabled = false, submitLabel, t }: { busy:
  * `hasMore` to switch into cursor mode and on `rowCount` to switch into offset
  * mode, and an explicit `undefined` is rejected under
  * `exactOptionalPropertyTypes`.
+ *
+ * ⚠️ `pageSize` and `onPageSizeChange` must travel together. The framework
+ * renders the rows-per-page selector whenever `pageSizeOptions` has more than
+ * one entry (it always does here — `pageSizeOptions` defaults to
+ * `LEDGER_PAGE_SIZES`), but it can only *apply* a change through
+ * `onPageSizeChange`. Omitting the handler leaves a selector that opens, shows
+ * its options, and then silently discards the pick: `handlePageSizeChange`
+ * calls `pagination.onPageSizeChange?.(nextPageSize)`, the optional call is a
+ * no-op, and because `pagination.pageSize` stays defined the composite never
+ * falls back to its own internal state either — so the trigger snaps back to
+ * the old value as though nothing was clicked.
  */
 function serverPagination(
   page: number,
   pageInfo: PageInfo,
   busy: boolean,
   setPage: (value: number | ((current: number) => number)) => void,
+  onPageSizeChange: (pageSize: number) => void,
   pageSizeOptions: readonly number[] = LEDGER_PAGE_SIZES,
 ): DataTablePaginationProps {
   const rowCount = pageInfo.totalItems === undefined ? undefined : Number(pageInfo.totalItems);
@@ -2436,6 +2523,13 @@ function serverPagination(
     onPageChange: (next: number) => {
       if (busy || next < 1) return;
       setPage(next);
+    },
+    onPageSizeChange: (next: number) => {
+      if (busy || next === pageSize) return;
+      onPageSizeChange(next);
+      // A larger page can leave the current page past the end of the result
+      // set, so changing the page size always restarts from the first page.
+      setPage(1);
     },
     ...(pageInfo.hasMore === undefined ? {} : { hasMore: pageInfo.hasMore }),
     page: rowCount === undefined ? page : (pageInfo.page ?? page),

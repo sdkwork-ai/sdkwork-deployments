@@ -15,6 +15,8 @@ export type { PublishingAppsPageProps } from "./components/PublishingAppsPage.ts
 export { CategoryCascadeSelect } from "./components/CategoryCascadeSelect.tsx";
 export { DeployAppTypeSelect } from "./components/DeployAppTypeSelect.tsx";
 export { DeployAppTypeGrid } from "./components/DeployAppTypeGrid.tsx";
+export { LockedAppTypeField } from "./components/LockedAppTypeField.tsx";
+export type { LockedAppTypeFieldProps } from "./components/LockedAppTypeField.tsx";
 export { DeployAppTypeIcon } from "./components/DeployAppTypeIcon.tsx";
 export { DeployFrameworkSelect } from "./components/DeployFrameworkSelect.tsx";
 export { DeployProjectPathBar } from "./components/DeployProjectPathBar.tsx";
@@ -53,6 +55,9 @@ export type {
   DeployUploadProgress,
 } from "./service/deploy-app-operations.ts";
 export {
+  appKindOfCard,
+  cardIdsOfAppKind,
+  cardsOfAppKind,
   classifyAppTypeCards,
   classifyFrameworks,
   createDeployAppPublishingService,
@@ -63,6 +68,7 @@ export {
   requiredSurfaceDirectory,
   resolveDeployAppType,
   toDeployAppMediaRef,
+  CARD_APP_KIND,
   DEPLOY_APP_TYPE_CARDS,
   DEPLOY_APP_TYPE_OPTIONS,
 } from "./service/deploy-app-publishing.ts";
@@ -80,8 +86,7 @@ export type {
   DeployAppTypeOption,
   DeployFrameworkAvailability,
   DeployFrameworkOption,
-} from "./service/deploy-app-publishing.ts";
-export {
+} from "./service/deploy-app-publishing.ts";export {
   APP_SURFACE_DIRECTORY_CAPABILITIES,
   APP_SURFACE_DIRECTORY_SUFFIX,
   browserDistOutputPath,

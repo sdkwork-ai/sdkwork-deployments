@@ -384,6 +384,71 @@ export function resolveDeployAppType(cardId: string | undefined, frameworkId?: s
 }
 
 /* ------------------------------------------------------------------ *
+ * v6：发布阶段的应用类型由已建应用决定（不再向用户提问）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 卡片 id → 契约 `AppKind`，即创建阶段（`CreateAppDialog`）落进
+ * `deploy_app.app_kind` 的那个值。
+ *
+ * 这张表的存在理由：**创建阶段一张卡只落一个 appKind**（见
+ * `CreateAppDialog.appKindOfCard`），而发布阶段要做的是**反查** —— 已知
+ * `deploy_app.app_kind`，问「它当初是哪张卡」。
+ *
+ * 两个方向刻意都放在这里而不是各写各的：`CreateAppDialog` 用
+ * {@link appKindOfCard} 正向落库，发布对话框用 {@link cardsOfAppKind} 反向
+ * 取回表面根。它们必须互为逆映射，否则应用类型会在发布阶段被静默改写
+ * （例如把 `STATIC_WEB` 的应用发布到 `SPA_WEB` 的表面目录上）。
+ *
+ * v6 只登记 **surface 互不重叠** 的卡片：一张卡 = 一个 appKind + 一个表面根。
+ * 9 张卡与 `deploy_app.app_kind` 的一对一关系因此是确定的，反查无需猜测。
+ */
+export const CARD_APP_KIND: Readonly<Record<string, DeployAppKind>> = {
+  h5: "SPA_WEB",
+  "pc-web": "SPA_WEB",
+  "static-web": "STATIC_WEB",
+  "api-service": "API_SERVICE",
+  "mini-program": "WECHAT_MINIPROGRAM",
+  android: "ANDROID_APP",
+  ios: "IOS_APP",
+  harmonyos: "HARMONYOS_APP",
+  // 契约扩展成员：Rust 权威接受 WINDOWS/MACOS/LINUX，生成式联合尚未跟上
+  // （见 CONTRACT_APP_KIND_EXTENSIONS）。
+  desktop: "DESKTOP_APP",
+};
+
+/** 卡片 id → 契约 `AppKind`（未登记的卡片返回 undefined）。 */
+export function appKindOfCard(cardId: string): DeployAppKind | undefined {
+  return CARD_APP_KIND[cardId];
+}
+
+/**
+ * 契约 `AppKind` → 卡片 id。反向查 {@link CARD_APP_KIND}。
+ *
+ * `SPA_WEB` 同时对应 `h5` 与 `pc-web` 两张卡：契约把两者都归为 `SPA_WEB`，
+ * 区分它们的是**表面根**（`h5` / `pc`），而这个信息在创建阶段没有落库，因此
+ * 反查必须由调用方提供首选顺序（见 {@link cardsOfAppKind}），不能武断取第一个。
+ */
+export function cardIdsOfAppKind(appKind: DeployAppKind): readonly string[] {
+  return Object.entries(CARD_APP_KIND)
+    .filter(([, kind]) => kind === appKind)
+    .map(([cardId]) => cardId);
+}
+
+/**
+ * 契约 `AppKind` → 该应用类型对应的卡片集合（按网格展示顺序）。
+ *
+ * 返回数组而非单个卡片，是因为 `SPA_WEB` 有两张卡。调用方（发布对话框）在
+ * 只有一个候选时直接锁定；多于一个时保持未选状态、由用户在第 2 步前的
+ * 应用类型只读区里补齐 —— 这样既不臆测表面根，也不把用户堵死。
+ */
+export function cardsOfAppKind(appKind: DeployAppKind | undefined): readonly DeployAppTypeCard[] {
+  if (appKind === undefined) return [];
+  const ids = new Set(cardIdsOfAppKind(appKind));
+  return DEPLOY_APP_TYPE_CARDS.filter((card) => ids.has(card.id));
+}
+
+/* ------------------------------------------------------------------ *
  * v4：项目规范驱动的可选性（发布对话框「支持 / 不支持」判定）
  * ------------------------------------------------------------------ */
 

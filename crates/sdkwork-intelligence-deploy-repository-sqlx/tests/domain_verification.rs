@@ -49,17 +49,20 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("load pending challenge");
-    let token = pending.token.clone().expect("new challenge returns the proof");
+    let token = pending
+        .token
+        .clone()
+        .expect("new challenge returns the proof");
     let verification_id = pending
         .verification_id
         .clone()
         .expect("pending challenge verification id");
-    let proof_sha256 = pending
-        .proof_sha256
-        .clone()
-        .expect("pending proof digest");
+    let proof_sha256 = pending.proof_sha256.clone().expect("pending proof digest");
     assert!(!pending.verified);
-    assert!(pending.created, "the call that opens the attempt reports so");
+    assert!(
+        pending.created,
+        "the call that opens the attempt reports so"
+    );
     assert_eq!(
         sdkwork_utils_rust::crypto::sha256_hash(token.as_bytes()),
         proof_sha256

@@ -73,7 +73,12 @@ export function DeployAppTypeGrid({
               className={css.typeCardTile}
               onClick={() => { selectCard(card); }}
             >
-              <span className={css.typeCardIcon}><DeployAppTypeIcon iconKey={card.iconKey} /></span>
+              {/*
+                图标 26 → 22px：高度是这一片里最贵的维度（9 张卡片始终 3 行），
+                每让出 4px 就是网格整体省 12px，而 22px 在
+                「10px 内边距 + 13px 名称」的密度下仍然是视觉锚点。
+              */}
+              <span className={css.typeCardIcon}><DeployAppTypeIcon iconKey={card.iconKey} size={22} /></span>
               <span className={css.typeCardName}>{t(card.labelKey)}</span>
               <span className={css.typeCardHint}>{t(card.hintKey)}</span>
               {suggested && supported && <span className={css.typeCardBadge}>{t("typeSuggested")}</span>}

@@ -1,20 +1,26 @@
 /**
- * CreateDeployAppDialog — 发布（发布 deploy_app 应用）对话框（v5）。
+ * CreateDeployAppDialog — 发布（把源码目录发布到已创建的 deploy_app 上）对话框（v6）。
  *
  * v5 职责收敛：**本对话框只负责发布，不再创建应用**。应用必须先在
  * `CreateAppDialog` 里创建（名称/类型/图标/封面/预览图），因此这里的
- * 应用步骤退化为「本次发布的目标应用」——由宿主通过 `publishAppId` /
- * `publishAppName`（或关联模式）指定，默认即为入口行上的那个应用。
+ * 应用步骤退化为「本次发布的目标应用」——由宿主通过 `publishApp` 指定，
+ * 默认即为入口行上的那个应用。
+ *
+ * v6 职责再收敛：**应用类型不再由用户在发布阶段选择**。`deploy_app.app_kind`
+ * 在 `CreateAppDialog` 里已经确定并落库，它决定应用被部署到哪个平台。
+ * 若在这里还能改，发布动作就变成了「改写应用身份」—— 那不是发布。
+ * 因此第 1 步从「9 张可点卡片」变为**只读的类型确认**（见
+ * `LockedAppTypeField`），可编辑的部分（框架架构、目录、构建产物）留在第 2 步。
  *
  * 交互流程：
- *   1. 应用类型 grid（icon + 应用类型名称）
+ *   1. 应用类型（只读确认；取自已建应用的 app_kind）
  *   2. 环境与目录：ENVIRONMENT_SPEC 规范环境（开发/测试/预发/演示/线上）+
  *      standalone|cloud 部署形态（决定 dist/<mode>/<envAlias> 产物子树）+
  *      应用根路径（宿主 inspectDirectory 按 sdkwork 规范自动发现表面根路径
  *      并自动完善，无宿主时按 APPLICATION_SPEC 从路径推导）+ 构建产物相对
  *      路径（浏览器类表面随环境/形态联动）+ 框架架构（目录标记自动检测，
  *      带徽标，路径下方手动可改）；「下一步」校验源目录与产物目录存在性
- *   3. 应用：确认发布到哪个应用（默认入口带入的已建应用；也可改关联其他应用）
+ *   3. 应用：确认发布到哪个应用（默认入口带入的已建应用）
  *   4. 应用资料（可选）：图标/封面/截图
  *   5. 发布：版本/描述/release notes
  *
@@ -27,19 +33,19 @@
  * 组件为纯 props 输入（两个生成式 client + locale + 宿主端口），不依赖
  * console context，deployments 控制台与 BirdCoder 插件均可复用（高内聚低耦合）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AppKind, AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, APP_KIND_LABEL_KEYS, type PublishingMessageKey, type PublishingTranslator } from "../i18n.ts";
 import {
   createDeployAppPublishingService,
-  classifyAppTypeCards,
   classifyFrameworks,
   detectFrameworkId,
   frameworksOfCard,
   isAppSlugConflictError,
   isValidSemver,
+  cardsOfAppKind,
   resolveDeployAppType,
   DEPLOY_APP_TYPE_CARDS,
   type CreateDeployAppInput,
@@ -64,7 +70,7 @@ import {
   type DeployProjectInspection,
 } from "../service/project-detection.ts";
 import { CategoryCascadeSelect } from "./CategoryCascadeSelect.tsx";
-import { DeployAppTypeGrid } from "./DeployAppTypeGrid.tsx";
+import { LockedAppTypeField } from "./LockedAppTypeField.tsx";
 import { DeployFrameworkSelect } from "./DeployFrameworkSelect.tsx";
 import {
   DeployAppMediaFields,
@@ -144,9 +150,18 @@ export function CreateDeployAppDialog({
     [deployClient, driveClient],
   )
 
+  // v6: 应用类型候选 —— 由已建应用的 app_kind 反查，不再由用户选。
+  // `SPA_WEB` 同时对应 h5 / pc-web 两张卡（两者表面根不同：h5 vs pc），
+  // 契约分不清，因此在多于一个候选时保留一个「指明表面」的选择。
+  const lockedCards = useMemo(() => cardsOfAppKind(publishApp?.appKind), [publishApp?.appKind])
+
   const [step, setStep] = useState(1)
   const [directory, setDirectory] = useState<string | undefined>(initialDirectory ?? defaultDirectory)
-  const [cardId, setCardId] = useState<string>()
+  // v6: 唯一候选时直接锁定；多候选时留空，由只读区里的表面选择补齐；
+  // 无候选（未识别的契约枚举）时留空 —— 此时发布会在 submit 处被挡下。
+  const [cardId, setCardId] = useState<string | undefined>(
+    () => (lockedCards.length === 1 ? lockedCards[0]?.id : undefined),
+  )
   const [frameworkId, setFrameworkId] = useState<string>()
   const [buildOutputPath, setBuildOutputPath] = useState("")
   const [detection, setDetection] = useState<DeployProjectDetection>()
@@ -179,33 +194,7 @@ export function CreateDeployAppDialog({
     [cardId, frameworkId],
   )
   const frameworks = useMemo(() => frameworksOfCard(cardId), [cardId])
-  // v4 需求 2：项目画像 + 每张类型卡片的可选性。项目符合 sdkwork 规范且
-  // apps/ 表面清单可读时，只放开项目实际提供表面所对应的应用类型；否则全部
-  // 放开，由用户自行选择（判定逻辑见 classifyAppTypeCards）。
   const profile = useMemo(() => projectProfile(detection, directory), [detection, directory])
-  const cardAvailability = useMemo(
-    () => classifyAppTypeCards(DEPLOY_APP_TYPE_CARDS, profile),
-    [profile],
-  )
-  const gatedTypes = profile.sdkwork && profile.surfaces.length > 0
-  const cardSupported = useCallback(
-    (id: string | undefined) => id === undefined
-      ? true
-      : cardAvailability.find((entry) => entry.cardId === id)?.supported !== false,
-    [cardAvailability],
-  )
-  const suggestedCardId = useMemo(() => {
-    if (detection === undefined) return undefined
-    const detected = new Set(profile.surfaces)
-    const isDetected = (id: string | undefined) => {
-      const surface = DEPLOY_APP_TYPE_CARDS.find((candidate) => candidate.id === id)?.surface
-      return surface !== undefined && detected.has(surface)
-    }
-    // 已选卡片且其表面已被检测到 → 保留「检测到」徽标；尚未选择时推荐第一个
-    // 被检测到的表面，让用户一眼看出项目实际提供哪些应用。
-    if (cardId !== undefined) return isDetected(cardId) ? cardId : undefined
-    return DEPLOY_APP_TYPE_CARDS.find((card) => isDetected(card.id))?.id
-  }, [detection, profile, cardId])
   const matchedSurfacePath = useMemo(() => {
     if (detection === undefined || type?.surface === undefined || directory === undefined) return undefined
     return resolveSourceDirectory(detection, type.surface, detectionRoot ?? directory)
@@ -264,6 +253,9 @@ export function CreateDeployAppDialog({
     [frameworks, frameworkId],
   )
 
+  // v6: 这是在**等价卡片之间指明表面**（SPA_WEB ⊃ h5 / pc-web），不是重选
+  // 应用类型 —— 两张卡的 appKind 相同，只有 surface 不同。因此它不改写应用
+  // 身份，只决定 metadata.surface（本次发布到哪个表面根）。
   const selectCard = (nextCardId: string) => {
     setCardId(nextCardId)
     const card = DEPLOY_APP_TYPE_CARDS.find((candidate) => candidate.id === nextCardId)
@@ -418,20 +410,19 @@ export function CreateDeployAppDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoDetectedId, cardId])
 
-  // v4：目录换成另一个项目后，原先选中的应用类型可能已不在新项目的 apps/
-  // 表面之内 —— 这会直接违反「必须符合项目规范」，因此清空类型与框架选择，
-  // 让用户重新选一个受支持的。（检测中 detection 为 undefined，不会误清。）
-  useEffect(() => {
-    if (cardId === undefined || cardSupported(cardId)) return
-    setCardId(undefined)
-    setFrameworkId(undefined)
-    setBuildOutputPath("")
-  }, [cardId, cardSupported])
+  // v6：原先这里有一条 v4 规则 —— 目录换成别的项目后、若已选类型不在新项目
+  // 的 apps/ 表面之内就清空类型选择。发布阶段应用类型已由已建应用决定，
+  // **清空它等于让一次目录变更把应用身份抹掉**，所以这条规则退化为「只读区
+  // 提示」：表面是否存在于当前项目由第 2 步的目录/产物校验去挡，类型不动。
 
   const canNext = (): boolean => {
-    if (step === 1) return cardId !== undefined && cardSupported(cardId)
+    // v6: 第 1 步没有「待用户选择」的东西 —— 应用类型已由已建应用决定。
+    // 唯一会挡住的情况是「该 app_kind 不在发布器识别范围内」或仍未指明表面
+    // （SPA_WEB 的两张卡），此时 `type` 解析不出来，第 2 步的目录联动也没法
+    // 工作，所以在这里挡住并给出说明，而不是放进第 2 步再失败。
+    if (step === 1) return type !== undefined
     if (step === 2) return Boolean(directory?.trim()) && frameworkId !== undefined
-    // v5: 第 3 步只确认发布目标应用 —— 应用必须已存在（由上游创建或列表中选中）。
+    // v5: 第 3 步只确认发布目标应用 —— 应用必须已存在。
     if (step === 3) return Boolean(targetAppId)
     if (step === 4) return true
     return isValidSemver(version)
@@ -605,13 +596,15 @@ export function CreateDeployAppDialog({
 
         <div className={css.body}>
           {step === 1 && (
-            <DeployAppTypeGrid
+            /* v6: 应用类型只读确认 —— 类型在 CreateAppDialog 已落库，发布阶段
+               不允许修改（改它等于改写应用身份）。多候选（SPA_WEB ⊃ h5/pc-web）
+               时由只读区内的表面选择补齐 metadata.surface。 */
+            <LockedAppTypeField
+              cards={lockedCards}
+              appKind={publishApp?.appKind}
               cardId={cardId}
-              suggestedCardId={suggestedCardId}
-              availability={cardAvailability}
-              gated={gatedTypes}
+              onSelectCard={lockedCards.length > 1 ? selectCard : undefined}
               t={t}
-              onChange={selectCard}
             />
           )}
 

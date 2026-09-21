@@ -278,6 +278,12 @@ const en = {
   columnActions: "Actions",
   publishTargetApp: "Target application",
   publishTargetPickHint: "Select one of the applications created earlier. Applications must be created before they can be published.",
+  // v6: the application type is fixed at creation time and only shown here.
+  appTypeLocked: "Application type",
+  appTypeLockedHint: "Set when the application was created and fixed from here on — publishing cannot change it.",
+  typeLockedBadge: "Fixed",
+  appTypeLockedUnknown: "This application's type is not one the publisher recognises. Recreate it from the Apps page, or pick the matching type below.",
+  appTypeLockedAmbiguous: "This type maps to more than one surface (H5 and PC web are both SPA_WEB). Pick the surface this directory publishes.",
 
   // Console apps page (PublishingAppsPage)
   appsPageEyebrow: "Apps",
@@ -397,6 +403,8 @@ const en = {
   domainEnvProduction: "Production",
   domainSave: "Save",
   domainSaving: "Saving…",
+  domainSaveHintDirty: "Unsaved changes",
+  domainSaveHintClean: "No unsaved changes",
   domainSaved: "Publishing domains updated.",
   domainList: "Current hostnames",
   domainListLoading: "Loading hostnames…",
@@ -834,6 +842,12 @@ const zh: Record<keyof typeof en, string> = {
   columnActions: "操作",
   publishTargetApp: "发布目标应用",
   publishTargetPickHint: "从已创建的应用中选择一个。应用必须先创建，之后才能发布。",
+  // v6：应用类型在创建时即已确定，发布阶段只展示、不可修改。
+  appTypeLocked: "应用类型",
+  appTypeLockedHint: "该类型在应用创建时确定，发布阶段固定不可修改。",
+  typeLockedBadge: "固定",
+  appTypeLockedUnknown: "该应用的类型不在发布器识别范围内。请在应用页重建该应用，或在下方选择匹配的类型。",
+  appTypeLockedAmbiguous: "该类型对应多个表面（H5 与 PC 网页同属 SPA_WEB）。请选择本次目录要发布的表面。",
 
   // 控制台应用页（PublishingAppsPage）
   appsPageEyebrow: "应用",
@@ -953,6 +967,8 @@ const zh: Record<keyof typeof en, string> = {
   domainEnvProduction: "生产",
   domainSave: "保存",
   domainSaving: "保存中…",
+  domainSaveHintDirty: "有未保存的改动",
+  domainSaveHintClean: "暂无未保存的改动",
   domainSaved: "发布域名已更新。",
   domainList: "当前域名",
   domainListLoading: "正在加载域名…",

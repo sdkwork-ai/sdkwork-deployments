@@ -768,9 +768,14 @@ async fn domain_zone_listing_filters_by_scope() {
         .await
         .expect("list with scope=USER");
     assert_eq!(
-        user_page.total, 1,
+        user_page.total,
+        1,
         "scope=USER must count only the operator's own zone; got {:?}",
-        user_page.items.iter().map(|zone| &zone.apex_hostname).collect::<Vec<_>>()
+        user_page
+            .items
+            .iter()
+            .map(|zone| &zone.apex_hostname)
+            .collect::<Vec<_>>()
     );
     assert_eq!(user_page.items[0].apex_hostname, operator_apex);
     assert_eq!(user_page.items[0].scope, ZoneScope::User);
@@ -780,9 +785,14 @@ async fn domain_zone_listing_filters_by_scope() {
         .await
         .expect("list with scope=PLATFORM");
     assert_eq!(
-        platform_page.total, 1,
+        platform_page.total,
+        1,
         "scope=PLATFORM must count only the provisioning zone; got {:?}",
-        platform_page.items.iter().map(|zone| &zone.apex_hostname).collect::<Vec<_>>()
+        platform_page
+            .items
+            .iter()
+            .map(|zone| &zone.apex_hostname)
+            .collect::<Vec<_>>()
     );
     assert_eq!(platform_page.items[0].apex_hostname, platform_apex);
     assert_eq!(platform_page.items[0].scope, ZoneScope::Platform);

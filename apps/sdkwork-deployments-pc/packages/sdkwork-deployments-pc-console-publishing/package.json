@@ -17,7 +17,8 @@
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/ui-pc-react": "workspace:*",
     "@sdkwork/utils": "workspace:*",
-    "react": "catalog:"
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@types/react": "catalog:"

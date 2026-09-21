@@ -29,6 +29,7 @@ import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";
 import {
   createDeployAppPublishingService,
+  appKindOfCard as serviceAppKindOfCard,
   isAppSlugConflictError,
   toSdkAppKind,
   type DeployAppCategorySelection,
@@ -289,33 +290,12 @@ export function CreateAppDialog({
  * 卡片 id → 契约 `AppKind`。
  *
  * 创建阶段一张卡片只落一个 appKind：契约里 Web 表面（H5 / PC 网页 / 静态资源）
- * 都是 `SPA_WEB` / `STATIC_WEB`，桌面端是 `DESKTOP_APP`。把映射集中在这里，
- * 发布阶段再按框架细分到具体 `deploy_app_platform_target`。
+ * 都是 `SPA_WEB` / `STATIC_WEB`，桌面端是 `DESKTOP_APP`。映射表本体放在
+ * service 层（`CARD_APP_KIND` / {@link appKindOfCard}），因为发布阶段要用它
+ * **反查**（`cardsOfAppKind`）—— 正向与反向必须互为逆映射，写在两处必然会漂移。
  */
 function appKindOfCard(cardId: string): DeployAppKind | undefined {
-  switch (cardId) {
-    case "h5":
-    case "pc-web":
-      return "SPA_WEB"
-    case "static-web":
-      return "STATIC_WEB"
-    case "api-service":
-      return "API_SERVICE"
-    case "mini-program":
-      return "WECHAT_MINIPROGRAM"
-    case "android":
-      return "ANDROID_APP"
-    case "ios":
-      return "IOS_APP"
-    case "harmonyos":
-      return "HARMONYOS_APP"
-    case "desktop":
-      // 契约扩展成员：Rust 权威接受 WINDOWS/MACOS/LINUX，生成式联合尚未跟上
-      // （见 deploy-app-publishing.ts 的 CONTRACT_APP_KIND_EXTENSIONS）。
-      return "DESKTOP_APP"
-    default:
-      return undefined
-  }
+  return serviceAppKindOfCard(cardId)
 }
 
 function errorText(cause: unknown, t: PublishingTranslator): string {

@@ -458,25 +458,8 @@ export function AppDomainDialog({
                 />
               ))}
 
-              <div className={css.modeRow}>
-                <button
-                  type="button"
-                  className={css.secondaryButton}
-                  disabled={busy || atCapacity}
-                  onClick={addDraft}
-                  title={atCapacity ? t("domainCustomLimitReached", { max: String(MAX_CUSTOM_DOMAINS) }) : undefined}
-                >
-                  {t("domainCustomAdd")}
-                </button>
-                <button
-                  type="button"
-                  className={css.primaryButton}
-                  disabled={!canBind}
-                  onClick={() => { void bindDrafts() }}
-                >
-                  {busy ? t("domainBinding") : t("domainBind")}
-                </button>
-              </div>
+              {/* 添加域名 / 保存 都不在这里 —— 它们由正文末尾的粘性保存区承载。
+                  正文只负责「看」与「改」，动作全部留在视口内。 */}
 
               {/* CNAME 指引 —— 行业标准做法：让用户把自有域名别名到平台主机名。 */}
               {defaultDomains.length > 0 && (
@@ -616,16 +599,8 @@ export function AppDomainDialog({
                 </div>
               )}
 
-              <div className={css.modeRow}>
-                <button
-                  type="button"
-                  className={css.primaryButton}
-                  disabled={busy || !dirty || !labelValid || !suffixesValid}
-                  onClick={() => { void savePlatformDomains() }}
-                >
-                  {busy ? t("domainSaving") : t("domainSave")}
-                </button>
-              </div>
+              {/* 保存键不再挂在正文末尾 —— 它由下面的粘性保存区承载，
+                  正文滚到哪里都留在视口内。这里只留平台域名的只读回显。 */}
 
               {/* ---------- 当前主机名清单（平台域名的只读回显） ---------- */}
               {defaultDomains.length > 0 && (
@@ -643,10 +618,48 @@ export function AppDomainDialog({
           )}
         </div>
 
+        {/* 粘性保存区：正文滚到哪里，保存都留在视口内。
+            放在 `.body` 内、作为最后一个子元素 —— sticky 因此停在正文末尾，
+            而不是像 fixed 那样盖住最后一行预览。 */}
+        <div className={css.saveBar}>
+          <span className={css.saveBarHint}>
+            {dirty
+              ? t("domainSaveHintDirty")
+              : t("domainSaveHintClean")}
+          </span>
+          <div className={css.saveBarSpacer} />
+          <button
+            type="button"
+            className={css.secondaryButton}
+            disabled={busy || atCapacity}
+            onClick={addDraft}
+            title={atCapacity ? t("domainCustomLimitReached", { max: String(MAX_CUSTOM_DOMAINS) }) : undefined}
+          >
+            {t("domainCustomAdd")}
+          </button>
+          <button
+            type="button"
+            className={css.secondaryButton}
+            disabled={!canBind}
+            onClick={() => { void bindDrafts() }}
+          >
+            {busy ? t("domainBinding") : t("domainBind")}
+          </button>
+          <button
+            type="button"
+            className={css.primaryButton}
+            disabled={busy || !dirty || !labelValid || !suffixesValid}
+            onClick={() => { void savePlatformDomains() }}
+          >
+            {busy ? t("domainSaving") : t("domainSave")}
+          </button>
+        </div>
+
         <footer className={css.footer}>
-          {error && <div className={css.errorBanner} role="alert">{error}</div>}
-          {!error && notice && <div className={css.successBanner} role="status">{notice}</div>}
-          {!error && !notice && <div className={css.footerSpacer} />}
+          {/* 状态行常驻页脚：结果不会随正文滚走，失败态也不再挤掉动作按钮。 */}
+          {error && <span className={css.footerStatus} data-tone="error" role="alert">{error}</span>}
+          {!error && notice && <span className={css.footerStatus} data-tone="success" role="status">{notice}</span>}
+          {!error && !notice && <span className={css.footerSpacer} />}
           <button type="button" className={css.secondaryButton} disabled={busy} onClick={onClose}>
             {t("close")}
           </button>

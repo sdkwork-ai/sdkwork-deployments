@@ -705,6 +705,16 @@ impl DeployAppApi for DeployService {
             ))
         })?;
         let account_code = crate::cloud_accounts::account_code(&request.account_code, family)?;
+        // The console cannot probe a credential — that would mean dispatching it
+        // to the vendor from the read path — so it asks the operator to affirm the
+        // credential is an active one for the declared vendor. Refused rather than
+        // defaulted: an unattested credential that silently became usable is worse
+        // than a refusal, because it looks configured and fails at the first order.
+        if !request.confirms_credential {
+            return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                "confirmsCredential must be true: the operator has to affirm the credential is an active one for the declared provider",
+            ));
+        }
         let registration = self
             .cloud_accounts
             .register_account(RegisterCloudAccountCommand {
