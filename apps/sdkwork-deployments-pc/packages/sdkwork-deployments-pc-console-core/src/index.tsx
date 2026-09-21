@@ -61,6 +61,14 @@ export interface DeploymentsDeliveryService {
     pageSize?: number | undefined
     status?: ("ACTIVE" | "PAUSED") | undefined
     keyword?: string | undefined
+    /**
+     * Ownership filter. `USER` keeps the list to the root domains the operator
+     * defined; `PLATFORM` would surface the tenant-level `app.<suffix>` zones
+     * the deployment provisions for app publishing. Those are subdomains, not
+     * root domains, so a root-domain list asks for `USER` — their subdomains
+     * are reached by opening the root domain, never by listing them here.
+     */
+    scope?: ("USER" | "PLATFORM") | undefined
   }): Promise<{ items: DomainZoneResponse[]; pageInfo: PageInfo }>;
   createDomainZone(body: CreateDomainZoneRequest): Promise<DomainZoneResponse>;
   retrieveDomainZone(zoneId: string): Promise<DomainZoneResponse>;
@@ -154,6 +162,7 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
           ...(params.pageSize === undefined ? {} : { pageSize: params.pageSize }),
           ...(params.status === undefined ? {} : { status: params.status }),
           ...(params.keyword === undefined ? {} : { keyword: params.keyword }),
+          ...(params.scope === undefined ? {} : { scope: params.scope }),
         },
       ),
     createDomainZone: (body) => zones.create(body, idempotencyParams()),

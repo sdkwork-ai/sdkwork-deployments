@@ -277,7 +277,8 @@ async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
     use std::sync::Arc;
 
     let (repository, pool) = test_repository().await;
-    let service = DeployService::new(Arc::new(repository), Arc::new(MemoryDeployDrivePort));    let context = DeployAppRequestContext {
+    let service = DeployService::new(Arc::new(repository), Arc::new(MemoryDeployDrivePort));
+    let context = DeployAppRequestContext {
         tenant_id: 7,
         actor_id: Some(1),
         organization_id: Some(9),
@@ -299,10 +300,7 @@ async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
                 description: None,
                 default_environment: None,
                 app_domain_label: Some("with-override".to_owned()),
-                app_domain_suffixes: Some(vec![
-                    "example.com".to_owned(),
-                    "example.cn".to_owned(),
-                ]),
+                app_domain_suffixes: Some(vec!["example.com".to_owned(), "example.cn".to_owned()]),
                 idempotency_key: Some("create-with-override".to_owned()),
             },
         )

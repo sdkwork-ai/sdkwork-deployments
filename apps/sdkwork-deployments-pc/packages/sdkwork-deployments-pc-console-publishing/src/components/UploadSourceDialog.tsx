@@ -9,7 +9,9 @@
  *      负责收集文件/包类型并把进度渲染出来。
  *   2. **Git 仓库** — 只登记 `sourceRepository`（仓库是代码来源，不是制品），
  *      因此不走 publisher，而是直接 `sourceRepositories.create`。
- *   3. **从 Drive 选择** — 列出已有 `.zip` 复用，避免重复上传同一份包。
+ *   3. **从 Drive 选择** — 打开 `DriveNodePickerDialog`（真正的网盘浏览器：
+ *      空间 → 文件夹 → 文件），选中后把字节拉回浏览器走与本地包相同的
+ *      publisher 链路。
  *
  * 两条容易踩的坑，写在这里免得后人重犯：
  *
@@ -18,6 +20,9 @@
  * - **`File` 不是 `Blob` 的窄化替身**：`DriveUploaderBlobLike` 允许宿主换成
  *   文件系统句柄，所以校验一律读 `file.size` / `file.type`，不假设 `File` 特有
  *   的 `lastModified`。
+ * - **选中目录不是「选中一个包」**：目录没有单一字节流。所以目录选择被显式
+ *   拒绝（`drivePickerFolderNotPackage`），只有文件才进入上传链路 —— 静默给
+ *   目录拼一个 zip 名会伪造出一个服务端不认识的制品名。
  *
  * 组件为纯 props 输入（生成式 client + locale），deployments 控制台与任何宿主
  * 都能复用。
@@ -27,12 +32,12 @@ import type { AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-a
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";
+import { DriveNodePickerDialog, type DriveNodeSelection } from "./DriveNodePickerDialog.tsx";
 import {
   DEPLOY_PACKAGE_TYPE_OPTIONS,
   createDeployAppOperationsService,
   type DeployAppOperationsService,
   type DeployCodeSource,
-  type DeployDriveArchiveOption,
   type DeployUploadProgress,
 } from "../service/deploy-app-operations.ts";
 import css from "./create-deploy-app.module.css";
@@ -101,16 +106,15 @@ export function UploadSourceDialog({
   const [credentialRef, setCredentialRef] = useState("")
 
   // Drive picker
-  const [archives, setArchives] = useState<DeployDriveArchiveOption[]>()
-  const [archivesLoading, setArchivesLoading] = useState(false)
-  const [archivesLoaded, setArchivesLoaded] = useState(false)
-  const [pickedArchive, setPickedArchive] = useState<DeployDriveArchiveOption>()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickedNode, setPickedNode] = useState<DriveNodeSelection>()
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onClose()
+      // 网盘选择器自己处理 Esc；两层同时监听会让 Esc 一次关掉两个面板。
+      if (event.key === "Escape" && !busy && !pickerOpen) onClose()
     }
     document.addEventListener("keydown", onKeyDown)
     const previousOverflow = document.body.style.overflow
@@ -119,7 +123,7 @@ export function UploadSourceDialog({
       document.removeEventListener("keydown", onKeyDown)
       document.body.style.overflow = previousOverflow
     }
-  }, [busy, onClose])
+  }, [busy, onClose, pickerOpen])
 
   // 离开对话框时中断在飞的 Drive 上传，否则用户关掉面板后浏览器还在传。
   useEffect(() => () => { abortRef.current?.abort() }, [])
@@ -128,19 +132,6 @@ export function UploadSourceDialog({
     () => DEPLOY_PACKAGE_TYPE_OPTIONS.find((option) => option.value === packageType)?.maxSizeMiB ?? 2048,
     [packageType],
   )
-
-  const loadArchives = async () => {
-    setArchivesLoading(true)
-    setArchivesLoaded(true)
-    try {
-      setArchives(await service.listDriveArchives())
-    } catch (cause) {
-      setArchives([])
-      setError(errorText(cause, t, "uploadDriveLoadFailed"))
-    } finally {
-      setArchivesLoading(false)
-    }
-  }
 
   const onPickFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0]
@@ -167,19 +158,36 @@ export function UploadSourceDialog({
     }
   }
 
+  /**
+   * 网盘选择器的回调。目录没有单一字节流，不能直接进上传链路 —— 这里显式拒绝
+   * 并让用户重新选，而不是替它伪造一个压缩包名。
+   */
+  const onDriveNodeSelected = (selection: DriveNodeSelection) => {
+    setPickerOpen(false)
+    setProgress(undefined)
+    setNotice(undefined)
+    if (selection.nodeKind === "folder") {
+      setPickedNode(undefined)
+      setError(t("drivePickerFolderNotPackage"))
+      return
+    }
+    setPickedNode(selection)
+    setError(undefined)
+  }
+
   const activeArchive = source === "local"
     ? file === undefined
       ? undefined
       : { name: file.name, size: file.size }
-    : pickedArchive === undefined
+    : pickedNode === undefined
       ? undefined
-      : { name: pickedArchive.fileName, size: pickedArchive.contentLength }
+      : { name: pickedNode.nodeName, size: pickedNode.contentLength }
 
   const canSubmit = source === "local"
     ? file !== undefined && checksum !== undefined
     : source === "git"
       ? repoKey.trim() !== "" && repoUrl.trim() !== ""
-      : pickedArchive !== undefined
+      : pickedNode !== undefined
 
   const abort = () => {
     abortRef.current?.abort()
@@ -206,23 +214,31 @@ export function UploadSourceDialog({
       }
 
       if (source === "drive") {
-        // Drive 里的包已经落在 Drive 上，但没有 `deploy_artifact` 记录 ——
+        // 网盘里的文件已经落在 Drive 上，但没有 `deploy_artifact` 记录 ——
         // 制品登记才是发布能消费它的前提。这里读回字节再走同一条 publisher
         // 链路，保证制品与本地压缩包形态完全一致。
-        const archive = pickedArchive as DeployDriveArchiveOption
-        const bytes = await downloadDriveArchive(driveClient, archive)
-        const driveFile = new File([bytes], archive.fileName, { type: archive.contentType })
+        const node = pickedNode as DriveNodeSelection
+        if (node.contentLength > limitMiB * 1024 * 1024) {
+          setError(t("uploadPackageTooLarge", { limit: String(limitMiB) }))
+          setBusy(false)
+          return
+        }
+        const bytes = await downloadDriveNode(driveClient, node)
+        const driveFile = new File([bytes], node.nodeName, {
+          type: node.contentType ?? "application/octet-stream",
+        })
         const digest = await service.archiveChecksum(driveFile)
+        abortRef.current = new AbortController()
         const result = await service.uploadCodeFromArchive({
           appId: app.id,
           packageType,
           archive: {
             file: driveFile,
-            fileName: archive.fileName,
-            contentType: archive.contentType,
+            fileName: node.nodeName,
+            contentType: node.contentType ?? "application/octet-stream",
             checksumSha256: digest,
           },
-          ...(abortRef.current === undefined ? {} : { signal: abortRef.current.signal }),
+          signal: abortRef.current.signal,
           onProgress: setProgress,
         })
         const summary = t("uploadSucceeded", { artifactId: result.artifactId })
@@ -426,42 +442,23 @@ export function UploadSourceDialog({
           {source === "drive" && (
             <div className={css.field}>
               <span className={css.fieldLabel}>{t("uploadSourceDrive")}</span>
-              {!archivesLoaded && (
+              <div className={css.mediaFileRow}>
                 <button
                   type="button"
                   className={css.secondaryButton}
                   disabled={busy}
-                  onClick={() => { void loadArchives() }}
+                  onClick={() => { setPickerOpen(true); setError(undefined) }}
                 >
-                  {t("uploadDriveLoad")}
+                  {t("drivePickerTitle")}
                 </button>
-              )}
-              {archivesLoading && <span className={css.fieldHint}>{t("uploadDriveLoading")}</span>}
-              {archives !== undefined && archives.length === 0 && !archivesLoading && (
-                <span className={css.fieldHint}>{t("uploadDriveEmpty")}</span>
-              )}
-              {archives !== undefined && archives.length > 0 && (
-                <div className={css.appList}>
-                  {archives.map((archive) => (
-                    <button
-                      key={archive.nodeId}
-                      type="button"
-                      className={css.appRow}
-                      data-selected={pickedArchive?.nodeId === archive.nodeId}
-                      disabled={busy}
-                      onClick={() => { setPickedArchive(archive); setError(undefined) }}
-                    >
-                      <span className={css.appRowMeta}>
-                        <strong>{archive.fileName}</strong>
-                        <small>{formatBytes(archive.contentLength)} · {formatDate(archive.updatedAt, locale)}</small>
-                      </span>
-                      <span className={css.targetChipBadge}>
-                        {pickedArchive?.nodeId === archive.nodeId ? t("uploadDriveSelected") : t("uploadDriveSelect")}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+                {pickedNode !== undefined && (
+                  <span className={css.mediaFileName}>
+                    {pickedNode.displayPath}
+                    {pickedNode.contentLength > 0 && ` · ${formatBytes(pickedNode.contentLength)}`}
+                  </span>
+                )}
+              </div>
+              <span className={css.fieldHint}>{t("uploadSourceDriveHint")}</span>
             </div>
           )}
 
@@ -486,7 +483,7 @@ export function UploadSourceDialog({
           {error && <div className={css.errorBanner} role="alert">{error}</div>}
           {!error && notice && <div className={css.successBanner} role="status">{notice}</div>}
           {!error && !notice && <div className={css.footerSpacer} />}
-          {busy && source === "local" && (
+          {busy && (source === "local" || source === "drive") && (
             <button type="button" className={css.secondaryButton} onClick={abort}>
               {t("cancel")}
             </button>
@@ -504,6 +501,15 @@ export function UploadSourceDialog({
           </button>
         </footer>
       </div>
+      {pickerOpen && (
+        <DriveNodePickerDialog
+          driveClient={driveClient}
+          locale={locale}
+          theme={theme}
+          onClose={() => { setPickerOpen(false) }}
+          onSelected={onDriveNodeSelected}
+        />
+      )}
     </div>
   )
 }
@@ -537,16 +543,16 @@ const SOURCE_HINT_KEYS = {
  * `tests/architecture-boundary.test.ts`). The content endpoint is bounded, so an
  * archive larger than one response is read as a sequence of ranges.
  */
-async function downloadDriveArchive(
+async function downloadDriveNode(
   driveClient: SdkworkDriveAppClient,
-  archive: DeployDriveArchiveOption,
+  node: DriveNodeSelection,
 ): Promise<ArrayBuffer> {
   const chunks: Uint8Array[] = []
   let offset = 0
   let totalBytes: number | undefined
 
   for (;;) {
-    const content = await driveClient.drive.nodes.content.retrieve(archive.nodeId, {
+    const content = await driveClient.drive.nodes.content.retrieve(node.nodeId, {
       byteRangeStart: String(offset),
       byteRangeLength: DRIVE_CONTENT_CHUNK_BYTES,
       encoding: "base64",
@@ -568,7 +574,7 @@ async function downloadDriveArchive(
 
   if (totalBytes !== undefined && offset !== totalBytes) {
     throw new Error(
-      `Drive returned ${offset} of ${totalBytes} bytes for ${archive.fileName}.`,
+      `Drive returned ${offset} of ${totalBytes} bytes for ${node.nodeName}.`,
     )
   }
 
@@ -616,11 +622,6 @@ function formatBytes(bytes: number): string {
     unit += 1
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`
-}
-
-function formatDate(value: string, locale: DeploymentsLocale): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(locale)
 }
 
 /**

@@ -2,15 +2,18 @@
  * AppDomainDialog — 应用行上的「域名设置」命令（行业标准双轨）。
  *
  * 参考行业 SaaS（Vercel / Netlify / Cloudflare Pages）的通行做法，域名分两类，
- * 本对话框一次覆盖两者：
+ * 本对话框一次覆盖两者。**自定义域名在上、平台预置域名在下** —— 用户真正要
+ * 完成的事是「把我的域名指过来」，平台域名是后台自动开通的既成事实。
  *
- *   1. **平台预置域名**（DEFAULT）—— `appId.app.<suffix>`。每个应用都自动获得，
- *      覆盖全部 5 个生命周期环境（`app` / `app-dev` / `app-test` / `app-staging`
- *      / `app-demo`）。服务端在应用创建时已自动开通，这里只允许改 `appId`
- *      （`appDomainLabel`）与后缀目录（`appDomainSuffixes`），保存后服务端重新
- *      对账全部环境。
- *   2. **自定义域名**（CUSTOM）—— 用户自有域名。先向域名区登记主机名并取得
- *      DNS 归属校验记录，再把它绑到应用上；只有绑定后流量才会真正进来。
+ *   1. **自定义域名**（CUSTOM，置顶）—— 用户自有域名。**直接输入完整域名**，
+ *      服务端是权威：本组件按最长后缀匹配已登记区域（`inferDomainZone`），
+ *      匹配不到也允许提交，由服务端裁决。**最多 {@link MAX_CUSTOM_DOMAINS} 个**，
+ *      支持动态添加与删除。
+ *   2. **平台预置域名**（DEFAULT，次要）—— `appId.app.<suffix>`。每个应用都自动
+ *      获得，覆盖全部 5 个生命周期环境（`app` / `app-dev` / `app-test`
+ *      / `app-staging` / `app-demo`）。服务端在应用创建时已自动开通，这里只允许
+ *      改 `appId`（`appDomainLabel`）与后缀目录（`appDomainSuffixes`），保存后
+ *      服务端重新对账全部环境。
  *
  * 两条**不能想当然**的实现约束：
  *
@@ -21,19 +24,33 @@
  *
  * 组件为纯 props 输入（生成式 client + locale），不依赖 console context。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AppResponse, DomainZoneResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";
 import {
+  compositionKey,
   createDeployAppOperationsService,
+  customDomainCapacity,
   domainStatusLabel,
+  inferDomainZone,
+  isHostnameShaped,
+  MAX_CUSTOM_DOMAINS,
+  normalizeHostname,
   type DeployAppDomain,
   type DeployAppDomainState,
   type DeployAppOperationsService,
 } from "../service/deploy-app-operations.ts";
 import css from "./create-deploy-app.module.css";
+
+/**
+ * How many custom domains one application may serve.
+ *
+ * Re-exported from the operations service so the cap has exactly one definition;
+ * the dialog re-exports it to keep its existing public surface.
+ */
+export { MAX_CUSTOM_DOMAINS } from "../service/deploy-app-operations.ts"
 
 export interface AppDomainDialogProps {
   readonly deployClient: SdkworkDeployAppClient
@@ -52,6 +69,54 @@ export interface AppDomainDialogProps {
 const ENVIRONMENT_ORDER = ["development", "test", "staging", "demo", "production"] as const
 
 type DomainEnvironment = (typeof ENVIRONMENT_ORDER)[number]
+
+/**
+ * 「全部」页签的哨兵值。真实环境名不可能等于它，所以可以安全地放进同一个
+ * `selectedEnvironment` 状态里，不需要第二个布尔量。
+ */
+const ALL_ENVIRONMENTS = "all"
+
+type EnvironmentTab = DomainEnvironment | typeof ALL_ENVIRONMENTS
+
+/**
+ * 过滤出属于某个页签的域名。
+ *
+ * 「全部」返回原数组（不复制）；指定环境则只留该环境的行。**服务端的
+ * `environment` 是自由字符串**，所以未知环境名不会出现在任何具体页签里，
+ * 只能在「全部」下看到 —— 这比把它们静默塞进某个页签要诚实。
+ */
+export function filterDomainsByEnvironment<T extends { readonly environment: string }>(
+  domains: readonly T[],
+  tab: string,
+): readonly T[] {
+  if (tab === ALL_ENVIRONMENTS) return domains
+  return domains.filter((domain) => domain.environment === tab)
+}
+
+/**
+ * 按出现顺序收集域名实际使用到的环境，并保证已知环境排在前面。
+ *
+ * 用**实际存在的环境**而不是写死的 `ENVIRONMENT_ORDER` 建页签：平台域名只
+ * 覆盖 5 个生命周期环境，但服务端可能返回别的名字，页签必须跟着数据走，
+ * 否则会出现「点进去永远空白」的空页签。
+ */
+export function environmentTabsInUse(
+  domains: readonly { readonly environment: string }[],
+): readonly string[] {
+  const seen: string[] = []
+  for (const domain of domains) {
+    if (!seen.includes(domain.environment)) seen.push(domain.environment)
+  }
+  const known = ENVIRONMENT_ORDER.filter((environment) => seen.includes(environment))
+  const unknown = seen.filter((environment) => !(ENVIRONMENT_ORDER as readonly string[]).includes(environment))
+  return [...known, ...unknown]
+}
+
+/** 一行待添加的自定义域名。`id` 稳定，保证删中间一项时输入焦点不跳。 */
+interface CustomDraft {
+  readonly id: number
+  hostname: string
+}
 
 export function AppDomainDialog({
   deployClient,
@@ -79,15 +144,14 @@ export function AppDomainDialog({
   // 平台域名配置。null 表示「清除覆盖、回落到 slug / 平台目录」。
   const [labelInput, setLabelInput] = useState("")
   const [suffixInput, setSuffixInput] = useState<string[]>([])
+  const [environmentTab, setEnvironmentTab] = useState<EnvironmentTab>(ALL_ENVIRONMENTS)
   const labelTouched = useRef(false)
   const suffixesTouched = useRef(false)
 
-  // 自定义域名
-  const [zones, setZones] = useState<readonly DomainZoneResponse[]>()
-  const [zonesLoading, setZonesLoading] = useState(false)
-  const [zonesLoaded, setZonesLoaded] = useState(false)
-  const [zoneId, setZoneId] = useState("")
-  const [customHostname, setCustomHostname] = useState("")
+  // 自定义域名：已生效的来自 `state`，这里是「待添加」草稿行。
+  const [zones, setZones] = useState<readonly DomainZoneResponse[]>([])
+  const [drafts, setDrafts] = useState<CustomDraft[]>([])
+  const nextDraftId = useRef(1)
 
   const current = state?.app ?? app
   /** 有效后缀：有覆盖用覆盖，否则平台目录 —— 服务端已算好，这里只防缺省。 */
@@ -112,6 +176,16 @@ export function AppDomainDialog({
 
   useEffect(() => { void reload() }, [app.id])
 
+  // 区域清单只用于「输入时提示落在哪个区域」，加载失败不阻塞自定义域名录入
+  // （服务端才是权威，匹配不到也允许提交）。
+  useEffect(() => {
+    let cancelled = false
+    void service.listDomainZones()
+      .then((loaded) => { if (!cancelled) setZones(loaded) })
+      .catch(() => { if (!cancelled) setZones([]) })
+    return () => { cancelled = true }
+  }, [service])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busy) onClose()
@@ -124,21 +198,6 @@ export function AppDomainDialog({
       document.body.style.overflow = previousOverflow
     }
   }, [busy, onClose])
-
-  const loadZones = async () => {
-    setZonesLoading(true)
-    setZonesLoaded(true)
-    try {
-      const loaded = await service.listDomainZones()
-      setZones(loaded)
-      if (loaded.length > 0) setZoneId((value) => (value === "" ? loaded[0]?.id ?? "" : value))
-    } catch (cause) {
-      setZones([])
-      setError(t("domainUpdateFailed", { message: messageOf(cause) }))
-    } finally {
-      setZonesLoading(false)
-    }
-  }
 
   /* ---------------- 平台域名：派生与校验 ---------------- */
 
@@ -169,6 +228,29 @@ export function AppDomainDialog({
     return out
   }, [labelInput, suffixInput, current.slug])
 
+  /** 预览里实际用到的环境（按生命周期顺序），用来建「生成的域名」页签。 */
+  const previewEnvironments = useMemo(
+    () => environmentTabsInUse(previewHostnames),
+    [previewHostnames],
+  )
+  /** 当前页签下要展示的预览行。 */
+  const visiblePreviewHostnames = useMemo(
+    () => filterDomainsByEnvironment(previewHostnames, environmentTab),
+    [previewHostnames, environmentTab],
+  )
+
+  /**
+   * 改了应用标识 / 后缀后，当前页签可能已不存在（该环境没有预览行了）。
+   *
+   * 回落到「全部」而不是留在空页签上 —— 空页签会让操作者以为域名丢了。
+   * 放在 effect 里而非渲染期改写 state，避免与 React 的渲染纯粹性冲突。
+   */
+  useEffect(() => {
+    if (environmentTab === ALL_ENVIRONMENTS) return
+    if (previewEnvironments.includes(environmentTab)) return
+    setEnvironmentTab(ALL_ENVIRONMENTS)
+  }, [previewEnvironments, environmentTab])
+
   const dirty = labelTouched.current || suffixesTouched.current
 
   const savePlatformDomains = async () => {
@@ -197,22 +279,51 @@ export function AppDomainDialog({
     }
   }
 
-  const bindCustom = async () => {
+  /* ---------------- 自定义域名：动态增删 ---------------- */
+
+  /** 已生效 + 待添加的总数，用来卡 5 个上限并算剩余额度。 */
+  const { used: customTotal, atCapacity } = customDomainCapacity(
+    customDomains.length,
+    drafts.length,
+  )
+
+  const addDraft = () => {
+    if (atCapacity) return
+    setDrafts((list) => [...list, { id: nextDraftId.current++, hostname: "" }])
+  }
+
+  const removeDraft = (id: number) => {
+    setDrafts((list) => list.filter((draft) => draft.id !== id))
+  }
+
+  const updateDraft = (id: number, hostname: string) => {
+    setDrafts((list) => list.map((draft) => (draft.id === id ? { ...draft, hostname } : draft)))
+  }
+
+  /** 一次提交全部草稿：任一失败即停，成功的部分保留（已生效的会出现在列表里）。 */
+  const bindDrafts = async () => {
+    const pending = drafts.filter((draft) => normalizeHostname(draft.hostname) !== "")
+    if (pending.length === 0) return
     setBusy(true)
     setError(undefined)
     setNotice(undefined)
+    const bound: string[] = []
     try {
-      const result = await service.bindCustomHostname(app.id, {
-        zoneId,
-        apexHostname: zones?.find((zone) => zone.id === zoneId)?.apexHostname ?? "",
-        hostname: customHostname.trim().toLowerCase(),
-      })
-      setCustomHostname("")
-      await reload()
-      const summary = t("domainBound", { hostname: result.hostname.hostname })
+      for (const draft of pending) {
+        const hostname = normalizeHostname(draft.hostname)
+        const result = await service.bindCustomHostname(app.id, { hostname })
+        bound.push(result.hostname.hostname)
+        // 逐个提交，让中途失败时已成功的部分立即落到列表里，而不是回滚掉。
+        setDrafts((list) => list.filter((item) => item.id !== draft.id))
+        await reload()
+      }
+      const summary = bound.length === 1
+        ? t("domainBound", { hostname: bound[0] ?? "" })
+        : t("domainBoundMany", { count: String(bound.length) })
       setNotice(summary)
       onChanged?.(summary)
     } catch (cause) {
+      await reload()
       setError(isConflict(cause)
         ? t("domainBindConflict")
         : t("domainUpdateFailed", { message: messageOf(cause) }))
@@ -221,19 +332,54 @@ export function AppDomainDialog({
     }
   }
 
-  const zoneError = useMemo(() => {
-    if (zoneId === "") return undefined
-    const apex = zones?.find((zone) => zone.id === zoneId)?.apexHostname
-    const host = customHostname.trim().toLowerCase()
-    if (apex === undefined || host === "") return undefined
-    if (host !== apex && !host.endsWith(`.${apex}`)) {
-      return t("domainCustomMustMatchZone", { zone: apex })
-    }
-    return undefined
-  }, [zoneId, zones, customHostname, t])
+  const draftRowsValid = drafts.length > 0
+    && drafts.every((draft) => {
+      const host = normalizeHostname(draft.hostname)
+      return host === "" || isHostnameShaped(host)
+    })
+  const draftHasContent = drafts.some((draft) => normalizeHostname(draft.hostname) !== "")
+  const canBind = !busy && draftHasContent && draftRowsValid
 
-  const hostnameValid = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
-    .test(customHostname.trim().toLowerCase())
+  /**
+   * 解绑一个自定义域名：把它从组合里移除。
+   *
+   * 先绑定后解绑共用 `composition.update`（整份替换语义），所以这里必须把
+   * **其余**绑定全部带上，否则解绑一个会连带清掉别的。主机名本身（`deploy_domain`
+   * 行）保留，因为它可能被别的应用或别的路径复用。
+   */
+  const unbindCustom = async (domain: DeployAppDomain) => {
+    if (domain.domainId === undefined) {
+      setError(t("domainUnbindUnavailable"))
+      return
+    }
+    setBusy(true)
+    setError(undefined)
+    setNotice(undefined)
+    try {
+      const all = state?.domains ?? []
+      const appBefore = await service.loadDomainState(app.id)
+      const bindings = all
+        .filter((item) => item.domainId !== undefined && item.domainId !== domain.domainId)
+        .map((item) => ({
+          key: compositionKey(item.hostname, item.pathPrefix ?? "/"),
+          domainId: item.domainId as string,
+          pathPrefix: item.pathPrefix ?? "/",
+          action: { type: "SERVE" as const },
+        }))
+      await service.replaceDomainBindings(app.id, {
+        version: appBefore.app.version,
+        bindings,
+      })
+      await reload()
+      const summary = t("domainUnbound", { hostname: domain.hostname })
+      setNotice(summary)
+      onChanged?.(summary)
+    } catch (cause) {
+      setError(t("domainUpdateFailed", { message: messageOf(cause) }))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div
@@ -263,7 +409,99 @@ export function AppDomainDialog({
 
           {!loading && (
             <>
-              {/* ---------- 1. 平台预置域名 ---------- */}
+              {/* ---------- 1. 自定义域名（置顶：这是用户真正要做的事） ---------- */}
+              <div className={css.field}>
+                <div className={css.sectionHead}>
+                  <span className={css.stepTitle}>{t("domainSectionCustom")}</span>
+                  <span
+                    className={css.counterPill}
+                    data-full={atCapacity ? "true" : "false"}
+                    aria-label={t("domainCustomCounterLabel", {
+                      used: String(customTotal),
+                      max: String(MAX_CUSTOM_DOMAINS),
+                    })}
+                  >
+                    {customTotal}/{MAX_CUSTOM_DOMAINS}
+                  </span>
+                </div>
+                <span className={css.fieldHint}>{t("domainSectionCustomHint")}</span>
+              </div>
+
+              {/* 已生效的自定义域名 —— 每行可删除（从组合中解绑）。 */}
+              {customDomains.length > 0 && (
+                <div className={css.domainTable}>
+                  <div className={css.domainTableHeadBar}>
+                    <span className={css.domainTableHeadTitle}>{t("domainKindCustom")}</span>
+                  </div>
+                  {customDomains.map((domain) => (
+                    <CustomDomainRow
+                      key={`${domain.hostname}${domain.pathPrefix ?? ""}`}
+                      domain={domain}
+                      t={t}
+                      busy={busy}
+                      onRemove={() => { void unbindCustom(domain) }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* 待添加草稿行 —— 自由输入，边输边给「落在哪个区域」的提示。 */}
+              {drafts.map((draft) => (
+                <CustomDomainDraftRow
+                  key={draft.id}
+                  draft={draft}
+                  t={t}
+                  busy={busy}
+                  zones={zones}
+                  onChange={(value) => { updateDraft(draft.id, value) }}
+                  onRemove={() => { removeDraft(draft.id) }}
+                />
+              ))}
+
+              <div className={css.modeRow}>
+                <button
+                  type="button"
+                  className={css.secondaryButton}
+                  disabled={busy || atCapacity}
+                  onClick={addDraft}
+                  title={atCapacity ? t("domainCustomLimitReached", { max: String(MAX_CUSTOM_DOMAINS) }) : undefined}
+                >
+                  {t("domainCustomAdd")}
+                </button>
+                <button
+                  type="button"
+                  className={css.primaryButton}
+                  disabled={!canBind}
+                  onClick={() => { void bindDrafts() }}
+                >
+                  {busy ? t("domainBinding") : t("domainBind")}
+                </button>
+              </div>
+
+              {/* CNAME 指引 —— 行业标准做法：让用户把自有域名别名到平台主机名。 */}
+              {defaultDomains.length > 0 && (
+                <div className={css.dnsGuide}>
+                  <span className={css.dnsGuideTitle}>{t("domainCnameTitle")}</span>
+                  <span className={css.fieldHint}>{t("domainCnameHint")}</span>
+                  <dl className={css.dnsRecord}>
+                    <dt>{t("domainCnameRecord")}</dt>
+                    <dd><code>CNAME</code></dd>
+                    <dt>{t("domainCnameTarget")}</dt>
+                    <dd>
+                      <code>{defaultDomains[0]?.hostname ?? t("domainNotConfigured")}</code>
+                      <CopyButton value={defaultDomains[0]?.hostname ?? ""} t={t} />
+                    </dd>
+                  </dl>
+                </div>
+              )}
+
+              {atCapacity && (
+                <span className={css.fieldHint}>
+                  {t("domainCustomLimitReached", { max: String(MAX_CUSTOM_DOMAINS) })}
+                </span>
+              )}
+
+              {/* ---------- 2. 平台预置域名（次要：已自动开通，通常无需改动） ---------- */}
               <div className={css.field}>
                 <span className={css.stepTitle}>{t("domainSectionDefault")}</span>
                 <span className={css.fieldHint}>{t("domainSectionDefaultHint")}</span>
@@ -329,12 +567,49 @@ export function AppDomainDialog({
               {previewHostnames.length > 0 && (
                 <div className={css.field}>
                   <span className={css.fieldLabel}>{t("domainAppIdPreview")}</span>
-                  <div className={css.envGrid}>
-                    {previewHostnames.map((entry) => (
-                      <div key={`${entry.environment}-${entry.hostname}`} className={css.envCard} style={{ cursor: "default" }}>
+                  <div className={css.previewTable}>
+                    {/* 表头条：环境页签嵌在这里，与下面「当前域名」清单同一套头部样式。 */}
+                    <div className={css.domainTableHeadBar}>
+                      <span className={css.domainTableHeadTitle}>{t("domainAppIdPreview")}</span>
+                      <div className={css.tabBar} role="tablist" aria-label={t("domainTabListLabel")}>
+                        <button
+                          type="button"
+                          role="tab"
+                          className={css.tabButton}
+                          data-active={environmentTab === ALL_ENVIRONMENTS ? "true" : "false"}
+                          aria-selected={environmentTab === ALL_ENVIRONMENTS}
+                          onClick={() => { setEnvironmentTab(ALL_ENVIRONMENTS) }}
+                        >
+                          {t("domainTabAll")}
+                          <span className={css.tabCount}>{previewHostnames.length}</span>
+                        </button>
+                        {previewEnvironments.map((environment) => {
+                          const count = filterDomainsByEnvironment(previewHostnames, environment).length
+                          return (
+                            <button
+                              key={environment}
+                              type="button"
+                              role="tab"
+                              className={css.tabButton}
+                              data-active={environmentTab === environment ? "true" : "false"}
+                              aria-selected={environmentTab === environment}
+                              onClick={() => { setEnvironmentTab(environment as EnvironmentTab) }}
+                            >
+                              {domainStatusLabel("environment", environment, t)}
+                              <span className={css.tabCount}>{count}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    {visiblePreviewHostnames.map((entry) => (
+                      <div key={`${entry.environment}-${entry.hostname}`} className={css.previewRow}>
                         <span className={css.envDot} data-environment={entry.environment} />
-                        <span className={css.envName}>{entry.hostname}</span>
-                        <span className={css.envId}>{domainStatusLabel("environment", entry.environment, t)}</span>
+                        <span className={css.targetChipBadge}>
+                          {domainStatusLabel("environment", entry.environment, t)}
+                        </span>
+                        <code className={css.previewHost}>{entry.hostname}</code>
+                        <CopyButton value={entry.hostname} t={t} />
                       </div>
                     ))}
                   </div>
@@ -352,105 +627,16 @@ export function AppDomainDialog({
                 </button>
               </div>
 
-              {/* ---------- 当前主机名清单 ---------- */}
-              <div className={css.field}>
-                <span className={css.stepTitle}>{t("domainList")}</span>
-                {defaultDomains.length === 0 && customDomains.length === 0 && (
-                  <span className={css.fieldHint}>{t("domainListEmpty")}</span>
-                )}
-              </div>
+              {/* ---------- 当前主机名清单（平台域名的只读回显） ---------- */}
               {defaultDomains.length > 0 && (
-                <DomainTable domains={defaultDomains} t={t} label={t("domainKindDefault")} />
-              )}
-              {customDomains.length > 0 && (
-                <DomainTable domains={customDomains} t={t} label={t("domainKindCustom")} />
-              )}
-
-              {/* ---------- 2. 自定义域名 ---------- */}
-              <div className={css.field}>
-                <span className={css.stepTitle}>{t("domainSectionCustom")}</span>
-                <span className={css.fieldHint}>{t("domainSectionCustomHint")}</span>
-              </div>
-
-              <div className={css.field}>
-                <span className={css.fieldLabel}>{t("domainCustomZone")}</span>
-                {!zonesLoaded && (
-                  <button
-                    type="button"
-                    className={css.secondaryButton}
-                    style={{ alignSelf: "flex-start" }}
-                    disabled={busy}
-                    onClick={() => { void loadZones() }}
-                  >
-                    {t("domainCustomZoneLoad")}
-                  </button>
-                )}
-                {zonesLoading && <span className={css.fieldHint}>{t("domainListLoading")}</span>}
-                {zonesLoaded && zones !== undefined && zones.length === 0 && (
-                  <span className={css.fieldHint}>{t("domainCustomZoneEmpty")}</span>
-                )}
-                {zones !== undefined && zones.length > 0 && (
-                  <select
-                    className={css.select}
-                    value={zoneId}
-                    disabled={busy}
-                    onChange={(event) => { setZoneId(event.target.value) }}
-                  >
-                    {zones.map((zone) => (
-                      <option key={zone.id} value={zone.id}>
-                        {zone.apexHostname} · {zone.verifiedHostnameCount}/{zone.hostnameCount}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <span className={css.fieldHint}>{t("domainCustomZoneHint")}</span>
-              </div>
-
-              {zones !== undefined && zones.length > 0 && (
                 <>
-                  <div className={css.field}>
-                    <span className={css.fieldLabel}>{t("domainCustomHostname")}</span>
-                    <input
-                      className={css.input}
-                      value={customHostname}
-                      placeholder={t("domainCustomHostnamePlaceholder")}
-                      disabled={busy}
-                      onChange={(event) => { setCustomHostname(event.target.value.trim().toLowerCase()) }}
-                    />
-                    <span className={css.fieldHint}>{t("domainCustomHostnameHint")}</span>
-                    {customHostname !== "" && !hostnameValid && (
-                      <span className={css.fieldErrorInline}>{t("domainCustomHostnameInvalid")}</span>
+                  <DomainTable
+                    domains={defaultDomains}
+                    t={t}
+                    header={(
+                      <span className={css.domainTableHeadTitle}>{t("domainList")}</span>
                     )}
-                    {zoneError !== undefined && (
-                      <span className={css.fieldErrorInline}>{zoneError}</span>
-                    )}
-                  </div>
-
-                  {/* CNAME 指引 —— 行业标准做法：让用户把自有域名别名到平台主机名。 */}
-                  <div className={css.dnsGuide}>
-                    <span className={css.dnsGuideTitle}>{t("domainCnameTitle")}</span>
-                    <span className={css.fieldHint}>{t("domainCnameHint")}</span>
-                    <dl className={css.dnsRecord}>
-                      <dt>{t("domainCnameRecord")}</dt>
-                      <dd><code>CNAME</code></dd>
-                      <dt>{t("domainCnameTarget")}</dt>
-                      <dd>
-                        <code>{defaultDomains[0]?.hostname ?? t("domainNotConfigured")}</code>
-                        <CopyButton value={defaultDomains[0]?.hostname ?? ""} t={t} />
-                      </dd>
-                    </dl>
-                  </div>
-
-                  <div className={css.modeRow}>
-                    <button
-                      type="button"
-                      className={css.secondaryButton}
-                      disabled={busy || zoneId === "" || !hostnameValid || zoneError !== undefined}
-                      onClick={() => { void bindCustom() }}
-                    >
-                      {busy ? t("domainBinding") : t("domainBind")}
-                    </button>
-                  </div>
+                  />
                 </>
               )}
             </>
@@ -474,19 +660,25 @@ export function AppDomainDialog({
  * Sub-components
  * ------------------------------------------------------------------ */
 
-/** 主机名清单：平台组与自定义组共用一张表，只是标题不同。 */
+/**
+ * 主机名清单：平台组与自定义组共用一张表。
+ *
+ * 头部是一个**插槽**而不是一个标题字符串：平台组要在同一根头部条里放环境页签，
+ * 自定义组只放一个静态标题。这样两组共用同一套表头样式，页签也天然落在
+ * 「域名列表 header」里，而不是浮在表格上方。
+ */
 function DomainTable({
   domains,
   t,
-  label,
+  header,
 }: {
   domains: readonly DeployAppDomain[]
   t: PublishingTranslator
-  label: string
+  header: ReactNode
 }) {
   return (
     <div className={css.domainTable}>
-      <div className={css.domainTableHead}>{label}</div>
+      <div className={css.domainTableHeadBar}>{header}</div>
       {domains.map((domain) => (
         <div key={`${domain.hostname}${domain.pathPrefix ?? ""}`} className={css.domainRow}>
           <div className={css.domainRowMain}>
@@ -509,6 +701,119 @@ function DomainTable({
           <CopyButton value={domain.hostname} t={t} />
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * 一行**已生效**的自定义域名：可看到绑定/校验状态，并可解绑。
+ *
+ * 解绑按钮直接调 `composition.update` 把该主机名从组合里摘掉 —— 这才是
+ * 「删除自定义域名」的实际语义（`deploy_domain` 行是租户资产，不随之删除）。
+ */
+function CustomDomainRow({
+  domain,
+  t,
+  busy,
+  onRemove,
+}: {
+  domain: DeployAppDomain
+  t: PublishingTranslator
+  busy: boolean
+  onRemove: () => void
+}) {
+  return (
+    <div className={css.domainRow}>
+      <div className={css.domainRowMain}>
+        <code className={css.domainHost}>{domain.hostname}</code>
+        <span className={css.domainRowMeta}>
+          <span className={css.targetChipBadge}>
+            {domainStatusLabel("environment", domain.environment, t)}
+          </span>
+          <span className={`${css.statusPill} ${statusClass(domain.bindingStatus)}`}>
+            {t("domainBindingStatus")}: {domainStatusLabel("binding", domain.bindingStatus, t)}
+          </span>
+          <span className={`${css.statusPill} ${verificationClass(domain.verificationStatus)}`}>
+            {t("domainVerificationStatus")}: {domainStatusLabel("verification", domain.verificationStatus, t)}
+          </span>
+        </span>
+      </div>
+      <div className={css.domainRowActions}>
+        <CopyButton value={domain.hostname} t={t} />
+        <button
+          type="button"
+          className={css.dangerGhostButton}
+          disabled={busy}
+          title={t("domainUnbind", { hostname: domain.hostname })}
+          aria-label={t("domainUnbind", { hostname: domain.hostname })}
+          onClick={onRemove}
+        >
+          {t("domainCustomRemove")}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 一行**待添加**的自定义域名：自由输入 + 实时提示落在哪个区域。
+ *
+ * 区域提示是「引导」而不是「闸门」：匹配不到时给出去域名管理的引导，但仍然
+ * 允许提交 —— 服务端是权威，用户可能拥有本工作区尚未登记的域名。
+ */
+function CustomDomainDraftRow({
+  draft,
+  t,
+  busy,
+  zones,
+  onChange,
+  onRemove,
+}: {
+  draft: CustomDraft
+  t: PublishingTranslator
+  busy: boolean
+  zones: readonly DomainZoneResponse[]
+  onChange: (value: string) => void
+  onRemove: () => void
+}) {
+  const host = normalizeHostname(draft.hostname)
+  const shaped = host === "" || isHostnameShaped(host)
+  const matchedZone = host === "" ? undefined : inferDomainZone(host, zones)
+  return (
+    <div className={css.field}>
+      <div className={css.draftRow}>
+        <input
+          className={css.input}
+          value={draft.hostname}
+          placeholder={t("domainCustomHostnamePlaceholder")}
+          disabled={busy}
+          autoFocus
+          onChange={(event) => { onChange(event.target.value.trim().toLowerCase()) }}
+        />
+        <button
+          type="button"
+          className={css.dangerGhostButton}
+          disabled={busy}
+          title={t("domainCustomRemove")}
+          aria-label={t("domainCustomRemove")}
+          onClick={onRemove}
+        >
+          ×
+        </button>
+      </div>
+      {!shaped && (
+        <span className={css.fieldErrorInline}>{t("domainCustomHostnameInvalid")}</span>
+      )}
+      {shaped && matchedZone !== undefined && (
+        <span className={css.zoneHintOk}>
+          {t("domainCustomZoneMatched", { zone: matchedZone.apexHostname })}
+        </span>
+      )}
+      {shaped && host !== "" && matchedZone === undefined && (
+        <span className={css.zoneHintWarn}>
+          {t("domainCustomZoneUnmatched")}
+        </span>
+      )}
     </div>
   )
 }

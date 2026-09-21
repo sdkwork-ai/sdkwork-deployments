@@ -15,6 +15,8 @@ export const deploymentsWorkspaceEnUs = {
   "table.select": "Select",
   "table.selectRow": "Select row {row}",
   "table.empty": "No resources found.",
+  "table.rowsPerPage": "Rows per page",
+  "table.actions": "Actions",
   "pagination.page": "Page {page}",
   "pagination.total": "{total} total",
   "pagination.previous": "Previous page",

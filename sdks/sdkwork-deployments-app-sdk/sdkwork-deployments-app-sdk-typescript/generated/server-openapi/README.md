@@ -85,6 +85,7 @@ const params = {
   page_size: 2,
   status: 'ACTIVE',
   keyword: 'keyword',
+  scope: 'USER',
 };
 const result = await client.domain.domainZones.list(params);
 ```

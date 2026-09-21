@@ -156,8 +156,13 @@ export interface DeployAppDomainState {
 
 /** A hostname the operator wants to serve on the app. */
 export interface DeployCustomHostnameInput {
-  readonly zoneId: string
-  readonly apexHostname: string
+  /**
+   * The zone to claim the hostname under. Optional: when omitted, the service
+   * resolves it from the registered zones by longest-apex match
+   * (`inferDomainZone`), which is what lets the operator type a bare domain.
+   */
+  readonly zoneId?: string | undefined
+  readonly apexHostname?: string | undefined
   /** Full hostname, e.g. `app.example.com`. */
   readonly hostname: string
 }
@@ -166,6 +171,21 @@ export interface DeployCustomHostnameResult {
   readonly hostname: DomainHostnameResponse
   /** The composition revision the binding was committed in. */
   readonly composition?: AppCompositionResponse | undefined
+}
+
+/** One route the composition should serve. */
+export interface DeployBindingInput {
+  readonly key: string
+  readonly domainId: string
+  readonly pathPrefix: string
+  readonly action: { readonly type: "SERVE" }
+}
+
+/** The complete binding set to commit, plus the version it was derived from. */
+export interface DeployReplaceBindingsInput {
+  /** `AppResponse.version` the bindings were read at; sent as `If-Match`. */
+  readonly version: string
+  readonly bindings: readonly DeployBindingInput[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -189,7 +209,15 @@ export interface DeployAppOperationsService {
   uploadCodeFromArchive(input: DeployUploadCodeFromArchiveInput): Promise<DeployUploadCodeResult>
   /** 上传代码 — bind a Git repository as the code source. */
   connectGitSource(appId: string, input: DeployGitSourceInput): Promise<SourceRepositoryResponse>
-  /** 上传代码 — list Drive archives the operator can reuse. */
+  /**
+   * 上传代码 — 以关键字/空间搜索 Drive 节点。
+   *
+   * ⚠️ **当前 UI 已不再消费这个方法**：`UploadSourceDialog` 的「从 Drive
+   * 选择」分支改用 `DriveNodePickerDialog`（真正的目录树浏览），因为「列出
+   * 命中 `*.zip` 的扁平清单」既进不去子目录、也无法选目录。此方法保留为已发布
+   * 的 service API（`publish.ts` 对外导出），供需要「按关键字跨空间搜包」的
+   * 调用方使用；新代码请优先用目录树浏览。
+   */
   listDriveArchives(params?: { spaceId?: string | undefined; keyword?: string | undefined }): Promise<DeployDriveArchiveOption[]>
   /** Compute the SHA-256 the artifact registration requires, in the browser. */
   archiveChecksum(file: DriveUploaderBlobLike): Promise<string>
@@ -204,6 +232,14 @@ export interface DeployAppOperationsService {
   }): Promise<AppResponse>
   /** 域名设置 — register a custom hostname and bind it to the app. */
   bindCustomHostname(appId: string, input: DeployCustomHostnameInput): Promise<DeployCustomHostnameResult>
+  /**
+   * 域名设置 — replace the app's served bindings wholesale.
+   *
+   * `app.composition.update` has replace semantics, so unbinding one hostname
+   * means re-sending all the others. The caller passes the complete desired set
+   * and the app `version` it read, which the endpoint uses as `If-Match`.
+   */
+  replaceDomainBindings(appId: string, input: DeployReplaceBindingsInput): Promise<AppCompositionResponse>
   /** 域名设置 — domain zones the operator may register a hostname under. */
   listDomainZones(): Promise<readonly DomainZoneResponse[]>
 
@@ -365,19 +401,37 @@ export function createDeployAppOperationsService(
       const existing = await listAppDomains(deployClient, appId)
       const appBefore = await deployClient.app.retrieve(appId)
 
+      // 1b. Resolve the zone when the caller only supplied a hostname. The
+      //     claim endpoint refuses names outside the zone they are claimed
+      //     under, so an unresolved zone must fail here with an actionable
+      //     message rather than as an opaque server error.
+      let zoneId = input.zoneId ?? ""
+      if (zoneId === "") {
+        const zones = await deployClient.domain.domainZones.list({ pageSize: 100 }).catch(() => undefined)
+        const active = (zones?.items ?? []).filter((zone) => zone.status === "ACTIVE")
+        const matched = inferDomainZone(input.hostname, active)
+        if (matched === undefined) {
+          throw new Error(
+            `No registered domain zone owns ${normalizeHostname(input.hostname)}. ` +
+              "Register the domain under Domain management first.",
+          )
+        }
+        zoneId = matched.id
+      }
+
       // 2. Prove ownership. `EnsureDomainHostnameClaimsRequest` refuses names
       //    outside the zone and refuses duplicates *before* writing, so a failed
       //    request never leaves the tenant owning a hostname nobody asked for.
       //    A successful call also creates the `deploy_domain` row, which is why
       //    no separate hostname create follows.
       const claims = await deployClient.domain.domainZones.hostnameClaims.ensure(
-        input.zoneId,
+        zoneId,
         { hostnames: [input.hostname] },
         { idempotencyKey: createIdempotencyKey() },
       )
       const claim = claims.items?.[0]
       if (claim === undefined) {
-        throw new Error(`Domain zone ${input.zoneId} did not return a hostname claim.`)
+        throw new Error(`Domain zone ${zoneId} did not return a hostname claim.`)
       }
       const hostname = claim.hostname
 
@@ -412,6 +466,29 @@ export function createDeployAppOperationsService(
         { ifMatch: appBefore.version, idempotencyKey: createIdempotencyKey() },
       )
       return { hostname, composition }
+    },
+
+    async replaceDomainBindings(appId, input) {
+      // Replace semantics: whatever this list contains is what the app serves
+      // afterwards. The `If-Match` version is what makes a concurrent edit fail
+      // loudly instead of silently reverting the other operator's change.
+      return deployClient.app.composition.update(
+        appId,
+        {
+          environment: "production",
+          defaultVariantKey: "default",
+          resources: [],
+          variants: [{ key: "default", label: "Default" }],
+          mounts: [],
+          bindings: input.bindings.map((binding) => ({
+            key: binding.key,
+            domainId: binding.domainId,
+            pathPrefix: binding.pathPrefix,
+            action: binding.action,
+          })),
+        },
+        { ifMatch: input.version, idempotencyKey: createIdempotencyKey() },
+      )
     },
 
     async loadAppDetail(appId) {
@@ -474,6 +551,86 @@ export function compositionKey(hostname: string, pathPrefix: string): string {
   const path = pathPrefix.trim().replace(/^\/|\/$/g, "").replace(/[^a-zA-Z0-9]+/g, "-")
   return path === "" ? host : `${host}--${path}`
 }
+
+/** Normalize a hostname the way DNS does, so matching is case/dot insensitive. */
+export function normalizeHostname(value: string): string {
+  return value.trim().toLowerCase().replace(/\.$/, "")
+}
+
+/**
+ * Pick the zone that owns a hostname, so the operator can type a bare domain
+ * instead of first choosing a zone.
+ *
+ * The server refuses a hostname outside the zone it is claimed under, so this
+ * must choose the **longest** matching apex: with both `example.com` and
+ * `eu.example.com` registered, `app.eu.example.com` belongs to the latter, and
+ * picking the former would claim the wrong relative name.
+ *
+ * Returns `undefined` when the hostname is the apex of no registered zone. The
+ * caller decides whether that is fatal — the server is still the authority, so
+ * a hostname the operator owns elsewhere may legitimately be accepted later.
+ */
+export function inferDomainZone(
+  hostname: string,
+  zones: readonly DomainZoneResponse[],
+): DomainZoneResponse | undefined {
+  const host = normalizeHostname(hostname)
+  if (host === "") return undefined
+  let best: DomainZoneResponse | undefined
+  for (const zone of zones) {
+    const apex = normalizeHostname(zone.apexHostname)
+    if (apex === "") continue
+    if (host !== apex && !host.endsWith(`.${apex}`)) continue
+    if (best === undefined || apex.length > normalizeHostname(best.apexHostname).length) {
+      best = zone
+    }
+  }
+  return best
+}
+
+/** A hostname is a lowercase dotted name whose labels are DNS-legal. */
+export function isHostnameShaped(value: string): boolean {
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(
+    normalizeHostname(value),
+  )
+}
+
+/**
+ * How many custom domains one application may serve.
+ *
+ * A product rule, not a mirror of a server-side cap — the server does not impose
+ * one yet. It lives here rather than in the dialog so the arithmetic can be
+ * asserted without a DOM.
+ */
+export const MAX_CUSTOM_DOMAINS = 5
+
+export interface CustomDomainCapacity {
+  /** 已生效 + 待添加的合计，用来算剩余额度。 */
+  readonly used: number
+  /** 还剩几个位置；到上限时为 0，不会为负。 */
+  readonly remaining: number
+  /** 是否可以再添加一行。 */
+  readonly atCapacity: boolean
+}
+
+/**
+ * Derive the custom-domain budget from how many are already bound and how many
+ * drafts are open.
+ *
+ * `used` counts **both**, so an operator cannot open six drafts and only
+ * discover the limit when binding. `remaining` is clamped at 0 so the counter
+ * never renders a negative number once the cap is passed.
+ */
+export function customDomainCapacity(
+  boundCount: number,
+  draftCount: number,
+  max: number = MAX_CUSTOM_DOMAINS,
+): CustomDomainCapacity {
+  const used = Math.max(0, boundCount) + Math.max(0, draftCount)
+  const remaining = Math.max(0, max - used)
+  return { used, remaining, atCapacity: remaining <= 0 }
+}
+
 
 /** Flatten the publisher's three-variant progress union into one shape. */
 function normalizeUploadProgress(progress: ApplicationPublishProgress): DeployUploadProgress {

@@ -15,6 +15,8 @@ export const deploymentsWorkspaceZhCn = {
   "table.select": "选择",
   "table.selectRow": "选择第 {row} 行",
   "table.empty": "暂无资源。",
+  "table.rowsPerPage": "每页条数",
+  "table.actions": "操作",
   "pagination.page": "第 {page} 页",
   "pagination.total": "共 {total} 条",
   "pagination.previous": "上一页",

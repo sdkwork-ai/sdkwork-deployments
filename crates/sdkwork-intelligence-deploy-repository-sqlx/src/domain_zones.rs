@@ -62,9 +62,12 @@ impl DeployRepository {
         let predicate = format!(
             "z.tenant_id = $1 AND {} AND z.deleted_at IS NULL
             AND ($3 = '' OR z.status = $3)
-            AND ($4 = '' OR LOWER(z.apex_hostname) LIKE $4 OR LOWER(COALESCE(z.display_name, '')) LIKE $4)",
+            AND ($4 = '' OR LOWER(z.apex_hostname) LIKE $4 OR LOWER(COALESCE(z.display_name, '')) LIKE $4)
+            AND ($5 = '' OR ($5 = 'USER' AND z.user_id IS NOT NULL)
+                        OR ($5 = 'PLATFORM' AND z.user_id IS NULL))",
             zone_owner_gate(2)
         );
+        let scope = query.scope.map(ZoneScope::as_str).unwrap_or("");
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM deploy_dns_zone z WHERE {predicate}"
         )))
@@ -72,17 +75,19 @@ impl DeployRepository {
         .bind(owner_user_id)
         .bind(status)
         .bind(&keyword)
+        .bind(scope)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_dns_zone", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ZONE_SELECT} FROM deploy_dns_zone z WHERE {predicate}
-             ORDER BY (z.user_id IS NULL) ASC, z.updated_at DESC, z.id DESC LIMIT $5 OFFSET $6"
+             ORDER BY (z.user_id IS NULL) ASC, z.updated_at DESC, z.id DESC LIMIT $6 OFFSET $7"
         )))
         .bind(tenant_id)
         .bind(owner_user_id)
         .bind(status)
         .bind(keyword)
+        .bind(scope)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -462,6 +467,7 @@ impl DeployRepository {
                 proof_sha256: None,
                 token: None,
                 expires_at: None,
+                created: false,
             });
         }
 
@@ -508,10 +514,21 @@ impl DeployRepository {
                     active.try_get("record_name").map_err(|error| {
                         DeployServiceError::Internal(format!("map verification record: {error}"))
                     })?;
+                let active_uuid: String = active.try_get("uuid").map_err(|error| {
+                    DeployServiceError::Internal(format!("map verification uuid: {error}"))
+                })?;
+                // The value the operator publishes is `dns_txt_record_value(uuid)`,
+                // which is deterministic: only its digest is persisted, but the
+                // plaintext is re-derivable from the attempt's own id. Returning
+                // `None` here meant the record value was shown exactly once — on the
+                // call that created the attempt — and every later `verify` (a second
+                // click, or the same page reloaded) handed the operator a record
+                // *name* with nothing to put in it, which is an unbreakable
+                // `PENDING` domain and therefore a certificate that can never be
+                // ordered. Re-deriving restores the missing half of the instructions.
+                let token = dns_txt_record_value(&active_uuid);
                 let result = DomainVerificationChallenge {
-                    verification_id: Some(active.try_get("uuid").map_err(|error| {
-                        DeployServiceError::Internal(format!("map verification uuid: {error}"))
-                    })?),
+                    verification_id: Some(active_uuid),
                     hostname,
                     record_relative_name: dns_txt_relative_name(
                         &active_record_name,
@@ -522,8 +539,9 @@ impl DeployRepository {
                     proof_sha256: Some(active.try_get("proof_sha256").map_err(|error| {
                         DeployServiceError::Internal(format!("map verification proof: {error}"))
                     })?),
-                    token: None,
+                    token: Some(token),
                     expires_at: Some(expires_at.to_rfc3339()),
+                    created: false,
                 };
                 transaction.commit().await.map_err(|error| {
                     store_error("commit deploy_domain_verification challenge", error)
@@ -584,6 +602,7 @@ impl DeployRepository {
             proof_sha256: Some(proof_sha256),
             token: Some(token),
             expires_at: Some(expires_at.to_rfc3339()),
+            created: true,
         })
     }
 

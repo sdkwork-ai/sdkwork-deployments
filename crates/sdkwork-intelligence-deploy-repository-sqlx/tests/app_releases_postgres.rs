@@ -122,7 +122,10 @@ async fn create_app_release_resolves_the_build_number_from_the_package_build() {
         .expect("read stored release")
         .try_get("build_number")
         .expect("build_number");
-    assert_eq!(stored, 42, "deploy_release.build_number is the build's number");
+    assert_eq!(
+        stored, 42,
+        "deploy_release.build_number is the build's number"
+    );
 }
 
 #[tokio::test]
@@ -141,7 +144,10 @@ async fn create_app_release_is_idempotent_on_the_request_key() {
         .await
         .expect("replayed create returns the original release");
 
-    assert_eq!(replay.id, first.id, "the replay returns the original release");
+    assert_eq!(
+        replay.id, first.id,
+        "the replay returns the original release"
+    );
     assert_eq!(replay.build_number, 42, "the replay keeps the build number");
 
     use sqlx::Row;

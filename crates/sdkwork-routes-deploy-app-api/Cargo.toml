@@ -19,12 +19,14 @@ sdkwork-web-axum.workspace = true
 sdkwork-web-core.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 http-body-util.workspace = true
+sqlx.workspace = true
 tokio.workspace = true
 tower.workspace = true
-# Scratch live-schema probe for `apps.domains.list`; remove with the probe test.
-sdkwork-intelligence-deploy-service.workspace = true
-sdkwork-intelligence-deploy-repository-sqlx.workspace = true
+# `app_route_trait_coverage.rs` mounts the real `DeployService` so it can prove
+# no app-api route reaches a default `DeployAppApi` body.
 sdkwork-database-id.workspace = true
 sdkwork-deploy-drive-port.workspace = true
-sqlx.workspace = true
+sdkwork-intelligence-deploy-repository-sqlx.workspace = true
+sdkwork-intelligence-deploy-service.workspace = true

@@ -15,6 +15,7 @@
     "@sdkwork/deployments-app-sdk": "workspace:*",
     "@sdkwork/deployments-pc-commons": "workspace:*",
     "@sdkwork/drive-app-sdk": "workspace:*",
+    "@sdkwork/ui-pc-react": "workspace:*",
     "@sdkwork/utils": "workspace:*",
     "react": "catalog:"
   },

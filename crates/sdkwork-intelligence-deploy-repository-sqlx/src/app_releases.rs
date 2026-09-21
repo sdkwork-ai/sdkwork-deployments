@@ -83,14 +83,16 @@ impl DeployRepository {
         // miss. Surfacing that as a validation error beats writing a bogus `0`
         // into `deploy_release.build_number`, where nothing downstream could
         // tell it apart from a real build #0.
-        let build_number: i64 = package_row.try_get::<Option<i64>, _>("build_number").map_err(
-            |error| DeployServiceError::Internal(format!("read package build number: {error}")),
-        )?
-        .ok_or_else(|| {
-            DeployServiceError::validation(
-                "package build is missing or deleted; cannot derive the build number",
-            )
-        })?;
+        let build_number: i64 = package_row
+            .try_get::<Option<i64>, _>("build_number")
+            .map_err(|error| {
+                DeployServiceError::Internal(format!("read package build number: {error}"))
+            })?
+            .ok_or_else(|| {
+                DeployServiceError::validation(
+                    "package build is missing or deleted; cannot derive the build number",
+                )
+            })?;
         let package_version: String = package_row.try_get("package_version").unwrap_or_default();
         let package_status: String = package_row.try_get("package_status").unwrap_or_default();
         if !matches!(package_status.as_str(), "VALIDATED" | "READY") {

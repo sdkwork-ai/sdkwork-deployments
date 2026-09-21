@@ -16,11 +16,10 @@ import {
   ArrowLeft,
   BadgeCheck,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CirclePause,
   CirclePlay,
   Clipboard,
+  ClipboardList,
   FileKey2,
   Globe2,
   History,
@@ -36,6 +35,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -43,6 +43,8 @@ import {
   type ReactNode,
 } from "react";
 import { Link, Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
+
+import { DataTable, type DataTableColumn, type DataTablePaginationProps } from "@sdkwork/ui-pc-react";
 
 import { deliveryText, type DeliveryMessageKey } from "./i18n.ts";
 import { relativeRecordName } from "./dns-record-name.ts";
@@ -81,14 +83,28 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
     let active = true;
     setBusy(true);
     setError(undefined);
+    // This is the root-domain list, so it asks for root domains only. The
+    // inventory also holds tenant-level `app.<suffix>` zones, but those are
+    // subdomains the deployment provisions for app publishing — they are not
+    // root domains and must never be listed here as if the operator had
+    // registered them. `scope=USER` means `user_id IS NOT NULL`, which is
+    // exactly "an operator-defined root domain". Their subdomains are reached
+    // by opening the root domain, not by showing up as siblings of it.
     void service.listDomainZones({
       page,
       pageSize: 20,
       keyword: keyword || undefined,
       status: status === "ALL" ? undefined : status,
+      scope: "USER",
     }).then((result) => {
       if (!active) return;
-      setZones(result.items);
+      // The filter is re-applied here as well. A gateway that predates the
+      // `scope` query parameter drops it without an error and answers with the
+      // whole inventory, which would put `app.<suffix>` subdomains back into a
+      // root-domain list. The list's own invariant is "root domains only", so
+      // it holds that invariant rather than trusting a response to have
+      // honoured a request.
+      setZones(result.items.filter((zone) => zone.scope === "USER"));
       setPageInfo(result.pageInfo);
     }).catch((cause) => {
       if (active) setError(errorText(cause));
@@ -100,6 +116,39 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
 
   const reload = () => setRefreshVersion((value) => value + 1);
   const closeAndReload = () => { setDialog(undefined); reload(); };
+
+  /**
+   * 根域名列：整格是一个 Link（原实现如此）—— 打开根域名是进入其子域名的
+   * 唯一入口，所以单元格本身就是导航，不是纯文本。
+   */
+  const zoneColumns = useMemo<DataTableColumn<DomainZoneResponse>[]>(() => [
+    {
+      id: "apexHostname",
+      header: t("rootDomain"),
+      cell: (zone) => (
+        // Opening the root domain is how its subdomains are reached, so the
+        // apex cell and the 子域名 action both lead to the same place.
+        <Link className="primary-cell-link" to={zone.id}>
+          <Globe2 size={17} />
+          <span>
+            <strong>{zone.apexHostname}</strong>
+            <small>{zone.displayName || zone.dnsProvider || "-"}</small>
+          </span>
+        </Link>
+      ),
+      width: 260,
+    },
+    { id: "status", header: t("status"), cell: (zone) => <StatusBadge value={zone.status} t={t} />, width: 110 },
+    {
+      id: "hostnameCount",
+      header: t("hostnames"),
+      cell: (zone) => <><strong>{zone.hostnameCount}</strong><small className="cell-subtitle">{t("verifiedSummary", { verified: zone.verifiedHostnameCount, total: zone.hostnameCount })}</small></>,
+      width: 160,
+    },
+    { id: "certificateCount", header: t("certificates"), cell: (zone) => zone.certificateCount, width: 110 },
+    { id: "bindingCount", header: t("appBindings"), cell: (zone) => zone.bindingCount, width: 110 },
+    { id: "updatedAt", header: t("updated"), cell: (zone) => formatDate(zone.updatedAt, locale), width: 180 },
+  ], [locale, t]);
 
   return <section className="resource-page domain-page">
     <div className="resource-commandbar">
@@ -118,45 +167,35 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       </div>
     </div>
     {error && <ErrorBanner message={error} t={t} />}
-    <div className="table-frame domain-table-frame" aria-busy={busy}>
-      <table className="domain-table"><thead><tr>
-        <th>{t("rootDomain")}</th><th>{t("scope")}</th><th>{t("status")}</th><th>{t("hostnames")}</th><th>{t("certificates")}</th><th>{t("appBindings")}</th><th>{t("updated")}</th><th className="operations-column">{t("operations")}</th>
-      </tr></thead><tbody>{zones.map((zone) => {
+    <DataTable<DomainZoneResponse>
+      columns={zoneColumns}
+      density="compact"
+      emptyState={<span><Globe2 size={24} />{t("noRootDomains")}</span>}
+      getRowId={(zone) => zone.id}
+      loading={busy && zones.length === 0}
+      pagination={serverPagination(page, pageInfo, busy, setPage)}
+      rowActions={(zone) => {
         // hostnameCount includes the apex hostname row every zone owns, so
         // only counts above 1 represent user-added subdomains that block
         // zone deletion.
         const deleteBlocked = Number(zone.hostnameCount) > 1 || Number(zone.certificateCount) > 0 || Number(zone.bindingCount) > 0;
-        // The inventory mixes two kinds of row that both look like "a domain":
-        // a root domain an operator defined, and the tenant-level `app.<suffix>`
-        // zone the deployment provisions so apps get publishing hostnames. The
-        // second has no owner and is not the operator's to manage, so the table
-        // says which is which instead of presenting both as root domains.
-        const isPlatform = zone.scope === "PLATFORM";
-        return <tr key={zone.id}>
-          <td><Link className="primary-cell-link" to={zone.id}><Globe2 size={17} /><span><strong>{zone.apexHostname}</strong><small>{zone.displayName || zone.dnsProvider || "-"}</small></span></Link></td>
-          <td>{isPlatform
-            ? <span className="scope-badge scope-badge-platform" title={t("scopePlatformHint")}>{t("scopePlatform")}</span>
-            : <span className="scope-badge scope-badge-user">{t("scopeUser")}</span>}</td>
-          <td><StatusBadge value={zone.status} t={t} /></td>
-          <td><strong>{zone.hostnameCount}</strong><small className="cell-subtitle">{t("verifiedSummary", { verified: zone.verifiedHostnameCount, total: zone.hostnameCount })}</small></td>
-          <td>{zone.certificateCount}</td><td>{zone.bindingCount}</td><td>{formatDate(zone.updatedAt, locale)}</td>
-          <td><div className="row-actions">
-            {/* Text labels rather than bare icons: entering the hostname list and
-                requesting a certificate are the two things an operator opens this
-                table for, and neither is guessable from a glyph alone. The literal
-                text stays inside the accessible name so the label still matches
-                what is read out. */}
-            <Link className="table-action table-action-text" to={zone.id} title={t("open")} aria-label={`${t("hostnames")} · ${zone.apexHostname}`}><Globe2 size={15} /><span>{t("hostnames")}</span></Link>
-            <Link className="table-action table-action-text" to={`/console/certificates?zoneId=${encodeURIComponent(zone.id)}&apex=${encodeURIComponent(zone.apexHostname)}`} title={t("requestCertificate")} aria-label={`${t("certificates")} · ${zone.apexHostname}`}><FileKey2 size={15} /><span>{t("certificates")}</span></Link>
-            <button className="table-action" type="button" title={t("edit")} aria-label={`${t("edit")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "edit", zone })}><Pencil size={16} /></button>
-            <button className="table-action" type="button" title={zone.status === "ACTIVE" ? t("pause") : t("resume")} aria-label={`${zone.status === "ACTIVE" ? t("pause") : t("resume")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "status", zone })}>{zone.status === "ACTIVE" ? <CirclePause size={16} /> : <CirclePlay size={16} />}</button>
-            <button className="table-action danger-action" type="button" disabled={deleteBlocked} title={deleteBlocked ? t("deleteBlocked") : t("delete")} aria-label={`${t("delete")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "delete", zone })}><Trash2 size={16} /></button>
-          </div></td>
-        </tr>;
-      })}</tbody></table>
-      {!busy && zones.length === 0 && <div className="empty-state"><Globe2 size={24} />{t("noRootDomains")}</div>}
-    </div>
-    <Pagination page={page} pageInfo={pageInfo} busy={busy} setPage={setPage} t={t} />
+        return <div className="row-actions">
+          {/* Text labels rather than bare icons: entering the subdomain list and
+              requesting a certificate are the two things an operator opens this
+              table for, and neither is guessable from a glyph alone. The literal
+              text stays inside the accessible name so the label still matches
+              what is read out. */}
+          <Link className="table-action table-action-text" to={zone.id} title={t("open")} aria-label={`${t("hostnames")} · ${zone.apexHostname}`}><Globe2 size={15} /><span>{t("hostnames")}</span></Link>
+          <Link className="table-action table-action-text" to={`/console/certificates?zoneId=${encodeURIComponent(zone.id)}&apex=${encodeURIComponent(zone.apexHostname)}`} title={t("requestCertificate")} aria-label={`${t("certificates")} · ${zone.apexHostname}`}><FileKey2 size={15} /><span>{t("certificates")}</span></Link>
+          <button className="table-action" type="button" title={t("edit")} aria-label={`${t("edit")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "edit", zone })}><Pencil size={16} /></button>
+          <button className="table-action" type="button" title={zone.status === "ACTIVE" ? t("pause") : t("resume")} aria-label={`${zone.status === "ACTIVE" ? t("pause") : t("resume")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "status", zone })}>{zone.status === "ACTIVE" ? <CirclePause size={16} /> : <CirclePlay size={16} />}</button>
+          <button className="table-action danger-action" type="button" disabled={deleteBlocked} title={deleteBlocked ? t("deleteBlocked") : t("delete")} aria-label={`${t("delete")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "delete", zone })}><Trash2 size={16} /></button>
+        </div>;
+      }}
+      rowActionsLabel={t("operations")}
+      rows={zones}
+      stickyHeader
+    />
     {dialog?.kind === "create" && <ZoneFormDialog t={t} close={() => setDialog(undefined)} submit={async (body) => { await service.createDomainZone(toDomainZoneRequestBody(body)); closeAndReload(); }} />}
     {dialog?.kind === "edit" && <ZoneFormDialog t={t} zone={dialog.zone} close={() => setDialog(undefined)} submit={async (body) => { await service.updateDomainZone(dialog.zone.id, toDomainZoneRequestBody(body)); closeAndReload(); }} />}
     {dialog?.kind === "status" && <ConfirmDialog
@@ -1005,6 +1044,24 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
   const reload = () => setRefreshVersion((value) => value + 1);
   if (!zone && busy) return <section className="resource-page"><div className="empty-state">{t("loading")}</div></section>;
 
+  /**
+   * 子域名台账列。rename/delete 的锁定规则来自 `rowLocks`（与向导的覆盖域名
+   * 选择器共用），两张表提供同一组改名/删除动作，所以必须锁同样的行。
+   */
+  const hostnameColumns = useMemo<DataTableColumn<DomainHostnameResponse>[]>(() => [
+    {
+      id: "hostname",
+      header: t("hostname"),
+      cell: (hostname) => <span className="hostname-cell"><Globe2 size={16} /><strong>{hostname.hostname}</strong></span>,
+      width: 260,
+    },
+    { id: "hostnameType", header: t("type"), cell: (hostname) => hostname.hostnameType === "WILDCARD" ? t("wildcard") : t("exact"), width: 110 },
+    { id: "verificationStatus", header: t("verification"), cell: (hostname) => <StatusBadge value={hostname.verificationStatus} t={t} />, width: 130 },
+    { id: "certificateCount", header: t("certificateCoverage"), cell: (hostname) => hostname.certificateCount, width: 130 },
+    { id: "bindingCount", header: t("appBindings"), cell: (hostname) => hostname.bindingCount, width: 110 },
+    { id: "updatedAt", header: t("updated"), cell: (hostname) => formatDate(hostname.updatedAt, locale), width: 180 },
+  ], [locale, t]);
+
   return <section className="resource-page domain-page">
     <Link className="back-link" to="/console/domains"><ArrowLeft size={16} />{t("backDomains")}</Link>
     <div className="resource-commandbar">
@@ -1018,31 +1075,39 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
       <Metric label={t("status")} value={zone.status === "ACTIVE" ? t("active") : t("paused")} />
     </div>}
     {error && <ErrorBanner message={error} t={t} />}
-    <div className="table-frame domain-table-frame" aria-busy={busy}><table className="domain-table"><thead><tr>
-      <th>{t("hostname")}</th><th>{t("type")}</th><th>{t("verification")}</th><th>{t("certificateCoverage")}</th><th>{t("appBindings")}</th><th>{t("updated")}</th><th className="operations-column">{t("operations")}</th>
-    </tr></thead><tbody>{hostnames.map((hostname) => {
-      // The apex hostname row is owned by the zone itself and can only be
-      // removed together with the whole zone; hostnames with active
-      // certificate coverage or application bindings keep their name and
-      // cannot be renamed or deleted independently. Both rules come from
-      // `rowLocks`, which the wizard's coverage picker reads too: the two tables
-      // offer the same rename and delete, so they have to lock the same rows.
-      const locks = rowLocks(hostname, zone);
-      const renameBlocked = locks.apex || locks.referenced;
-      return <tr key={hostname.id}>
-        <td><span className="hostname-cell"><Globe2 size={16} /><strong>{hostname.hostname}</strong></span></td>
-        <td>{hostname.hostnameType === "WILDCARD" ? t("wildcard") : t("exact")}</td>
-        <td><StatusBadge value={hostname.verificationStatus} t={t} /></td>
-        <td>{hostname.certificateCount}</td><td>{hostname.bindingCount}</td><td>{formatDate(hostname.updatedAt, locale)}</td>
-        <td><div className="row-actions">
+    <DataTable<DomainHostnameResponse>
+      columns={hostnameColumns}
+      density="compact"
+      emptyState={<span><Globe2 size={24} />{t("noHostnames")}</span>}
+      getRowId={(hostname) => hostname.id}
+      loading={busy && hostnames.length === 0}
+      pagination={serverPagination(page, pageInfo, busy, setPage)}
+      rowActions={(hostname) => {
+        // The apex hostname row is owned by the zone itself and can only be
+        // removed together with the whole zone; hostnames with active
+        // certificate coverage or application bindings keep their name and
+        // cannot be renamed or deleted independently.
+        const locks = rowLocks(hostname, zone);
+        const renameBlocked = locks.apex || locks.referenced;
+        return <div className="row-actions">
           <button className="table-action" type="button" disabled={hostname.verificationStatus === "VERIFIED"} title={t("verify")} aria-label={`${t("verify")} ${hostname.hostname}`} onClick={() => { setBusy(true); void service.verifyDomainHostname(zoneId, hostname.id).then((result) => { setVerification(result); reload(); }).catch((cause) => setError(errorText(cause))).finally(() => setBusy(false)); }}><ShieldCheck size={16} /></button>
+          {/* The record instructions have to be reopenable, not a one-shot dialog.
+              Ownership is proven by a record the operator publishes by hand, so
+              they leave this page to do it and come back to check — and the value
+              they were shown once would otherwise be gone, leaving a row that can
+              never be proven and therefore a certificate that can never be
+              ordered. The server re-derives the value on every read, so asking
+              again is a safe way to display it again. */}
+          {hostname.verificationStatus !== "VERIFIED" && <button className="table-action" type="button" disabled={busy} title={t("viewRecord")} aria-label={`${t("viewRecord")} ${hostname.hostname}`} onClick={() => { setBusy(true); void service.verifyDomainHostname(zoneId, hostname.id).then((result) => setVerification(result)).catch((cause) => setError(errorText(cause))).finally(() => setBusy(false)); }}><ClipboardList size={16} /></button>}
           {hostname.verificationStatus === "VERIFIED" ? <Link className="table-action" to={`/console/certificates?zoneId=${encodeURIComponent(zoneId)}&domainId=${encodeURIComponent(hostname.id)}&hostname=${encodeURIComponent(hostname.hostname)}`} title={t("requestCertificate")} aria-label={`${t("requestCertificate")} ${hostname.hostname}`}><FileKey2 size={16} /></Link> : <button className="table-action" type="button" disabled title={t("requestCertificate")} aria-label={`${t("requestCertificate")} ${hostname.hostname}`}><FileKey2 size={16} /></button>}
           <button className="table-action" type="button" disabled={renameBlocked} title={locks.apex ? t("apexEditBlocked") : locks.referenced ? t("renameBlocked") : t("editHostname")} aria-label={`${t("editHostname")} ${hostname.hostname}`} onClick={() => setEditTarget(hostname)}><Pencil size={16} /></button>
           <button className="table-action danger-action" type="button" disabled={locks.apex || locks.referenced} title={locks.apex ? t("apexDeleteBlocked") : locks.referenced ? t("hostnameBlocked") : t("delete")} aria-label={`${t("delete")} ${hostname.hostname}`} onClick={() => setDeleteTarget(hostname)}><Trash2 size={16} /></button>
-        </div></td>
-      </tr>;
-    })}</tbody></table>{!busy && hostnames.length === 0 && <div className="empty-state"><Globe2 size={24} />{t("noHostnames")}</div>}</div>
-    <Pagination page={page} pageInfo={pageInfo} busy={busy} setPage={setPage} t={t} />
+        </div>;
+      }}
+      rowActionsLabel={t("operations")}
+      rows={hostnames}
+      stickyHeader
+    />
     {createOpen && <HostnameFormDialog t={t} close={() => setCreateOpen(false)} submit={async (relativeName) => { await service.createDomainHostname(zoneId, { relativeName }); setCreateOpen(false); reload(); }} />}
     {editTarget && <HostnameFormDialog hostname={editTarget} t={t} close={() => setEditTarget(undefined)} submit={async (relativeName) => { await service.updateDomainHostname(zoneId, editTarget.id, { relativeName }); setEditTarget(undefined); reload(); }} />}
     {deleteTarget && <ConfirmDialog title={t("deleteHostnameTitle")} message={t("deleteHostnameConfirm")} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await service.deleteDomainHostname(zoneId, deleteTarget.id); setDeleteTarget(undefined); reload(); }} />}
@@ -1138,22 +1203,57 @@ export function CertificateManagementPage({ locale }: DeploymentsResourcePagePro
 
   const reload = () => setRefreshVersion((value) => value + 1);
   const closeCreate = () => { setCreateOpen(false); setSearchParams({}, { replace: true }); };
+
+  const certificateColumns = useMemo<DataTableColumn<CertificateResponse>[]>(() => [
+    {
+      id: "certName",
+      header: t("certificates"),
+      cell: (certificate) => <span className="certificate-name"><FileKey2 size={17} /><strong>{certificate.certName}</strong></span>,
+      width: 220,
+    },
+    {
+      id: "identifiers",
+      header: t("identifiers"),
+      cell: (certificate) => <div className="identifier-list">{certificate.identifiers.map((identifier) => <span key={identifier}>{identifier}</span>)}</div>,
+      width: 280,
+    },
+    {
+      id: "certificateScope",
+      header: t("certificateType"),
+      cell: (certificate) => <>{certificate.certificateScope === "WILDCARD" ? t("wildcard") : t("scopeSingleDomain")}<small className="cell-subtitle">{certificate.validationMethod === "DNS_01" ? t("validationDns01") : certificate.validationMethod === "HTTP_01" ? t("validationHttp01") : t("validationAuto")}</small></>,
+      width: 150,
+    },
+    { id: "status", header: t("status"), cell: (certificate) => <StatusBadge value={certificate.status} t={t} />, width: 120 },
+    { id: "keyAlgorithm", header: t("keyAlgorithm"), cell: (certificate) => certificate.preferredKeyAlgorithm, width: 120 },
+    { id: "caProfile", header: t("caProfile"), cell: (certificate) => certificate.caProfile, width: 180 },
+    { id: "validity", header: t("validity"), cell: (certificate) => <CertificateValidity certificate={certificate} locale={locale} t={t} />, width: 200 },
+    { id: "renewal", header: t("renewal"), cell: (certificate) => <CertificateRenewal certificate={certificate} locale={locale} t={t} />, width: 180 },
+  ], [locale, t]);
+
   return <section className="resource-page domain-page">
     <div className="resource-commandbar">
       <div className="resource-identity"><h1>{t("certificatesTitle")}</h1></div>
       <div className="actions"><button className="icon-button" type="button" disabled={busy} title={t("refresh")} onClick={reload}><RefreshCw size={17} /></button><button className="command-button" type="button" onClick={() => setCreateOpen(true)}><Plus size={16} />{t("requestCertificate")}</button></div>
     </div>
     {error && <ErrorBanner message={error} t={t} />}
-    <div className="table-frame domain-table-frame certificate-table-frame" aria-busy={busy}><table className="domain-table"><thead><tr>
-      <th>{t("certificates")}</th><th>{t("identifiers")}</th><th>{t("certificateType")}</th><th>{t("status")}</th><th>{t("keyAlgorithm")}</th><th>{t("caProfile")}</th><th>{t("validity")}</th><th>{t("renewal")}</th><th className="operations-column">{t("operations")}</th>
-    </tr></thead><tbody>{certificates.map((certificate) => <tr key={certificate.id}>
-      <td><span className="certificate-name"><FileKey2 size={17} /><strong>{certificate.certName}</strong></span></td>
-      <td><div className="identifier-list">{certificate.identifiers.map((identifier) => <span key={identifier}>{identifier}</span>)}</div></td>
-      <td>{certificate.certificateScope === "WILDCARD" ? t("wildcard") : t("scopeSingleDomain")}<small className="cell-subtitle">{certificate.validationMethod === "DNS_01" ? t("validationDns01") : certificate.validationMethod === "HTTP_01" ? t("validationHttp01") : t("validationAuto")}</small></td>
-      <td><StatusBadge value={certificate.status} t={t} /></td><td>{certificate.preferredKeyAlgorithm}</td><td>{certificate.caProfile}</td><td><CertificateValidity certificate={certificate} locale={locale} t={t} /></td><td><CertificateRenewal certificate={certificate} locale={locale} t={t} /></td>
-      <td><div className="row-actions"><button className="table-action" type="button" disabled={certificate.certificateSource !== "MANAGED" || certificate.status === "REVOKED"} title={t("renew")} aria-label={`${t("renew")} ${certificate.certName}`} onClick={() => setRenewTarget(certificate)}><RotateCw size={16} /></button><button className="table-action" type="button" title={t("renewalHistory")} aria-label={`${t("renewalHistory")} ${certificate.certName}`} onClick={() => setHistoryTarget(certificate)}><History size={16} /></button><button className="table-action danger-action" type="button" disabled={certificate.status === "REVOKED"} title={t("revoke")} aria-label={`${t("revoke")} ${certificate.certName}`} onClick={() => setRevokeTarget(certificate)}><Trash2 size={16} /></button></div></td>
-    </tr>)}</tbody></table>{!busy && certificates.length === 0 && <div className="empty-state"><FileKey2 size={24} />{t("noCertificates")}</div>}</div>
-    <Pagination page={page} pageInfo={pageInfo} busy={busy} setPage={setPage} t={t} />
+    <DataTable<CertificateResponse>
+      columns={certificateColumns}
+      density="compact"
+      emptyState={<span><FileKey2 size={24} />{t("noCertificates")}</span>}
+      getRowId={(certificate) => certificate.id}
+      loading={busy && certificates.length === 0}
+      pagination={serverPagination(page, pageInfo, busy, setPage)}
+      rowActions={(certificate) => (
+        <div className="row-actions">
+          <button className="table-action" type="button" disabled={certificate.certificateSource !== "MANAGED" || certificate.status === "REVOKED"} title={t("renew")} aria-label={`${t("renew")} ${certificate.certName}`} onClick={() => setRenewTarget(certificate)}><RotateCw size={16} /></button>
+          <button className="table-action" type="button" title={t("renewalHistory")} aria-label={`${t("renewalHistory")} ${certificate.certName}`} onClick={() => setHistoryTarget(certificate)}><History size={16} /></button>
+          <button className="table-action danger-action" type="button" disabled={certificate.status === "REVOKED"} title={t("revoke")} aria-label={`${t("revoke")} ${certificate.certName}`} onClick={() => setRevokeTarget(certificate)}><Trash2 size={16} /></button>
+        </div>
+      )}
+      rowActionsLabel={t("operations")}
+      rows={certificates}
+      stickyHeader
+    />
     {createOpen && <CertificateFormDialog initialTarget={initialDomainId || initialZoneId ? { domainId: initialDomainId, hostname: initialHostname, zoneId: initialZoneId, apex: initialApex } : undefined} t={t} close={closeCreate} submit={async (body) => { await service.createCertificate(toCertificateCreateRequest(body)); closeCreate(); reload(); }} />}
     {renewTarget && <ConfirmDialog title={t("renew")} message={renewTarget.certName} t={t} close={() => setRenewTarget(undefined)} submit={async () => { await service.renewCertificate(renewTarget.id); setRenewTarget(undefined); reload(); }} />}
     {historyTarget && <CertificateRenewalHistoryDialog certificate={historyTarget} locale={locale} t={t} close={() => setHistoryTarget(undefined)} />}
@@ -1516,12 +1616,6 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
     setRows(cache.current.get(id) ?? []);
   }
 
-  function toggle(row: DomainHostnameResponse, checked: boolean) {
-    setDraft((current) => checked
-      ? [...current, row]
-      : current.filter((item) => item.id !== row.id));
-  }
-
   const chosen = new Set(draft.map((row) => row.hostname));
   // A row that cannot join the set is disabled rather than hidden: the operator
   // asked which hostnames this root domain has, and an answer that silently
@@ -1538,30 +1632,6 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
   // name — rather than over whatever words the table happens to print, so `@`
   // finds the apex and `*` finds the wildcards in every locale.
   const listed = needle === "" ? rows : rows.filter((row) => `${row.hostname} ${row.relativeName}`.includes(needle));
-  const allListedChosen = listed.length > 0 && listed.every((row) => chosen.has(row.hostname) || blocked(row));
-
-  /**
-   * Selects or clears everything the filter is showing.
-   *
-   * What the filter is showing, not the whole root domain: a header checkbox that
-   * also ticked the rows the table is hiding is how "cover these" quietly becomes
-   * "cover more than these". Rows the current certificate type refuses are passed
-   * over by the same rule their own checkboxes use, so a select-all and one click
-   * per row arrive at the same draft.
-   */
-  function selectAll(on: boolean) {
-    const shown = new Set(listed.map((row) => row.id));
-    setDraft((current) => {
-      if (!on) return current.filter((row) => !shown.has(row.id));
-      let next = current;
-      for (const row of listed) {
-        if (next.some((item) => item.id === row.id)) continue;
-        if (rowBlockedByScope(next, row, scope)) continue;
-        next = [...next, row];
-      }
-      return next;
-    });
-  }
 
   return <Modal close={close} closeLabel={t("close")} title={t("hostnamePickerTitle")} width="picker">
     {error && <ErrorBanner message={error} t={t} />}
@@ -1613,52 +1683,69 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
             proven, what already references it, and what can be done to it — and
             columns are what let an operator read down the page and compare, where a
             card per row only lets them re-read one row at a time. */}
-        <div className="table-frame hostname-picker-frame" aria-busy={busy}>
-          <table className="domain-table hostname-picker-table">
-            <thead><tr>
-              <th className="selection-column"><input type="checkbox" checked={allListedChosen} disabled={listed.length === 0} aria-label={t("select")} onChange={(event) => selectAll(event.target.checked)} /></th>
-              <th>{t("relativeName")}</th>
-              <th>{t("hostnameQualified")}</th>
-              <th>{t("verification")}</th>
-              <th>{t("certificates")}</th>
-              <th>{t("bindings")}</th>
-              <th className="operations-column">{t("operations")}</th>
-            </tr></thead>
-            <tbody>{listed.map((row) => {
-              const isChosen = chosen.has(row.hostname);
-              const isBlocked = blocked(row);
-              const locks = rowLocks(row, activeZone);
-              return <tr key={row.id} className={isChosen ? "selected" : undefined} onClick={() => { if (!isBlocked) toggle(row, !isChosen); }}>
-                {/* The cell stops its own clicks: the row toggles, and the
-                    checkbox toggles, and without this a click on the box would
-                    count as both and land back where it started. */}
-                <td className="selection-column" onClick={(event) => event.stopPropagation()}>
-                  <input type="checkbox" checked={isChosen} disabled={isBlocked} aria-label={`${t("select")} ${row.hostname}`} onChange={(event) => toggle(row, event.target.checked)} />
-                </td>
-                {/* `@` is read out as the root domain rather than left as a
-                    symbol: the row it labels is that name, and the operator
-                    choosing coverage is the one who has to recognise it. */}
-                <td>{row.relativeName === "@" ? t("apexHostname") : row.relativeName}</td>
-                <td><span className="hostname-cell"><Globe2 size={16} /><span><strong>{row.hostname}</strong><small className="cell-subtitle">{row.hostnameType === "WILDCARD" ? t("wildcard") : t("exact")}</small></span></span></td>
-                <td><StatusBadge value={row.verificationStatus} t={t} /></td>
-                <td>{row.certificateCount}</td>
-                <td>{row.bindingCount}</td>
-                <td className="operations-column" onClick={(event) => event.stopPropagation()}><div className="row-actions">
-                  {/* The three row actions a records table owes an operator: prove
-                      it, rename it, remove it. Rename and delete are locked by the
-                      same two rules the hostname ledger applies, and the tooltip
-                      names the one in the way rather than letting the submit fail. */}
-                  <button className="table-action" type="button" disabled={busy || row.verificationStatus === "VERIFIED"} title={t("verify")} aria-label={`${t("verify")} ${row.hostname}`} onClick={() => void verify(row)}><ShieldCheck size={16} /></button>
-                  <button className="table-action" type="button" disabled={busy || locks.apex || locks.referenced} title={locks.apex ? t("apexEditBlocked") : locks.referenced ? t("renameBlocked") : t("editHostname")} aria-label={`${t("editHostname")} ${row.hostname}`} onClick={() => setEditTarget(row)}><Pencil size={16} /></button>
-                  <button className="table-action danger-action" type="button" disabled={busy || locks.apex || locks.referenced} title={locks.apex ? t("apexDeleteBlocked") : locks.referenced ? t("hostnameBlocked") : t("delete")} aria-label={`${t("delete")} ${row.hostname}`} onClick={() => setDeleteTarget(row)}><Trash2 size={16} /></button>
-                </div></td>
-              </tr>;
-            })}</tbody>
-          </table>
-          {!busy && listed.length === 0 && <div className="selector-empty">
-            {needle === "" ? t("noHostnames") : t("hostnamePickerNoMatch")}
-          </div>}
-        </div>
+        <DataTable<DomainHostnameResponse>
+          columns={[
+            // `@` is read out as the root domain rather than left as a symbol:
+            // the row it labels is that name, and the operator choosing coverage
+            // is the one who has to recognise it.
+            { id: "relativeName", header: t("relativeName"), cell: (row) => row.relativeName === "@" ? t("apexHostname") : row.relativeName, width: 140 },
+            {
+              id: "hostname",
+              header: t("hostnameQualified"),
+              cell: (row) => <span className="hostname-cell"><Globe2 size={16} /><span><strong>{row.hostname}</strong><small className="cell-subtitle">{row.hostnameType === "WILDCARD" ? t("wildcard") : t("exact")}</small></span></span>,
+              width: 280,
+            },
+            { id: "verificationStatus", header: t("verification"), cell: (row) => <StatusBadge value={row.verificationStatus} t={t} />, width: 130 },
+            { id: "certificateCount", header: t("certificates"), cell: (row) => row.certificateCount, width: 110 },
+            { id: "bindingCount", header: t("bindings"), cell: (row) => row.bindingCount, width: 110 },
+          ]}
+          density="compact"
+          emptyState={<span>{needle === "" ? t("noHostnames") : t("hostnamePickerNoMatch")}</span>}
+          // Rows the current certificate type refuses are disabled rather than
+          // hidden: the operator asked which hostnames this root domain has, and
+          // an answer that silently omitted the ones the current scope cannot
+          // take would read as a root domain that is missing them.
+          getRowProps={(row) => (blocked(row) ? { "aria-disabled": true } : undefined)}
+          getRowId={(row) => row.id}
+          getRowSelectionLabel={(row) => `${t("select")} ${row.hostname}`}
+          loading={busy && rows.length === 0}
+          onSelectedRowIdsChange={(ids) => {
+            // The framework reports the whole selection, so the draft is rebuilt
+            // from it rather than toggled one row at a time. Rows the current
+            // scope refuses are dropped on the way in by the same rule their own
+            // checkboxes use, so select-all and one click per row agree.
+            const byId = new Map(listed.map((row) => [row.id, row]));
+            const next: DomainHostnameResponse[] = [];
+            for (const id of ids) {
+              const row = byId.get(String(id));
+              if (row === undefined || next.some((item) => item.id === row.id)) continue;
+              if (rowBlockedByScope(next, row, scope)) continue;
+              next.push(row);
+            }
+            setDraft(next);
+          }}
+          rowActions={(row) => {
+            const locks = rowLocks(row, activeZone);
+            return <div className="row-actions">
+              {/* The three row actions a records table owes an operator: prove
+                  it, rename it, remove it. Rename and delete are locked by the
+                  same two rules the hostname ledger applies, and the tooltip
+                  names the one in the way rather than letting the submit fail.
+                  An unproven row also gets the record instructions on demand:
+                  proving it means leaving to publish a TXT record, and coming
+                  back has to be able to show what to publish again. */}
+              <button className="table-action" type="button" disabled={busy || row.verificationStatus === "VERIFIED"} title={t("verify")} aria-label={`${t("verify")} ${row.hostname}`} onClick={() => void verify(row)}><ShieldCheck size={16} /></button>
+              {row.verificationStatus !== "VERIFIED" && <button className="table-action" type="button" disabled={busy} title={t("viewRecord")} aria-label={`${t("viewRecord")} ${row.hostname}`} onClick={() => void verify(row)}><ClipboardList size={16} /></button>}
+              <button className="table-action" type="button" disabled={busy || locks.apex || locks.referenced} title={locks.apex ? t("apexEditBlocked") : locks.referenced ? t("renameBlocked") : t("editHostname")} aria-label={`${t("editHostname")} ${row.hostname}`} onClick={() => setEditTarget(row)}><Pencil size={16} /></button>
+              <button className="table-action danger-action" type="button" disabled={busy || locks.apex || locks.referenced} title={locks.apex ? t("apexDeleteBlocked") : locks.referenced ? t("hostnameBlocked") : t("delete")} aria-label={`${t("delete")} ${row.hostname}`} onClick={() => setDeleteTarget(row)}><Trash2 size={16} /></button>
+            </div>;
+          }}
+          rowActionsLabel={t("operations")}
+          rows={listed}
+          selectable
+          selectedRowIds={listed.filter((row) => chosen.has(row.hostname)).map((row) => row.id)}
+          selectionBar={{ description: t("hostnamePickerCount", { count: draft.length }) }}
+        />
       </div>
     </div>
     <footer className="dialog-footer">
@@ -1774,10 +1861,26 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   // root domain is a decision the picker makes, and quietly taking the first one
   // would decide the certificate's coverage and filter the account field by a
   // root domain the operator never chose.
+  //
+  // Root domains only, the same invariant the domain list holds. The request asks
+  // for `scope=USER` and the response is filtered again, because a certificate
+  // covers hostnames the operator owns: the inventory also holds the platform's
+  // `app.<suffix>` zones, whose hostnames are already verified, so offering them
+  // here let an operator pick one and order a certificate over the deployment's
+  // own names. `zones[0]` seeds the dialog's initial root domain, so an unfiltered
+  // list could also open the picker on a platform zone without anyone choosing it.
   useEffect(() => {
     let active = true;
-    void service.listDomainZones({ page: 1, pageSize: 50, status: "ACTIVE" })
-      .then((result) => { if (active) setZones(result.items); })
+    void service.listDomainZones({ page: 1, pageSize: 50, status: "ACTIVE", scope: "USER" })
+      .then((result) => {
+        if (!active) return;
+        // A gateway that predates the `scope` query parameter drops it silently and
+        // answers with the whole inventory, which is what put platform zones in this
+        // list. The form's invariant is "the operator's own root domains", so it
+        // holds that invariant rather than trusting the response to have honoured
+        // the request.
+        setZones(result.items.filter((zone) => zone.scope === "USER"));
+      })
       .catch((cause) => { if (active) setError(errorText(cause)); })
       .finally(() => { if (active) setZonesLoaded(true); });
     return () => { active = false; };
@@ -2309,10 +2412,41 @@ function DialogFooter({ busy, close, disabled = false, submitLabel, t }: { busy:
   return <footer className="dialog-footer"><button className="secondary-button" type="button" onClick={close}>{t("cancel")}</button><button className="command-button" type="submit" disabled={busy || disabled}>{submitLabel}</button></footer>;
 }
 
-function Pagination({ busy, page, pageInfo, setPage, t }: { busy: boolean; page: number; pageInfo: PageInfo; setPage(value: number | ((current: number) => number)): void; t: Translator }) {
-  const summary = pageInfo.totalItems ? t("total", { total: pageInfo.totalItems }) : t("page", { page: pageInfo.page ?? page });
-  return <footer className="pagination"><span>{summary}</span><button className="icon-button" type="button" disabled={page <= 1 || busy} title={t("previous")} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={18} /></button><button className="icon-button" type="button" disabled={!pageInfo.hasMore || busy} title={t("next")} onClick={() => setPage((value) => value + 1)}><ChevronRight size={18} /></button></footer>;
+/**
+ * Builds the framework pagination descriptor for a server-paginated ledger.
+ *
+ * All three ledgers on this page read `PageInfo` from the same service, so the
+ * mapping lives here once instead of three times. Optional fields are *omitted*
+ * rather than set to `undefined`: the framework keys on the presence of
+ * `hasMore` to switch into cursor mode and on `rowCount` to switch into offset
+ * mode, and an explicit `undefined` is rejected under
+ * `exactOptionalPropertyTypes`.
+ */
+function serverPagination(
+  page: number,
+  pageInfo: PageInfo,
+  busy: boolean,
+  setPage: (value: number | ((current: number) => number)) => void,
+  pageSizeOptions: readonly number[] = LEDGER_PAGE_SIZES,
+): DataTablePaginationProps {
+  const rowCount = pageInfo.totalItems === undefined ? undefined : Number(pageInfo.totalItems);
+  const pageSize = pageInfo.pageSize ?? LEDGER_PAGE_SIZES[0];
+  return {
+    mode: "server",
+    onPageChange: (next: number) => {
+      if (busy || next < 1) return;
+      setPage(next);
+    },
+    ...(pageInfo.hasMore === undefined ? {} : { hasMore: pageInfo.hasMore }),
+    page: rowCount === undefined ? page : (pageInfo.page ?? page),
+    pageSize,
+    pageSizeOptions,
+    ...(rowCount === undefined || !Number.isFinite(rowCount) ? {} : { rowCount }),
+  };
 }
+
+/** 台账每页条数选项；服务端分页，页码由 `Pagination` 描述符驱动。 */
+const LEDGER_PAGE_SIZES = [20, 50, 100] as const;
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="domain-metric"><span>{label}</span><strong>{value}</strong></div>;
@@ -2435,19 +2569,43 @@ function CertificateRenewalHistoryDialog({ certificate, locale, t, close }: { ce
 
   return <Modal close={close} closeLabel={t("close")} title={`${t("renewalHistoryTitle")} · ${certificate.certName}`} width="history">
     {error && <ErrorBanner message={error} t={t} />}
-    <div className="table-frame domain-table-frame" aria-busy={busy}><table className="domain-table"><thead><tr>
-      <th>{t("renewalAttempt")}</th><th>{t("status")}</th><th>{t("renewalTrigger")}</th><th>{t("renewalWindowReplaced")}</th><th>{t("renewalWindowIssued")}</th><th>{t("renewalOutcome")}</th>
-    </tr></thead><tbody>{attempts.map((attempt) => {
-      const described = RENEWAL_ATTEMPT_KEYS[attempt.status];
-      return <tr key={attempt.id}>
-        <td>#{attempt.attemptNo}<small className="cell-subtitle">{formatDate(attempt.scheduledAt, locale)}</small></td>
-        <td><span className={`status-badge ${described?.tone ?? "status-paused"}`}>{described ? t(described.label) : attempt.status}</span>{attempt.finishedAt && <small className="cell-subtitle">{t("renewalFinishedAt")} {formatDate(attempt.finishedAt, locale)}</small>}</td>
-        <td>{attempt.triggerKind === "SCHEDULED" ? t("renewalTriggerScheduled") : t("renewalTriggerManual")}</td>
-        <td>{attempt.previousNotBefore ? formatDate(attempt.previousNotBefore, locale) : "-"}<small className="cell-subtitle">{attempt.previousNotAfter ? formatDate(attempt.previousNotAfter, locale) : "-"}</small></td>
-        <td>{attempt.newNotBefore ? formatDate(attempt.newNotBefore, locale) : "-"}<small className="cell-subtitle">{attempt.newNotAfter ? formatDate(attempt.newNotAfter, locale) : "-"}</small></td>
-        <td>{described ? t(described.detail) : attempt.status}{attempt.lastErrorCode && <small className="cell-subtitle">{t("renewalErrorCode")} {attempt.lastErrorCode}</small>}</td>
-      </tr>;
-    })}</tbody></table>{!busy && !error && attempts.length === 0 && <div className="empty-state">{t("renewalHistoryEmpty")}</div>}</div>
+    <DataTable<CertificateRenewalResponse>
+      columns={[
+        {
+          id: "attemptNo",
+          header: t("renewalAttempt"),
+          cell: (attempt) => <>#{attempt.attemptNo}<small className="cell-subtitle">{formatDate(attempt.scheduledAt, locale)}</small></>,
+          width: 150,
+        },
+        {
+          id: "status",
+          header: t("status"),
+          cell: (attempt) => {
+            const described = RENEWAL_ATTEMPT_KEYS[attempt.status];
+            return <><span className={`status-badge ${described?.tone ?? "status-paused"}`}>{described ? t(described.label) : attempt.status}</span>{attempt.finishedAt && <small className="cell-subtitle">{t("renewalFinishedAt")} {formatDate(attempt.finishedAt, locale)}</small>}</>;
+          },
+          width: 200,
+        },
+        { id: "triggerKind", header: t("renewalTrigger"), cell: (attempt) => attempt.triggerKind === "SCHEDULED" ? t("renewalTriggerScheduled") : t("renewalTriggerManual"), width: 130 },
+        { id: "previous", header: t("renewalWindowReplaced"), cell: (attempt) => <>{attempt.previousNotBefore ? formatDate(attempt.previousNotBefore, locale) : "-"}<small className="cell-subtitle">{attempt.previousNotAfter ? formatDate(attempt.previousNotAfter, locale) : "-"}</small></>, width: 190 },
+        { id: "issued", header: t("renewalWindowIssued"), cell: (attempt) => <>{attempt.newNotBefore ? formatDate(attempt.newNotBefore, locale) : "-"}<small className="cell-subtitle">{attempt.newNotAfter ? formatDate(attempt.newNotAfter, locale) : "-"}</small></>, width: 190 },
+        {
+          id: "outcome",
+          header: t("renewalOutcome"),
+          cell: (attempt) => {
+            const described = RENEWAL_ATTEMPT_KEYS[attempt.status];
+            return <>{described ? t(described.detail) : attempt.status}{attempt.lastErrorCode && <small className="cell-subtitle">{t("renewalErrorCode")} {attempt.lastErrorCode}</small>}</>;
+          },
+          width: 220,
+        },
+      ]}
+      density="compact"
+      emptyState={<span>{t("renewalHistoryEmpty")}</span>}
+      getRowId={(attempt) => attempt.id}
+      loading={busy && attempts.length === 0}
+      rows={attempts}
+      stickyHeader
+    />
     <footer className="dialog-footer"><button className="secondary-button" type="button" onClick={close}>{t("close")}</button></footer>
   </Modal>;
 }

@@ -27,6 +27,96 @@ async fn seed_domains(pool: &sqlx::PgPool) {
     .expect("seed certificate hostname resources");
 }
 
+/// The zone-ownership half of the creation gate.
+///
+/// `deploy_dns_zone.user_id` is the unit of ownership: `NULL` marks a
+/// tenant-level zone every member reaches, a non-NULL value marks a zone private
+/// to that user (the DDL states this next to the column). The certificate gate
+/// used to test the tenant alone, which accepted every verified hostname in the
+/// tenant — including one in another user's private zone. These rows are
+/// `VERIFIED` + `ACTIVE`, so nothing but the zone check distinguishes them.
+async fn seed_zone_ownership(pool: &sqlx::PgPool) {
+    sqlx::raw_sql(
+        "INSERT INTO deploy_dns_zone (
+            id,uuid,tenant_id,organization_id,apex_hostname,status,user_id
+         ) VALUES
+            (30,'zone-mine',7,9,'mine.example','ACTIVE',11),
+            (31,'zone-theirs',7,9,'theirs.example','ACTIVE',12),
+            (32,'zone-tenant-level',7,9,'app.example','ACTIVE',NULL);
+         INSERT INTO deploy_domain (
+            id,uuid,tenant_id,organization_id,zone_id,hostname_ascii,hostname_type,
+            verification_status,verified_at,status
+         ) VALUES
+            (40,'domain-mine',7,9,30,'mine.example','EXACT','VERIFIED',NOW(),'ACTIVE'),
+            (41,'domain-theirs',7,9,31,'theirs.example','EXACT','VERIFIED',NOW(),'ACTIVE'),
+            (42,'domain-tenant-level',7,9,32,'app.example','EXACT','VERIFIED',NOW(),'ACTIVE');",
+    )
+    .execute(pool)
+    .await
+    .expect("seed zone ownership resources");
+}
+
+/// A caller may only build a certificate over hostnames in zones they reach.
+///
+/// The escalation this pins: a hostname in another user's private zone is
+/// `VERIFIED` and `ACTIVE`, so a tenant-only predicate accepted it and let any
+/// member of the tenant order a certificate covering someone else's name. The
+/// fix gates on the zone, which is the ownership unit the domain inventory
+/// already speaks in.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn certificates_reject_hostnames_from_another_users_private_zone() {
+    let pool = common::postgres_pool().await;
+    seed_zone_ownership(&pool).await;
+    let repository = DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(5).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+
+    // The caller's own zone: the certificate they are entitled to.
+    repository
+        .create_certificate(
+            7,
+            Some(9),
+            Some(11),
+            "certificate-own-zone",
+            &request("Own zone", &["domain-mine"]),
+        )
+        .await
+        .expect("a caller reaches a hostname in their own zone");
+
+    // Another user's private zone: the escalation. Same tenant, same shape of
+    // row, `VERIFIED` + `ACTIVE` — only the zone's owner differs.
+    let foreign = repository
+        .create_certificate(
+            7,
+            Some(9),
+            Some(11),
+            "certificate-other-private-zone",
+            &request("Other private zone", &["domain-theirs"]),
+        )
+        .await;
+    assert!(
+        foreign.is_err(),
+        "a caller must not reach a hostname in another user's private zone, got {foreign:?}"
+    );
+
+    // A tenant-level zone (`user_id IS NULL`) is shared with every member, which
+    // is what the inventory documents. The gate must keep both halves distinct:
+    // denying this would be the fix overreaching past the model.
+    repository
+        .create_certificate(
+            7,
+            Some(9),
+            Some(11),
+            "certificate-tenant-level-zone",
+            &request("Tenant level zone", &["domain-tenant-level"]),
+        )
+        .await
+        .expect("a tenant-level zone is reachable by every member");
+}
+
 fn request(cert_name: &str, domain_ids: &[&str]) -> CreateCertificateRequest {
     scoped_request(cert_name, domain_ids, CertificateScope::SingleDomain)
 }

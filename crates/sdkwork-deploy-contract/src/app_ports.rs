@@ -81,6 +81,11 @@ pub struct ListDomainZonesQuery {
     pub page_size: i32,
     pub status: Option<String>,
     pub keyword: Option<String>,
+    /// Restrict the inventory to one ownership kind (`USER` / `PLATFORM`).
+    /// `None` keeps both, which is the audit view; the console passes `USER`
+    /// so the platform-provisioned `app.<suffix>` zones do not appear as root
+    /// domains the operator owns.
+    pub scope: Option<crate::dto::ZoneScope>,
 }
 
 #[async_trait]

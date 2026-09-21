@@ -5,7 +5,7 @@ use std::sync::Arc;
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployAppApi, DeployAppRequestContext,
-    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
+    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -54,6 +54,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
                 page_size: 20,
                 status: Some("ACTIVE".to_owned()),
                 keyword: Some("Production".to_owned()),
+                scope: None,
             },
         )
         .await
@@ -82,7 +83,17 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("reload verification challenge");
-    assert!(repeated_challenge.token.is_none());
+    // The published value is `base64url(sha256(attempt id))`, so reloading the
+    // attempt must hand back the *same* value: an operator who publishes the
+    // record and then asks again (or reloads the page) still has to be told what
+    // to put in it. Returning `None` on reload left every re-ask with a record
+    // name and no value, which is a domain that can never leave `PENDING` and a
+    // certificate that can never be ordered.
+    assert_eq!(
+        repeated_challenge.token, first_challenge.token,
+        "reloading a challenge must repeat the value the operator publishes"
+    );
+    assert!(repeated_challenge.token.is_some());
     assert_eq!(
         repeated_challenge.verification_id,
         first_challenge.verification_id
@@ -262,6 +273,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         page_size: 50,
         status: None,
         keyword: None,
+        scope: None,
     };
 
     // User 11 owns one zone, user 12 owns another in the same tenant, and the
@@ -491,6 +503,7 @@ async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
         page_size: 50,
         status: None,
         keyword: None,
+        scope: None,
     };
 
     let alice = service
@@ -623,6 +636,7 @@ async fn domain_zone_listing_puts_operator_zones_first_and_labels_their_scope() 
         page_size: 50,
         status: None,
         keyword: None,
+        scope: None,
     };
 
     // The operator's own root domain, created first.
@@ -693,4 +707,91 @@ async fn domain_zone_listing_puts_operator_zones_first_and_labels_their_scope() 
             );
         }
     }
+}
+
+/// The console's "Domains" page must be able to ask for one ownership kind.
+///
+/// Labeling the scope (the test above) is not enough on its own: both kinds are
+/// still returned, and because the platform provisions its whole `app.<suffix>`
+/// catalog in one transaction, those rows crowd the operator's own root domains
+/// out of the first page. `scope` is the filter that makes "my domains" and
+/// "the platform's domains" two honest, separately paginated lists.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn domain_zone_listing_filters_by_scope() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(7).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let request = |apex: &str| CreateDomainZoneRequest {
+        apex_hostname: apex.to_owned(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    let listing = |scope: Option<ZoneScope>| ListDomainZonesQuery {
+        page: 1,
+        page_size: 50,
+        status: None,
+        keyword: None,
+        scope,
+    };
+
+    let operator_apex = format!("scoped{suffix}.dev");
+    repository
+        .create_domain_zone(7, Some(9), Some(11), &request(&operator_apex))
+        .await
+        .expect("create the operator's root domain");
+
+    let platform_apex = format!("app.{operator_apex}");
+    sqlx::query(
+        "INSERT INTO deploy_dns_zone (
+            id, uuid, tenant_id, organization_id, apex_hostname, display_name,
+            dns_provider, provider_zone_ref, status, user_id, created_by, updated_by
+         ) VALUES (
+            90002, 'zone-90002', 7, 9, $1, 'Platform app domain zone', 'platform', $2,
+            'ACTIVE', NULL, 1, 1
+         )",
+    )
+    .bind(&platform_apex)
+    .bind(format!("app.*.{suffix}.dev"))
+    .execute(repository.pool())
+    .await
+    .expect("seed the platform zone");
+
+    let user_page = repository
+        .list_domain_zones(7, Some(11), &listing(Some(ZoneScope::User)))
+        .await
+        .expect("list with scope=USER");
+    assert_eq!(
+        user_page.total, 1,
+        "scope=USER must count only the operator's own zone; got {:?}",
+        user_page.items.iter().map(|zone| &zone.apex_hostname).collect::<Vec<_>>()
+    );
+    assert_eq!(user_page.items[0].apex_hostname, operator_apex);
+    assert_eq!(user_page.items[0].scope, ZoneScope::User);
+
+    let platform_page = repository
+        .list_domain_zones(7, Some(11), &listing(Some(ZoneScope::Platform)))
+        .await
+        .expect("list with scope=PLATFORM");
+    assert_eq!(
+        platform_page.total, 1,
+        "scope=PLATFORM must count only the provisioning zone; got {:?}",
+        platform_page.items.iter().map(|zone| &zone.apex_hostname).collect::<Vec<_>>()
+    );
+    assert_eq!(platform_page.items[0].apex_hostname, platform_apex);
+    assert_eq!(platform_page.items[0].scope, ZoneScope::Platform);
+
+    // Omitting the filter keeps the audit view: both kinds, which is what a
+    // caller inspecting the whole inventory needs.
+    let both = repository
+        .list_domain_zones(7, Some(11), &listing(None))
+        .await
+        .expect("list without a scope filter");
+    assert_eq!(both.total, 2, "no filter must return both kinds");
 }

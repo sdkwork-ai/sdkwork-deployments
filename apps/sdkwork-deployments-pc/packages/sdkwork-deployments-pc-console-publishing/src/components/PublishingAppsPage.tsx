@@ -31,6 +31,7 @@
  * 未覆盖的新枚举值回退原文展示。
  */
 import { useEffect, useMemo, useState } from "react";
+import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 import type { AppKind, AppResponse, AppStatus, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
@@ -56,6 +57,10 @@ export interface PublishingAppsPageProps {
   /** Host directory-picker port (optional; falls back to manual path input). */
   readonly pickDirectory?: (current: string | undefined) => Promise<string | undefined>
 }
+
+/** 列表拉取上限：一次取满一页候选全集，之后由 DataTable 在客户端分页。 */
+const APP_LIST_PAGE_SIZE = 50;
+const APP_TABLE_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 /** 枚举 → 本地化文案；映射表未覆盖的新枚举值回退原文。 */
 function enumLabel(kind: AppKind | AppStatus, table: Readonly<Record<string, PublishingMessageKey>>, t: PublishingTranslator): string {
@@ -101,7 +106,7 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
     let active = true
     setBusy(true)
     setError(undefined)
-    void service.listApps({ page: 1, pageSize: 50 }).then((result) => {
+    void service.listApps({ page: 1, pageSize: APP_LIST_PAGE_SIZE }).then((result) => {
       if (active) setApps(result.items)
     }).catch((cause) => {
       if (active) {
@@ -122,6 +127,114 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
     if (summary !== undefined) setNotice(summary)
     refreshList()
   }
+
+  /**
+   * 列定义：与既有表头一一对应（名称/标识/类型/状态/域名/平台目标/版本/更新时间）。
+   * 行内四命令（发布/上传代码/域名设置/详情）走框架的行动作槽，不再手写单元格。
+   */
+  const columns = useMemo<DataTableColumn<AppResponse>[]>(() => [
+    {
+      id: "name",
+      header: t("columnName"),
+      cell: (app) => <strong>{app.name}</strong>,
+      width: 180,
+    },
+    {
+      id: "slug",
+      header: t("columnSlug"),
+      cell: (app) => app.slug,
+      width: 160,
+    },
+    {
+      id: "kind",
+      header: t("columnKind"),
+      cell: (app) => enumLabel(app.appKind, APP_KIND_LABEL_KEYS, t),
+      width: 140,
+    },
+    {
+      id: "status",
+      header: t("columnStatus"),
+      cell: (app) => (
+        <span className={`status-badge status-${app.appStatus.toLowerCase()}`}>
+          {enumLabel(app.appStatus, APP_STATUS_LABEL_KEYS, t)}
+        </span>
+      ),
+      width: 110,
+    },
+    {
+      id: "domains",
+      header: t("columnDomains"),
+      cell: (app) => {
+        const hostname = primaryHostname(app)
+        if (hostname === undefined) {
+          return <span className="muted">{t("domainNotConfigured")}</span>
+        }
+        // 后缀目录可能有多条；列表只展示首个，其余折成计数。
+        const extraSuffixes = (app.appDomainSuffixes?.length ?? 0) - 1
+        return (
+          <span className="domain-cell">
+            <code>{hostname}</code>
+            {extraSuffixes > 0 && <span className="domain-more">+{extraSuffixes}</span>}
+          </span>
+        )
+      },
+      width: 260,
+    },
+    {
+      id: "platformTargets",
+      header: t("columnPlatformTargets"),
+      align: "right",
+      cell: (app) => app.platformTargetCount ?? "-",
+      width: 130,
+    },
+    {
+      id: "version",
+      header: t("columnVersion"),
+      cell: (app) => app.latestReleaseTag ?? "-",
+      width: 140,
+    },
+    {
+      id: "updated",
+      header: t("columnUpdated"),
+      cell: (app) => new Date(app.updatedAt).toLocaleString(locale),
+      width: 180,
+    },
+  ], [locale, t])
+
+  /** 行内运维命令：发布 / 上传代码 / 域名设置 / 详情。 */
+  const renderRowActions = (app: AppResponse) => (
+    <div className="row-actions">
+      {/* 发布是行内动作 —— 只有已经存在的应用才可能被发布。 */}
+      <button
+        type="button"
+        className="command-button"
+        onClick={() => { setNotice(undefined); setPublishTarget(app) }}
+      >
+        {t("publishAppAction")}
+      </button>
+      <button
+        type="button"
+        className="command-button"
+        onClick={() => { setNotice(undefined); setUploadTarget(app) }}
+      >
+        {t("uploadCodeAction")}
+      </button>
+      <button
+        type="button"
+        className="command-button"
+        onClick={() => { setNotice(undefined); setDomainTarget(app) }}
+      >
+        {t("domainSettingsAction")}
+      </button>
+      <button
+        type="button"
+        className="command-button"
+        onClick={() => { setNotice(undefined); setDetailTarget(app) }}
+      >
+        {t("appDetailAction")}
+      </button>
+    </div>
+  )
 
   return (
     <section className="resource-page publishing-apps-page">
@@ -144,98 +257,34 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
       {error && <div className="error-banner" role="alert">{error}</div>}
       {notice && <div className="success-banner" role="status">{notice}</div>}
       {/* 空态只在表格内呈现（appsEmpty）—— 表格上方不再重复「请先创建应用」提示。 */}
-      <div className="table-frame" aria-busy={busy}>
-        <table>
-          <thead>
-            <tr>
-              <th>{t("columnName")}</th>
-              <th>{t("columnSlug")}</th>
-              <th>{t("columnKind")}</th>
-              <th>{t("columnStatus")}</th>
-              <th>{t("columnDomains")}</th>
-              <th>{t("columnPlatformTargets")}</th>
-              <th>{t("columnVersion")}</th>
-              <th>{t("columnUpdated")}</th>
-              <th>{t("columnActions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {apps.map((app) => {
-              const hostname = primaryHostname(app)
-              const extraSuffixes = (app.appDomainSuffixes?.length ?? 0) - 1
-              return (
-                <tr key={app.id}>
-                  <td><strong>{app.name}</strong></td>
-                  <td>{app.slug}</td>
-                  <td>{enumLabel(app.appKind, APP_KIND_LABEL_KEYS, t)}</td>
-                  <td><span className={`status-badge status-${app.appStatus.toLowerCase()}`}>{enumLabel(app.appStatus, APP_STATUS_LABEL_KEYS, t)}</span></td>
-                  <td>
-                    {hostname === undefined
-                      ? <span className="muted">{t("domainNotConfigured")}</span>
-                      : (
-                        <span className="domain-cell">
-                          <code>{hostname}</code>
-                          {/* 后缀目录可能有多条；列表只展示首个，其余折成计数。 */}
-                          {extraSuffixes > 0 && (
-                            <span className="domain-more">+{extraSuffixes}</span>
-                          )}
-                        </span>
-                      )}
-                  </td>
-                  <td>{app.platformTargetCount ?? "-"}</td>
-                  <td>{app.latestReleaseTag ?? "-"}</td>
-                  <td>{new Date(app.updatedAt).toLocaleString(locale)}</td>
-                  <td>
-                    <div className="row-actions">
-                      {/* 发布是行内动作 —— 只有已经存在的应用才可能被发布。 */}
-                      <button
-                        type="button"
-                        className="command-button"
-                        onClick={() => { setNotice(undefined); setPublishTarget(app) }}
-                      >
-                        {t("publishAppAction")}
-                      </button>
-                      <button
-                        type="button"
-                        className="command-button"
-                        onClick={() => { setNotice(undefined); setUploadTarget(app) }}
-                      >
-                        {t("uploadCodeAction")}
-                      </button>
-                      <button
-                        type="button"
-                        className="command-button"
-                        onClick={() => { setNotice(undefined); setDomainTarget(app) }}
-                      >
-                        {t("domainSettingsAction")}
-                      </button>
-                      <button
-                        type="button"
-                        className="command-button"
-                        onClick={() => { setNotice(undefined); setDetailTarget(app) }}
-                      >
-                        {t("appDetailAction")}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-        {/* 空态即唯一的创建入口提示：表格内联，不再到表格上方重复一遍。 */}
-        {!busy && apps.length === 0 && (
-          <div className="empty-state">
-            <p>{t("appsEmpty")}</p>
-            <button
-              type="button"
-              className="command-button"
-              onClick={() => { setNotice(undefined); setCreateOpen(true) }}
-            >
-              + {t("createAppAction")}
-            </button>
-          </div>
-        )}
+      <div aria-busy={busy}>
+        <DataTable<AppResponse>
+          columns={columns}
+          density="compact"
+          emptyState={(
+            <div className="empty-state">
+              <p>{t("appsEmpty")}</p>
+              <button
+                type="button"
+                className="command-button"
+                onClick={() => { setNotice(undefined); setCreateOpen(true) }}
+              >
+                + {t("createAppAction")}
+              </button>
+            </div>
+          )}
+          getRowId={(app) => app.id}
+          loading={busy && apps.length === 0}
+          pagination={{
+            defaultPageSize: 20,
+            mode: "client",
+            pageSizeOptions: APP_TABLE_PAGE_SIZE_OPTIONS,
+          }}
+          rowActions={renderRowActions}
+          rowActionsLabel={t("columnActions")}
+          rows={apps}
+          stickyHeader
+        />
       </div>
       {createOpen && (
         <CreateAppDialog

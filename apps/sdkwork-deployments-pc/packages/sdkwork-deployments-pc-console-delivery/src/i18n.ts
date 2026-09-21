@@ -115,10 +115,6 @@ const en = {
   revokeCertificateConfirm: "This certificate will be revoked and can no longer terminate TLS.",
   revokeCertificateTitle: "Revoke certificate",
   rootDomain: "Root domain",
-  scope: "Ownership",
-  scopePlatform: "Platform",
-  scopeUser: "Mine",
-  scopePlatformHint: "Provisioned by the deployment to publish apps. Every member of the tenant sees it; it has no owner to edit.",
   rootDomainConverted: "Will be registered as {ascii}.",
   rootDomainIp: "Enter a domain name, not an IP address.",
   rootDomainMalformed: "Use letters, digits, hyphens, and dots only; no scheme, path, port, underscore, or space. For example example.com.",
@@ -144,6 +140,7 @@ const en = {
   verified: "Verified",
   verifiedSummary: "{verified} of {total} verified",
   verify: "Verify ownership",
+  viewRecord: "Show DNS record",
   wildcard: "Wildcard",
   certName: "Certificate name",
   certNameDerived: "Derived from the covered hostname; edit to override.",
@@ -242,6 +239,8 @@ const en = {
   hostnameQualified: "Full hostname",
   hostnameDeclareNote: "The name is declared under this root domain as soon as it is created, and is selected for coverage when the certificate type allows it.",
   select: "Select",
+  // 「每页条数」是框架 DataTable 分页控件的标签，四张表共用同一份文案。
+  rowsPerPage: "Rows per page",
 } as const;
 
 const zh: Record<keyof typeof en, string> = {
@@ -359,10 +358,6 @@ const zh: Record<keyof typeof en, string> = {
   revokeCertificateConfirm: "证书将被吊销，之后不能继续用于 TLS 终止。",
   revokeCertificateTitle: "吊销证书",
   rootDomain: "根域名",
-  scope: "归属",
-  scopePlatform: "平台",
-  scopeUser: "我的",
-  scopePlatformHint: "由部署为 App 发布自动预置。租户内全员可见，无归属人可编辑。",
   rootDomainConverted: "将注册为 {ascii}。",
   rootDomainIp: "请填写域名，不能是 IP 地址。",
   rootDomainMalformed: "只能包含字母、数字、连字符和点，不要带协议、路径、端口、下划线或空格；例如 example.com。",
@@ -388,6 +383,7 @@ const zh: Record<keyof typeof en, string> = {
   verified: "已验证",
   verifiedSummary: "已验证 {verified}/{total}",
   verify: "验证所有权",
+  viewRecord: "查看 DNS 记录",
   wildcard: "泛域名",
   certName: "证书名称",
   certNameDerived: "根据覆盖域名自动派生，可自行修改。",
@@ -483,6 +479,7 @@ const zh: Record<keyof typeof en, string> = {
   hostnameQualified: "完整域名",
   hostnameDeclareNote: "创建后立即声明在该根域名下；证书类型允许时会自动勾选为覆盖域名。",
   select: "选择",
+  rowsPerPage: "每页条数",
 };
 
 export type DeliveryMessageKey = keyof typeof en;

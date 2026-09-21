@@ -290,7 +290,11 @@ async fn usage_batch_ingest_resolves_app_uuid_through_binding_and_app_paths() {
         })
         .expect("the binding-attributed event is listed");
     let stored_binding: Option<i64> = via_binding_row.try_get("binding_id").expect("binding_id");
-    assert_eq!(stored_binding, Some(900_003), "binding internal id is attributed");
+    assert_eq!(
+        stored_binding,
+        Some(900_003),
+        "binding internal id is attributed"
+    );
     for row in &rows {
         let tenant: i64 = row.try_get("tenant_id").expect("tenant_id");
         assert_eq!(tenant, tenant_id, "tenant is resolved from the binding/app");

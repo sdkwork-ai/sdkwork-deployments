@@ -51,20 +51,18 @@ impl CertificateIssuancePort for AcmeCertificateIssuance {
         // The zone resolver is owned in this scope and borrowed by the
         // context: the single-zone adapter preserves the deploy-side
         // contract while the engine moves to per-identifier resolution.
-        let zone_holder = request
-            .dns01
+        let zone_holder = request.dns01.as_ref().map(|context| {
+            sdkwork_webserver_acme_service::SingleZoneResolver {
+                zone_apex: context.zone_apex.clone(),
+            }
+        });
+        let dns01 = zone_holder
             .as_ref()
-            .map(|context| {
-                sdkwork_webserver_acme_service::SingleZoneResolver {
-                    zone_apex: context.zone_apex.clone(),
-                }
-            });
-        let dns01 = zone_holder.as_ref().zip(request.dns01.as_ref()).map(
-            |(zones, context)| AcmeDns01Context {
+            .zip(request.dns01.as_ref())
+            .map(|(zones, context)| AcmeDns01Context {
                 presenter: context.presenter.as_ref(),
                 zones,
-            },
-        );
+            });
         self.issuer
             .issue_with_challenge(
                 CERT_TYPE_LETS_ENCRYPT,

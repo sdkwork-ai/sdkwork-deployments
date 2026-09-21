@@ -210,9 +210,9 @@ impl DeployRepository {
         // `JSONB` column). An empty array means "no override", matching the
         // writer, which never stores one.
         let override_suffixes = crate::support::string_list_from_row(&row, "app_domain_suffixes")
-            .map_err(|error| DeployServiceError::Internal(format!(
-                "read app domain suffixes: {error}"
-            )))?
+            .map_err(|error| {
+                DeployServiceError::Internal(format!("read app domain suffixes: {error}"))
+            })?
             .filter(|suffixes| !suffixes.is_empty());
         Ok(AppDomainConfig {
             label: sdkwork_deploy_core::effective_app_domain_label(

@@ -5,10 +5,9 @@ use sdkwork_deploy_contract::{
     is_deploy_package_artifact_type, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse,
-    AppResponse, BuildPage, BuildResponse, BuildTemplatePage, BuildTemplateResponse, ChannelPage,
-    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
-    CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
+    AppReleaseResponse, AppResponse, BuildPage, BuildResponse, BuildTemplatePage,
+    BuildTemplateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
+    ChannelRolloutResponse, CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
     CreateAppReleaseRequest, CreateAppRequest, CreateArtifactRequest, CreateBuildRequest,
     CreateBuildTemplateRequest, CreateCertificateRequest, CreateDeployUploadSessionRequest,
@@ -168,7 +167,12 @@ impl DeployService {
             .repository
             .domain_hostname_verification_challenge(tenant_id, owner_user_id, zone_id, hostname_id)
             .await?;
-        if challenge.verified || challenge.token.is_some() {
+        // A challenge this call just opened cannot have a published record yet, so
+        // there is nothing to look up: hand the operator the record to publish.
+        // The test is `created`, not `token.is_some()`, because the token is now
+        // re-derived on every reload and would otherwise make every reload skip
+        // the lookup — which is the one thing that can move a name to VERIFIED.
+        if challenge.verified || challenge.created {
             return Ok(challenge.response());
         }
         let verification_id = challenge.verification_id.as_deref().ok_or_else(|| {

@@ -38,6 +38,18 @@ paths:
         schema:
           type: string
           maxLength: 253
+      - name: scope
+        in: query
+        description: >-
+          Restrict the inventory to one ownership kind. `USER` returns only the
+          root domains this caller defined; `PLATFORM` returns only the
+          tenant-level `app.<suffix>` zones the deployment provisions for app
+          publishing. Omitted means both kinds, which is the audit view.
+        schema:
+          type: string
+          enum:
+          - USER
+          - PLATFORM
       responses:
         '200':
           description: Success

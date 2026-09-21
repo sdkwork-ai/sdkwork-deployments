@@ -21,8 +21,23 @@ pub struct DomainVerificationChallenge {
     pub record_relative_name: Option<String>,
     pub verified: bool,
     pub proof_sha256: Option<String>,
+    /// The value the operator publishes, `base64url(sha256(attempt id))`.
+    ///
+    /// Present on every unanswered challenge, not just the one this call
+    /// created: it is deterministic, so re-deriving it on reload is what lets an
+    /// operator who already published the record — or who reloaded the page —
+    /// still be told what to put in it. Absent once `verified`.
     pub token: Option<String>,
     pub expires_at: Option<String>,
+    /// Whether **this** call opened the attempt, as opposed to reloading one
+    /// that already existed.
+    ///
+    /// The ownership pass uses this to decide whether to spend a DNS lookup: a
+    /// freshly opened attempt cannot have a published record yet, so asking is
+    /// pointless. It used to be inferred from `token.is_some()`, which stopped
+    /// being a valid proxy once the token became re-derivable — every reload
+    /// would then have skipped the lookup and no domain could ever verify.
+    pub created: bool,
 }
 
 impl DomainVerificationChallenge {

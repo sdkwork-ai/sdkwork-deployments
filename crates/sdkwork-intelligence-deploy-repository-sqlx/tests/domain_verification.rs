@@ -49,15 +49,47 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
         .await
         .expect("load pending challenge");
-    let token = pending.token.expect("new challenge returns the proof once");
+    let token = pending.token.clone().expect("new challenge returns the proof");
     let verification_id = pending
         .verification_id
+        .clone()
         .expect("pending challenge verification id");
-    let proof_sha256 = pending.proof_sha256.expect("pending proof digest");
+    let proof_sha256 = pending
+        .proof_sha256
+        .clone()
+        .expect("pending proof digest");
     assert!(!pending.verified);
+    assert!(pending.created, "the call that opens the attempt reports so");
     assert_eq!(
         sdkwork_utils_rust::crypto::sha256_hash(token.as_bytes()),
         proof_sha256
+    );
+
+    // The record value is `base64url(sha256(attempt id))` and therefore
+    // deterministic, so re-reading the *same* attempt has to repeat it. Until it
+    // did, the value was shown exactly once — on the click that opened the
+    // attempt — and every later check (a second click, the page reloaded) handed
+    // the operator a record name with nothing to publish. That is an ownership
+    // proof that can never be completed, a hostname stuck at `PENDING`, and a
+    // certificate that can never be ordered, which is the whole loop this pins.
+    let reloaded = repository
+        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .await
+        .expect("reload pending challenge");
+    assert!(!reloaded.created, "a reload did not open the attempt");
+    assert_eq!(
+        reloaded.verification_id.as_deref(),
+        Some(verification_id.as_str()),
+        "reload must target the same attempt"
+    );
+    assert_eq!(
+        reloaded.token.as_deref(),
+        Some(token.as_str()),
+        "reload must repeat the value the operator publishes"
+    );
+    assert_eq!(
+        reloaded.proof_sha256.as_deref(),
+        Some(proof_sha256.as_str())
     );
 
     assert!(!repository

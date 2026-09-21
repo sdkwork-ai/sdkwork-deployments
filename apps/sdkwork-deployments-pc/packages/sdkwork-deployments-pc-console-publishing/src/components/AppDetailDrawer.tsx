@@ -153,7 +153,9 @@ export function AppDetailDrawer({
               ? <span className={css.fieldHint}>{t("domainListEmpty")}</span>
               : (
                 <div className={css.domainTable}>
-                  <div className={css.domainTableHead}>{t("detailSectionDomains")}</div>
+                  <div className={css.domainTableHeadBar}>
+                    <span className={css.domainTableHeadTitle}>{t("detailSectionDomains")}</span>
+                  </div>
                   {[...defaultDomains, ...customDomains].map((domain) => (
                     <DomainDetailRow key={`${domain.hostname}${domain.pathPrefix ?? ""}`} domain={domain} t={t} />
                   ))}

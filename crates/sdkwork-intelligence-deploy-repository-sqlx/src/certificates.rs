@@ -153,16 +153,40 @@ impl DeployRepository {
             .iter()
             .map(String::as_str)
             .collect::<Vec<_>>();
+        // The gate is the tenant *and* the zone's owner, not the tenant alone.
+        //
+        // A tenant-scoped check is not enough: the same tenant also holds the
+        // platform's own `app.<suffix>` zones, whose hostnames the deployment
+        // verifies for app publishing. Those rows are `VERIFIED` + `ACTIVE`, so a
+        // tenant-only predicate accepts them, and any member of the tenant could
+        // then order a certificate covering platform infrastructure — the edge's
+        // own names. The zone is the unit of ownership (`deploy_dns_zone.user_id`),
+        // so it is the unit the gate has to speak in.
+        //
+        // "Reachable" is the same rule the domain inventory states, spelled the
+        // same way (`zone_owner_gate`): a zone is reachable when it is the
+        // caller's own, or when it is tenant-level (`user_id IS NULL`) and
+        // therefore shared with every member. It is deliberately *not* "the
+        // caller is the platform": no such caller exists here, and denying
+        // tenant-level zones outright would hide the platform zones the
+        // inventory documents as visible to everyone.
+        //
+        // `$3 IS NULL` (an unauthenticated actor) keeps the pre-existing
+        // tenant-wide behaviour rather than silently denying every request, since
+        // this path is also reached by internal callers that carry no user.
         let requested_domains = sqlx::query(
-            "SELECT id, hostname_ascii
-             FROM deploy_domain
-             WHERE tenant_id = $1 AND uuid = ANY($2)
-               AND verification_status = 'VERIFIED' AND status = 'ACTIVE'
-               AND deleted_at IS NULL
-             FOR SHARE",
+            "SELECT d.id, d.hostname_ascii
+             FROM deploy_domain d
+             JOIN deploy_dns_zone z ON z.id = d.zone_id
+             WHERE d.tenant_id = $1 AND d.uuid = ANY($2)
+               AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
+               AND d.deleted_at IS NULL
+               AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
+             FOR SHARE OF d",
         )
         .bind(tenant_id)
         .bind(&domain_ids)
+        .bind(actor_id)
         .fetch_all(&mut *transaction)
         .await
         .map_err(|error| store_error("resolve certificate hostname identifiers", error))?;
@@ -192,21 +216,28 @@ impl DeployRepository {
         // A wildcard scope adds the apex, which the caller did not select, so the
         // planned set is resolved against `deploy_domain` a second time rather
         // than reusing `requested_domains`. The added apex must already be an
-        // active verified claim of this tenant.
+        // active verified claim of this tenant — and, for the same reason the
+        // caller's own selection is zone-gated, of a zone this caller can reach.
+        // Resolving it tenant-wide would have let a wildcard pull in an apex from
+        // someone else's private zone, which is the caller's own selection rule
+        // bypassed by a side door.
         let planned_hostnames = planned_identifiers
             .iter()
             .map(|identifier| identifier.hostname.clone())
             .collect::<Vec<_>>();
         let planned_claims = sqlx::query(
-            "SELECT id, hostname_ascii
-             FROM deploy_domain
-             WHERE tenant_id = $1 AND hostname_ascii = ANY($2)
-               AND verification_status = 'VERIFIED' AND status = 'ACTIVE'
-               AND deleted_at IS NULL
-             FOR SHARE",
+            "SELECT d.id, d.hostname_ascii
+             FROM deploy_domain d
+             JOIN deploy_dns_zone z ON z.id = d.zone_id
+             WHERE d.tenant_id = $1 AND d.hostname_ascii = ANY($2)
+               AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
+               AND d.deleted_at IS NULL
+               AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
+             FOR SHARE OF d",
         )
         .bind(tenant_id)
         .bind(&planned_hostnames)
+        .bind(actor_id)
         .fetch_all(&mut *transaction)
         .await
         .map_err(|error| store_error("resolve planned certificate identifiers", error))?;

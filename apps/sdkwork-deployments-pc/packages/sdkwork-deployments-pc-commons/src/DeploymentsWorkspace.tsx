@@ -1,9 +1,14 @@
-import { Activity, AppWindow, Boxes, ChevronLeft, ChevronRight, FileKey2, FolderTree, Globe2, LogOut, Network, Package, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shield, Tags, Upload, X } from "lucide-react";
+import { Activity, AppWindow, Boxes, FileKey2, FolderTree, Globe2, LogOut, Network, Package, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shield, Tags, Upload, X } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
+import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
+
 import { translateDeployments, type DeploymentsLocale, type DeploymentsMessageKey } from "./i18n/index.ts";
 import type { DeploymentsAction, DeploymentsDataSource, DeploymentsModuleEntry, DeploymentsPcModuleDefinition, DeploymentsRegistry, DeploymentsResourceKey, DeploymentsResourcePages } from "./types.ts";
+
+/** 通用资源表的每页条数选项；服务端分页时页码/总数由后端 pageInfo 决定。 */
+const RESOURCE_PAGE_SIZES = [20, 50, 100] as const;
 
 export interface DeploymentsWorkspaceProps {
   locale: DeploymentsLocale;
@@ -39,7 +44,8 @@ function Page({ entry, locale, source }: { entry: DeploymentsModuleEntry; locale
   const t = translator(locale);
   const [items, setItems] = useState<readonly Record<string, unknown>[]>([]);
   const [page, setPage] = useState(1);
-  const [pageInfo, setPageInfo] = useState({ page: 1, pageSize: 20, hasMore: false, total: undefined as number | undefined });
+  const [pageSize, setPageSize] = useState<number>(RESOURCE_PAGE_SIZES[0]);
+  const [pageInfo, setPageInfo] = useState<{ page: number; pageSize: number; hasMore: boolean; total: number | undefined }>({ page: 1, pageSize: RESOURCE_PAGE_SIZES[0], hasMore: false, total: undefined });
   const [scopeId, setScopeId] = useState(() => sessionStorage.getItem("sdkwork.deployments.siteId") ?? "");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, unknown>>();
@@ -51,23 +57,80 @@ function Page({ entry, locale, source }: { entry: DeploymentsModuleEntry; locale
     if (!source || (source.requiresScope && !scopeId.trim())) { setItems([]); return; }
     setBusy(true); setError(undefined);
     try {
-      const result = await source.load({ page, pageSize: 20, scopeId: scopeId.trim() || undefined, search: search.trim() || undefined });
+      const result = await source.load({ page, pageSize, scopeId: scopeId.trim() || undefined, search: search.trim() || undefined });
       setItems(result.items); setPageInfo({ ...result.pageInfo, total: result.pageInfo.total });
     } catch { setError(t("error.operation")); } finally { setBusy(false); }
   }
 
-  useEffect(() => { void load(); }, [entry.resource, page, scopeId]);
+  useEffect(() => { void load(); }, [entry.resource, page, pageSize, scopeId]);
   useEffect(() => { setPage(1); setSelected(undefined); }, [entry.resource]);
   const columns = useMemo(() => Array.from(new Set(items.flatMap(Object.keys))).slice(0, 7), [items]);
   const showsScope = source?.requiresScope || source?.actions.some((candidate) => candidate.requiresScope);
   const updateScope = (value: string) => { setScopeId(value); if (value.trim()) sessionStorage.setItem("sdkwork.deployments.siteId", value.trim()); else sessionStorage.removeItem("sdkwork.deployments.siteId"); };
 
+  /**
+   * 表列：由当前页实际出现的字段派生（原实现同样如此），渲染复用 `display()`。
+   * 选择列交给框架的 selectable，不再手写 radio 单元格。
+   */
+  const tableColumns = useMemo<DataTableColumn<Record<string, unknown>>[]>(
+    () => columns.map((column) => ({
+      id: column,
+      header: humanize(column),
+      cell: (item: Record<string, unknown>) => display(item[column], column),
+    })),
+    [columns],
+  );
+
+  /**
+   * 分页：后端 `pageInfo` 有两种形态 —— 带 `total` 的 offset 分页（可算页数）
+   * 与只带 `hasMore` 的 cursor 分页（无总数）。后者把 `hasMore` 交给框架，
+   * 由框架渲染页码序数并用该标志驱动「下一页」。
+   *
+   * `rowCount` 在无总数时必须**缺席**（而非 `undefined`）：框架用「`hasMore`
+   * 是否存在」判定 cursor 模式，用 `rowCount` 判定 offset 模式，传 `undefined`
+   * 会在 `exactOptionalPropertyTypes` 下被拒。
+   */
+  const pagination = {
+    hasMore: pageInfo.hasMore,
+    mode: "server" as const,
+    onPageChange: (next: number) => {
+      if (busy || next < 1 || next === page) return;
+      if (pageInfo.total === undefined && next !== page + 1 && next !== page - 1) return;
+      setPage(next);
+    },
+    onPageSizeChange: (next: number) => {
+      if (busy || next === pageSize) return;
+      setPageSize(next); setPage(1);
+    },
+    page: pageInfo.total === undefined ? page : pageInfo.page,
+    pageSize: pageInfo.pageSize,
+    pageSizeOptions: RESOURCE_PAGE_SIZES,
+    ...(pageInfo.total === undefined ? {} : { rowCount: pageInfo.total }),
+  };
+
   return <section className="resource-page">
     <header className="page-header"><div><span className="eyebrow">{entry.resource}</span><h1>{resourceText(t, entry.resource, "label")}</h1><p>{resourceText(t, entry.resource, "description")}</p></div><button className="icon-button" type="button" disabled={busy} title={t("toolbar.refresh")} onClick={() => void load()}><RefreshCw size={18} /></button></header>
     <div className="toolbar"><form className="search-box" onSubmit={(event) => { event.preventDefault(); setPage(1); void load(); }}><Search size={16} /><input aria-label={t("toolbar.search")} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("toolbar.search")} /></form>{showsScope && <label className="scope-input"><Settings2 size={16} /><input aria-label={t("toolbar.siteId")} value={scopeId} onChange={(event) => updateScope(event.target.value)} placeholder={t("toolbar.siteId")} /></label>}<div className="actions">{source?.actions.map((candidate) => <button key={candidate.id} className={candidate.dangerous ? "danger-button" : "command-button"} disabled={busy || (candidate.requiresSelection && !selected) || (candidate.requiresScope && !scopeId.trim())} onClick={() => setAction(candidate)} type="button">{candidate.requiresFile && <Upload size={15} />}{actionText(t, entry.resource, candidate)}</button>)}</div></div>
     {error && <div className="error-banner" role="alert">{error}<button className="icon-button" type="button" title={t("toolbar.dismiss")} onClick={() => setError(undefined)}><X size={16} /></button></div>}
-    {source?.requiresScope && !scopeId.trim() ? <div className="empty-state">{t("scope.empty")}</div> : <div className="table-frame" aria-busy={busy}><table><thead><tr><th aria-label={t("table.select")} />{columns.map((column) => <th key={column}>{humanize(column)}</th>)}</tr></thead><tbody>{items.map((item, index) => <tr key={recordKey(item, index)} className={selected === item ? "selected" : ""} onClick={() => setSelected(item)}><td><input type="radio" readOnly checked={selected === item} aria-label={t("table.selectRow", { row: index + 1 })} /></td>{columns.map((column) => <td key={column}>{display(item[column], column)}</td>)}</tr>)}</tbody></table>{!busy && items.length === 0 && <div className="empty-state">{t("table.empty")}</div>}</div>}
-    <footer className="pagination"><span>{pageInfo.total === undefined ? t("pagination.page", { page: pageInfo.page }) : t("pagination.total", { total: pageInfo.total })}</span><button className="icon-button" type="button" disabled={page <= 1 || busy} title={t("pagination.previous")} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={18} /></button><button className="icon-button" type="button" disabled={!pageInfo.hasMore || busy} title={t("pagination.next")} onClick={() => setPage((value) => value + 1)}><ChevronRight size={18} /></button></footer>
+    {source?.requiresScope && !scopeId.trim()
+      ? <div className="empty-state">{t("scope.empty")}</div>
+      : <DataTable<Record<string, unknown>>
+          columns={tableColumns}
+          density="compact"
+          emptyState={<span>{t("table.empty")}</span>}
+          getRowId={(item, index) => recordKey(item, index)}
+          getRowSelectionLabel={(_item, index) => t("table.selectRow", { row: index + 1 })}
+          loading={busy && items.length === 0}
+          onSelectedRowIdsChange={(ids) => {
+            const [nextId] = ids;
+            setSelected(nextId === undefined ? undefined : items.find((item, index) => recordKey(item, index) === String(nextId)));
+          }}
+          pagination={pagination}
+          rows={items as Record<string, unknown>[]}
+          selectable
+          selectedRowIds={selected === undefined ? [] : [recordKey(selected, items.indexOf(selected))]}
+          stickyHeader
+        />}
     {action && <Dialog action={action} label={actionText(t, entry.resource, action)} locale={locale} scopeId={scopeId || undefined} selected={selected} close={() => setAction(undefined)} done={() => { setAction(undefined); void load(); }} />}
   </section>;
 }

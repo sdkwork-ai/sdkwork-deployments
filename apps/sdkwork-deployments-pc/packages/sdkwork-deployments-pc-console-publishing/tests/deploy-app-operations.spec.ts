@@ -22,11 +22,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { AppResponse } from "@sdkwork/deployments-app-sdk";
 import {
   DEPLOY_PACKAGE_TYPE_OPTIONS,
+  MAX_CUSTOM_DOMAINS,
   createDeployAppOperationsService,
+  customDomainCapacity,
   domainStatusLabel,
+  inferDomainZone,
+  isHostnameShaped,
+  normalizeHostname,
   relativeNameInZone,
   compositionKey,
 } from "../src/service/deploy-app-operations.ts";
+import { environmentTabsInUse, filterDomainsByEnvironment } from "../src/components/AppDomainDialog.tsx";
 import { primaryHostname } from "../src/components/PublishingAppsPage.tsx";
 
 /** Minimal AppResponse; only the fields the derivation reads matter here. */
@@ -230,6 +236,171 @@ describe("bindCustomHostname", () => {
   })
 })
 
+describe("inferDomainZone", () => {
+  const zone = (apexHostname: string, id = `zone-${apexHostname}`, status = "ACTIVE") =>
+    ({ id, apexHostname, status }) as never
+
+  it("matches the zone that owns the hostname, not just any zone", () => {
+    const zones = [zone("example.com"), zone("other.test")]
+    expect(inferDomainZone("app.example.com", zones)?.apexHostname).toBe("example.com")
+    expect(inferDomainZone("app.other.test", zones)?.apexHostname).toBe("other.test")
+    expect(inferDomainZone("app.nowhere.dev", zones)).toBeUndefined()
+  })
+
+  it("prefers the longest apex so a nested zone is not shadowed", () => {
+    // With both zones registered, `app.eu.example.com` belongs to
+    // `eu.example.com`. Claiming it under `example.com` would compute the wrong
+    // relative name and the server would refuse or mis-record it.
+    const zones = [zone("example.com"), zone("eu.example.com")]
+    expect(inferDomainZone("app.eu.example.com", zones)?.apexHostname).toBe("eu.example.com")
+    // A hostname outside the nested zone still falls back to the broader one.
+    expect(inferDomainZone("app.us.example.com", zones)?.apexHostname).toBe("example.com")
+  })
+
+  it("is insensitive to case and a trailing dot", () => {
+    const zones = [zone("Example.COM")]
+    expect(inferDomainZone("App.Example.com.", zones)?.apexHostname).toBe("Example.COM")
+    expect(normalizeHostname("  App.Example.COM.  ")).toBe("app.example.com")
+  })
+
+  it("does not treat a lookalike suffix as belonging to the zone", () => {
+    // `notexample.com` must not match zone `example.com`.
+    const zones = [zone("example.com")]
+    expect(inferDomainZone("app.notexample.com", zones)).toBeUndefined()
+  })
+
+  it("matches the apex itself, for a bare-domain custom hostname", () => {
+    const zones = [zone("example.com")]
+    expect(inferDomainZone("example.com", zones)?.apexHostname).toBe("example.com")
+  })
+})
+
+describe("isHostnameShaped", () => {
+  it("accepts dotted lowercase names and rejects malformed ones", () => {
+    expect(isHostnameShaped("app.example.com")).toBe(true)
+    expect(isHostnameShaped("a-b.example.com")).toBe(true)
+    // Normalization is applied first, so uppercase and a trailing dot are fine.
+    expect(isHostnameShaped("App.Example.com.")).toBe(true)
+    expect(isHostnameShaped("localhost")).toBe(false)
+    expect(isHostnameShaped("-bad.example.com")).toBe(false)
+    expect(isHostnameShaped("bad-.example.com")).toBe(false)
+    expect(isHostnameShaped("")).toBe(false)
+  })
+})
+
+describe("bindCustomHostname", () => {
+  it("resolves the zone from registered zones when the caller omits one", async () => {
+    const ensure = vi.fn(async (zoneId: string) => ({
+      items: [{
+        hostname: {
+          id: "dom-1",
+          zoneId,
+          hostname: "app.example.com",
+          relativeName: "app",
+          status: "PENDING",
+        },
+      }],
+    }))
+    const list = vi.fn(async () => ({
+      items: [
+        { id: "zone-wide", apexHostname: "example.com", status: "ACTIVE" },
+        { id: "zone-eu", apexHostname: "eu.example.com", status: "ACTIVE" },
+      ],
+    }))
+    const service = createDeployAppOperationsService({
+      deployClient: {
+        app: {
+          retrieve: async () => appFixture({ version: "3" }),
+          domains: { list: async () => ({ items: [] }) },
+          composition: { update: async () => ({}) },
+        },
+        domain: { domainZones: { list, hostnameClaims: { ensure } } },
+      } as never,
+      driveClient: {} as never,
+      createIdempotencyKey: () => "idem",
+    })
+
+    await service.bindCustomHostname("app-1", { hostname: "app.eu.example.com" })
+
+    // The claim must go to the *nested* zone, not the first one listed.
+    expect(ensure.mock.calls[0]?.[0]).toBe("zone-eu")
+  })
+
+  it("fails with an actionable message when no registered zone owns the hostname", async () => {
+    const service = createDeployAppOperationsService({
+      deployClient: {
+        app: {
+          retrieve: async () => appFixture({ version: "3" }),
+          domains: { list: async () => ({ items: [] }) },
+        },
+        domain: {
+          domainZones: {
+            list: async () => ({ items: [{ id: "z1", apexHostname: "example.com", status: "ACTIVE" }] }),
+            hostnameClaims: { ensure: async () => ({ items: [] }) },
+          },
+        },
+      } as never,
+      driveClient: {} as never,
+      createIdempotencyKey: () => "idem",
+    })
+
+    await expect(
+      service.bindCustomHostname("app-1", { hostname: "app.unregistered.dev" }),
+    ).rejects.toThrow(/No registered domain zone owns app\.unregistered\.dev/)
+  })
+
+  it("ignores zones that are not ACTIVE", async () => {
+    const ensure = vi.fn(async () => ({ items: [] }))
+    const service = createDeployAppOperationsService({
+      deployClient: {
+        app: {
+          retrieve: async () => appFixture({ version: "3" }),
+          domains: { list: async () => ({ items: [] }) },
+        },
+        domain: {
+          domainZones: {
+            list: async () => ({ items: [{ id: "z1", apexHostname: "example.com", status: "PENDING" }] }),
+            hostnameClaims: { ensure },
+          },
+        },
+      } as never,
+      driveClient: {} as never,
+      createIdempotencyKey: () => "idem",
+    })
+
+    await expect(
+      service.bindCustomHostname("app-1", { hostname: "app.example.com" }),
+    ).rejects.toThrow(/No registered domain zone owns/)
+    expect(ensure).not.toHaveBeenCalled()
+  })
+})
+
+describe("replaceDomainBindings", () => {
+  it("commits exactly the given bindings with the read version as If-Match", async () => {
+    const compositionUpdate = vi.fn(async () => ({}))
+    const service = createDeployAppOperationsService({
+      deployClient: {
+        app: { composition: { update: compositionUpdate } },
+      } as never,
+      driveClient: {} as never,
+      createIdempotencyKey: () => "idem",
+    })
+
+    await service.replaceDomainBindings("app-1", {
+      version: "12",
+      bindings: [
+        { key: "keep-example-com", domainId: "dom-keep", pathPrefix: "/", action: { type: "SERVE" } },
+      ],
+    })
+
+    const call = compositionUpdate.mock.calls[0] as unknown as [string, { bindings: { domainId: string }[] }, { ifMatch: string }]
+    expect(call[0]).toBe("app-1")
+    expect(call[1].bindings.map((binding) => binding.domainId)).toEqual(["dom-keep"])
+    // Without If-Match a concurrent edit would be silently reverted.
+    expect(call[2].ifMatch).toBe("12")
+  })
+})
+
 describe("listDriveArchives", () => {
   it("keeps only files and coerces the string content length to a number", async () => {
     const service = createDeployAppOperationsService({
@@ -301,3 +472,87 @@ describe("domainStatusLabel", () => {
     expect(leaked).toEqual([])
   })
 })
+
+
+describe("customDomainCapacity", () => {
+  it("caps the sum of bound and draft domains, not just drafts", () => {
+    // Two already bound plus three open drafts is exactly the limit: the
+    // operator must not be able to open a sixth slot by ignoring the bound ones.
+    expect(customDomainCapacity(2, 3)).toEqual({ used: 5, remaining: 0, atCapacity: true })
+    // One fewer draft leaves exactly one slot.
+    expect(customDomainCapacity(2, 2)).toEqual({ used: 4, remaining: 1, atCapacity: false })
+  })
+
+  it("reports room to add while under the cap", () => {
+    const fresh = customDomainCapacity(0, 0)
+    expect(fresh.used).toBe(0)
+    expect(fresh.remaining).toBe(MAX_CUSTOM_DOMAINS)
+    expect(fresh.atCapacity).toBe(false)
+  })
+
+  it("clamps remaining at zero instead of going negative", () => {
+    // Servers can return more custom domains than the product cap (the cap is
+    // client-side only), and the counter must never render a negative number.
+    const over = customDomainCapacity(7, 0)
+    expect(over.used).toBe(7)
+    expect(over.remaining).toBe(0)
+    expect(over.atCapacity).toBe(true)
+  })
+
+  it("defaults to the product cap and honours an explicit override", () => {
+    expect(MAX_CUSTOM_DOMAINS).toBe(5)
+    expect(customDomainCapacity(0, 1).remaining).toBe(4)
+    expect(customDomainCapacity(0, 1, 1).atCapacity).toBe(true)
+  })
+})
+
+describe("filterDomainsByEnvironment / environmentTabsInUse", () => {
+  const rows = [
+    { hostname: "app.example.com", environment: "production" },
+    { hostname: "app-dev.example.com", environment: "development" },
+    { hostname: "app-test.example.com", environment: "test" },
+    { hostname: "app-dev2.example.com", environment: "development" },
+  ]
+
+  it("returns every domain under the all tab, without copying", () => {
+    expect(filterDomainsByEnvironment(rows, "all")).toBe(rows)
+  })
+
+  it("keeps only the matching environment", () => {
+    const dev = filterDomainsByEnvironment(rows, "development")
+    expect(dev.map((row) => row.hostname)).toEqual([
+      "app-dev.example.com",
+      "app-dev2.example.com",
+    ])
+  })
+
+  it("returns an empty list for an environment with no domains", () => {
+    expect(filterDomainsByEnvironment(rows, "staging")).toEqual([])
+  })
+
+  it("lists only environments that actually have domains, in lifecycle order", () => {
+    // staging and demo are absent, so they must NOT get a tab — a tab that
+    // always renders empty reads as a bug to the operator.
+    expect(environmentTabsInUse(rows)).toEqual(["development", "test", "production"])
+  })
+
+  it("sorts known environments first and keeps unknown ones last", () => {
+    // The server's environment field is a free string, so an unrecognised
+    // value must still be reachable rather than silently dropped.
+    const mixed = [
+      { hostname: "a", environment: "canary" },
+      { hostname: "b", environment: "production" },
+      { hostname: "c", environment: "development" },
+    ]
+    expect(environmentTabsInUse(mixed)).toEqual(["development", "production", "canary"])
+  })
+
+  it("does not duplicate a tab when one environment repeats", () => {
+    expect(environmentTabsInUse(rows).filter((env) => env === "development")).toHaveLength(1)
+  })
+
+  it("yields no tabs for an empty domain list", () => {
+    expect(environmentTabsInUse([])).toEqual([])
+  })
+})
+

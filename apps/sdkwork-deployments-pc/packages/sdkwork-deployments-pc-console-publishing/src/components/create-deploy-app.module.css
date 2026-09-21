@@ -23,6 +23,12 @@
   --pda-accent: var(--dsw-alias-state-business-primary, #2563eb);
   --pda-accent-hover: var(--dsw-alias-state-business-primary, #1d4ed8);
   --pda-accent-soft: var(--dsw-alias-interactive-bg-hover-accent, #eff4ff);
+  /* 页签/胶囊的「选中态」底色。**必须与 --pda-accent-soft 分开**：
+     表头条自己的底色就是 accent-soft，选中态若复用同一个值，两者完全同色，
+     选中标签只剩一圈描边可辨；深色下 accent-soft 是半透明蓝，
+     叠在深底上对比度掉到 1.0（文字直接看不见）。
+     这里取一个**不透明**的实色，保证在浅底与深底下都能与表头条拉开层次。 */
+  --pda-pill-active: var(--dsw-specific-menu, #ffffff);
   --pda-danger: var(--dsw-alias-state-error-primary, #dc2626);
   --pda-focus: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 35%, transparent);
   /* 级联列表滚动条：常态极淡只在需要时被感知，悬停加深提示可拖拽。 */
@@ -44,6 +50,13 @@
   --pda-accent: var(--dsw-alias-state-business-primary, #4f8cff);
   --pda-accent-hover: var(--dsw-alias-state-business-primary, #3b7bf2);
   --pda-accent-soft: var(--dsw-alias-interactive-bg-hover-accent, rgba(79, 140, 255, 0.14));
+  /* 深色下选中态：必须**比表头条明显亮一档**。
+     表头条底色 = 半透明 accent(0.14) 叠在对话框底上，实测 ≈ #1d2b44。
+     之前这里 fallback 到 #2a3344，与表头条只差 1.12 对比度 ⇒
+     选中页签看起来像个空心描边，而未选中页签用的是更亮的 surface(#161b26 字面值虽深，
+     但 accent-soft 底在深色下整体偏亮)，视觉上反而更像「被选中」，层次是反的。
+     这里直接给一个不透明、且在深蓝底上足够跳的中间灰蓝。 */
+  --pda-pill-active: var(--dsw-alias-bg-base, #38445c);
   --pda-danger: var(--dsw-alias-state-error-primary, #f87171);
   --pda-focus: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f8cff) 40%, transparent);
   /* 深色下用浅色 thumb：同一 alpha 在深底上会更「消失」，故取更亮的基色 + 略高不透明度。 */
@@ -812,10 +825,20 @@
   background: var(--pda-surface);
 }
 
-.domainTableHead {
+/* 表头条：标题在左、环境页签在右，两组域名清单共用同一套头部样式。 */
+.domainTableHeadBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--pda-border);
   background: var(--pda-accent-soft);
+}
+
+/* 表头标题：与页签同处一条头部，压低字号避免与页签抢视觉重心。 */
+.domainTableHeadTitle {
   color: var(--pda-accent);
   font-size: 11px;
   font-weight: 600;
@@ -905,6 +928,170 @@
 .copyButton:hover {
   border-color: var(--pda-accent);
   color: var(--pda-accent);
+}
+
+/* 区块标题行：标题 + 右侧计数药丸 */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 自定义域名用量计数（N/5）。满额时转为警示色。 */
+.counterPill {
+  padding: 1px 8px;
+  border: 1px solid var(--pda-border);
+  border-radius: 999px;
+  background: var(--pda-surface);
+  color: var(--pda-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.counterPill[data-full="true"] {
+  border-color: rgba(217, 119, 6, 0.45);
+  background: rgba(217, 119, 6, 0.12);
+  color: #d97706;
+}
+
+/* 域名清单的环境页签条（全部 / 开发 / 测试 / 预发 / 演示 / 生产）。
+   嵌在 `.domainTableHeadBar` 里，所以不再自带下外边距。 */
+.tabBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 页签：默认低调，选中态走强调色的软底 + 描边，与计数胶囊同一套令牌。 */
+.tabButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--pda-border);
+  border-radius: 999px;
+  background: var(--pda-surface);
+  color: var(--pda-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.tabButton:hover:not(:disabled) {
+  border-color: var(--pda-accent);
+  color: var(--pda-text);
+}
+
+.tabButton[data-active="true"] {
+  border-color: var(--pda-accent);
+  /* 选中底色用专门的不透明令牌：表头条本身就是 accent-soft，
+     复用同一个值会让选中态与底色同色（深色下文字对比度掉到 1.0）。 */
+  background: var(--pda-pill-active);
+  color: var(--pda-accent);
+  /* 选中态轻微抬起，进一步与未选中拉开层次（深色下光靠底色差异不够稳）。 */
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.publishDialog[data-theme="dark"] .tabButton[data-active="true"],
+.drawerRoot[data-theme="dark"] .tabButton[data-active="true"] {
+  /* 深色下阴影不可见，改用更亮的描边色 + 更强对比的文字。 */
+  border-color: var(--pda-accent);
+  box-shadow: none;
+}
+
+.tabButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* 页签上的条数徽标，等宽数字避免切换时宽度跳动。
+   ⚠️ 这里踩过两次坑，别再改回去：
+   ① 底色原来用 `--pda-text` 10%：该令牌在深色下翻成近白色，10% 白叠在偏亮的
+      选中页签上等于没叠（实测数字对比度 2.99，低于 AA 4.5）。
+   ② 改成 `background: currentColor` + `color: var(--pda-pill-active)`：
+      `currentColor` 取的是**该元素自己的 color**，而 color 刚被设成 pill-active
+      ⇒ 底色与文字色完全相同，对比度 1.00，数字直接隐形（两套主题都中招）。
+   正确做法：底色用 `--pda-accent` 的**淡色**（明确写成令牌的 color-mix，
+   不依赖 currentColor），文字继承页签的强调色。
+   这样「淡蓝底 + 蓝字」在浅色下成立；深色下 accent 是亮蓝，
+   亮蓝淡底 + 亮蓝字对比仍偏弱，故深色单独改用不透明的强调色实底 + 反白字。 */
+.tabCount {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--pda-accent) 22%, transparent);
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 深色下强调色是半透明的亮蓝，淡底方案会掉到 AA 以下，
+   改为「不透明强调色实底 + 反白数字」，保证 10px 小字也能读清。 */
+.publishDialog[data-theme="dark"] .tabCount,
+.drawerRoot[data-theme="dark"] .tabCount {
+  background: var(--pda-accent);
+  color: #0b1220;
+}
+
+/* 已生效域名行右侧的操作区（复制 + 删除） */
+.domainRowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 删除按钮：默认低调，悬停才显出危险色，避免误点 */
+.dangerGhostButton {
+  padding: 3px 8px;
+  border: 1px solid var(--pda-border);
+  border-radius: 6px;
+  background: var(--pda-surface);
+  color: var(--pda-text-muted);
+  font-size: 10px;
+  line-height: 1.6;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dangerGhostButton:hover:not(:disabled) {
+  border-color: rgba(220, 38, 38, 0.45);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--pda-danger);
+}
+
+.dangerGhostButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 待添加的域名草稿行：输入框 + 紧邻的删除按钮 */
+.draftRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draftRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 区域匹配提示：命中=绿，未命中=黄（引导而非拦截） */
+.zoneHintOk {
+  font-size: 11px;
+  color: #16a34a;
+}
+
+.zoneHintWarn {
+  font-size: 11px;
+  color: #d97706;
 }
 
 /* CNAME 指引块：DNS 记录的 <dt>/<dd> 两列栅格 */
@@ -1333,6 +1520,43 @@
   color: var(--pda-text-muted);
   font-size: 11px;
   font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+}
+
+/* --- 平台域名预览（行式清单：一行一个主机名，便于纵向扫读与逐个复制） --- */
+
+.previewTable {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+  border: 1px solid var(--pda-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--pda-surface);
+}
+
+.previewRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--pda-border);
+}
+
+.previewRow:last-child {
+  border-bottom: none;
+}
+
+.previewRow:hover {
+  background: var(--pda-accent-soft);
+}
+
+.previewHost {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--pda-text);
+  overflow-wrap: anywhere;
 }
 
 

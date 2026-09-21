@@ -59,7 +59,7 @@ describe("decodeDriveContentChunk", () => {
 
 describe("Drive archive read loop contract", () => {
   /**
-   * Mirrors the accumulation step in `downloadDriveArchive`: decode each range,
+   * Mirrors the accumulation step in `downloadDriveNode`: decode each range,
    * concatenate, and refuse to hand back a short artifact.
    */
   function readRanges(
