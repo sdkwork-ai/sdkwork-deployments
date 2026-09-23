@@ -48,7 +48,7 @@ import { DataTable, type DataTableColumn, type DataTablePaginationProps } from "
 
 import { deliveryText, type DeliveryMessageKey } from "./i18n.ts";
 import { relativeRecordName } from "./dns-record-name.ts";
-import { type RootDomainIssue, validateRootDomain } from "./root-domain.ts";
+import { type RootDomainIssue, isRootDomainApex, validateRootDomain } from "./root-domain.ts";
 
 type Translator = (key: DeliveryMessageKey, values?: Record<string, string | number>) => string;
 type ZoneDialog =
@@ -99,13 +99,22 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       scope: "USER",
     }).then((result) => {
       if (!active) return;
-      // The filter is re-applied here as well. A gateway that predates the
-      // `scope` query parameter drops it without an error and answers with the
-      // whole inventory, which would put `app.<suffix>` subdomains back into a
-      // root-domain list. The list's own invariant is "root domains only", so
-      // it holds that invariant rather than trusting a response to have
-      // honoured a request.
-      const rootDomains = result.items.filter((zone) => zone.scope === "USER");
+      // This table is the root-domain list, so every row it shows has to be a
+      // root domain. The platform provisions one `app.<suffix>` zone per suffix
+      // it serves for the whole tenant, and those land in the same listing as
+      // the operator's own root domains - but an `app.<suffix>` apex is a
+      // subdomain, not a root domain, and the hostnames under it belong to the
+      // zone it names rather than to any root domain on this page.
+      //
+      // The listing also sends `scope: "USER"` so the service leaves them out
+      // server-side, but the shape filter is applied here as well: a gateway
+      // that predates the parameter drops it without an error and answers with
+      // the whole inventory, and the list's own invariant is "root domains
+      // only" — so it holds that invariant rather than trusting a response to
+      // have honoured a request. A shape filter also survives a response that
+      // carries no ownership field at all, where a `scope` comparison would
+      // silently hide every row.
+      const rootDomains = result.items.filter((zone) => isRootDomainApex(zone.apexHostname));
       setZones(rootDomains);
       // Keep the count honest when rows were dropped that the service still
       // counted. "共 N 条" sitting above a visibly shorter list is the one
