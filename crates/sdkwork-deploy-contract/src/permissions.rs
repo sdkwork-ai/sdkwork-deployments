@@ -1,3 +1,8 @@
+//! ⚠️ UNLANDED: no `mod` declaration names this file inside the crate, so rustc
+//! never compiles it. It arrived with the `wip/deploy-certificate` work as the
+//! specification for a later landing — wire it up by declaring the module, not
+//! by deleting the file.
+//!
 //! IAM permission codes this module *reads* out of the caller's principal.
 //!
 //! Only the codes the Deploy module itself evaluates live here. A permission is

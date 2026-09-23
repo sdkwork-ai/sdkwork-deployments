@@ -1,3 +1,8 @@
+//! ⚠️ UNLANDED: no `mod` declaration names this file inside the crate, so rustc
+//! never compiles it. It arrived with the `wip/deploy-certificate` work as the
+//! specification for a later landing — wire it up by declaring the module, not
+//! by deleting the file.
+//!
 //! Keeping a root domain's provider-side records in step with the hostnames
 //! this control plane manages.
 //!

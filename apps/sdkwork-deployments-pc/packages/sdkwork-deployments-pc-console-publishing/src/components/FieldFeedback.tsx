@@ -1,4 +1,8 @@
 /**
+ * ⚠️ 未落地（v7）：本文件没有任何生产消费者，只被已 park 的
+ * `tests/pending/publish-first-step-v7.spec.ts.pending` 引用（见该目录 README）。
+ * 它是 v7 发布对话框的零件，接线前不要把它当成在跑的代码。
+ *
  * FieldFeedback — 字段级「必填 / 报错」反馈（v7）。
  *
  * 背景（用户实测反馈）：「点击下一步：请先填写必填项再发布」—— 界面上既没有

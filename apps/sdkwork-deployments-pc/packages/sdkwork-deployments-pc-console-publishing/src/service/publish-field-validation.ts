@@ -1,4 +1,9 @@
 /**
+ * ⚠️ 未落地（v7）：本文件没有任何生产消费者，只被已 park 的
+ * `tests/pending/publish-field-validation-v7.spec.ts.pending` 引用（见该目录 README）。
+ * 它缺的那几个 `field*` / `publishMissingFields` 文案也还没进 i18n，所以它自身
+ * 仍带着 typecheck 报错——那是"未落地"的标记，不是需要绕过的噪声。
+ *
  * 发布对话框的**字段级**校验（v7）。
  *
  * 为什么单独成模块：v7 之前这里是一个 `canNext(): boolean`，校验结果被压成
