@@ -41,8 +41,17 @@ the Nginx, server, and audit operations currently defined by the Deploy Backend 
 Application package bytes are uploaded through `@sdkwork/drive-app-sdk`. Deploy receives stable
 Drive upload, space, and node references through `artifacts.create`, then owns immutable artifact,
 release, deployment, and runtime-assignment business state. Disabling an application is the
-recoverable `apps.pause` command; re-enabling it is `apps.activate`; retiring it is `apps.delete`
-(which archives the application rather than hard-deleting its history).
+recoverable `apps.pause` command and re-enabling it is `apps.activate`. Retiring an application is
+an **archive transition** — `apps.update` to `AppStatus.ARCHIVED` — not a hard delete: the app-api
+deliberately exposes no `DELETE /apps/{appId}`, and deletion commands exist only for the
+neighbouring resources (`domainZones.delete`, `domainZones.hostnames.delete`, `certificates.delete`,
+`artifacts.delete`).
+
+> **Console coverage gap (open).** `createDeploymentsConsoleRegistry` already implements the whole
+> lifecycle — activate, pause, and the archive transition — but `consoleResourcePages` binds the
+> `apps` resource to the custom publishing page, which replaces that registry page outright. No
+> console surface therefore reaches the three commands today; the registry copy is unreachable until
+> either the custom page exposes them or the binding is dropped.
 
 Console packages must consume `@sdkwork/deployments-app-sdk` and `@sdkwork/drive-app-sdk` through
 console-core. Backend-admin packages must consume `@sdkwork/deployments-backend-sdk` through the lazy
