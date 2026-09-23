@@ -12,8 +12,9 @@ export { BuildProgressDialog } from "./components/BuildProgressDialog.tsx";
 export type { BuildProgressDialogProps, DeployDialogBuildFrame, DeployDialogBuildPort } from "./components/BuildProgressDialog.tsx";
 export { PublishingAppsPage, primaryHostname } from "./components/PublishingAppsPage.tsx";
 export type { PublishingAppsPageProps } from "./components/PublishingAppsPage.tsx";
-export { AppEditDialog, AppPublishDialog, AppSourceDialog } from "./components/AppOperationsDialogs.tsx";
+export { AppArchiveDialog, AppEditDialog, AppPublishDialog, AppSourceDialog } from "./components/AppOperationsDialogs.tsx";
 export type {
+  AppArchiveDialogProps,
   AppEditDialogProps,
   AppPublishDialogProps,
   AppSourceDialogProps,

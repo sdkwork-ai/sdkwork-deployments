@@ -494,9 +494,10 @@ const en = {
   detailOpen: "Open",
   detailLoadFailed: "Failed to load application details: {message}",
   detailMedia: "Store assets",
-  // Row operations of the applications ledger. `removeApp` is rendered disabled
-  // with `removeAppUnavailable` as its only explanation: the deploy app-api
-  // contract defines no `apps.delete`, so the slot exists but cannot act.
+  // Row operations of the applications ledger. Retirement has no `DELETE` route
+  // to call — the app-api defines none — but it is reachable as the
+  // `AppStatus.ARCHIVED` transition, so `archiveApp` is a real command that asks
+  // for confirmation rather than a disabled slot.
   operations: "Operations",
   editApp: "Edit",
   editAppTitle: "Edit application",
@@ -504,8 +505,11 @@ const en = {
   updateSourceTitle: "Modify source code",
   publishRelease: "Publish",
   publishReleaseTitle: "Publish a release",
-  removeApp: "Delete",
-  removeAppUnavailable: "Deleting an application is not available: the deploy app-api exposes no delete operation.",
+  disableApp: "Disable",
+  enableApp: "Enable",
+  archiveApp: "Archive",
+  archiveAppTitle: "Archive application",
+  archiveAppHint: "Retiring an application archives it: its releases and deployments are kept, nothing is hard-deleted. This console offers no un-archive, so confirm the application is really finished.",
   save: "Save",
   saving: "Saving...",
   releaseNote: "Release notes",
@@ -1081,8 +1085,9 @@ const zh: Record<keyof typeof en, string> = {
   detailOpen: "打开",
   detailLoadFailed: "应用详情加载失败：{message}",
   detailMedia: "应用资料",
-  // 应用台账的行级操作。`removeApp` 渲染为禁用态、以 `removeAppUnavailable`
-  // 作为唯一解释：deploy app-api 契约没有 `apps.delete`，所以这一格存在但不可用。
+  // 应用台账的行级操作。退役没有 `DELETE` 路由可调 —— 契约根本没有 —— 但它可以
+  // 通过 `AppStatus.ARCHIVED` 状态迁移达成，所以 `archiveApp` 是一条真命令，
+  // 只是会先要一次确认，而不是一个禁用的占位。
   operations: "操作",
   editApp: "编辑",
   editAppTitle: "编辑应用",
@@ -1090,8 +1095,11 @@ const zh: Record<keyof typeof en, string> = {
   updateSourceTitle: "修改源码",
   publishRelease: "发布",
   publishReleaseTitle: "发布版本",
-  removeApp: "删除",
-  removeAppUnavailable: "暂不支持删除应用：deploy app-api 未提供删除接口。",
+  disableApp: "禁用",
+  enableApp: "启用",
+  archiveApp: "归档",
+  archiveAppTitle: "归档应用",
+  archiveAppHint: "退役应用即归档：其版本与部署记录都会保留，不会硬删除任何历史。本控制台暂不提供取消归档，请确认该应用确实已终止使用。",
   save: "保存",
   saving: "保存中...",
   releaseNote: "更新说明",

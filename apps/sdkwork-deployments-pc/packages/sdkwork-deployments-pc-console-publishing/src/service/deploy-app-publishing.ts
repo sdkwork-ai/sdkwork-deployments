@@ -723,9 +723,13 @@ export interface DeployAppMediaUpload {
  * ledger used to expose per row (`update` / `update-source` / `publish` /
  * `delete`). The deploy plane owns the application lifecycle now, so the
  * semantics are re-expressed over `deploy_app` instead of the retired
- * host-owned entity: metadata edit, source repository, and release. `delete`
- * has no counterpart here — the app-api contract defines no `apps.delete` —
- * so it is deliberately absent rather than stubbed.
+ * host-owned entity: metadata edit, source repository, and release.
+ *
+ * `delete` has no `DELETE` route to call — the app-api defines none — but it
+ * *does* have a counterpart: retiring an application is the `AppStatus.ARCHIVED`
+ * transition, which archives it and keeps the history. That lives on the service
+ * as `archiveApp` (with `pauseApp` / `activateApp` beside it) rather than as a
+ * member of this patch.
  */
 export interface DeployAppMetadataPatch {
   readonly name?: string | undefined
@@ -772,6 +776,19 @@ export interface DeployAppPublishingService {
   // ── 行级操作（deploy_app 自己的生命周期；对齐宿主旧台账 update/update-source/publish）──
   /** `update`: 改应用元数据（名称/描述）。 */
   updateApp(appId: string, patch: DeployAppMetadataPatch): Promise<AppResponse>
+
+  /**
+   * Lifecycle transitions.
+   *
+   * `pause` and `activate` are their own authored operations in the app-api
+   * (`POST /apps/{appId}/pause|activate`) and take an idempotency key, exactly
+   * like the other commands. Retirement is not a `delete` route at all — the
+   * contract spells it as `apps.update` carrying `AppStatus.ARCHIVED` — so it
+   * goes through the update path and keeps the release history.
+   */
+  pauseApp(appId: string): Promise<AppResponse>
+  activateApp(appId: string): Promise<AppResponse>
+  archiveApp(appId: string): Promise<AppResponse>
   /** `update-source`: 给应用关联一个源码仓库。 */
   createSourceRepository(appId: string, input: DeployAppSourceRepositoryInput): Promise<SourceRepositoryResponse>
   /** `publish`: 用已注册的制品包发一个版本。 */
@@ -955,6 +972,19 @@ export function createDeployAppPublishingService(
         ...(name === undefined || name.length === 0 ? {} : { name }),
         ...(description === undefined ? {} : { description }),
       })
+    },
+
+    pauseApp(appId) {
+      return deployClient.app.pause(appId, { idempotencyKey: createIdempotencyKey() })
+    },
+
+    activateApp(appId) {
+      return deployClient.app.activate(appId, { idempotencyKey: createIdempotencyKey() })
+    },
+
+    archiveApp(appId) {
+      // No `DELETE /apps/{appId}` exists; retirement is this transition.
+      return deployClient.app.update(appId, { appStatus: "ARCHIVED" })
     },
 
     createSourceRepository(appId, input) {

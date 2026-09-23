@@ -171,6 +171,56 @@ export function AppEditDialog({ app, locale, onClose, onSaved, service }: AppEdi
   );
 }
 
+export interface AppArchiveDialogProps {
+  readonly app: AppResponse;
+  readonly locale: DeploymentsLocale;
+  readonly service: DeployAppPublishingService;
+  readonly onClose: () => void;
+  readonly onArchived: () => void;
+}
+
+/**
+ * `delete`, as the contract actually spells it.
+ *
+ * The app-api has no `DELETE /apps/{appId}`; retiring an application is the
+ * `AppStatus.ARCHIVED` transition, which archives it and keeps every release and
+ * deployment. That is still irreversible from this console — nothing here
+ * un-archives — so it asks first instead of acting straight off the row click.
+ */
+export function AppArchiveDialog({ app, locale, onClose, onArchived, service }: AppArchiveDialogProps) {
+  const t = useMemo(() => publishingTranslator(locale), [locale]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await service.archiveApp(app.id);
+      onArchived();
+    } catch (cause) {
+      setError(t("operationFailed", { message: messageOf(cause) }));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal close={onClose} closeLabel={t("close")} title={t("archiveAppTitle")}>
+      <p className="confirmation-message">
+        <strong>{app.name}</strong> — {t("archiveAppHint")}
+      </p>
+      {error && <div className="error-banner" role="alert">{error}</div>}
+      <DialogFooter
+        busy={busy}
+        close={onClose}
+        submitLabel={t("archiveApp")}
+        t={t}
+        onSubmit={() => void submit()}
+      />
+    </Modal>
+  );
+}
+
 export interface AppSourceDialogProps {
   readonly app: AppResponse;
   readonly locale: DeploymentsLocale;

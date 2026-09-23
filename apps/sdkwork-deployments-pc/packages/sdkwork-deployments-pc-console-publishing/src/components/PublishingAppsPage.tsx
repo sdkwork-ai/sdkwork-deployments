@@ -12,9 +12,10 @@
  *      an existing Drive archive; `AppDomainDialog` configures the platform
  *      hostname (`appId.app.<suffix>`) and custom domains; and `AppDetailDrawer`
  *      shows the app's gathered facts read-only.
- *   4. **Delete** — rendered as a permanently disabled slot: the deploy app-api
- *      contract defines no `apps.delete`, so the `title` says why instead of
- *      promising a call the contract cannot make.
+ *   4. **Lifecycle** — `pauseApp` / `activateApp` drive the ACTIVE ↔ PAUSED
+ *      transition, and `AppArchiveDialog` retires the app via `apps.update` to
+ *      `AppStatus.ARCHIVED`. The app-api defines no `DELETE` route, so
+ *      retirement *is* that archival transition rather than a hard delete.
  *
  * Publishing is therefore unavailable until an app exists: publishing is a
  * per-app row action, and with an empty table there is nothing to publish.
@@ -39,7 +40,7 @@ import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 import type { AppKind, AppResponse, AppStatus, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
-import { Globe, Info, Pencil, Rocket, Trash2, Upload, type LucideIcon } from "lucide-react";
+import { Archive, CirclePause, CirclePlay, Globe, Info, Pencil, Rocket, Upload, type LucideIcon } from "lucide-react";
 import {
   publishingTranslator,
   APP_KIND_LABEL_KEYS,
@@ -53,7 +54,7 @@ import { AppDomainDialog } from "./AppDomainDialog.tsx";
 import { CreateAppDialog } from "./CreateAppDialog.tsx";
 import { CreateDeployAppDialog } from "./CreateDeployAppDialog.tsx";
 import { UploadSourceDialog } from "./UploadSourceDialog.tsx";
-import { AppEditDialog } from "./AppOperationsDialogs.tsx";
+import { AppArchiveDialog, AppEditDialog } from "./AppOperationsDialogs.tsx";
 import "./create-deploy-app.module.css";
 
 export interface PublishingAppsPageProps {
@@ -68,13 +69,12 @@ export interface PublishingAppsPageProps {
 const APP_LIST_PAGE_SIZE = 50;
 const APP_TABLE_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
-/** 行内运维命令的一条：`onSelect` 缺省即「保留槽位但不可用」。 */
+/** 行内运维命令的一条。`danger` 只改观感、不禁用 —— 不可逆动作靠确认框兜底。 */
 interface RowAction {
   readonly key: PublishingMessageKey
   readonly icon: LucideIcon
-  readonly onSelect?: () => void
-  /** 覆写 hover 提示（默认与 `key` 同）；禁用槽位用它说明「为什么不能」而非重复「是什么」。 */
-  readonly titleKey?: PublishingMessageKey
+  readonly onSelect: () => void
+  readonly danger?: boolean
 }
 
 /** 枚举 → 本地化文案；映射表未覆盖的新枚举值回退原文。 */
@@ -111,12 +111,14 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
   // 创建与发布是两条独立命令：各自开各自的话框，互不代替。
   const [createOpen, setCreateOpen] = useState(false)
   const [publishTarget, setPublishTarget] = useState<AppResponse>()
-  // 行内运维命令：编辑 / 修改源码 / 发布 / 域名设置 / 详情，都挂在行上、都只针对已存在的应用。
-  // 「删除」只渲染禁用占位 —— 契约的 apps 资源没有 delete（见 removeAppUnavailable）。
+  // 行内运维命令：编辑 / 修改源码 / 发布 / 域名设置 / 详情 / 启停 / 归档，都挂在行上、
+  // 都只针对已存在的应用。启停只在该应用处于 ACTIVE 或 PAUSED 时出现 —— 其余状态没有
+  // 合法迁移，宁可不给入口也不发一个会被服务端拒绝的请求。
   const [editTarget, setEditTarget] = useState<AppResponse>()
   const [uploadTarget, setUploadTarget] = useState<AppResponse>()
   const [domainTarget, setDomainTarget] = useState<AppResponse>()
   const [detailTarget, setDetailTarget] = useState<AppResponse>()
+  const [archiveTarget, setArchiveTarget] = useState<AppResponse>()
   const [refresh, setRefresh] = useState(0)
 
   useEffect(() => {
@@ -219,11 +221,29 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
   ], [locale, t])
 
   /**
-   * 行内六命令，按生命周期排序：编辑 / 修改源码 / 发布 / 域名设置 / 详情 / 删除。
+   * 启停走 `apps.pause` / `apps.activate` 两条各自的命令（各自要幂等键），不是同一次
+   * `update` 的两种载荷。失败落到错误横幅，不静默吞掉；成功只刷新列表 —— 状态徽章本身
+   * 就是回执。
+   */
+  const toggleStatus = (app: AppResponse, next: "ACTIVE" | "PAUSED") => {
+    setNotice(undefined)
+    setError(undefined)
+    const transition = next === "PAUSED" ? service.pauseApp(app.id) : service.activateApp(app.id)
+    void transition.then(() => { refreshList() }).catch((cause) => {
+      const message = cause instanceof Error ? cause.message : String(cause)
+      setError(t("operationFailed", { message }))
+    })
+  }
+
+  /**
+   * 行内六到七命令，按生命周期排序：编辑 / 修改源码 / 发布 / 域名设置 / 详情 → 启停 → 归档。
    *
    * 渲染成 `table-action` 图标按钮而不是文字按钮 —— 操作列在 host 的 `deploy-surface.css`
-   * 里是 `min-width:144px`，6 个固定 32px 的图标合计 207px 仍在同模块先例内（域名台账每行
-   * 5 个动作），而 6 个文字按钮的 min-content 会在窄控制台上把表格顶出横向滚动。
+   * 里是 `min-width:144px`，7 个固定 32px 的图标合计 242px 仍在同模块先例内（域名台账每行
+   * 5 个动作、其中 2 个还带文字），而同样数量的文字按钮会在窄控制台上把表格顶出横向滚动。
+   *
+   * 启停只在 ACTIVE / PAUSED 之间出现：其余状态没有合法迁移，宁可不给入口也不发一个注定
+   * 被服务端拒绝的请求。归档是不可逆的，红色描边并先开确认框。
    *
    * 图标没有文字，可访问名就是唯一标识 ⇒ `aria-label` / `title` 都带应用名
    * （host 侧的门禁正是按可访问名断言的，不看 textContent）。
@@ -235,28 +255,29 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
       { key: "publishRelease", icon: Rocket, onSelect: () => { setNotice(undefined); setPublishTarget(app) } },
       { key: "domainSettingsAction", icon: Globe, onSelect: () => { setNotice(undefined); setDomainTarget(app) } },
       { key: "appDetailAction", icon: Info, onSelect: () => { setNotice(undefined); setDetailTarget(app) } },
-      // 删除：契约的 apps 资源没有 delete，所以槽位保留、动作永久禁用，
-      // 由 title 说明原因（`removeAppUnavailable`）而不是假装能删。
-      { key: "removeApp", icon: Trash2, titleKey: "removeAppUnavailable" },
+      ...(app.appStatus === "ACTIVE"
+        ? [{ key: "disableApp", icon: CirclePause, onSelect: () => { toggleStatus(app, "PAUSED") } } satisfies RowAction]
+        : app.appStatus === "PAUSED"
+          ? [{ key: "enableApp", icon: CirclePlay, onSelect: () => { toggleStatus(app, "ACTIVE") } } satisfies RowAction]
+          : []),
+      // 归档：契约没有 `DELETE /apps/{appId}`，退役是 `AppStatus.ARCHIVED` 状态迁移。
+      // 本控制台无法撤销，所以先开确认框，而不是直接执行。
+      { key: "archiveApp", icon: Archive, danger: true, onSelect: () => { setNotice(undefined); setArchiveTarget(app) } },
     ]
     return (
       <div className="row-actions">
-        {actions.map((action) => {
-          const unavailable = action.onSelect === undefined
-          return (
-            <button
-              key={action.key}
-              className={unavailable ? "table-action danger-action" : "table-action"}
-              type="button"
-              title={t(action.titleKey ?? action.key)}
-              aria-label={`${t(action.key)} ${app.name}`}
-              disabled={unavailable}
-              onClick={action.onSelect}
-            >
-              <action.icon aria-hidden="true" size={16} />
-            </button>
-          )
-        })}
+        {actions.map((action) => (
+          <button
+            key={action.key}
+            className={action.danger === true ? "table-action danger-action" : "table-action"}
+            type="button"
+            title={t(action.key)}
+            aria-label={`${t(action.key)} ${app.name}`}
+            onClick={action.onSelect}
+          >
+            <action.icon aria-hidden="true" size={16} />
+          </button>
+        ))}
       </div>
     )
   }
@@ -347,6 +368,15 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
           service={service}
           onClose={() => { setEditTarget(undefined) }}
           onSaved={() => { settle(() => { setEditTarget(undefined) }) }}
+        />
+      )}
+      {archiveTarget !== undefined && (
+        <AppArchiveDialog
+          app={archiveTarget}
+          locale={locale}
+          service={service}
+          onClose={() => { setArchiveTarget(undefined) }}
+          onArchived={() => { settle(() => { setArchiveTarget(undefined) }) }}
         />
       )}
       {uploadTarget !== undefined && (
