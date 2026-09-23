@@ -12,16 +12,16 @@ use sdkwork_deploy_contract::{
     CreateAppReleaseRequest, CreateAppRequest, CreateBuildRequest, CreateBuildTemplateRequest,
     CreatePlatformTargetRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
     DeployAppRequestContext, DeployServiceError, DeployServiceResult, DeploymentStatus,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, PackagePage, PackageResponse,
-    PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
-    RegisterPackageRequest, ReleaseStatus, SigningIdentityPage, SigningIdentityResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateBuildStateRequest, UsageEventPage,
-    UsageEventQuery, ENTITLEMENT_DIMENSION_ACTIVE_APPS, ENTITLEMENT_DIMENSION_BUILD_CONCURRENCY,
-    ENTITLEMENT_DIMENSION_DEPLOYMENT_COUNT, ENTITLEMENT_DIMENSION_PACKAGE_STORAGE_BYTES,
-    ENTITLEMENT_DIMENSION_PLATFORM_TARGETS, ENTITLEMENT_DIMENSION_RELEASE_COUNT,
-    USAGE_DIMENSION_BUILD_MINUTES, USAGE_DIMENSION_DEPLOYMENT_COUNT,
-    USAGE_DIMENSION_PACKAGE_STORAGE_BYTES,
+    EnvironmentPromotionPage, EnvironmentPromotionResponse, ListAppsQuery, PackagePage,
+    PackageResponse, PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest,
+    PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus, SigningIdentityPage,
+    SigningIdentityResponse, SourceRepositoryPage, SourceRepositoryResponse,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
+    UpdateBuildStateRequest, UsageEventPage, UsageEventQuery, ENTITLEMENT_DIMENSION_ACTIVE_APPS,
+    ENTITLEMENT_DIMENSION_BUILD_CONCURRENCY, ENTITLEMENT_DIMENSION_DEPLOYMENT_COUNT,
+    ENTITLEMENT_DIMENSION_PACKAGE_STORAGE_BYTES, ENTITLEMENT_DIMENSION_PLATFORM_TARGETS,
+    ENTITLEMENT_DIMENSION_RELEASE_COUNT, USAGE_DIMENSION_BUILD_MINUTES,
+    USAGE_DIMENSION_DEPLOYMENT_COUNT, USAGE_DIMENSION_PACKAGE_STORAGE_BYTES,
 };
 use sdkwork_deploy_core::{
     required_identity_field, validate_app_kind_platform, validate_catalog_name,
@@ -141,11 +141,16 @@ impl DeployService {
     pub async fn list_apps(
         &self,
         context: &DeployAppRequestContext,
-        page: i32,
-        page_size: i32,
+        query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage> {
         let tenant_id = Self::tenant_id(context)?;
-        self.repository.list_apps(tenant_id, page, page_size).await
+        // The subject travels with the query, not inside it: `actor_id` and
+        // `organization_id` decide *which rows the caller may reach*, while
+        // `query` fields only narrow the page. Collapsing the two would let a
+        // client widen its own reach by naming an owner in the request.
+        self.repository
+            .list_apps(tenant_id, context.actor_id, context.organization_id, query)
+            .await
     }
 
     pub async fn retrieve_app(

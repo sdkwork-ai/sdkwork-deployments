@@ -75,7 +75,6 @@ export function createDeployApplicationPublisher(
             const appDefaultEnvironment = normalizedOptionalText(
               request.app.defaultEnvironment,
             );
-            const appSiteId = normalizedOptionalText(request.app.siteId);
             const appMetadata = request.app.metadata;
             // The body's `idempotencyKey` and the `Idempotency-Key` header MUST carry
             // the same value, so resolve it once and reuse it for both.
@@ -90,7 +89,6 @@ export function createDeployApplicationPublisher(
                 appKind: request.app.appKind,
                 ...(appSlug !== undefined ? { slug: appSlug } : {}),
                 ...(appDescription !== undefined ? { description: appDescription } : {}),
-                ...(appSiteId !== undefined ? { siteId: appSiteId } : {}),
                 ...(appDefaultEnvironment !== undefined
                   ? { defaultEnvironment: appDefaultEnvironment }
                   : {}),

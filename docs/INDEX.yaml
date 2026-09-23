@@ -33,6 +33,10 @@ entries:
     path: docs/engineering/plans/PLAN-2026-0002-managed-domain-tls-control-plane.md
     kind: plan
     status: blocked-on-human-review
+  - id: PLAN-2026-0004-app-ownership-and-admin-ledger
+    path: docs/engineering/plans/PLAN-2026-0004-app-ownership-and-admin-ledger.md
+    kind: plan
+    status: proposed
   - id: REVIEW-20260721-cloud-site-publishing-commercial-readiness
     path: docs/engineering/reviews/REVIEW-20260721-cloud-site-publishing-commercial-readiness.md
     kind: review

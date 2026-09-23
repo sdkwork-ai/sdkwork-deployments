@@ -55,22 +55,38 @@ pub struct UsageEventQuery {
     pub until: Option<String>,
 }
 
-/// App list filters (the unified app surface carries the former site
-/// dimensions: type/status/keyword).
+/// `apps.list` filters.
+///
+/// This struct existed but was never used: the route deserialized the shared
+/// `PageQuery` instead, so the declared filters were unreachable and the
+/// ownership facet had nowhere to live. It is now the real query type for the
+/// route.
+///
+/// Two declared fields were dropped in the same change: `app_type: Option<i32>`
+/// and `status: Option<i32>`. Both were dead, and `status` contradicted the
+/// canonical vocabulary — `AppStatus` is a SCREAMING string enum
+/// (`DRAFT`/`ACTIVE`/`PAUSED`/`ARCHIVED`, which is also what the DDL CHECK
+/// accepts), so an integer status could only ever have produced filters the
+/// database rejects. Nothing deserialized this struct, and it is not declared in
+/// the published contract, so removing them is invisible on the wire.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ListAppsQuery {
     #[serde(default = "crate::dto::default_page")]
     pub page: i32,
     #[serde(default = "crate::dto::default_page_size")]
     pub page_size: i32,
-    /// Web publishing type (1..6).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub app_type: Option<i32>,
-    /// App status (0=DRAFT, 1=ACTIVE, 2=PAUSED, 3=ARCHIVED).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status: Option<i32>,
+    /// Case-insensitive match on the app name or slug.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyword: Option<String>,
+    /// Narrow the listing to one ownership level — the vocabulary
+    /// [`crate::app_delivery::AppOwnerType`] names.
+    ///
+    /// This is a **facet, not a grant**: omitting it widens the answer to every
+    /// level the caller can already reach, and setting it can only narrow that
+    /// set. Reach itself is decided by the owner gate in the repository, which
+    /// is conjunctive with this filter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<crate::app_delivery::AppOwnerType>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -490,8 +506,7 @@ pub trait DeployAppApi: Send + Sync {
     async fn list_apps(
         &self,
         _context: &DeployAppRequestContext,
-        _page: i32,
-        _page_size: i32,
+        _query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage> {
         Err(crate::DeployServiceError::Internal(
             "list_apps API is not implemented".to_owned(),

@@ -1,4 +1,4 @@
-import type { AppKind, AppStatus } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { AppKind, AppOwnerType, AppStatus } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import type { AppSurfaceId } from "./service/project-detection.ts";
 
@@ -298,6 +298,20 @@ const en = {
   appsEmpty: "No applications yet. Use \"New application\" to create the first one.",
   appsLoadFailed: "Failed to load applications: {message}",
   columnDomains: "Domain",
+  // Ownership columns. `columnOwner` shows the concrete owner subject (a user id
+  // for `USER`, an organization id for `ORGANIZATION`) and the level's own name
+  // when the owner is the level itself — never the level twice.
+  columnOwner: "Owner",
+  columnOwnerType: "Ownership",
+  ownerTypeFilter: "Ownership",
+  ownerTypeFilterAll: "All ownership levels",
+  ownerLevelPlatform: "Platform app",
+  ownerLevelTenant: "Shared app",
+  ownerLevelOrganization: "Organization app",
+  ownerLevelUser: "Personal app",
+  ownerScopePlatform: "Whole platform",
+  ownerScopeTenant: "Whole tenant",
+  ownerScopeOrganization: "Whole organization",
 
   // Row actions
   domainSettingsAction: "Domains",
@@ -487,6 +501,21 @@ const en = {
   detailFieldCategory: "Category",
   detailFieldAppDomain: "Hostname id",
   detailNoValue: "—",
+  // 归属与审计（详情抽屉）。面向平台运维：应用属于谁、谁建谁改、何时进出各状态、
+  // 边缘配置是否被人手改过。这些字段 `AppResponse` 一直在返，此前无面可看。
+  detailSectionOwnership: "Ownership & audit",
+  detailFieldOwnerType: "Ownership",
+  detailFieldOwnerSubject: "Owner",
+  detailFieldTenant: "Tenant",
+  detailFieldOrganization: "Organization",
+  detailFieldCreatedBy: "Created by",
+  detailFieldUpdatedBy: "Updated by",
+  detailFieldActivatedAt: "Activated",
+  detailFieldPausedAt: "Paused",
+  detailFieldArchivedAt: "Archived",
+  detailFieldNginxOverridden: "Edge config override",
+  detailBooleanYes: "Yes",
+  detailBooleanNo: "No",
   detailTargetsEmpty: "No platform target yet — publish the application to add one.",
   detailSourceEmpty: "No code source connected yet.",
   detailSourceLocal: "Uploaded archive",
@@ -889,6 +918,19 @@ const zh: Record<keyof typeof en, string> = {
   appsEmpty: "暂无应用，点击「新增应用」创建第一个应用。",
   appsLoadFailed: "应用列表加载失败：{message}",
   columnDomains: "域名",
+  // 归属两列。`columnOwner` 展示**具体归属主体**（USER 显示用户 ID、ORGANIZATION
+  // 显示组织 ID），当归属就是层级本身时显示该层级自己的名字 —— 不会把层级写两遍。
+  columnOwner: "归属用户",
+  columnOwnerType: "归属类型",
+  ownerTypeFilter: "归属类型",
+  ownerTypeFilterAll: "全部归属类型",
+  ownerLevelPlatform: "平台应用",
+  ownerLevelTenant: "租户应用",
+  ownerLevelOrganization: "组织应用",
+  ownerLevelUser: "个人应用",
+  ownerScopePlatform: "全平台",
+  ownerScopeTenant: "全租户",
+  ownerScopeOrganization: "全组织",
 
   // 行内操作
   domainSettingsAction: "域名设置",
@@ -1078,6 +1120,20 @@ const zh: Record<keyof typeof en, string> = {
   detailFieldCategory: "分类",
   detailFieldAppDomain: "域名标识",
   detailNoValue: "—",
+  // 归属与审计（详情抽屉）。
+  detailSectionOwnership: "归属与审计",
+  detailFieldOwnerType: "归属类型",
+  detailFieldOwnerSubject: "归属主体",
+  detailFieldTenant: "租户",
+  detailFieldOrganization: "组织",
+  detailFieldCreatedBy: "创建人",
+  detailFieldUpdatedBy: "更新人",
+  detailFieldActivatedAt: "激活时间",
+  detailFieldPausedAt: "暂停时间",
+  detailFieldArchivedAt: "归档时间",
+  detailFieldNginxOverridden: "边缘配置覆盖",
+  detailBooleanYes: "是",
+  detailBooleanNo: "否",
   detailTargetsEmpty: "尚无平台目标 —— 发布该应用后会自动添加。",
   detailSourceEmpty: "尚未接入代码来源。",
   detailSourceLocal: "已上传压缩包",
@@ -1256,4 +1312,29 @@ export const APP_STATUS_LABEL_KEYS: Readonly<Record<AppStatus, PublishingMessage
   PAUSED: "statusPaused",
   ARCHIVED: "statusArchived",
   FAILED: "statusFailed",
+};
+
+/**
+ * `deploy_app.owner_type` → 文案键映射（归属类型列与归属筛选共用）。
+ *
+ * 四个层级各有自己的名字，**不**复用 `APP_SURFACE_LABEL_KEYS` 那套「应用表面」
+ * 词表：表面回答「这是个什么应用」，归属回答「谁拥有它」，混用会让「平台应用」
+ * 与「PC 网页」撞成同一个键。
+ */
+export const APP_OWNER_TYPE_LABEL_KEYS: Readonly<Record<AppOwnerType, PublishingMessageKey>> = {
+  PLATFORM: "ownerLevelPlatform",
+  TENANT: "ownerLevelTenant",
+  ORGANIZATION: "ownerLevelOrganization",
+  USER: "ownerLevelUser",
+};
+
+/**
+ * 归属主体缺席时（`PLATFORM` / `TENANT` 的归属就是层级本身，没有单一主体）
+ * 「归属用户」列的兜底文案。`USER` / `ORGANIZATION` 有具体主体，走各自的 id，
+ * 因此这两个层级**刻意不在表内**。
+ */
+export const APP_OWNER_SCOPE_LABEL_KEYS: Readonly<Partial<Record<AppOwnerType, PublishingMessageKey>>> = {
+  PLATFORM: "ownerScopePlatform",
+  TENANT: "ownerScopeTenant",
+  ORGANIZATION: "ownerScopeOrganization",
 };

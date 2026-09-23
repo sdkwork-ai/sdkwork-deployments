@@ -21,17 +21,17 @@ use sdkwork_deploy_contract::{
     DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
     DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
     EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    ListDomainZonesQuery, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
-    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
-    RequestCertificateOrderRequest, RetentionRunResponse, RunnerHealthPage, ServerPage,
-    ServerResponse, SigningIdentityHealthPage, SigningIdentityPage, SigningIdentityResponse,
-    SourceEventPage, SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse,
-    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
-    UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
-    UpdateNginxConfigRequest, UpdateNodeClusterRequest, UpdateServerRequest, UsageEventPage,
-    UsageEventResponse, UsageReconciliationResponse,
+    ListAppsQuery, ListDomainZonesQuery, ListNginxConfigsQuery, NginxConfigPage,
+    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
+    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, RetentionRunResponse,
+    RunnerHealthPage, ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
+    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
+    SourceRepositoryResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
+    UpdateAppRequest, UpdateBuildStateRequest, UpdateDomainHostnameRequest,
+    UpdateDomainZoneRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
+    UpdateServerRequest, UsageEventPage, UsageEventResponse, UsageReconciliationResponse,
 };
 use sdkwork_deploy_contract::{
     DeployServiceError, DeployServiceResult, ProvisionAppDomainsResult, ResolvedDeployServer,
@@ -564,10 +564,12 @@ impl DeployRepositoryPort for DeployRepository {
     async fn list_apps(
         &self,
         tenant_id: i64,
-        page: i32,
-        page_size: i32,
+        actor_id: Option<i64>,
+        organization_id: Option<i64>,
+        query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage> {
-        self.list_apps_repo(tenant_id, page, page_size).await
+        self.list_apps_repo(tenant_id, actor_id, organization_id, query)
+            .await
     }
 
     async fn retrieve_app(&self, tenant_id: i64, app_id: &str) -> DeployServiceResult<AppResponse> {

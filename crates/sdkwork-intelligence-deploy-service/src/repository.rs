@@ -22,17 +22,18 @@ use sdkwork_deploy_contract::{
     DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
     DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
     EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    ListDomainZonesQuery, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
-    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    PromoteChannelRequest, PromoteEnvironmentRequest, ProvisionAppDomainsResult,
-    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, ResolvedDeployServer,
-    RetentionRunResponse, RunnerHealthPage, ServerPage, ServerResponse, SigningIdentityHealthPage,
-    SigningIdentityPage, SigningIdentityResponse, SourceEventPage, SourceEventResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateBuildStateRequest,
-    UpdateDomainZoneRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
-    UpdateServerRequest, UsageEventPage, UsageEventResponse, UsageReconciliationResponse,
+    ListAppsQuery, ListDomainZonesQuery, ListNginxConfigsQuery, NginxConfigPage,
+    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
+    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
+    RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
+    ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
+    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
+    SourceRepositoryResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
+    UpdateAppRequest, UpdateBuildStateRequest, UpdateDomainZoneRequest, UpdateNginxConfigRequest,
+    UpdateNodeClusterRequest, UpdateServerRequest, UsageEventPage, UsageEventResponse,
+    UsageReconciliationResponse,
 };
 
 use crate::{CertificateOrderCaaSubject, DomainVerificationChallenge};
@@ -554,11 +555,18 @@ pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Syn
         request: &CreateAppRequest,
     ) -> DeployServiceResult<AppResponse>;
 
+    /// List the apps this subject may reach.
+    ///
+    /// `actor_id` and `organization_id` are the caller's subject, not filters:
+    /// they drive the reachability gate inside the implementation, so a tenant
+    /// member sees the shared levels plus their own apps rather than the whole
+    /// tenant. `query.scope` only narrows further.
     async fn list_apps(
         &self,
         tenant_id: i64,
-        page: i32,
-        page_size: i32,
+        actor_id: Option<i64>,
+        organization_id: Option<i64>,
+        query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage>;
 
     async fn retrieve_app(&self, tenant_id: i64, app_id: &str) -> DeployServiceResult<AppResponse>;

@@ -70,6 +70,7 @@ export type { SdkWorkListResponse } from './sdk-work-list-response';
 export type { SdkWorkCommandResponse } from './sdk-work-command-response';
 export type { AppKind } from './app-kind';
 export type { AppStatus } from './app-status';
+export type { AppOwnerType } from './app-owner-type';
 export type { Platform } from './platform';
 export type { TechStack } from './tech-stack';
 export type { BuildStatus } from './build-status';

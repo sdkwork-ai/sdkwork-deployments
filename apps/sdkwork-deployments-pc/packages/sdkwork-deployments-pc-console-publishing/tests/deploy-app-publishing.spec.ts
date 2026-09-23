@@ -8,7 +8,7 @@
  * (supported / unsupported application types, architecture-compatible
  * frameworks). Pure functions only — no clients are exercised here.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   classifyAppTypeCards,
   classifyFrameworks,
@@ -647,5 +647,46 @@ describe("acceptance: real sdkwork-im layout", () => {
       .toBe("E:\\sdkwork-space\\sdkwork-im\\apps\\sdkwork-im-flutter-mobile");
     expect(resolveSourceDirectory(detection, "ios", listing.rootPath))
       .toBe("E:\\sdkwork-space\\sdkwork-im\\apps\\sdkwork-im-flutter-mobile");
+  });
+});
+
+/**
+ * `listApps` 的归属分面：服务层是「页面参数 → 线上查询串」的唯一转换点，所以
+ * 这里断言的是**它把哪些参数交给了生成的客户端**。断言在服务边界而不是 HTTP
+ * 报文，是因为这一层的失败模式恰恰是「参数被静默丢掉」—— 少传一个键不会抛错，
+ * 只会让页面上的筛选看起来没生效。
+ */
+describe("listApps ownership facet", () => {
+  function serviceWithSpy() {
+    const list = vi.fn(async () => ({
+      items: [],
+      pageInfo: { mode: "offset" as const, page: 1, pageSize: 50, hasMore: false },
+    }));
+    const service = createDeployAppPublishingService({
+      deployClient: { app: { list } } as unknown as Parameters<typeof createDeployAppPublishingService>[0]["deployClient"],
+      driveClient: {} as unknown as Parameters<typeof createDeployAppPublishingService>[0]["driveClient"],
+    });
+    return { list, service };
+  }
+
+  it("forwards the ownership level the caller asked for", async () => {
+    const { list, service } = serviceWithSpy();
+    await service.listApps({ page: 1, pageSize: 50, scope: "PLATFORM" });
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list.mock.calls[0]?.[0]).toMatchObject({ page: 1, pageSize: 50, scope: "PLATFORM" });
+  });
+
+  it("omits the level entirely when none was chosen", async () => {
+    const { list, service } = serviceWithSpy();
+    await service.listApps({ page: 1, pageSize: 50 });
+    // 缺席而不是 `scope: undefined`：默认查询就是「服务端按归属闸门判定的可达
+    // 全集」，多带一个空值会让审计面看起来像有人筛过。
+    expect(list.mock.calls[0]?.[0]).not.toHaveProperty("scope");
+  });
+
+  it("keeps the pre-existing paging and keyword parameters", async () => {
+    const { list, service } = serviceWithSpy();
+    await service.listApps({ page: 3, pageSize: 20, keyword: "store", scope: "USER" });
+    expect(list.mock.calls[0]?.[0]).toEqual({ page: 3, pageSize: 20, keyword: "store", scope: "USER" });
   });
 });

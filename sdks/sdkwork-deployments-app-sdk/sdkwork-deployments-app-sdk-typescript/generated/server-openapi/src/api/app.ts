@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppCompositionResponse, AppDomainResponse, AppResponse, CreateAppRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRequest } from '../types';
+import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppResponse, CreateAppRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRequest } from '../types';
 
 
 export interface AppSourceRepositoriesCreateParams {
@@ -115,6 +115,8 @@ export class AppDomainsApi {
 export interface AppListParams {
   page?: number;
   pageSize?: number;
+  keyword?: string;
+  scope?: AppOwnerType;
 }
 
 export interface AppCreateParams {
@@ -145,11 +147,13 @@ export class AppApi {
   }
 
 
-/** List tenant apps */
+/** List the apps the caller may reach */
   async list(params?: AppListParams, requestOptions?: ApiRequestOptions): Promise<{ items: AppResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
+      { name: 'scope', value: params?.scope, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: AppResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

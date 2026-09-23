@@ -20,6 +20,16 @@
  * Publishing is therefore unavailable until an app exists: publishing is a
  * per-app row action, and with an empty table there is nothing to publish.
  *
+ * **Ownership is two columns, not one.** `apps.list` is tenant-wide, so without
+ * them a platform-operated app, a tenant's shared app and one person's personal
+ * app are indistinguishable in the ledger. `归属类型` names the level and
+ * `归属用户` names the concrete owner — a user id for `USER`, an organization id
+ * for `ORGANIZATION`, and the level's own name for the two tenant-wide levels
+ * that have no single owner, so the level is never printed twice. The header
+ * filter drives the server's `scope` facet; the server keeps ownership gating
+ * (who may *reach* the app) separate from that facet (whether the app is *of
+ * the requested kind*), so filtering never widens visibility.
+ *
  * **The domain column needs no extra request.** `AppResponse` already carries
  * the *effective* `appDomainLabel` and `appDomainSuffixes`, so the canonical
  * production hostname is derived locally with the same rule the server uses
@@ -37,13 +47,15 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
-import type { AppKind, AppResponse, AppStatus, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { AppKind, AppOwnerType, AppResponse, AppStatus, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { Archive, CirclePause, CirclePlay, Globe, Info, Pencil, Rocket, Upload, type LucideIcon } from "lucide-react";
 import {
   publishingTranslator,
   APP_KIND_LABEL_KEYS,
+  APP_OWNER_SCOPE_LABEL_KEYS,
+  APP_OWNER_TYPE_LABEL_KEYS,
   APP_STATUS_LABEL_KEYS,
   type PublishingMessageKey,
   type PublishingTranslator,
@@ -69,6 +81,16 @@ export interface PublishingAppsPageProps {
 const APP_LIST_PAGE_SIZE = 50;
 const APP_TABLE_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
+/**
+ * 归属类型筛选项，按可见性由宽到窄排列（`PLATFORM` → `USER`，与后端
+ * `AppOwnerType::rank` / `scope_rank` 同序）。
+ *
+ * 键取自 {@link APP_OWNER_TYPE_LABEL_KEYS} 而不是手写一份：那张表是
+ * `Record<AppOwnerType, …>`，服务端新增归属层级时它必编译错，筛选项因此自动
+ * 跟上，不会出现「枚举加了、筛选项漏了」的半套。
+ */
+const APP_OWNER_SCOPE_OPTIONS = Object.keys(APP_OWNER_TYPE_LABEL_KEYS) as readonly AppOwnerType[];
+
 /** 行内运维命令的一条。`danger` 只改观感、不禁用 —— 不可逆动作靠确认框兜底。 */
 interface RowAction {
   readonly key: PublishingMessageKey
@@ -78,7 +100,11 @@ interface RowAction {
 }
 
 /** 枚举 → 本地化文案；映射表未覆盖的新枚举值回退原文。 */
-function enumLabel(kind: AppKind | AppStatus, table: Readonly<Record<string, PublishingMessageKey>>, t: PublishingTranslator): string {
+function enumLabel(
+  kind: AppKind | AppStatus | AppOwnerType,
+  table: Readonly<Record<string, PublishingMessageKey>>,
+  t: PublishingTranslator,
+): string {
   const key: PublishingMessageKey | undefined = table[kind];
   return key !== undefined ? t(key) : kind;
 }
@@ -108,6 +134,11 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
+  /** 归属类型筛选。空串 = 不筛 —— 服务端仍按归属闸门返回可达集合，二者独立。 */
+  const [ownerScope, setOwnerScope] = useState<AppOwnerType | "">("")
+  // 客户端分页页码受控：筛掉一部分行之后，旧页码可能指向一个不存在的分页，
+  // 非受控页码会把用户留在空白页上。受控之后筛选变更即回到第 1 页。
+  const [tablePage, setTablePage] = useState(1)
   // 创建与发布是两条独立命令：各自开各自的话框，互不代替。
   const [createOpen, setCreateOpen] = useState(false)
   const [publishTarget, setPublishTarget] = useState<AppResponse>()
@@ -125,7 +156,16 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
     let active = true
     setBusy(true)
     setError(undefined)
-    void service.listApps({ page: 1, pageSize: APP_LIST_PAGE_SIZE }).then((result) => {
+    console.log("PAGE-DIAG ownerScope=", JSON.stringify(ownerScope), "call=", JSON.stringify({
+      page: 1,
+      pageSize: APP_LIST_PAGE_SIZE,
+      ...(ownerScope === "" ? {} : { scope: ownerScope }),
+    }))
+    void service.listApps({
+      page: 1,
+      pageSize: APP_LIST_PAGE_SIZE,
+      ...(ownerScope === "" ? {} : { scope: ownerScope }),
+    }).then((result) => {
       if (active) setApps(result.items)
     }).catch((cause) => {
       if (active) {
@@ -136,9 +176,15 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
       if (active) setBusy(false)
     })
     return () => { active = false }
-  }, [refresh, service, t])
+  }, [ownerScope, refresh, service, t])
 
   const refreshList = () => { setRefresh((value) => value + 1) }
+
+  /** 换筛选分面 = 换一个行集合 ⇒ 页码必须回到第 1 页，否则可能停在空页上。 */
+  const selectOwnerScope = (value: AppOwnerType | "") => {
+    setOwnerScope(value)
+    setTablePage(1)
+  }
 
   /** 三个运维对话框共用同一套「提示 + 关框 + 刷新」收尾。 */
   const settle = (close: () => void, summary?: string) => {
@@ -148,7 +194,8 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
   }
 
   /**
-   * 列定义：与既有表头一一对应（名称/标识/类型/状态/域名/平台目标/版本/更新时间）。
+   * 列定义：与既有表头一一对应（名称 / 标识 / 类型 / 状态 / 归属类型 / 归属用户 /
+   * 域名 / 平台目标 / 版本 / 更新时间）。
    * 行内六命令（编辑/修改源码/发布/域名设置/详情/删除占位）走框架的行动作槽，不再手写单元格。
    */
   const columns = useMemo<DataTableColumn<AppResponse>[]>(() => [
@@ -179,6 +226,39 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
         </span>
       ),
       width: 110,
+    },
+    // 归属两列。服务端 `apps.list` 是租户级列表，此前不带任何归属信息，运维无法
+    // 区分「平台运维的应用 / 租户共享应用 / 某个人的应用」——同一张表里三者长得
+    // 一样。徽标复用根域名台账那套 `scope-badge` 词表（同一个「归属层级」概念），
+    // 不另造一套样式。
+    {
+      id: "ownerType",
+      header: t("columnOwnerType"),
+      cell: (app) => (
+        <span className={`scope-badge scope-badge-${app.ownerType.toLowerCase()}`}>
+          {enumLabel(app.ownerType, APP_OWNER_TYPE_LABEL_KEYS, t)}
+        </span>
+      ),
+      width: 120,
+    },
+    {
+      id: "owner",
+      header: t("columnOwner"),
+      cell: (app) => {
+        // `ownerId` 由服务端解析：USER 为 user_id、ORGANIZATION 为组织 id，
+        // 平台/租户两级没有单一主体（归属就是层级本身）⇒ 显示层级自己的名字，
+        // 而不是把「归属类型」那列的值再抄一遍。
+        const ownerId = app.ownerId
+        if (ownerId !== undefined && ownerId !== "") {
+          // 长 id 折尾：单元格自己的 `max-width` + 省略号由宿主样式兜住，这里
+          // 只保证最短可用辨识长度，`title` 留全量值。
+          const display = ownerId.length > 18 ? `…${ownerId.slice(-12)}` : ownerId
+          return <code title={ownerId}>{display}</code>
+        }
+        const scopeKey = APP_OWNER_SCOPE_LABEL_KEYS[app.ownerType]
+        return <span className="muted">{scopeKey === undefined ? t("detailNoValue") : t(scopeKey)}</span>
+      },
+      width: 150,
     },
     {
       id: "domains",
@@ -291,6 +371,21 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
           <p>{t("appsPageDescription")}</p>
         </div>
         <div className="actions">
+          {/* 归属类型筛选走服务端 `scope` 分面（不是本地过滤）：列表可能不止一页，
+              本地过滤会让「筛出来的结果」随分页变化而漂移。 */}
+          <label className="scope-filter">
+            <span className="scope-filter-label">{t("ownerTypeFilter")}</span>
+            <select
+              aria-label={t("ownerTypeFilter")}
+              value={ownerScope}
+              onChange={(event) => { selectOwnerScope(event.target.value as AppOwnerType | "") }}
+            >
+              <option value="">{t("ownerTypeFilterAll")}</option>
+              {APP_OWNER_SCOPE_OPTIONS.map((scope) => (
+                <option key={scope} value={scope}>{t(APP_OWNER_TYPE_LABEL_KEYS[scope])}</option>
+              ))}
+            </select>
+          </label>
           <button type="button" className="command-button" disabled={busy} onClick={refreshList}>
             {t("refresh")}
           </button>
@@ -324,7 +419,10 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
           pagination={{
             defaultPageSize: 20,
             mode: "client",
+            // 受控页码：见 `selectOwnerScope` —— 行集合变化时必须能回到第 1 页。
+            page: tablePage,
             pageSizeOptions: APP_TABLE_PAGE_SIZE_OPTIONS,
+            onPageChange: setTablePage,
           }}
           rowActions={renderRowActions}
           rowActionsLabel={t("operations")}

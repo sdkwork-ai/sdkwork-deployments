@@ -499,8 +499,19 @@ function CloudAccountField({ declaredProvider, dnsFamily, familyNote, onChange, 
         block in the dialog. Withheld for hand-published records, where the
         server is never asked to resolve anything. */}
     <legend title={chosen === undefined && !recordsPublishedByHand ? t("cloudAccountAutoHint") : undefined}>{t("cloudAccount")}</legend>
-    <div className="cloud-account-field">
-      <div>
+    {/* Two rows: the answer, then the ways to change it.
+        They used to share one row, which left the answer a quarter of the track —
+        the account's own name was the narrowest thing in the block while three
+        equally-weighted buttons took the rest, and "use automatic" read as a peer
+        of "choose" and "register" when it is a revision of the answer rather than
+        a third way to produce one. The answer therefore owns a full row, and "use
+        automatic" drops to a quiet control on that row. The row is only drawn as a
+        box when something is pinned, so the box means "a value is set" instead of
+        decorating the automatic state, which is the state the operator sees most
+        often and the one with the longest caption. */}
+    <div className="cloud-account-selection" data-state={chosen === undefined ? "auto" : "pinned"}>
+      <span className="cloud-account-mark" aria-hidden="true">{chosen === undefined ? <RotateCw size={15} /> : <BadgeCheck size={15} />}</span>
+      <div className="cloud-account-summary">
         <strong>{chosen ? chosen.displayName : t("cloudAccountAuto")}</strong>
         {/* The family decides which accounts are even offered, so it leads. An
             undetermined family is stated outright rather than left to look like
@@ -528,14 +539,14 @@ function CloudAccountField({ declaredProvider, dnsFamily, familyNote, onChange, 
             prose that moved to the caption above. */}
         {chosen === undefined && familyNote !== undefined && <small className="form-hint">{familyNote}</small>}
       </div>
-      <div className="cloud-account-actions">
-        <button className="secondary-button" type="button" onClick={() => setPickerOpen(true)}>{t("cloudAccountPick")}</button>
-        <button className="secondary-button" type="button" onClick={() => setRegisterOpen(true)}>{t("cloudAccountCreate")}</button>
-        {/* Only offered when something is actually pinned: a "use automatic"
-            button on an already-automatic field is a control that does nothing,
-            and on the create path there is no pin to clear at all. */}
-        {value !== undefined && <button className="secondary-button" type="button" onClick={() => { setAdopted(undefined); setReused(false); onChange(undefined); }}>{t("cloudAccountClear")}</button>}
-      </div>
+      {/* Only offered when something is actually pinned: a "use automatic"
+          control on an already-automatic field is a control that does nothing,
+          and on the create path there is no pin to clear at all. */}
+      {value !== undefined && <button className="cloud-account-clear" type="button" onClick={() => { setAdopted(undefined); setReused(false); onChange(undefined); }}>{t("cloudAccountClear")}</button>}
+    </div>
+    <div className="cloud-account-actions">
+      <button className="secondary-button" type="button" onClick={() => setPickerOpen(true)}>{t("cloudAccountPick")}</button>
+      <button className="secondary-button" type="button" onClick={() => setRegisterOpen(true)}>{t("cloudAccountCreate")}</button>
     </div>
     {/* Offered only when the family is known and exactly one account answers for
         it: at that point opening a dialog to choose the only option is work with
@@ -1054,9 +1065,16 @@ function ZoneFormDialog({ close, submit, t, zone }: {
           zone reference is full width as well because the contract allows up
           to 512 characters. */}
       <div className="form-grid">
+        {/* The root domain is frozen once the zone exists, so this is a value
+            being shown rather than a field being edited. It used to be
+            `disabled`, which hands both the appearance and the interaction to the
+            browser: in this console the browser paints it in its own grey, and
+            either way the value cannot be focused, selected, or copied — on the
+            one string that says what is being edited. `readOnly` refuses the edit
+            and keeps the value a value. */}
         <label className="form-field-wide">
           <span>{t("apexHostname")}</span>
-          <input autoFocus={!zone} required disabled={Boolean(zone)} value={apexHostname} onChange={(event) => setApexHostname(event.target.value)} placeholder="example.com" autoComplete="off" aria-invalid={apexMessage !== undefined} aria-describedby="delivery-apex-help" />
+          <input autoFocus={!zone} required readOnly={Boolean(zone)} value={apexHostname} onChange={(event) => setApexHostname(event.target.value)} placeholder="example.com" autoComplete="off" aria-invalid={apexMessage !== undefined} aria-describedby="delivery-apex-help" />
           <small className="form-hint" id="delivery-apex-help">{t("apexHint")}</small>
           {apexMessage !== undefined && <small className="form-error" role="alert">{apexMessage}</small>}
           {apexMessage === undefined && apex.ok && apex.converted && <small className="form-hint">{t("rootDomainConverted", { ascii: apex.value })}</small>}

@@ -17,6 +17,7 @@
 import type { SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   AppKind,
+  AppOwnerType,
   AppResponse,
   AppReleaseResponse,
   AppStatus,
@@ -607,8 +608,6 @@ export interface CreateDeployAppInput {
   readonly description?: string | undefined
   /** 需求 9: release notes。 */
   readonly releaseNotes?: string | undefined
-  /** 可选：关联站点（静态/SPA 场景）。 */
-  readonly siteId?: string | undefined
   /** v2: 发布目标环境（ENVIRONMENT_SPEC 规范环境）。 */
   readonly environment?: DeployEnvironmentId | undefined
   /** v2: 部署形态（standalone / cloud，profile id 前半）。 */
@@ -639,8 +638,6 @@ export interface CreateAppRecordInput {
   readonly description?: string | undefined
   /** 多级分类（deploy_app.metadata.category）。 */
   readonly category?: DeployAppCategorySelection | undefined
-  /** 可选：关联站点。 */
-  readonly siteId?: string | undefined
 }
 
 /** 需求 7: 语义化版本校验。 */const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
@@ -759,6 +756,12 @@ export interface DeployAppPublishingService {
     page?: number | undefined
     pageSize?: number | undefined
     keyword?: string | undefined
+    /**
+     * 归属层级筛选（`deploy_app.owner_type`）。服务端先按归属闸门判定「能否到达」，
+     * 再按此值判定「是否属于所求分面」，两者独立 —— 传 `USER` 不会放宽可见性，
+     * 只会在已可达集合里留下个人应用。
+     */
+    scope?: AppOwnerType | undefined
   }): Promise<{ items: AppResponse[]; pageInfo: PageInfo }>
   /** 需求 4/5/6: 上传媒体到 Drive，返回可持久化的引用。 */
   uploadMedia(input: DeployAppMediaUpload, appResourceId: string): Promise<DeployAppMediaRef>
@@ -831,11 +834,13 @@ export function createDeployAppPublishingService(
 
   return {
     listApps(params) {
+      console.log("SVC-DIAG params=", JSON.stringify(params))
       return deployClient.app.list(
         params && {
           ...(params.page === undefined ? {} : { page: params.page }),
           ...(params.pageSize === undefined ? {} : { pageSize: params.pageSize }),
           ...(params.keyword === undefined ? {} : { keyword: params.keyword }),
+          ...(params.scope === undefined ? {} : { scope: params.scope }),
         },
       )
     },
@@ -903,7 +908,6 @@ export function createDeployAppPublishingService(
         ...(slug === undefined ? {} : { slug }),
         ...(description === undefined ? {} : { description }),
         ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
-        ...(input.siteId === undefined ? {} : { siteId: input.siteId }),
       }
       // 只登记 deploy_app 本身 —— 平台目标由发布流程按实际发布的表面写入。
       return deployClient.app.create(request, { idempotencyKey })
@@ -942,7 +946,6 @@ export function createDeployAppPublishingService(
         idempotencyKey,
         ...(slug === undefined ? {} : { slug }),
         ...(description === undefined ? {} : { description }),
-        ...(input.siteId === undefined ? {} : { siteId: input.siteId }),
       }
       const created = await deployClient.app.create(request, { idempotencyKey })
 

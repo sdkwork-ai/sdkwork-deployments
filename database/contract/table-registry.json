@@ -343,6 +343,12 @@
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
+    },
+    {
+      "table_name": "deploy_dns_zone_wechat_verification",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
     }
   ]
 }

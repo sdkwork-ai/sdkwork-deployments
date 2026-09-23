@@ -203,17 +203,31 @@ pub async fn assemble_same_origin_contribution_with_pool(
     )
 }
 
-/// Migrate-only entrypoint for the Deployments database module, reusable by
-/// consuming hosts (for example the Web Server standalone gateway's
-/// `db-migrate` command). Baseline applies on empty databases; versioned
-/// forward migrations converge existing databases; the drift gate then
-/// fails loudly if the schema still diverges from the contract.
-pub async fn migrate_database_from_env() -> Result<(), String> {
-    std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
+/// Lifecycle-convergence entrypoint for the Deployments database module,
+/// reusable by consuming hosts (for example the Web Server standalone gateway).
+/// Baseline applies on empty databases; versioned forward migrations converge
+/// existing databases; the drift gate then fails loudly if the schema still
+/// diverges from the contract.
+///
+/// Whether forward migrations run is governed by `SDKWORK_DATABASE_AUTO_MIGRATE`
+/// (falling back to the manifest's `lifecycle.autoMigrate`), per
+/// DATABASE_FRAMEWORK_SPEC §4.4 — this entrypoint must not force it, because the
+/// serve path uses it. [`migrate_database_from_env`] is the explicit migration
+/// entrypoint that does.
+pub async fn ensure_database_lifecycle_from_env() -> Result<(), String> {
     sdkwork_deploy_database_host::bootstrap_deploy_database_from_env()
         .await
         .map(|_| ())
-        .map_err(|detail| format!("deploy database migration failed: {detail}"))
+        .map_err(|detail| format!("deploy database lifecycle failed: {detail}"))
+}
+
+/// Explicit migration entrypoint for the Deployments database module. Running
+/// this command **is** the operator's authorization to apply forward migrations,
+/// so it forces `SDKWORK_DATABASE_AUTO_MIGRATE` on for this process and then
+/// converges the module.
+pub async fn migrate_database_from_env() -> Result<(), String> {
+    std::env::set_var("SDKWORK_DATABASE_AUTO_MIGRATE", "true");
+    ensure_database_lifecycle_from_env().await
 }
 
 struct DeployServiceReadinessCheck {

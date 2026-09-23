@@ -2338,7 +2338,8 @@
     "/app/v3/api/apps": {
       "get": {
         "operationId": "apps.list",
-        "summary": "List tenant apps",
+        "summary": "List the apps the caller may reach",
+        "description": "Returns the applications this subject can reach, which is the two tenant-wide ownership levels (`PLATFORM`, `TENANT`) plus their own personal apps and their organization's apps. Reach is decided server-side from the request principal; `scope` can only narrow the page, never widen it.",
         "tags": [
           "app"
         ],
@@ -2354,6 +2355,23 @@
           },
           {
             "$ref": "#/components/parameters/PageSizeParam"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "Case-insensitive match on the app name or slug.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "Restrict the listing to one ownership level. Omitted means every level the caller can already reach, which is the audit view.",
+            "schema": {
+              "$ref": "#/components/schemas/AppOwnerType"
+            }
           }
         ],
         "responses": {
@@ -9631,7 +9649,9 @@
           },
           "totalItems": {
             "type": "string",
-            "pattern": "^[0-9]+$"
+            "format": "int64",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "totalPages": {
             "type": "integer",
@@ -9776,6 +9796,16 @@
           "PAUSED",
           "ARCHIVED",
           "FAILED"
+        ]
+      },
+      "AppOwnerType": {
+        "type": "string",
+        "description": "Which level owns an application, and therefore who may reach it.\n`apps.list` is tenant-wide, so without an explicit level a reader cannot tell a platform-operated app from a tenant's shared app from one person's personal app. This is the same question `DomainZoneResponse.scope` answers for domain zones, and it is modelled the same way — an explicit level rather than a flag derived from a nullable column, because every pre-existing `deploy_app` row carries `user_id IS NULL` and a derived flag would classify the whole inventory as platform-owned.\nThe vocabulary mirrors the cloud-account scopes this service already ships, so the account centre and the app inventory name the levels alike.",
+        "enum": [
+          "PLATFORM",
+          "TENANT",
+          "ORGANIZATION",
+          "USER"
         ]
       },
       "Platform": {
@@ -9956,13 +9986,13 @@
           "appKind": {
             "$ref": "#/components/schemas/AppKind"
           },
+          "ownerType": {
+            "$ref": "#/components/schemas/AppOwnerType",
+            "description": "Ownership level for the new application. Absent derives it from the request principal — `USER` when a user subject is present, which is the normal case, otherwise `TENANT`. `PLATFORM` is rejected: no permission in this surface distinguishes a platform operator from any other tenant member, so honouring it would let a member publish an app visible to every tenant."
+          },
           "description": {
             "type": "string",
             "maxLength": 2000
-          },
-          "siteId": {
-            "type": "string",
-            "format": "uuid"
           },
           "defaultEnvironment": {
             "type": "string",
@@ -10004,6 +10034,9 @@
           "appKind",
           "appStatus",
           "defaultEnvironment",
+          "ownerType",
+          "tenantId",
+          "nginxConfigOverridden",
           "createdAt",
           "updatedAt",
           "version"
@@ -10028,9 +10061,25 @@
           "description": {
             "type": "string"
           },
-          "siteId": {
+          "type": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Legacy web publishing type (1..6, `deploy_app.type`). Reserved: the column predates the unified app model and no consumer reads it. It is declared here because the server has always serialized it, so the schema previously contradicted its own `additionalProperties: false`. Use `appKind` to describe what an app is; do not grow this field."
+          },
+          "runtimeConfig": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Echo of `deploy_app.runtime_config`. Declared for the same reason as `type` — serialized by the server, previously absent from the schema."
+          },
+          "currentRevisionId": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "description": "The revision last observed converged on a web node. Differs from `desiredRevisionId` exactly when a release has not taken effect yet."
+          },
+          "desiredRevisionId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The revision the last publish wrote. `desired != current` is an un-applied release."
           },
           "defaultEnvironment": {
             "type": "string"
@@ -10058,6 +10107,62 @@
           },
           "latestReleaseTag": {
             "type": "string"
+          },
+          "ownerType": {
+            "$ref": "#/components/schemas/AppOwnerType"
+          },
+          "ownerUserId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true,
+            "description": "The owning user, present only for `ownerType: USER`. An id and not a display name: this service owns no user table, and a stored name drifts on rename."
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true,
+            "description": "The resolved owner subject — `user_id` for `USER`, `organization_id` for `ORGANIZATION`, absent for the two tenant-wide levels whose scope is the tenant itself."
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true,
+            "description": "Tenant scope. Exposed so a platform operator can locate an app; a tenant member only ever sees their own."
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true,
+            "description": "Organization scope. The column stores `0` for \"none\", which is reported as absent rather than as an organization numbered zero."
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "updatedBy": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the app last entered `ACTIVE`."
+          },
+          "pausedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the app last entered `PAUSED`."
+          },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the app was archived (the retirement transition)."
+          },
+          "nginxConfigOverridden": {
+            "type": "boolean",
+            "description": "Whether an operator has overridden the generated app-level nginx-compatible configuration (`nginx_conf_sha256 IS NOT NULL`)."
           },
           "createdAt": {
             "type": "string",
@@ -10151,6 +10256,16 @@
           "description": {
             "type": "string",
             "maxLength": 2000
+          },
+          "ownerType": {
+            "$ref": "#/components/schemas/AppOwnerType",
+            "description": "Move the app to another ownership level. Absent leaves it alone. Changing the level rewrites the owner pointer in the same statement, because the schema constrains the two to agree: `USER` takes `ownerUserId`, `ORGANIZATION` uses the app's organization, and `TENANT` clears the user owner. `PLATFORM` is rejected for the same reason `apps.create` rejects it."
+          },
+          "ownerUserId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true,
+            "description": "The user that should own the app when moving it to `USER`. Absent keeps the current owner; ignored at every other level."
           },
           "appStatus": {
             "$ref": "#/components/schemas/AppStatus"

@@ -30,6 +30,8 @@ client.setAccessToken('your-access-token');
 const params = {
   page: 1,
   page_size: 2,
+  keyword: 'keyword',
+  scope: 'PLATFORM',
 };
 const result = await client.app.list(params);
 ```
@@ -123,10 +125,12 @@ const result = await client.artifact.list(params);
 ### app
 
 ```typescript
-// List tenant apps
+// List the apps the caller may reach
 const params = {
   page: 1,
   page_size: 2,
+  keyword: 'keyword',
+  scope: 'PLATFORM',
 };
 const result = await client.app.list(params);
 ```
@@ -248,6 +252,8 @@ try {
   const params = {
     page: 1,
     page_size: 2,
+    keyword: 'keyword',
+    scope: 'PLATFORM',
   };
   const result = await client.app.list(params);
 } catch (error) {

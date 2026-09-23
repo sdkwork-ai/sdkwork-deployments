@@ -1799,7 +1799,32 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     runtime_config  JSONB        NOT NULL DEFAULT '{}',
     metadata        JSONB        NOT NULL DEFAULT '{}',
     data_scope      INTEGER      NOT NULL DEFAULT 1,
+    -- The owning user subject. `NULL` means "no user owner" and is what
+    -- `owner_type IN ('PLATFORM', 'TENANT')` reads. Written from the request
+    -- principal on `apps.create`; it is *not* the same fact as `created_by`,
+    -- which records who issued the command and may differ from the owner after
+    -- a transfer.
     user_id         BIGINT,
+    -- Which level owns this application.
+    --
+    -- `deploy_app` is reached by a tenant-wide predicate (`list_apps_repo`), so
+    -- without an explicit level a reader cannot tell a platform-operated app
+    -- from a tenant's shared app from one person's personal app — the same
+    -- problem `ZoneScope` solves for `deploy_dns_zone`. Apps cannot reuse that
+    -- derivation (`user_id IS NULL` ⇒ platform): every pre-existing row carries
+    -- `user_id IS NULL`, so a derived flag would classify the entire existing
+    -- inventory as platform-owned.
+    --
+    -- The vocabulary is the one this repository already ships for cloud accounts
+    -- (`ACCOUNT_SCOPE_*`, `sdkwork-deploy-cloud-account-port/src/lib.rs`), so the
+    -- account centre and the app inventory name and order the levels alike.
+    -- `DATABASE_SPEC.md` §6.7: `owner_type` values MUST come from a documented
+    -- enum, and owner-based access control MUST have supporting indexes — see
+    -- `idx_deploy_app_owner` below.
+    --
+    -- `TENANT` is the default because it is the honest reading of this table's
+    -- own history: the list query has always been tenant-wide.
+    owner_type      VARCHAR(16)  NOT NULL DEFAULT 'TENANT',
     default_variant_id BIGINT,
     current_revision_id BIGINT,
     desired_revision_id BIGINT,
@@ -1845,6 +1870,19 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     CONSTRAINT pk_deploy_app PRIMARY KEY (id),
     CONSTRAINT chk_deploy_app_type CHECK (type BETWEEN 1 AND 6),
     CONSTRAINT chk_deploy_app_status CHECK (app_status IN ('DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED')),
+    CONSTRAINT chk_deploy_app_owner_type CHECK (
+        owner_type IN ('PLATFORM', 'TENANT', 'ORGANIZATION', 'USER')
+    ),
+    -- The level and its owner pointer must agree. Without this a row could
+    -- advertise `USER` while carrying no user — rendering an empty owner cell
+    -- that looks like missing data rather than a broken write — or advertise
+    -- `PLATFORM` while pointing at one person, which is the exact ambiguity the
+    -- explicit column exists to remove.
+    CONSTRAINT chk_deploy_app_owner_pointer CHECK (
+        (owner_type = 'USER' AND user_id IS NOT NULL)
+        OR (owner_type = 'ORGANIZATION' AND organization_id <> 0)
+        OR (owner_type IN ('PLATFORM', 'TENANT') AND user_id IS NULL)
+    ),
     CONSTRAINT chk_deploy_app_default_environment CHECK (
         default_environment IN ('development', 'test', 'staging', 'demo', 'production')
     ),
@@ -1868,6 +1906,10 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     )
 );
 
+COMMENT ON COLUMN deploy_app.owner_type IS
+    '应用归属层级：PLATFORM（平台应用，全租户可见）/ TENANT（租户应用，租户内共享）/ ORGANIZATION（组织应用）/ USER（用户应用，仅创建者）。取值词表与云账号 ACCOUNT_SCOPE_* 一致';
+COMMENT ON COLUMN deploy_app.user_id IS
+    '归属用户主体；仅 owner_type = USER 时非空。注意与 created_by 的区别：后者记录命令发起人，归属可转移而命令不可';
 COMMENT ON COLUMN deploy_app.app_domain_label IS
     '默认发布域名的 <appId> 前缀；NULL 回退为 slug，可自定义（含应用 uuid）';
 COMMENT ON COLUMN deploy_app.app_domain_suffixes IS
@@ -1893,6 +1935,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_tenant_slug
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_idempotency
     ON deploy_app (tenant_id, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
+
+-- Owner-based access control needs supporting indexes (`DATABASE_SPEC.md` §6.7).
+-- The ownership predicate is always conjunctive with the tenant scope, so
+-- `tenant_id` leads both. `owner_type` answers the scope facet (`PLATFORM` /
+-- `TENANT` / `ORGANIZATION` / `USER`) and `user_id` answers "the caller's own
+-- apps"; the organization leg is a separate index because a tenant may hold many
+-- organizations and a `(tenant_id, owner_type, user_id)` scan cannot serve it.
+CREATE INDEX IF NOT EXISTS idx_deploy_app_owner
+    ON deploy_app (tenant_id, owner_type, user_id)
+    WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_deploy_app_owner_organization
+    ON deploy_app (tenant_id, organization_id)
+    WHERE deleted_at IS NULL AND owner_type = 'ORGANIZATION';
 
 -- Governed build recipe. Created before deploy_app_platform_target /
 -- deploy_build below: PostgreSQL validates FK target relations at

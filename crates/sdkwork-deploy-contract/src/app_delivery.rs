@@ -1,4 +1,4 @@
-﻿//! Unified application delivery DTOs: apps, platform targets, source
+//! Unified application delivery DTOs: apps, platform targets, source
 //! repositories, build templates, builds, packages, releases, channels,
 //! rollouts, deployments, and signing identities (REQ-2026-0002).
 
@@ -55,6 +55,90 @@ impl AppKind {
 
     pub fn is_web(self) -> bool {
         matches!(self, Self::StaticWeb | Self::SpaWeb)
+    }
+}
+
+/// Which level owns an application, and therefore who may reach it.
+///
+/// `apps.list` has always been tenant-wide, so a reader could not tell a
+/// platform-operated app from a tenant's shared app from one person's personal
+/// app. This is the same question [`crate::dto::ZoneScope`] answers for
+/// `deploy_dns_zone`, and it is modelled the same way: an explicit level rather
+/// than a flag derived from a nullable column, because every pre-existing
+/// `deploy_app` row carries `user_id IS NULL` and a derived flag would classify
+/// the whole inventory as platform-owned.
+///
+/// The vocabulary mirrors the cloud-account scopes this repository already ships
+/// (`ACCOUNT_SCOPE_*` in `sdkwork-deploy-cloud-account-port`), so the account
+/// centre and the app inventory name and order the levels alike. `DATABASE_SPEC.md`
+/// §6.7 requires `owner_type` values to come from a documented enum.
+///
+/// Stored in `deploy_app.owner_type` and constrained there by
+/// `chk_deploy_app_owner_pointer`, which keeps the level and its pointer in
+/// agreement.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AppOwnerType {
+    /// Platform-operated or built-in application. No user owner, reachable from
+    /// every tenant.
+    Platform,
+    /// Shared across the whole tenant. No user owner; `tenant_id` is the scope.
+    /// This is the default, and the honest reading of the ledger's own history.
+    #[default]
+    Tenant,
+    /// Shared inside one organization. Owner pointer is `organization_id`.
+    Organization,
+    /// One person's application. Owner pointer is `user_id`; reachable only by
+    /// that user, and by platform operators.
+    User,
+}
+
+impl AppOwnerType {
+    pub const ALL: [Self; 4] = [Self::Platform, Self::Tenant, Self::Organization, Self::User];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Platform => "PLATFORM",
+            Self::Tenant => "TENANT",
+            Self::Organization => "ORGANIZATION",
+            Self::User => "USER",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "PLATFORM" => Some(Self::Platform),
+            "TENANT" => Some(Self::Tenant),
+            "ORGANIZATION" => Some(Self::Organization),
+            "USER" => Some(Self::User),
+            _ => None,
+        }
+    }
+
+    /// Widest-first rank, matching `scope_rank` in
+    /// `sdkwork-deploy-cloud-account-port` so list ordering and precedence agree
+    /// with the account centre. Lowest rank is the narrowest reach.
+    pub const fn rank(self) -> u8 {
+        match self {
+            Self::User => 0,
+            Self::Organization => 1,
+            Self::Tenant => 2,
+            Self::Platform => 3,
+        }
+    }
+
+    /// Whether an app at this level is reachable by a subject that is not its
+    /// owner. `PLATFORM` and `TENANT` are shared; `ORGANIZATION` is shared only
+    /// inside its organization and `USER` not at all, so both need the caller's
+    /// own scope to be checked — see the predicate in the repository.
+    pub const fn is_shared(self) -> bool {
+        matches!(self, Self::Platform | Self::Tenant)
+    }
+}
+
+impl std::fmt::Display for AppOwnerType {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
     }
 }
 
@@ -533,6 +617,19 @@ pub struct CreateAppRequest {
     pub slug: Option<String>,
     #[serde(rename = "appKind")]
     pub app_kind: AppKind,
+    /// Ownership level for the new application.
+    ///
+    /// Absent means the repository derives it from the request principal:
+    /// [`AppOwnerType::User`] when a user subject is present — the normal case,
+    /// since a console create is always somebody's app — and
+    /// [`AppOwnerType::Tenant`] otherwise. `PLATFORM` and `ORGANIZATION` are
+    /// never inferred; a caller that wants them must say so, because a tenant
+    /// member cannot be allowed to promote their own app to platform visibility.
+    ///
+    /// The level and the owner pointer are kept in agreement by
+    /// `chk_deploy_app_owner_pointer`.
+    #[serde(rename = "ownerType", default)]
+    pub owner_type: Option<AppOwnerType>,
     #[serde(default)]
     pub description: Option<String>,
     /// Web publishing type (1..6, was `deploy_app.type`).
@@ -583,6 +680,23 @@ pub struct UpdateAppRequest {
     /// to write back `metadata.media` after the Drive upload completes.
     #[serde(default)]
     pub metadata: Option<Value>,
+    /// Moves the app to another ownership level. Absent leaves it alone.
+    ///
+    /// A plain `Option` rather than the double-`Option` used by `appDomainLabel`:
+    /// that one needs "present but null" because clearing the override is a real
+    /// operation, whereas `deploy_app.owner_type` is `NOT NULL` and every app
+    /// always has exactly one level, so there is no clear to express.
+    ///
+    /// Changing the level rewrites the owner pointer in the same statement,
+    /// because `chk_deploy_app_owner_pointer` requires the two to agree: `USER`
+    /// takes `ownerUserId`, `ORGANIZATION` uses the app's organization, and
+    /// `PLATFORM` / `TENANT` clear `user_id`.
+    #[serde(rename = "ownerType", default)]
+    pub owner_type: Option<AppOwnerType>,
+    /// The user that should own the app when moving it to `USER`. Absent means
+    /// "keep the current owner"; ignored at every other level.
+    #[serde(rename = "ownerUserId", default)]
+    pub owner_user_id: Option<String>,
     #[serde(rename = "appStatus", default)]
     pub app_status: Option<AppStatus>,
     #[serde(rename = "defaultEnvironment", default)]
@@ -658,6 +772,52 @@ pub struct AppResponse {
     pub app_domain_suffixes: Vec<String>,
     #[serde(rename = "latestReleaseTag", skip_serializing_if = "Option::is_none")]
     pub latest_release_tag: Option<String>,
+    /// Which level owns the application. Drives both the ledger's ownership
+    /// column and the reachability predicate in `list_apps_repo`; see
+    /// [`AppOwnerType`].
+    #[serde(rename = "ownerType")]
+    pub owner_type: AppOwnerType,
+    /// The owning user, present only for [`AppOwnerType::User`].
+    ///
+    /// Deliberately an id and not a display name: this database owns no user
+    /// table (`deploy_app.user_id` has no FK), and a stored name snapshot drifts
+    /// on rename. `DATABASE_SPEC.md` permits a denormalized snapshot only as a
+    /// read-model projection. Matches how the provider-account DTO already
+    /// exposes `ownerUserId`.
+    #[serde(rename = "ownerUserId", skip_serializing_if = "Option::is_none")]
+    pub owner_user_id: Option<String>,
+    /// The resolved owner subject: `user_id`, `organization_id`, or absent for
+    /// [`AppOwnerType::Platform`] / [`AppOwnerType::Tenant`], whose scope is the
+    /// tenant itself. Saved as a string per the int64 wire contract.
+    #[serde(rename = "ownerId", skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<String>,
+    /// Tenant scope. Exposed so a platform operator can locate an app across
+    /// tenants; a tenant member only ever sees their own.
+    #[serde(rename = "tenantId")]
+    pub tenant_id: String,
+    /// Organization scope. `0` in the column means "none" and reads as absent,
+    /// never as an organization whose id happens to be zero.
+    #[serde(rename = "organizationId", skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<String>,
+    #[serde(rename = "createdBy", skip_serializing_if = "Option::is_none")]
+    pub created_by: Option<String>,
+    #[serde(rename = "updatedBy", skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+    /// Lifecycle observations written by the `apps.activate` / `apps.pause` /
+    /// archive transitions. The status badge shows the current state; these say
+    /// how long it has held it.
+    #[serde(rename = "activatedAt", skip_serializing_if = "Option::is_none")]
+    pub activated_at: Option<String>,
+    #[serde(rename = "pausedAt", skip_serializing_if = "Option::is_none")]
+    pub paused_at: Option<String>,
+    #[serde(rename = "archivedAt", skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<String>,
+    /// Whether an operator has overridden the app-level nginx-compatible
+    /// configuration (`deploy_app.nginx_conf_sha256 IS NOT NULL`). The generated
+    /// sidecar is the norm; a hand-written override is what an operator needs to
+    /// know about during an incident.
+    #[serde(rename = "nginxConfigOverridden")]
+    pub nginx_config_overridden: bool,
     #[serde(rename = "createdAt")]
     pub created_at: String,
     #[serde(rename = "updatedAt")]

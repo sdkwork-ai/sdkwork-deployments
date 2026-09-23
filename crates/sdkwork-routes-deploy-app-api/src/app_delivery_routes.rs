@@ -15,7 +15,7 @@ use sdkwork_deploy_contract::{
     CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest,
     CreateAppEnvironmentRequest, CreateAppReleaseRequest, CreateAppRequest, CreateBuildRequest,
     CreateBuildTemplateRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployAppRequestContext, PromoteChannelRequest,
+    CreateSourceRepositoryRequest, DeployAppRequestContext, ListAppsQuery, PromoteChannelRequest,
     PromoteEnvironmentRequest, RegisterPackageRequest, UpdateAppDatabaseProfileRequest,
     UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRequest,
     UpdateBuildStateRequest, UsageEventQuery,
@@ -127,14 +127,19 @@ async fn list_apps(
     ctx: WebRequestContext,
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
-    Query(query): Query<PageQuery>,
+    Query(query): Query<ListAppsQuery>,
 ) -> Response {
     finish_api_json(
         &ctx,
         async {
             let context = require_app_context(context)?;
-            let (page, page_size) = page_values(&query);
-            let result = state.api.list_apps(&context, page, page_size).await?;
+            // The query is forwarded whole rather than unpacked into
+            // `page`/`page_size` here: `scope` and `keyword` are part of the
+            // caller's request, and `ListAppsQuery` carries the defaulting. Note
+            // that the *served* `/openapi.json` drops authored parameters from
+            // `.list` routes, so this extractor — not the YAML — is what actually
+            // accepts the parameters.
+            let result = state.api.list_apps(&context, &query).await?;
             ok_json(envelope::app_page(result))
         }
         .await,

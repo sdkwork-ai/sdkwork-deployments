@@ -154,6 +154,18 @@ pub(crate) fn optional_datetime_from_row(
         .map(|value| value.map(|value| value.to_rfc3339_opts(SecondsFormat::Millis, true)))
 }
 
+/// Read a nullable `BIGINT` subject column as the string the wire contract wants.
+///
+/// `API_SPEC.md` §13.6 puts `int64` on the wire as a string, so an owner or audit
+/// actor id has to be converted rather than bound as a number. `NULL` stays
+/// absent — it means "no subject", which is a different fact from an id of `0`.
+pub(crate) fn optional_int64_string(row: &PgRow, column: &str) -> Option<String> {
+    row.try_get::<Option<i64>, _>(column)
+        .ok()
+        .flatten()
+        .map(|value| value.to_string())
+}
+
 pub(crate) async fn resolve_app_uuid(
     pool: &PgPool,
     tenant_id: i64,

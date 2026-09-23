@@ -6,22 +6,54 @@
 @media(max-width:760px){.app-layout{grid-template-columns:68px minmax(0,1fr)}.brand div,.sidebar nav .nav-label,.sidebar-footer>span{display:none}.sidebar nav a{justify-content:center}.resource-page{padding:20px 14px}.search-box,.scope-input{flex:1 1 180px;min-width:0}.actions{margin-left:0;width:100%}.form-grid{grid-template-columns:1fr}.form-grid label:has(textarea){grid-column:auto}.metric-strip{grid-template-columns:1fr}.domain-metric,.domain-metric:nth-child(2){border-right:0;border-bottom:1px solid #e1e5e7}.domain-metric:last-child{border-bottom:0}.copy-field,.verification-expiry{grid-template-columns:minmax(0,1fr) 32px}.copy-field>span,.verification-expiry span{grid-column:1/-1}.copy-field>.form-hint{grid-column:1/-1}.selector-zone{grid-template-columns:1fr}.delivery-dialog{padding:16px}.certificate-form-grid{grid-template-columns:1fr}}
 .form-error{display:block;margin:0;font-size:12px;line-height:1.5;color:#842a24;font-weight:500}
 .form-grid input[aria-invalid="true"],.form-grid select[aria-invalid="true"],.form-grid textarea[aria-invalid="true"]{border-color:#c9998f;background:#fff2f0}
+/* A locked value (the root domain of an existing zone) reads as a value, not as a
+   field: a filled surface, a default cursor, and the text left alone. `disabled`
+   was the mechanism, and it takes the appearance out of this stylesheet's hands —
+   the browser's own grey here, and no focus, selection or copy on the one string
+   that names what is being edited. The invalid state is excluded rather than
+   reordered around: a locked field that also fails validation should still say so. */
+.form-grid input[readonly]:not([aria-invalid="true"]){background:#f4f6f7;cursor:default}
+/* A validation message can carry a machine identifier longer than the dialog is
+   wide. `anywhere` breaks it inside the box instead of letting it widen the box;
+   `flex-start` so a wrapped message is not vertically centred against an action
+   button, which read as a blob. */
+.error-banner{align-items:flex-start;line-height:1.5;overflow-wrap:anywhere}
 .row-actions .table-action-text{width:auto;flex:0 0 auto;gap:5px;padding:0 9px;margin-right:0;font-size:12px;font-weight:500;white-space:nowrap;border-color:#c9d0d4;background:#fff}
 .row-actions .table-action-text:hover{border-color:#a9b3b9;background:#f2f5f6;color:#1d2428}
 .delivery-dialog .dialog-footer{position:sticky;bottom:-16px;z-index:1;margin-top:16px;padding:12px 0 4px;background:#fff;border-top:1px solid #e1e5e7}
 .delivery-dialog.delivery-dialog-history{width:min(1120px,100%)}
-/* Cloud account picker: a summary line plus its actions, kept as one row so the
-   field reads as a single choice rather than three separate controls. */
-.cloud-account-field{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
-/* Scoped to the summary block, not to "any div": `.cloud-account-field > div`
-   outranks `.cloud-account-actions` on specificity, so the loose form restyles
-   the actions cluster as a one-column grid — both buttons stretched to equal
-   width and stacked, with this grid's gap beating the cluster's. */
-.cloud-account-field>div:first-child{display:grid;gap:5px;min-width:0}
-.cloud-account-field>div:first-child strong{font-size:13px}
-.cloud-account-actions{display:flex;flex-wrap:wrap;gap:7px}
+/* Cloud account: the answer on its own row, the ways to change it on the row
+   below. The answer used to share a line with three buttons and got a quarter of
+   the track (measured 147px of 586px), which made the account's own name the
+   narrowest thing in the block and made "use automatic" look like a peer of
+   "choose" and "register" instead of a revision of the answer.
+   The box is drawn only for the pinned state, so it means "a value is set" rather
+   than decorating a state; the automatic caption is the longer of the two and the
+   one seen most often, so it stays unboxed and reserves the same padding as the
+   boxed form to keep the two aligned.
+   Grid rather than flex because the three tracks are fixed in role — mark, answer,
+   revision — and the answer is the only one that may shrink. */
+.cloud-account-selection{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;padding:9px 11px;border:1px solid transparent;border-radius:6px}
+/* A four-line automatic caption beside a 20px mark: centred, the mark floats in
+   the middle of the paragraph. The pinned row is two lines, where centred is right. */
+.cloud-account-selection[data-state="auto"]{align-items:start}
+.cloud-account-selection[data-state="pinned"]{border-color:#d5dbde;background:#f7f9fa}
+.cloud-account-mark{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:#e7ecef;color:#536067}
+.cloud-account-selection[data-state="auto"] .cloud-account-mark{margin-top:1px}
+.cloud-account-selection[data-state="pinned"] .cloud-account-mark{background:#dff3e5;color:#23613a}
+.cloud-account-summary{display:grid;gap:3px;min-width:0}
+.cloud-account-summary strong{font-size:13px;overflow:hidden;text-overflow:ellipsis}
+/* A revision of the answer, not a third way to produce one, so it carries no
+   button chrome until it is reached for. */
+.cloud-account-clear{min-height:28px;padding:0 9px;border:1px solid transparent;border-radius:5px;background:transparent;color:#536067;font-size:12px;flex:0 0 auto}
+.cloud-account-clear:hover{border-color:#c9d0d4;background:#fff;color:#1d2428}
+.cloud-account-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .cloud-account-actions .secondary-button{min-height:34px}
-@media(max-width:760px){.cloud-account-field{align-items:stretch}.cloud-account-actions{width:100%}}
+@media(max-width:760px){
+  .cloud-account-selection{grid-template-columns:20px minmax(0,1fr)}
+  .cloud-account-clear{grid-column:2;justify-self:start;margin-top:2px}
+  .cloud-account-actions{width:100%}
+}
 /* Single-candidate shortcut: it shortens the choice above it, so it sits below
    the row rather than inside the actions cluster (a third equally-weighted button
    there would look like a peer of "choose" and "register"). The amber tint marks
@@ -205,14 +237,27 @@
 .muted{color:#8a949a}
 .row-actions .command-button{min-height:28px;padding:0 9px;font-size:12px;font-weight:500;white-space:nowrap}
 
-/* Ownership badge on the root-domain ledger.
-   The inventory mixes operator-defined root domains with the tenant-level
+/* Ownership badge on the root-domain and application ledgers.
+   The domain inventory mixes operator-defined root domains with the tenant-level
    `app.<suffix>` zones the deployment provisions for app publishing. Both look
    like "a domain" in the first column, so the table has to say which is which
-   or a platform zone reads as the operator's own root domain. */
+   or a platform zone reads as the operator's own root domain.
+   The application ledger asks the same question about `deploy_app.owner_type`,
+   so it reuses the vocabulary instead of growing a second badge set. */
 .scope-badge{display:inline-flex;align-items:center;min-height:22px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:650;white-space:nowrap}
-/* Operator-defined: neutral, matches the table's inert text. */
+/* Operator-defined / one person's own: neutral, matches the table's inert text. */
 .scope-badge-user{background:#e7ecef;color:#46545b}
+/* Tenant-wide: the app belongs to everybody in the tenant, so it reads as the
+   normal shared case rather than as an exception. */
+.scope-badge-tenant{background:#dff3e5;color:#23613a}
+/* Organization-wide: a narrower sharing level than the tenant. */
+.scope-badge-organization{background:#e6e9f7;color:#3f4b8f}
 /* Platform-provisioned: the same amber the console uses for machine-managed
    state it did not author, so it is visibly not the operator's to edit. */
 .scope-badge-platform{background:#fff0c7;color:#755407}
+
+/* Ownership facet selector in the applications ledger header. Mirrors the
+   `.scope-input` box the domain ledger uses so the two toolbars line up. */
+.scope-filter{height:38px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #c9d0d4;padding:0 10px;border-radius:5px}
+.scope-filter-label{color:#657178;font-size:12px;font-weight:650;white-space:nowrap}
+.scope-filter select{min-width:0;border:0;outline:none;background:transparent;color:#1d2428}

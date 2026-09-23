@@ -14,6 +14,7 @@ export type {
   AppCompositionResponse,
   AppDomainResponse,
   AppKind,
+  AppOwnerType,
   AppReleaseResponse,
   AppResponse,
   AppStatus,

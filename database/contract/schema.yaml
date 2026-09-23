@@ -180,3 +180,6 @@ tables:
   - name: deploy_certificate_renewal
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_dns_zone_wechat_verification
+    lifecycle_status: active
+    owner: deploy-platform

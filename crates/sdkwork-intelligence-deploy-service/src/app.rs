@@ -15,13 +15,13 @@ use sdkwork_deploy_contract::{
     CreateHealthCheckRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
     CreateSourceRepositoryRequest, DeployAppApi, DeployAppRequestContext, DeployServiceResult,
     DeployUploadSessionResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
-    ListDomainZonesQuery, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
-    RequestCertificateOrderRequest, SigningIdentityPage, SigningIdentityResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateBuildStateRequest,
-    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery,
-    UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
+    ListAppsQuery, ListDomainZonesQuery, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, SigningIdentityPage,
+    SigningIdentityResponse, SourceRepositoryPage, SourceRepositoryResponse,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
+    UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
+    UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
 };
 use sdkwork_deploy_drive_port::{DriveRequestCredentials, PrepareDeployUploadCommand};
 
@@ -1155,10 +1155,9 @@ impl DeployAppApi for DeployService {
     async fn list_apps(
         &self,
         context: &DeployAppRequestContext,
-        page: i32,
-        page_size: i32,
+        query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage> {
-        self.list_apps(context, page, page_size).await
+        self.list_apps(context, query).await
     }
 
     async fn create_app(
@@ -1739,9 +1738,8 @@ impl DeployService {
     pub async fn list_apps_api(
         &self,
         context: &DeployAppRequestContext,
-        page: i32,
-        page_size: i32,
+        query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage> {
-        self.list_apps(context, page, page_size).await
+        self.list_apps(context, query).await
     }
 }

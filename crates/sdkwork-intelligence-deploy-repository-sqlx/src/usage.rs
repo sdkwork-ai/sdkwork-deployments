@@ -1,4 +1,4 @@
-﻿//! Usage metering repository operations (TECH §4.6): append-only usage facts
+//! Usage metering repository operations (TECH §4.6): append-only usage facts
 //! with deduplication identity, traffic batch ingest from Web Server nodes,
 //! and the entitlement projection read model.
 
@@ -422,9 +422,7 @@ impl DeployRepository {
                     quantity: row
                         .try_get("quantity")
                         .map_err(|error| read_error("quantity", error))?,
-                    unit: row
-                        .try_get("unit")
-                        .unwrap_or_else(|_| String::new()),
+                    unit: row.try_get("unit").unwrap_or_else(|_| String::new()),
                 })
             })
             .collect::<Result<Vec<_>, DeployServiceError>>()?;
@@ -516,9 +514,7 @@ impl DeployRepository {
                     quantity: row
                         .try_get("quantity")
                         .map_err(|error| read_error("quantity", error))?,
-                    unit: row
-                        .try_get("unit")
-                        .unwrap_or_else(|_| String::new()),
+                    unit: row.try_get("unit").unwrap_or_else(|_| String::new()),
                 })
             })
             .collect::<Result<Vec<_>, DeployServiceError>>()?;
@@ -541,7 +537,9 @@ impl DeployRepository {
                 .bind(&query.date_to)
                 .fetch_all(&mut *transaction)
                 .await
-                .map_err(|error| store_error("aggregate deploy_usage_event tenant breakdown", error))?;
+                .map_err(|error| {
+                    store_error("aggregate deploy_usage_event tenant breakdown", error)
+                })?;
             tenant_rows
                 .iter()
                 .map(|row| {
@@ -555,9 +553,7 @@ impl DeployRepository {
                         quantity: row
                             .try_get("quantity")
                             .map_err(|error| read_error("quantity", error))?,
-                        unit: row
-                            .try_get("unit")
-                            .unwrap_or_else(|_| String::new()),
+                        unit: row.try_get("unit").unwrap_or_else(|_| String::new()),
                     })
                 })
                 .collect::<Result<Vec<_>, DeployServiceError>>()?
