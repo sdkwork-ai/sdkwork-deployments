@@ -274,8 +274,6 @@ const en = {
   createAppMediaHint: "Uploaded to Drive and referenced from deploy_app.metadata.media. Optional at creation time, editable later.",
   createAppSucceeded: "Application {name} created. You can publish it now.",
   publishDisabledNoApp: "Create an application first — publishing becomes available once an app exists.",
-  publishAppAction: "Publish",
-  columnActions: "Actions",
   publishTargetApp: "Target application",
   publishTargetPickHint: "Select one of the applications created earlier. Applications must be created before they can be published.",
   // v6: the application type is fixed at creation time and only shown here.
@@ -302,7 +300,6 @@ const en = {
   columnDomains: "Domain",
 
   // Row actions
-  uploadCodeAction: "Upload code",
   domainSettingsAction: "Domains",
   appDetailAction: "Details",
   domainNotConfigured: "Not configured",
@@ -864,8 +861,6 @@ const zh: Record<keyof typeof en, string> = {
   createAppMediaHint: "上传至 Drive 并写入 deploy_app.metadata.media。创建时可留空，之后可再编辑。",
   createAppSucceeded: "应用 {name} 已创建，现在可以发布该应用。",
   publishDisabledNoApp: "请先创建应用 —— 应用创建完成后才会具备发布能力。",
-  publishAppAction: "发布",
-  columnActions: "操作",
   publishTargetApp: "发布目标应用",
   publishTargetPickHint: "从已创建的应用中选择一个。应用必须先创建，之后才能发布。",
   // v6：应用类型在创建时即已确定，发布阶段只展示、不可修改。
@@ -892,7 +887,6 @@ const zh: Record<keyof typeof en, string> = {
   columnDomains: "域名",
 
   // 行内操作
-  uploadCodeAction: "上传代码",
   domainSettingsAction: "域名设置",
   appDetailAction: "详情",
   domainNotConfigured: "未配置",
