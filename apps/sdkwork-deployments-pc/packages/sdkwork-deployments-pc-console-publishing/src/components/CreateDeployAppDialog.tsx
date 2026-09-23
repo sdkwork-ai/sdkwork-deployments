@@ -34,8 +34,8 @@
  * console context，deployments 控制台与 BirdCoder 插件均可复用（高内聚低耦合）。
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { AppKind, AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { AppKind, AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, APP_KIND_LABEL_KEYS, type PublishingMessageKey, type PublishingTranslator } from "../i18n.ts";
 import {

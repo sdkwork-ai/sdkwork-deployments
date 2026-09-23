@@ -1,4 +1,4 @@
-import type { AppKind, AppStatus } from "@sdkwork/deployments-app-sdk";
+import type { AppKind, AppStatus } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import type { AppSurfaceId } from "./service/project-detection.ts";
 

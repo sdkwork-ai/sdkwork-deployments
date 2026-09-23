@@ -14,7 +14,7 @@
  * birdcoder publish plugin) construct it with the two generated clients and a
  * Drive upload result type, so it stays reusable and decoupled.
  */
-import type { SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
+import type { SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   AppKind,
   AppResponse,
@@ -30,12 +30,12 @@ import type {
   PlatformTargetResponse,
   SourceRepositoryResponse,
   TechStack,
-} from "@sdkwork/deployments-app-sdk";
+} from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   DriveUploaderBlobLike,
   DriveUploaderUploadResult,
   SdkworkDriveAppClient,
-} from "@sdkwork/drive-app-sdk";
+} from "@sdkwork/deployments-pc-console-core/sdk";
 import { DEPLOY_APP_MEDIA_UPLOAD } from "@sdkwork/deployments-pc-commons";
 import { uuid } from "@sdkwork/utils/id";
 import {

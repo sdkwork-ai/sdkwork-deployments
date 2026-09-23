@@ -7,7 +7,7 @@
  * itself is declarative data so it can be swapped for a server-driven catalog
  * (e.g. the appstore catalog API) without touching the dialog.
  */
-import type { AppKind } from "@sdkwork/deployments-app-sdk";
+import type { AppKind } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { PublishingMessageKey } from "../i18n.ts";
 
 /** One selectable category node. */

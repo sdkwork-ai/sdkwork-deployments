@@ -28,8 +28,8 @@
  * 都能复用。
  */
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import type { AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";
 import { DriveNodePickerDialog, type DriveNodeSelection } from "./DriveNodePickerDialog.tsx";

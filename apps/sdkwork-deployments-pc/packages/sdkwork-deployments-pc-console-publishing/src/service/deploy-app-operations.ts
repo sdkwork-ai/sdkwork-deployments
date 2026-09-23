@@ -39,18 +39,18 @@ import type {
   PlatformTargetResponse,
   SourceRepositoryResponse,
   SdkworkDeployAppClient,
-} from "@sdkwork/deployments-app-sdk";
+} from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   DriveUploaderBlobLike,
   DriveUploaderProgress,
   SdkworkDriveAppClient,
-} from "@sdkwork/drive-app-sdk";
+} from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   ApplicationPublishProgress,
   ApplicationPublishResult,
   DeployApplicationPublisher,
-} from "@sdkwork/deployments-app-sdk/application-publisher";
-import { createDeployApplicationPublisher } from "@sdkwork/deployments-app-sdk/application-publisher";
+} from "@sdkwork/deployments-pc-console-core/sdk";
+import { createDeployApplicationPublisher } from "@sdkwork/deployments-pc-console-core/sdk";
 import { uuid } from "@sdkwork/utils/id";
 
 /* ------------------------------------------------------------------ *

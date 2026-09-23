@@ -25,8 +25,8 @@
  * 组件为纯 props 输入（生成式 client + locale），不依赖 console context。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { AppResponse, DomainZoneResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { AppResponse, DomainZoneResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";
 import {

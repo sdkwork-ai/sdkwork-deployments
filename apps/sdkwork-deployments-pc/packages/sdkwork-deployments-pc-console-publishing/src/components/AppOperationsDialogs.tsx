@@ -21,7 +21,7 @@
  * the `.deploy-surface` mirror — so these components ship no stylesheet of their
  * own and need no second registration.
  */
-import type { AppResponse } from "@sdkwork/deployments-app-sdk";
+import type { AppResponse } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";

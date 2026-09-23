@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import type { AppKind } from "@sdkwork/deployments-app-sdk";
+import type { AppKind } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { PublishingTranslator } from "../i18n.ts";
 import { categoriesForAppKind, findCategoryNode, type DeployAppCategoryNode } from "../service/app-categories.ts";
 import type { DeployAppCategorySelection } from "../service/deploy-app-publishing.ts";

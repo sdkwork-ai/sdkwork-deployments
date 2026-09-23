@@ -30,7 +30,7 @@
  * - **`parentNodeId` 省略 = 列空间根**；传空串会被服务端当成一个不存在的 id。
  *   所以根层必须整个字段省略，不能传 `""`。
  */
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { publishingTranslator } from "../i18n.ts";

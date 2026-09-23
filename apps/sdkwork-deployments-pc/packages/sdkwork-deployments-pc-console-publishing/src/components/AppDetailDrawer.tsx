@@ -16,8 +16,8 @@
  *   避免同一个字段出现两个写入口。
  */
 import { useEffect, useMemo, useState } from "react";
-import type { AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
-import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import type { AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import {
   publishingTranslator,
