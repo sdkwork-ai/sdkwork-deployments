@@ -3233,6 +3233,7 @@ dependencies = [
  "sdkwork-database-spi",
  "sdkwork-database-sqlx",
  "sdkwork-deploy-certificate-material",
+ "sdkwork-deploy-cloud-account-port",
  "sdkwork-deploy-content-provider-port",
  "sdkwork-deploy-contract",
  "sdkwork-deploy-core",

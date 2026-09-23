@@ -35,6 +35,7 @@ sdkwork-database-lifecycle.workspace = true
 sdkwork-database-spi.workspace = true
 sdkwork-database-sqlx.workspace = true
 sdkwork-deploy-certificate-material.workspace = true
+sdkwork-deploy-cloud-account-port.workspace = true
 sdkwork-deploy-drive-port.workspace = true
 sdkwork-deploy-service-host.workspace = true
 sdkwork-webserver-acme-service.workspace = true
