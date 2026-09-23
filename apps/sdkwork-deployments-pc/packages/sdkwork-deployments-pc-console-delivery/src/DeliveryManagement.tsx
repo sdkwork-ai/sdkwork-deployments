@@ -45,7 +45,7 @@ import {
 import { Link, Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 
 import { deliveryText, type DeliveryMessageKey } from "./i18n.ts";
-import { type RootDomainIssue, validateRootDomain } from "./root-domain.ts";
+import { type RootDomainIssue, isRootDomainApex, validateRootDomain } from "./root-domain.ts";
 
 type Translator = (key: DeliveryMessageKey, values?: Record<string, string | number>) => string;
 type ZoneDialog =
@@ -87,8 +87,29 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       status: status === "ALL" ? undefined : status,
     }).then((result) => {
       if (!active) return;
-      setZones(result.items);
-      setPageInfo(result.pageInfo);
+      // This table is the root-domain list, so every row it shows has to be a
+      // root domain. The platform provisions one `app.<suffix>` zone per suffix
+      // it serves for the whole tenant, and those land in the same listing as
+      // the operator's own root domains - but an `app.<suffix>` apex is a
+      // subdomain, not a root domain, and the hostnames under it belong to the
+      // zone it names rather than to any root domain on this page.
+      //
+      // The listing also takes `scope: "USER"` to leave them out server-side.
+      // That parameter is not sent yet (the generated client in this tree does
+      // not carry it), and an edge running an older build would silently drop
+      // it anyway, so the response is asserted here instead of trusted: the
+      // filter bounds what the service returned, it never widens it.
+      const rootDomains = result.items.filter((zone) => isRootDomainApex(zone.apexHostname));
+      setZones(rootDomains);
+      // Keep the count honest when rows were dropped that the service still
+      // counted. "共 N 条" sitting above a visibly shorter list is the one
+      // inconsistency an operator reads as a bug; once the service filters too
+      // the two agree and this assignment is a no-op.
+      setPageInfo(
+        rootDomains.length === result.items.length
+          ? result.pageInfo
+          : { ...result.pageInfo, totalItems: String(rootDomains.length) },
+      );
     }).catch((cause) => {
       if (active) setError(errorText(cause));
     }).finally(() => {

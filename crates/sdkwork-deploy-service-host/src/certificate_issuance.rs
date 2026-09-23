@@ -28,7 +28,7 @@ use sdkwork_webserver_acme_service::{
     AcmeAccountStore, AcmeConfig, AcmeDns01Context, AcmeHttpClientFactory, AcmeServiceError,
     CertificateIssuer, EncryptedFileAcmeAccountStore, ExtraRootsClientFactory,
     IssuedCertificateMaterial, MemoryAcmeAccountStore, PlatformVerifierClientFactory,
-    DEFAULT_ACME_OPERATION_TIMEOUT_MS,
+    SingleZoneResolver, DEFAULT_ACME_OPERATION_TIMEOUT_MS,
 };
 
 /// Let's Encrypt (`certType = 1`) as the engine's certificate type.
@@ -48,10 +48,22 @@ impl CertificateIssuancePort for AcmeCertificateIssuance {
         // The borrowed context is built here rather than carried on the request:
         // the engine wants `&dyn Dns01Presenter`, and a request that crosses an
         // `async` port boundary cannot hold that borrow.
-        let dns01 = request.dns01.as_ref().map(|context| AcmeDns01Context {
-            presenter: context.presenter.as_ref(),
-            zone_apex: context.zone_apex.as_str(),
+        //
+        // The engine resolves the zone per identifier, so the control plane's single
+        // apex goes through `SingleZoneResolver` — the adapter the engine documents
+        // for a deployment whose certificates never span hosted zones. Both borrows
+        // live in this frame, which is why they can be handed out as one context.
+        let zone_resolver = request.dns01.as_ref().map(|context| SingleZoneResolver {
+            zone_apex: context.zone_apex.clone(),
         });
+        let dns01 = request
+            .dns01
+            .as_ref()
+            .zip(zone_resolver.as_ref())
+            .map(|(context, zones)| AcmeDns01Context {
+                presenter: context.presenter.as_ref(),
+                zones,
+            });
         self.issuer
             .issue_with_challenge(
                 CERT_TYPE_LETS_ENCRYPT,

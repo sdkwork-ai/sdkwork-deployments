@@ -10,6 +10,7 @@
  * 文本必须来自 message catalog）；枚举值经 APP_KIND/APP_STATUS 映射表本地化，
  * 未覆盖的新枚举值回退原文展示。
  */
+import { Pencil, Rocket, Trash2, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AppKind, AppResponse, AppStatus, SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
@@ -22,6 +23,7 @@ import {
   type PublishingTranslator,
 } from "../i18n.ts";
 import { createDeployAppPublishingService } from "../service/deploy-app-publishing.ts";
+import { AppEditDialog, AppPublishDialog, AppSourceDialog } from "./AppOperationsDialogs.tsx";
 import { CreateDeployAppDialog } from "./CreateDeployAppDialog.tsx";
 import "./create-deploy-app.module.css";
 
@@ -50,6 +52,20 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
   const [error, setError] = useState<string>()
   const [createOpen, setCreateOpen] = useState(false)
   const [refresh, setRefresh] = useState(0)
+  /**
+   * The row operation currently open, if any.
+   *
+   * Held here rather than in the row so the ledger has exactly one dialog
+   * mounted at a time, and so the record it acts on survives the reload the
+   * operation triggers.
+   */
+  const [operation, setOperation] = useState<{ kind: "edit" | "source" | "publish"; app: AppResponse }>()
+  const reload = () => { setRefresh((value) => value + 1) }
+  const closeOperation = () => { setOperation(undefined) }
+  const finishOperation = () => {
+    setOperation(undefined)
+    reload()
+  }
 
   useEffect(() => {
     let active = true
@@ -97,6 +113,7 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
               <th>{t("columnPlatformTargets")}</th>
               <th>{t("columnVersion")}</th>
               <th>{t("columnUpdated")}</th>
+              <th className="operations-column">{t("operations")}</th>
             </tr>
           </thead>
           <tbody>
@@ -109,6 +126,36 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
                 <td>{app.platformTargetCount ?? "-"}</td>
                 <td>{app.latestReleaseTag ?? "-"}</td>
                 <td>{new Date(app.updatedAt).toLocaleString(locale)}</td>
+                {/*
+                  Row operations, rendered in the module's own operations-column
+                  idiom: `row-actions` + `table-action` icon buttons, exactly as
+                  `DeliveryManagement.tsx` renders the domains, hostnames and
+                  certificates ledgers.
+
+                  The earlier text-label variant was measured out. Four nowrap
+                  text buttons ("Edit" / "Modify source code" / "Publish" /
+                  "Delete") gave the column a 327.8px min-content width, against
+                  the 144px this stylesheet authors for `.operations-column` —
+                  four 32px icon buttons plus gaps. At a real console content
+                  width of ~1036px that pushed the frame into horizontal scroll
+                  and squeezed Status/Version under 80px. Icons restore the
+                  authored width.
+
+                  `delete` is present but permanently disabled. The deploy app-api
+                  contract defines no `apps.delete` (only zones, hostnames,
+                  certificates and artifacts are deletable), so rendering an
+                  enabled button would promise a call that cannot be made; the
+                  title carries the reason instead of the capability being
+                  silently missing.
+                */}
+                <td>
+                  <div className="row-actions">
+                    <button className="table-action" type="button" title={t("editApp")} aria-label={`${t("editApp")} ${app.name}`} onClick={() => setOperation({ app, kind: "edit" })}><Pencil aria-hidden="true" size={16} /></button>
+                    <button className="table-action" type="button" title={t("updateSource")} aria-label={`${t("updateSource")} ${app.name}`} onClick={() => setOperation({ app, kind: "source" })}><Upload aria-hidden="true" size={16} /></button>
+                    <button className="table-action" type="button" title={t("publishRelease")} aria-label={`${t("publishRelease")} ${app.name}`} onClick={() => setOperation({ app, kind: "publish" })}><Rocket aria-hidden="true" size={16} /></button>
+                    <button className="table-action danger-action" disabled type="button" title={t("removeAppUnavailable")} aria-label={`${t("removeApp")} ${app.name}`}><Trash2 aria-hidden="true" size={16} /></button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -124,9 +171,18 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, pickDire
           onClose={() => { setCreateOpen(false) }}
           onPublished={() => {
             setCreateOpen(false)
-            setRefresh((value) => value + 1)
+            reload()
           }}
         />
+      )}
+      {operation?.kind === "edit" && (
+        <AppEditDialog app={operation.app} locale={locale} service={service} onClose={closeOperation} onSaved={finishOperation} />
+      )}
+      {operation?.kind === "source" && (
+        <AppSourceDialog app={operation.app} locale={locale} service={service} onClose={closeOperation} onSaved={finishOperation} />
+      )}
+      {operation?.kind === "publish" && (
+        <AppPublishDialog app={operation.app} locale={locale} service={service} onClose={closeOperation} onSaved={finishOperation} />
       )}
     </section>
   )

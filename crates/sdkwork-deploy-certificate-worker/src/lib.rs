@@ -235,30 +235,29 @@ impl CertificateIssuanceWorker {
                     );
                     return;
                 }
-                _ = ticker.tick() => {
-                    match self.run_once().await {
-                        // Silence when there is nothing to do: this loop runs for days
-                        // between renewals, and a line every tick would bury the ticks
-                        // that mattered.
-                        Ok(result) if !result.is_idle() => {
-                            tracing::info!(
-                                worker_id = %self.config.worker_id,
-                                claimed = result.claimed,
-                                stored = result.stored,
-                                failed = result.failed,
-                                abandoned = result.abandoned,
-                                "certificate issuance batch completed"
-                            );
-                        }
-                        Ok(_) => {}
-                        Err(error) => {
-                            tracing::warn!(
-                                worker_id = %self.config.worker_id,
-                                error = %error,
-                                "certificate issuance batch failed"
-                            );
-                        }
-                    }
+                _ = ticker.tick() => {}
+            }
+            match self.run_once().await {
+                // Silence when there is nothing to do: this loop runs for days
+                // between renewals, and a line every tick would bury the ticks
+                // that mattered.
+                Ok(result) if !result.is_idle() => {
+                    tracing::info!(
+                        worker_id = %self.config.worker_id,
+                        claimed = result.claimed,
+                        stored = result.stored,
+                        failed = result.failed,
+                        abandoned = result.abandoned,
+                        "certificate issuance batch completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(
+                        worker_id = %self.config.worker_id,
+                        error = %error,
+                        "certificate issuance batch failed"
+                    );
                 }
             }
         }

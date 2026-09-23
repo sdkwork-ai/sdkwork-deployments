@@ -5,7 +5,7 @@ use std::sync::Arc;
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployAppApi, DeployAppRequestContext,
-    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
+    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -54,6 +54,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
                 page_size: 20,
                 status: Some("ACTIVE".to_owned()),
                 keyword: Some("Production".to_owned()),
+                scope: None,
             },
         )
         .await
@@ -262,6 +263,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         page_size: 50,
         status: None,
         keyword: None,
+        scope: None,
     };
 
     // User 11 owns one zone, user 12 owns another in the same tenant, and the
@@ -491,6 +493,7 @@ async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
         page_size: 50,
         status: None,
         keyword: None,
+        scope: None,
     };
 
     let alice = service
@@ -585,4 +588,105 @@ async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
         .expect("the owner's own zone is untouched");
     assert_eq!(alice_still_there.id, alice.id);
     assert_eq!(alice_still_there.status, "ACTIVE");
+}
+
+/// The console's "Domains" page must be able to ask for one ownership kind.
+///
+/// An unfiltered listing returns both kinds, and because the platform
+/// provisions its whole `app.<suffix>` catalog in one transaction those rows
+/// crowd the operator's own root domains out of the first page. `scope` makes
+/// "my root domains" and "the platform's zones" two separately paginated lists,
+/// which is what keeps the root-domain page free of `app.*` rows.
+///
+/// The platform zone is seeded by SQL because no caller-facing entry point can
+/// produce a zone without an owner: `create_domain_zone` always attributes the
+/// new row to the calling subject, and the provisioning apex is by construction
+/// `app.<suffix>` rather than a registrable root domain.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn domain_zone_listing_filters_by_scope() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(7).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let request = |apex: &str| CreateDomainZoneRequest {
+        apex_hostname: apex.to_owned(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    let listing = |scope: Option<ZoneScope>| ListDomainZonesQuery {
+        page: 1,
+        page_size: 50,
+        status: None,
+        keyword: None,
+        scope,
+    };
+
+    let operator_apex = format!("scoped{suffix}.dev");
+    repository
+        .create_domain_zone(7, Some(9), Some(11), &request(&operator_apex))
+        .await
+        .expect("create the operator's root domain");
+
+    let platform_apex = format!("app.{operator_apex}");
+    sqlx::query(
+        "INSERT INTO deploy_dns_zone (
+            id, uuid, tenant_id, organization_id, apex_hostname, display_name,
+            dns_provider, provider_zone_ref, status, user_id, created_by, updated_by
+         ) VALUES (
+            90002, 'zone-90002', 7, 9, $1, 'Platform app domain zone', 'platform', $2,
+            'ACTIVE', NULL, 1, 1
+         )",
+    )
+    .bind(&platform_apex)
+    .bind(format!("app.*.{suffix}.dev"))
+    .execute(repository.pool())
+    .await
+    .expect("seed the platform zone");
+
+    let user_page = repository
+        .list_domain_zones(7, Some(11), &listing(Some(ZoneScope::User)))
+        .await
+        .expect("list with scope=USER");
+    assert_eq!(
+        user_page.total,
+        1,
+        "scope=USER must count only the operator's own zone; got {:?}",
+        user_page
+            .items
+            .iter()
+            .map(|zone| &zone.apex_hostname)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(user_page.items[0].apex_hostname, operator_apex);
+
+    let platform_page = repository
+        .list_domain_zones(7, Some(11), &listing(Some(ZoneScope::Platform)))
+        .await
+        .expect("list with scope=PLATFORM");
+    assert_eq!(
+        platform_page.total,
+        1,
+        "scope=PLATFORM must count only the provisioning zone; got {:?}",
+        platform_page
+            .items
+            .iter()
+            .map(|zone| &zone.apex_hostname)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(platform_page.items[0].apex_hostname, platform_apex);
+
+    // Omitting the filter keeps the audit view: both kinds, which is what the
+    // certificate coverage picker needs, since a certificate over a platform
+    // zone is legitimate.
+    let both = repository
+        .list_domain_zones(7, Some(11), &listing(None))
+        .await
+        .expect("list without a scope filter");
+    assert_eq!(both.total, 2, "no filter must return both kinds");
 }

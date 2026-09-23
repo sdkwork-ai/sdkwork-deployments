@@ -38,6 +38,19 @@ paths:
         schema:
           type: string
           maxLength: 253
+      - name: scope
+        in: query
+        description: |
+          Restricts the listing to one ownership level. `USER` lists the zones
+          the caller owns - the root domains it created through the console -
+          and `PLATFORM` lists the tenant-level `app.<suffix>` zones the
+          deployment provisions. Omit it to list both, which is what a caller
+          inspecting the whole inventory wants.
+        schema:
+          type: string
+          enum:
+          - USER
+          - PLATFORM
       responses:
         '200':
           description: Success

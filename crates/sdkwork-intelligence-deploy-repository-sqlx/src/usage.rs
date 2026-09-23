@@ -3,8 +3,10 @@
 //! and the entitlement projection read model.
 
 use sdkwork_deploy_contract::{
-    DeployServiceError, DeployServiceResult, UsageEventAttribution, UsageEventIngestItem,
-    UsageEventPage, UsageEventQuery, UsageEventResponse, UsageIngestResult,
+    DeployServiceError, DeployServiceResult, TrafficUsageAppTotal, TrafficUsageDailyPoint,
+    TrafficUsageStatistics, TrafficUsageStatisticsQuery, TrafficUsageTenantTotal,
+    TrafficUsageTotal, UsageEventAttribution, UsageEventIngestItem, UsageEventPage,
+    UsageEventQuery, UsageEventResponse, UsageIngestResult,
 };
 use sdkwork_intelligence_deploy_service::repository::InsertUsageEventCommand;
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
@@ -341,7 +343,246 @@ impl DeployRepository {
             page_size,
         })
     }
+
+    /// Aggregate traffic usage over a closed date window.
+    ///
+    /// `tenant_id: None` reads **every** tenant and additionally fills the
+    /// per-tenant breakdown (the platform-wide view the Web Server operations
+    /// surface needs); `Some(id)` reads exactly one tenant and leaves that
+    /// breakdown empty, because repeating the caller's own totals once per
+    /// dimension is noise rather than information.
+    ///
+    /// Every view aggregates `deploy_usage_event` — the append-only facts —
+    /// rather than the daily rollups, so the totals, the daily series, and the
+    /// per-app breakdown cannot disagree with each other merely because the
+    /// reconciliation job has not run since the last window closed.
+    ///
+    /// The window is **half-open** (`date_from <= day < date_to`) and anchored
+    /// to UTC explicitly. Relying on the session `TimeZone` here would make the
+    /// same query mean different windows on differently configured servers,
+    /// and a closed-both-ends window would double-count the boundary day in
+    /// every consecutive pair.
+    pub(super) async fn usage_statistics_repo(
+        &self,
+        tenant_id: Option<i64>,
+        query: &TrafficUsageStatisticsQuery,
+    ) -> DeployServiceResult<TrafficUsageStatistics> {
+        let top_apps = query.top_apps.clamp(1, MAX_TRAFFIC_STATISTICS_APPS);
+        let dimension = query.dimension.as_deref().unwrap_or("");
+        let predicate = "($1::bigint IS NULL OR tenant_id = $1)
+            AND ($2 = '' OR dimension = $2)
+            AND period_start >= ($3::date)::timestamp AT TIME ZONE 'UTC'
+            AND period_start < ($4::date)::timestamp AT TIME ZONE 'UTC'";
+
+        let totals_sql = format!(
+            "SELECT dimension, COALESCE(SUM(quantity), 0) AS quantity, MIN(unit) AS unit
+             FROM deploy_usage_event
+             WHERE {predicate}
+             GROUP BY dimension
+             ORDER BY dimension"
+        );
+        let totals_rows = sqlx::query(AssertSqlSafe(&*totals_sql))
+            .bind(tenant_id)
+            .bind(dimension)
+            .bind(&query.date_from)
+            .bind(&query.date_to)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("aggregate deploy_usage_event totals", error))?;
+        let totals = totals_rows
+            .iter()
+            .map(|row| {
+                Ok(TrafficUsageTotal {
+                    dimension: row
+                        .try_get("dimension")
+                        .map_err(|error| read_error("dimension", error))?,
+                    quantity: row
+                        .try_get("quantity")
+                        .map_err(|error| read_error("quantity", error))?,
+                    unit: row
+                        .try_get("unit")
+                        .unwrap_or_else(|_| String::new()),
+                })
+            })
+            .collect::<Result<Vec<_>, DeployServiceError>>()?;
+
+        let daily_sql = format!(
+            "SELECT to_char(period_start AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS usage_date,
+                    dimension,
+                    COALESCE(SUM(quantity), 0) AS quantity
+             FROM deploy_usage_event
+             WHERE {predicate}
+             GROUP BY usage_date, dimension
+             ORDER BY usage_date, dimension"
+        );
+        let daily_rows = sqlx::query(AssertSqlSafe(&*daily_sql))
+            .bind(tenant_id)
+            .bind(dimension)
+            .bind(&query.date_from)
+            .bind(&query.date_to)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("aggregate deploy_usage_event daily series", error))?;
+        let daily = daily_rows
+            .iter()
+            .map(|row| {
+                Ok(TrafficUsageDailyPoint {
+                    usage_date: row
+                        .try_get("usage_date")
+                        .map_err(|error| read_error("usage_date", error))?,
+                    dimension: row
+                        .try_get("dimension")
+                        .map_err(|error| read_error("dimension", error))?,
+                    quantity: row
+                        .try_get("quantity")
+                        .map_err(|error| read_error("quantity", error))?,
+                })
+            })
+            .collect::<Result<Vec<_>, DeployServiceError>>()?;
+
+        // The bound applies to *attributed* apps only; the unattributed bucket
+        // is unioned back unconditionally. Bounding the whole set instead would
+        // let a busy drift bucket push a real app out of the list, and the
+        // breakdown would then no longer sum back to the totals.
+        let apps_sql = format!(
+            "WITH facts AS (
+                 SELECT app_id, dimension, quantity, unit
+                 FROM deploy_usage_event
+                 WHERE {predicate}
+             ), ranked AS (
+                 SELECT app_id, COALESCE(SUM(quantity), 0) AS total
+                 FROM facts
+                 WHERE app_id IS NOT NULL
+                 GROUP BY app_id
+                 ORDER BY total DESC, app_id
+                 LIMIT $5
+             )
+             SELECT a.uuid AS app_uuid, a.slug AS app_slug, f.dimension AS dimension,
+                    COALESCE(SUM(f.quantity), 0) AS quantity, MIN(f.unit) AS unit
+             FROM facts f
+             JOIN ranked r ON r.app_id = f.app_id
+             LEFT JOIN deploy_app a ON a.id = f.app_id
+             GROUP BY a.uuid, a.slug, f.dimension
+             UNION ALL
+             SELECT NULL::varchar AS app_uuid, NULL::varchar AS app_slug,
+                    f.dimension AS dimension,
+                    COALESCE(SUM(f.quantity), 0) AS quantity, MIN(f.unit) AS unit
+             FROM facts f
+             WHERE f.app_id IS NULL
+             GROUP BY f.dimension
+             ORDER BY app_slug NULLS LAST, dimension"
+        );
+        let apps_rows = sqlx::query(AssertSqlSafe(&*apps_sql))
+            .bind(tenant_id)
+            .bind(dimension)
+            .bind(&query.date_from)
+            .bind(&query.date_to)
+            .bind(top_apps)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("aggregate deploy_usage_event app breakdown", error))?;
+        let apps = apps_rows
+            .iter()
+            .map(|row| {
+                Ok(TrafficUsageAppTotal {
+                    app_uuid: row.try_get("app_uuid").ok(),
+                    app_slug: row.try_get("app_slug").ok(),
+                    dimension: row
+                        .try_get("dimension")
+                        .map_err(|error| read_error("dimension", error))?,
+                    quantity: row
+                        .try_get("quantity")
+                        .map_err(|error| read_error("quantity", error))?,
+                    unit: row
+                        .try_get("unit")
+                        .unwrap_or_else(|_| String::new()),
+                })
+            })
+            .collect::<Result<Vec<_>, DeployServiceError>>()?;
+
+        // A tenant-scoped read would repeat the caller's own totals once per
+        // dimension, so the breakdown is only meaningful platform-wide.
+        let tenants = if tenant_id.is_none() {
+            let tenants_sql = format!(
+                "SELECT tenant_id, dimension, COALESCE(SUM(quantity), 0) AS quantity,
+                        MIN(unit) AS unit
+                 FROM deploy_usage_event
+                 WHERE {predicate}
+                 GROUP BY tenant_id, dimension
+                 ORDER BY tenant_id, dimension"
+            );
+            let tenant_rows = sqlx::query(AssertSqlSafe(&*tenants_sql))
+                .bind(tenant_id)
+                .bind(dimension)
+                .bind(&query.date_from)
+                .bind(&query.date_to)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|error| store_error("aggregate deploy_usage_event tenant breakdown", error))?;
+            tenant_rows
+                .iter()
+                .map(|row| {
+                    Ok(TrafficUsageTenantTotal {
+                        tenant_id: row
+                            .try_get("tenant_id")
+                            .map_err(|error| read_error("tenant_id", error))?,
+                        dimension: row
+                            .try_get("dimension")
+                            .map_err(|error| read_error("dimension", error))?,
+                        quantity: row
+                            .try_get("quantity")
+                            .map_err(|error| read_error("quantity", error))?,
+                        unit: row
+                            .try_get("unit")
+                            .unwrap_or_else(|_| String::new()),
+                    })
+                })
+                .collect::<Result<Vec<_>, DeployServiceError>>()?
+        } else {
+            Vec::new()
+        };
+
+        Ok(TrafficUsageStatistics {
+            date_from: query.date_from.clone(),
+            date_to: query.date_to.clone(),
+            totals,
+            daily,
+            apps,
+            tenants,
+            platform_scope: tenant_id.is_none(),
+        })
+    }
 }
+
+/// Aggregated traffic usage for the Web Server operations surface
+/// (inherent method so a read-only consumer that shares this database reuses
+/// one entry point instead of reaching into the tables itself).
+///
+/// `tenant_id: None` means every tenant. The Web Server's admin surface is the
+/// only caller: its `app-console` half reads the deployments app API instead,
+/// which is tenant-scoped by the session and therefore already answers "my own
+/// traffic" without a platform-wide read being reachable from it.
+impl DeployRepository {
+    pub async fn traffic_usage_statistics_lookup(
+        &self,
+        tenant_id: Option<i64>,
+        query: &TrafficUsageStatisticsQuery,
+    ) -> DeployServiceResult<TrafficUsageStatistics> {
+        self.usage_statistics_repo(tenant_id, query).await
+    }
+}
+
+/// Upper bound on the per-app breakdown a single statistics read may return.
+///
+/// The read is a UI drill-down, not an export: without a server-side bound a
+/// platform-wide read over a wide window would group by every app on the
+/// installation in one response.
+pub const MAX_TRAFFIC_STATISTICS_APPS: i64 = 200;
+
+fn read_error(column: &str, error: sqlx::Error) -> DeployServiceError {
+    DeployServiceError::Internal(format!("read usage aggregate {column}: {error}"))
+}
+
 fn map_usage_event_row(row: &PgRow) -> Result<UsageEventResponse, DeployServiceError> {
     let attribution_json: serde_json::Value = row
         .try_get("attribution_json")

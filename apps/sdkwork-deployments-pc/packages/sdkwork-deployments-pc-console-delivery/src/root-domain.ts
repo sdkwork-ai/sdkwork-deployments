@@ -37,6 +37,29 @@ export type RootDomainIssue =
   | "tooLong"
   | "notApex";
 
+/**
+ * Whether a hostname is a registrable root domain — the apex a zone is
+ * registered under.
+ *
+ * `create_domain_zone` refuses anything that is not one, because
+ * `normalize_zone_apex` in the service answers this with
+ * `psl::domain_str(host) == host`. Every zone an operator created through the
+ * console is therefore an apex. The platform's `app.<suffix>` zones are the
+ * exception: the deployment provisions them itself rather than through that
+ * endpoint, and by construction each one is a subdomain of the suffix it
+ * serves — so it is never a root domain, even though it is a zone.
+ *
+ * The root-domain page answers this for every row the listing hands it, which
+ * is what keeps those provisioning zones out of a table whose every column is
+ * a statement about root domains. It narrows what the service returned and
+ * never widens it, so a row the answer rejects is one the page may not show
+ * regardless of who asked for it.
+ */
+export function isRootDomainApex(hostname: string): boolean {
+  const candidate = hostname.trim().replace(/\.$/, "").toLowerCase();
+  return candidate.length > 0 && isRegistrableRootDomain(candidate);
+}
+
 export type RootDomainValidation =
   | {
       ok: true;

@@ -2,6 +2,7 @@
 
 pub mod app_domains;
 pub mod app_kind_rules;
+pub mod certificate_key_algorithm;
 pub mod certificate_validity;
 pub mod database_profile;
 pub mod package_manifest;
@@ -23,6 +24,10 @@ pub use app_kind_rules::{
     DOUYIN_MINIPROGRAM_TOTAL_PACKAGE_BYTES, JVM_ARTIFACT_MAXIMUM_BYTES,
     PROCESS_BUNDLE_MAXIMUM_BYTES, WEB_BUNDLE_MAXIMUM_BYTES, WECHAT_MINIPROGRAM_MAIN_PACKAGE_BYTES,
     WECHAT_MINIPROGRAM_TOTAL_PACKAGE_BYTES,
+};
+pub use certificate_key_algorithm::{
+    validate_certificate_key_algorithm, CERTIFICATE_DEFAULT_KEY_ALGORITHM,
+    CERTIFICATE_KEY_ALGORITHMS, CERTIFICATE_KEY_ALGORITHM_ECDSA, CERTIFICATE_KEY_ALGORITHM_RSA,
 };
 pub use certificate_validity::{
     CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS, CERTIFICATE_MAXIMUM_RENEW_BEFORE_DAYS,

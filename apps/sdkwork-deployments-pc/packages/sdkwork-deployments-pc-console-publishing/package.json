@@ -16,6 +16,7 @@
     "@sdkwork/deployments-pc-commons": "workspace:*",
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/utils": "workspace:*",
+    "lucide-react": "catalog:",
     "react": "catalog:"
   },
   "devDependencies": {

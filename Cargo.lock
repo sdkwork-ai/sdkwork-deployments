@@ -3441,6 +3441,7 @@ dependencies = [
  "rcgen",
  "rustls",
  "rustls-pki-types",
+ "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "serde",
  "serde_json",
@@ -3481,6 +3482,7 @@ dependencies = [
  "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "sdkwork-webserver-resolver-cache",
+ "sdkwork-webserver-tunnel-core",
  "serde",
  "serde_json",
  "sha1 0.10.6",
@@ -3541,6 +3543,17 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sdkwork-webserver-tunnel-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ipnet",
+ "sdkwork-utils-rust",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
