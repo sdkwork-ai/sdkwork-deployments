@@ -12,7 +12,7 @@ use std::sync::Arc;
 use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult};
 use sdkwork_webserver_acme_service::{
     AcmeServiceResult, AliyunDns01Presenter, CloudflareDns01Presenter, Dns01Presenter,
-    DnsApiClient, DnsProviderKind, DnspodDns01Presenter,
+    DnsApiClient, DnsProviderKind, DnspodDns01Presenter, HttpRequestDns01Presenter,
 };
 
 /// A credential value that never renders its contents.
@@ -51,6 +51,16 @@ pub enum DeployDnsProviderCredential {
     Cloudflare {
         api_token: SecretString,
     },
+    /// The template-driven family: the whole document *is* the request
+    /// configuration, so there is no field to translate and no public half.
+    ///
+    /// Every other variant here is one vendor's API written out as Rust. This one
+    /// carries the requests as data, which is why the account center's
+    /// `(identifier, secret)` shape stores its entire configuration in the secret
+    /// and leaves the identifier empty.
+    HttpRequest {
+        config: SecretString,
+    },
 }
 
 impl fmt::Debug for DeployDnsProviderCredential {
@@ -72,6 +82,13 @@ impl fmt::Debug for DeployDnsProviderCredential {
                 .debug_struct("DeployDnsProviderCredential::Cloudflare")
                 .field("api_token", &"<redacted>")
                 .finish(),
+            // The configuration holds the endpoints *and* whatever `vars`
+            // declares, so nothing in it is safe to render — not even the parts
+            // that look like a public endpoint.
+            Self::HttpRequest { .. } => formatter
+                .debug_struct("DeployDnsProviderCredential::HttpRequest")
+                .field("config", &"<redacted>")
+                .finish(),
         }
     }
 }
@@ -82,6 +99,7 @@ impl DeployDnsProviderCredential {
             Self::AliyunDns { .. } => DnsProviderKind::AliyunDns,
             Self::Dnspod { .. } => DnsProviderKind::Dnspod,
             Self::Cloudflare { .. } => DnsProviderKind::Cloudflare,
+            Self::HttpRequest { .. } => DnsProviderKind::HttpRequest,
         }
     }
 
@@ -100,7 +118,8 @@ impl DeployDnsProviderCredential {
     ) -> DeployServiceResult<Self> {
         let kind = DnsProviderKind::parse(dns_provider).ok_or_else(|| {
             DeployServiceError::validation(format!(
-                "unsupported DNS provider kind {dns_provider}; supported: ALIYUN_DNS, DNSPOD, CLOUDFLARE"
+                "unsupported DNS provider kind {dns_provider}; supported: {}",
+                DnsProviderKind::supported_list()
             ))
         })?;
         let identifier = access_key_id.trim();
@@ -139,6 +158,14 @@ impl DeployDnsProviderCredential {
             DnsProviderKind::Cloudflare => Ok(Self::Cloudflare {
                 api_token: SecretString::new(secret),
             }),
+            // The generic family has no field names of its own, so the secret half
+            // *is* the configuration document. An identifier sent alongside it is
+            // ignored rather than rejected, for the same reason Cloudflare's is: the
+            // console's one-form design cannot know which family needs one, and
+            // rejecting it would turn a harmless extra field into a failed binding.
+            DnsProviderKind::HttpRequest => Ok(Self::HttpRequest {
+                config: SecretString::new(secret),
+            }),
         }
     }
 
@@ -151,7 +178,8 @@ impl DeployDnsProviderCredential {
     pub fn from_secret_payload(provider_kind: &str, payload: &str) -> DeployServiceResult<Self> {
         let kind = DnsProviderKind::parse(provider_kind).ok_or_else(|| {
             DeployServiceError::validation(format!(
-                "unsupported DNS provider kind {provider_kind}; supported: ALIYUN_DNS, DNSPOD, CLOUDFLARE"
+                "unsupported DNS provider kind {provider_kind}; supported: {}",
+                DnsProviderKind::supported_list()
             ))
         })?;
         let document: serde_json::Value = serde_json::from_str(payload).map_err(|_| {
@@ -174,6 +202,13 @@ impl DeployDnsProviderCredential {
             }),
             DnsProviderKind::Cloudflare => Ok(Self::Cloudflare {
                 api_token: SecretString::new(require_field(object, "apiToken")?),
+            }),
+            // This document *is* the configuration, so it round-trips verbatim
+            // instead of being projected onto fields the family does not have. Its
+            // shape is the presenter's to validate — it is the only layer that knows
+            // what a usable request template looks like.
+            DnsProviderKind::HttpRequest => Ok(Self::HttpRequest {
+                config: SecretString::new(payload),
             }),
         }
     }
@@ -229,6 +264,11 @@ pub fn build_dns01_presenter(
                 api_token.expose(),
                 zone_ref.map(str::to_string),
             )?)
+        }
+        // `zone_ref` is deliberately unused: this family addresses records through
+        // the templates in its own configuration, which name the zone themselves.
+        DeployDnsProviderCredential::HttpRequest { config } => {
+            Arc::new(HttpRequestDns01Presenter::new(client, config.expose())?)
         }
     };
     Ok(presenter)

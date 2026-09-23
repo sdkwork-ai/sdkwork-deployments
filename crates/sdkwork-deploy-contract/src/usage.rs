@@ -111,3 +111,128 @@ pub struct UsageIngestResult {
     #[serde(rename = "rejected")]
     pub rejected: usize,
 }
+
+// ---------------------------------------------------------------------------
+// Aggregated traffic usage statistics (read model)
+// ---------------------------------------------------------------------------
+//
+// Consumed by the Web Server's operations surface, which shares this database
+// and reads the append-only facts through
+// `DeployRepository::traffic_usage_statistics_lookup`.
+//
+// These are **in-process** read models, not wire DTOs: the quantities stay
+// `i64` deliberately. The decimal-string encoding the API contract requires
+// (API_SPEC §13.6) belongs to the consuming surface's own response types, where
+// one serde rule can cover the whole document — encoding it here would put a
+// wire concern inside an internal port and make the two representations drift.
+//
+// Every view aggregates the **facts** (`deploy_usage_event`) rather than the
+// daily rollups (`deploy_tenant_usage_daily` / `deploy_app_usage_daily`).
+// Reading the facts keeps one authority: totals, the daily series, and the
+// per-app breakdown are then equal to each other by construction instead of by
+// the reconciliation job having run most recently.
+
+/// One usage dimension's aggregate over the requested window.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageTotal {
+    /// Usage dimension (`traffic.requests`, `traffic.ingress_bytes`,
+    /// `traffic.egress_bytes`).
+    pub dimension: String,
+    /// Sum of the dimension's quantity over the window.
+    pub quantity: i64,
+    /// Unit of `quantity` (`REQUEST`, `BYTE`).
+    pub unit: String,
+}
+
+/// One day of one usage dimension, for trend series.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageDailyPoint {
+    /// Calendar day in UTC (`YYYY-MM-DD`).
+    #[serde(rename = "usageDate")]
+    pub usage_date: String,
+    pub dimension: String,
+    pub quantity: i64,
+}
+
+/// One app's aggregate of one usage dimension over the window.
+///
+/// A row whose [`app_uuid`](Self::app_uuid) is absent is the **unattributed
+/// bucket**: traffic the edge served for a hostname it could not resolve to an
+/// app (or a tenant-less window). It is reported rather than dropped so the
+/// per-app rows always sum back to the corresponding total.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageAppTotal {
+    #[serde(rename = "appUuid", default, skip_serializing_if = "Option::is_none")]
+    pub app_uuid: Option<String>,
+    #[serde(rename = "appSlug", default, skip_serializing_if = "Option::is_none")]
+    pub app_slug: Option<String>,
+    pub dimension: String,
+    pub quantity: i64,
+    pub unit: String,
+}
+
+/// One tenant's aggregate of one usage dimension over the window.
+///
+/// Only populated for a platform-wide read (`tenant_id: None`); a tenant-scoped
+/// read returns an empty list because the answer would be the caller's own
+/// totals repeated once per dimension.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageTenantTotal {
+    #[serde(rename = "tenantId")]
+    pub tenant_id: i64,
+    pub dimension: String,
+    pub quantity: i64,
+    pub unit: String,
+}
+
+/// Aggregate traffic usage over a closed date window.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageStatistics {
+    /// Inclusive UTC day the window starts on (`YYYY-MM-DD`).
+    #[serde(rename = "dateFrom")]
+    pub date_from: String,
+    /// **Exclusive** UTC day the window ends on (`YYYY-MM-DD`): the facts
+    /// selected are `date_from <= day < date_to`. Half-open on purpose, so
+    /// consecutive windows neither double-count nor drop a day.
+    #[serde(rename = "dateTo")]
+    pub date_to: String,
+    /// Window totals, one per dimension present in the window.
+    pub totals: Vec<TrafficUsageTotal>,
+    /// Daily series, one row per (day, dimension) present in the window.
+    pub daily: Vec<TrafficUsageDailyPoint>,
+    /// Per-app breakdown of the top apps by total traffic, plus the
+    /// unattributed bucket when it carries traffic.
+    pub apps: Vec<TrafficUsageAppTotal>,
+    /// Per-tenant breakdown; empty for a tenant-scoped read.
+    pub tenants: Vec<TrafficUsageTenantTotal>,
+    /// Whether the read covered every tenant rather than one. Reported so a
+    /// surface cannot render a platform-wide number as if it were the
+    /// caller's own (or the reverse).
+    #[serde(rename = "platformScope")]
+    pub platform_scope: bool,
+}
+
+/// Filters for [`TrafficUsageStatistics`].
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrafficUsageStatisticsQuery {
+    /// Inclusive UTC day (`YYYY-MM-DD`).
+    #[serde(rename = "dateFrom")]
+    pub date_from: String,
+    /// Exclusive UTC day (`YYYY-MM-DD`).
+    #[serde(rename = "dateTo")]
+    pub date_to: String,
+    /// Restrict to one dimension; `None` returns every dimension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dimension: Option<String>,
+    /// Size of the per-app breakdown. The unattributed bucket is always kept
+    /// in addition to this bound, because dropping it would make the breakdown
+    /// silently disagree with the totals.
+    #[serde(rename = "topApps")]
+    pub top_apps: i64,
+}

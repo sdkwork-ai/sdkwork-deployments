@@ -3446,6 +3446,7 @@ dependencies = [
  "rcgen",
  "rustls",
  "rustls-pki-types",
+ "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "serde",
  "serde_json",
@@ -3555,6 +3556,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "ipnet",
+ "sdkwork-utils-rust",
  "serde",
  "thiserror 2.0.18",
 ]
