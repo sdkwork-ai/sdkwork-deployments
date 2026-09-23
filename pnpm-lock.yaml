@@ -795,6 +795,9 @@ importers:
       '@sdkwork/sdk-common':
         specifier: workspace:*
         version: link:../../../sdkwork-sdk-commons/sdkwork-sdk-common-typescript
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../sdkwork-ui/sdkwork-ui-pc-react
       lucide-react:
         specifier: 'catalog:'
         version: 1.38.0(react@19.2.8)
@@ -900,6 +903,9 @@ importers:
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-commons:
     dependencies:
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
       lucide-react:
         specifier: 'catalog:'
         version: 1.38.0(react@19.2.8)
@@ -947,6 +953,9 @@ importers:
       '@sdkwork/deployments-pc-console-core':
         specifier: workspace:*
         version: link:../sdkwork-deployments-pc-console-core
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
       lucide-react:
         specifier: 'catalog:'
         version: 1.38.0(react@19.2.8)
@@ -969,15 +978,15 @@ importers:
 
   apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-publishing:
     dependencies:
-      '@sdkwork/deployments-app-sdk':
-        specifier: workspace:*
-        version: link:../../../../sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript
       '@sdkwork/deployments-pc-commons':
         specifier: workspace:*
         version: link:../sdkwork-deployments-pc-commons
-      '@sdkwork/drive-app-sdk':
+      '@sdkwork/deployments-pc-console-core':
         specifier: workspace:*
-        version: link:../../../../../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript
+        version: link:../sdkwork-deployments-pc-console-core
+      '@sdkwork/ui-pc-react':
+        specifier: workspace:*
+        version: link:../../../../../sdkwork-ui/sdkwork-ui-pc-react
       '@sdkwork/utils':
         specifier: workspace:*
         version: link:../../../../../sdkwork-utils/packages/sdkwork-utils-typescript
@@ -987,6 +996,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.8(react@19.2.8)
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
