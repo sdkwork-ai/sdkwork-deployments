@@ -2607,3 +2607,39 @@ BEGIN
 END
 $$;
 
+-- source: initialization state
+-- 微信公众号域名校验文件。微信公众平台要求域名根路径可公开取回一个形如
+-- `MP_verify_xxxxx.txt` 的文件；控制台上传原文，边缘数据面按域名原样提供，
+-- 自检端口按微信爬虫的视角取回比对。一个 DNS Zone 至多一份：微信重新生成
+-- 校验文件时整体替换，旧的文件名与内容同时作废。
+
+CREATE TABLE IF NOT EXISTS deploy_dns_zone_wechat_verification (
+    id              BIGINT        NOT NULL,
+    uuid            VARCHAR(36)   NOT NULL,
+    tenant_id       BIGINT        NOT NULL,
+    organization_id BIGINT        NOT NULL DEFAULT 0,
+    zone_id         BIGINT        NOT NULL,
+    file_name       VARCHAR(64)   NOT NULL,
+    content         VARCHAR(2048) NOT NULL,
+    -- 文件归属用户；NULL 表示 tenant 级，与 deploy_dns_zone.user_id 同义。
+    user_id         BIGINT,
+    created_by      BIGINT,
+    updated_by      BIGINT,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    version         BIGINT        NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_dns_zone_wechat_verification_uuid UNIQUE (uuid),
+    -- One file per zone: the schema, not the service layer, is what makes the
+    -- replacement semantics true even if a caller races itself.
+    CONSTRAINT uk_deploy_dns_zone_wechat_verification_zone UNIQUE (zone_id),
+    CONSTRAINT fk_deploy_dns_zone_wechat_verification_zone FOREIGN KEY (zone_id) REFERENCES deploy_dns_zone(id),
+    CONSTRAINT chk_deploy_dns_zone_wechat_verification_file_name CHECK (file_name LIKE '%.txt'),
+    CONSTRAINT chk_deploy_dns_zone_wechat_verification_content CHECK (content <> '')
+);
+
+COMMENT ON TABLE deploy_dns_zone_wechat_verification IS '微信公众号域名校验文件；一个 DNS Zone 至多一份，按域名公开发布';
+COMMENT ON COLUMN deploy_dns_zone_wechat_verification.file_name IS '微信生成的校验文件名，形如 MP_verify_xxx.txt';
+COMMENT ON COLUMN deploy_dns_zone_wechat_verification.content IS '校验文件原文，逐字节存储与逐字节返回';
+COMMENT ON COLUMN deploy_dns_zone_wechat_verification.user_id IS '文件归属用户；NULL 表示 tenant 级，与 deploy_dns_zone.user_id 同义';
+

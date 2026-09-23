@@ -73,6 +73,22 @@ pub struct ListAppsQuery {
     pub keyword: Option<String>,
 }
 
+/// Ownership level a domain-zone listing may be restricted to.
+///
+/// A zone is either user-private — a root domain an operator created through
+/// the console, which carries `user_id` — or tenant-level, the platform-owned
+/// `app.<suffix>` inventory the deployment provisions for the whole tenant,
+/// which carries none. The root-domain list asks for [`ZoneScope::User`]
+/// because those platform zones are edge infrastructure rather than anybody's
+/// root domain; a listing that omits the scope sees both, which is what the
+/// certificate coverage picker needs so it can still reach them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum ZoneScope {
+    User,
+    Platform,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ListDomainZonesQuery {
     #[serde(default = "crate::dto::default_page")]

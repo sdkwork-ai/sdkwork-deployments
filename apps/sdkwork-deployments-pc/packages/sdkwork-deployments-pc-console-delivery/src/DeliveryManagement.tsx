@@ -105,8 +105,17 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       // root-domain list. The list's own invariant is "root domains only", so
       // it holds that invariant rather than trusting a response to have
       // honoured a request.
-      setZones(result.items.filter((zone) => zone.scope === "USER"));
-      setPageInfo(result.pageInfo);
+      const rootDomains = result.items.filter((zone) => zone.scope === "USER");
+      setZones(rootDomains);
+      // Keep the count honest when rows were dropped that the service still
+      // counted. "共 N 条" sitting above a visibly shorter list is the one
+      // inconsistency an operator reads as a bug; once the service filters too
+      // the two agree and this assignment is a no-op.
+      setPageInfo(
+        rootDomains.length === result.items.length
+          ? result.pageInfo
+          : { ...result.pageInfo, totalItems: String(rootDomains.length) },
+      );
     }).catch((cause) => {
       if (active) setError(errorText(cause));
     }).finally(() => {

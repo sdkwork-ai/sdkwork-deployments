@@ -12,6 +12,12 @@ export { BuildProgressDialog } from "./components/BuildProgressDialog.tsx";
 export type { BuildProgressDialogProps, DeployDialogBuildFrame, DeployDialogBuildPort } from "./components/BuildProgressDialog.tsx";
 export { PublishingAppsPage, primaryHostname } from "./components/PublishingAppsPage.tsx";
 export type { PublishingAppsPageProps } from "./components/PublishingAppsPage.tsx";
+export { AppEditDialog, AppPublishDialog, AppSourceDialog } from "./components/AppOperationsDialogs.tsx";
+export type {
+  AppEditDialogProps,
+  AppPublishDialogProps,
+  AppSourceDialogProps,
+} from "./components/AppOperationsDialogs.tsx";
 export { CategoryCascadeSelect } from "./components/CategoryCascadeSelect.tsx";
 export { DeployAppTypeSelect } from "./components/DeployAppTypeSelect.tsx";
 export { DeployAppTypeGrid } from "./components/DeployAppTypeGrid.tsx";

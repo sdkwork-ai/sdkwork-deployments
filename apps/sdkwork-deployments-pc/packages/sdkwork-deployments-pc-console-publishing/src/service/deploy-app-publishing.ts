@@ -18,11 +18,17 @@ import type { SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import type {
   AppKind,
   AppResponse,
+  AppReleaseResponse,
   AppStatus,
   CreatePlatformTargetRequest,
   CreateAppRequest,
+  CreateAppReleaseRequest,
+  CreateSourceRepositoryRequest,
+  PackageResponse,
   PageInfo,
   Platform,
+  PlatformTargetResponse,
+  SourceRepositoryResponse,
   TechStack,
 } from "@sdkwork/deployments-app-sdk";
 import type {
@@ -643,6 +649,9 @@ export function isValidSemver(version: string): boolean {
   return SEMVER_PATTERN.test(version.trim())
 }
 
+/** Publish-form option page size: the package picker is a short list, not a ledger. */
+const PACKAGE_OPTION_PAGE_SIZE = 100
+
 /**
  * Whether an error from `apps.create` is the slug-uniqueness conflict.
  *
@@ -707,6 +716,39 @@ export interface DeployAppMediaUpload {
   readonly height?: number | undefined
 }
 
+/**
+ * Row operation inputs.
+ *
+ * These mirror the four operations the Web Server console's own application
+ * ledger used to expose per row (`update` / `update-source` / `publish` /
+ * `delete`). The deploy plane owns the application lifecycle now, so the
+ * semantics are re-expressed over `deploy_app` instead of the retired
+ * host-owned entity: metadata edit, source repository, and release. `delete`
+ * has no counterpart here — the app-api contract defines no `apps.delete` —
+ * so it is deliberately absent rather than stubbed.
+ */
+export interface DeployAppMetadataPatch {
+  readonly name?: string | undefined
+  readonly description?: string | undefined
+}
+
+/** `update-source`: the git repository an app builds from. */
+export interface DeployAppSourceRepositoryInput {
+  readonly repoKey: string
+  readonly repoProvider: CreateSourceRepositoryRequest["repoProvider"]
+  readonly repoUrl: string
+  readonly defaultBranch?: string | undefined
+  readonly cloneMode?: CreateSourceRepositoryRequest["cloneMode"]
+}
+
+/** `publish`: cut a release from an already-registered package. */
+export interface DeployAppReleaseInput {
+  readonly platformTargetId: string
+  readonly packageId: string
+  readonly semanticVersion: string
+  readonly releaseNotes?: string | undefined
+}
+
 export interface DeployAppPublishingService {
   /** 需求 1: 可关联的已有应用列表。 */
   listApps(params?: {
@@ -727,6 +769,17 @@ export interface DeployAppPublishingService {
   createPlatformTarget(appId: string, request: CreatePlatformTargetRequest): Promise<unknown>
   /** 组装 deploy_app.metadata JSONB。 */
   buildMetadata(input: CreateDeployAppInput): Record<string, unknown>
+  // ── 行级操作（deploy_app 自己的生命周期；对齐宿主旧台账 update/update-source/publish）──
+  /** `update`: 改应用元数据（名称/描述）。 */
+  updateApp(appId: string, patch: DeployAppMetadataPatch): Promise<AppResponse>
+  /** `update-source`: 给应用关联一个源码仓库。 */
+  createSourceRepository(appId: string, input: DeployAppSourceRepositoryInput): Promise<SourceRepositoryResponse>
+  /** `publish`: 用已注册的制品包发一个版本。 */
+  publishAppRelease(appId: string, input: DeployAppReleaseInput): Promise<AppReleaseResponse>
+  /** publish 表单的可选项：平台目标（同一应用下）。 */
+  listPlatformTargets(appId: string): Promise<PlatformTargetResponse[]>
+  /** publish 表单的可选项：已注册的制品包。 */
+  listPackages(appId: string): Promise<PackageResponse[]>
 }
 
 /** Service context: two generated clients + optional idempotency source. */
@@ -890,6 +943,67 @@ export function createDeployAppPublishingService(
       return deployClient.app.platformTargets.create(appId, request, {
         idempotencyKey: request.idempotencyKey ?? createIdempotencyKey(),
       })
+    },
+
+    updateApp(appId, patch) {
+      const name = patch.name?.trim()
+      const description = patch.description?.trim()
+      // Generated request members stay `?: string`, which
+      // `exactOptionalPropertyTypes` will not satisfy with `string | undefined`;
+      // unset members are omitted instead (the wire treats them identically).
+      return deployClient.app.update(appId, {
+        ...(name === undefined || name.length === 0 ? {} : { name }),
+        ...(description === undefined ? {} : { description }),
+      })
+    },
+
+    createSourceRepository(appId, input) {
+      const defaultBranch = input.defaultBranch?.trim()
+      return deployClient.app.sourceRepositories.create(
+        appId,
+        {
+          repoKey: input.repoKey.trim(),
+          repoProvider: input.repoProvider,
+          repoUrl: input.repoUrl.trim(),
+          ...(defaultBranch === undefined || defaultBranch.length === 0 ? {} : { defaultBranch }),
+          ...(input.cloneMode === undefined ? {} : { cloneMode: input.cloneMode }),
+        },
+        { idempotencyKey: createIdempotencyKey() },
+      )
+    },
+
+    publishAppRelease(appId, input) {
+      const releaseNotes = input.releaseNotes?.trim()
+      // `CreateAppReleaseRequest` declares a **required body** `idempotencyKey`
+      // (openapi.yaml `releases.create`; `additionalProperties: false`), and the
+      // Rust authority rejects a blank one outright:
+      // `idempotencyKey is required` (`app_delivery.rs::create_app_release`).
+      // Mint the key once and reuse it for both the body member and the
+      // `Idempotency-Key` header — two independently generated keys would make a
+      // retry look like a second command.
+      const idempotencyKey = createIdempotencyKey()
+      const request: CreateAppReleaseRequest = {
+        platformTargetId: input.platformTargetId,
+        packageId: input.packageId,
+        semanticVersion: input.semanticVersion.trim(),
+        idempotencyKey,
+        // Free-form JSONB (`Option<Value>`); unset members are omitted rather
+        // than sent as `undefined`, which the wire treats identically.
+        ...(releaseNotes === undefined || releaseNotes.length === 0
+          ? {}
+          : { releaseNotes: { note: releaseNotes } }),
+      }
+      return deployClient.release.create(appId, request, { idempotencyKey })
+    },
+
+    async listPlatformTargets(appId) {
+      const page = await deployClient.app.platformTargets.list(appId)
+      return page.items
+    },
+
+    async listPackages(appId) {
+      const page = await deployClient.package.list(appId, { pageSize: PACKAGE_OPTION_PAGE_SIZE })
+      return page.items
     },
   }
 }

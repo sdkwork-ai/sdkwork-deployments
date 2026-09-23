@@ -17,6 +17,7 @@
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/ui-pc-react": "workspace:*",
     "@sdkwork/utils": "workspace:*",
+    "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

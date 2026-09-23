@@ -39,6 +39,13 @@ const HOSTNAME_SELECT: &str =
 /// A caller with no user subject therefore reads exactly those tenant-level
 /// zones and nothing else, because `user_id = NULL` is never true. That is the
 /// honest answer for a service principal, and it needs no separate branch.
+///
+/// This gate answers "may the caller reach this row". It deliberately does not
+/// answer "does this row belong on the page being asked for" - that is the
+/// separate `scope` facet in `list_domain_zones_repo`, and the two stay apart
+/// because the console's root-domain list wants only the caller's own root
+/// domains while the certificate coverage picker still needs the tenant-level
+/// platform zones.
 fn zone_owner_gate(parameter: usize) -> String {
     format!("(z.user_id IS NULL OR z.user_id = ${parameter})")
 }
@@ -52,6 +59,15 @@ impl DeployRepository {
     ) -> DeployServiceResult<DomainZonePage> {
         let (page, page_size, offset) = pagination(query.page, query.page_size);
         let status = query.status.as_deref().unwrap_or("");
+        // The ownership level as the literal the predicate compares against.
+        // Absent maps to the empty string, which the predicate reads as "both
+        // levels" — that keeps every caller that never sends `scope` on the
+        // answer it had before the parameter existed.
+        let scope = match query.scope {
+            Some(ZoneScope::User) => "USER",
+            Some(ZoneScope::Platform) => "PLATFORM",
+            None => "",
+        };
         let keyword = query
             .keyword
             .as_deref()
@@ -59,6 +75,13 @@ impl DeployRepository {
             .filter(|value| !value.is_empty())
             .map(|value| format!("%{}%", value.to_ascii_lowercase()))
             .unwrap_or_default();
+        // Conjunctive with the owner gate, not a replacement for it: the gate
+        // decides *which rows the caller may reach*, the scope narrows that set
+        // to one ownership level. A caller asking for PLATFORM sees only the
+        // tenant-level zones it could already reach; asking for USER sees only
+        // its own, which is what the root-domain list wants. The platform
+        // inventory is `app.<suffix>`, so it is never a root domain and never
+        // belongs on that list.
         let predicate = format!(
             "z.tenant_id = $1 AND {} AND z.deleted_at IS NULL
             AND ($3 = '' OR z.status = $3)
@@ -1316,5 +1339,50 @@ mod tests {
                 "{name}"
             );
         }
+    }
+}
+
+impl DeployRepository {
+    /// Resolves the WeChat domain-verification file published under `hostname`.
+    ///
+    /// Walks `deploy_domain` rather than suffix-matching `apex_hostname`: a zone's
+    /// apex holds its own row there (which is what `create_domain_zone_repo`'s
+    /// overlap check is built on), so this path covers the apex *and* the names
+    /// under it while still refusing to attribute `notexample.com` to
+    /// `example.com`.
+    ///
+    /// No `tenant_id` filter: active `hostname_ascii` values are globally unique
+    /// (`uk_deploy_domain_active_hostname`), and the file is content the operator
+    /// deliberately publishes to the WeChat crawler — it is not anyone's private
+    /// data, so there is no owner predicate to apply and none is invented.
+    pub async fn wechat_verification_by_hostname_lookup(
+        &self,
+        hostname: &str,
+    ) -> DeployServiceResult<Option<(String, String)>> {
+        let normalized = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
+        let row = sqlx::query(
+            "SELECT v.file_name, v.content
+             FROM deploy_domain d
+             JOIN deploy_dns_zone z ON z.id = d.zone_id
+             JOIN deploy_dns_zone_wechat_verification v ON v.zone_id = z.id
+             WHERE d.hostname_ascii = $1
+               AND d.deleted_at IS NULL AND z.deleted_at IS NULL
+             ORDER BY d.id DESC
+             LIMIT 1",
+        )
+        .bind(&normalized)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("retrieve deploy_dns_zone_wechat_verification", error))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let file_name: String = row.try_get("file_name").map_err(|error| {
+            DeployServiceError::Internal(format!("map wechat verification file name: {error}"))
+        })?;
+        let content: String = row.try_get("content").map_err(|error| {
+            DeployServiceError::Internal(format!("map wechat verification content: {error}"))
+        })?;
+        Ok(Some((file_name, content)))
     }
 }

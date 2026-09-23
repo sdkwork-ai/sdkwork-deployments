@@ -716,6 +716,11 @@ async fn domain_zone_listing_puts_operator_zones_first_and_labels_their_scope() 
 /// catalog in one transaction, those rows crowd the operator's own root domains
 /// out of the first page. `scope` is the filter that makes "my domains" and
 /// "the platform's domains" two honest, separately paginated lists.
+///
+/// The platform zone is seeded by SQL because no caller-facing entry point can
+/// produce a zone without an owner: `create_domain_zone` always attributes the
+/// new row to the calling subject, and the provisioning apex is by construction
+/// `app.<suffix>` rather than a registrable root domain.
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn domain_zone_listing_filters_by_scope() {
@@ -798,7 +803,9 @@ async fn domain_zone_listing_filters_by_scope() {
     assert_eq!(platform_page.items[0].scope, ZoneScope::Platform);
 
     // Omitting the filter keeps the audit view: both kinds, which is what a
-    // caller inspecting the whole inventory needs.
+    // caller inspecting the whole inventory needs — the certificate coverage
+    // picker in particular, since a certificate over a platform zone is
+    // legitimate.
     let both = repository
         .list_domain_zones(7, Some(11), &listing(None))
         .await

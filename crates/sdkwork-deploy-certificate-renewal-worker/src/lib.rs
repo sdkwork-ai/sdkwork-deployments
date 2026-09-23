@@ -195,6 +195,12 @@ impl CertificateRenewalWorker {
         let mut sweep_ticker = interval(self.config.sweep_interval);
         sweep_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
         tokio::pin!(shutdown);
+        // 停机排空语义:select 只决定"下一个要执行的动作",动作体在
+        // select 之外完整执行——在途批次不再被停机信号丢弃。
+        enum WorkerAction {
+            Renew,
+            Sweep,
+        }
         loop {
             tokio::select! {
                 _ = &mut shutdown => {
@@ -203,53 +209,53 @@ impl CertificateRenewalWorker {
                         "certificate renewal worker shutdown"
                     );
                     return;
-                }
-                _ = renewal_ticker.tick() => {
-                    match self.run_once().await {
-                        // Silence when there is nothing to do: this loop runs for
-                        // days between renewals, and a line every tick would bury
-                        // the ticks that mattered.
-                        Ok(result) if !result.is_idle() => {
-                            tracing::info!(
-                                worker_id = %self.config.worker_id,
-                                claimed = result.claimed,
-                                ordered = result.ordered,
-                                failed = result.failed,
-                                "certificate renewal batch completed"
-                            );
+                _ = renewal_ticker.tick() => WorkerAction::Renew,
+                _ = sweep_ticker.tick() => WorkerAction::Sweep,
+            };
+            match action {
+                WorkerAction::Renew => match self.run_once().await {
+                            // Silence when there is nothing to do: this loop runs for
+                            // days between renewals, and a line every tick would bury
+                            // the ticks that mattered.
+                            Ok(result) if !result.is_idle() => {
+                                tracing::info!(
+                                    worker_id = %self.config.worker_id,
+                                    claimed = result.claimed,
+                                    ordered = result.ordered,
+                                    failed = result.failed,
+                                    "certificate renewal batch completed"
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                tracing::warn!(
+                                    worker_id = %self.config.worker_id,
+                                    error = %error,
+                                    "certificate renewal batch failed"
+                                );
+                            }
                         }
-                        Ok(_) => {}
-                        Err(error) => {
-                            tracing::warn!(
-                                worker_id = %self.config.worker_id,
-                                error = %error,
-                                "certificate renewal batch failed"
-                            );
+                },
+                WorkerAction::Sweep => match self.sweep_once().await {
+                            Ok(sweep) if !sweep.is_empty() => {
+                                tracing::info!(
+                                    worker_id = %self.config.worker_id,
+                                    certificates_expired = sweep.certificates_expired,
+                                    versions_expired = sweep.versions_expired,
+                                    renewals_cancelled = sweep.renewals_cancelled,
+                                    "certificate expiry sweep completed"
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(error) => {
+                                tracing::warn!(
+                                    worker_id = %self.config.worker_id,
+                                    error = %error,
+                                    "certificate expiry sweep failed"
+                                );
+                            }
                         }
                     }
-                }
-                _ = sweep_ticker.tick() => {
-                    match self.sweep_once().await {
-                        Ok(sweep) if !sweep.is_empty() => {
-                            tracing::info!(
-                                worker_id = %self.config.worker_id,
-                                certificates_expired = sweep.certificates_expired,
-                                versions_expired = sweep.versions_expired,
-                                renewals_cancelled = sweep.renewals_cancelled,
-                                "certificate expiry sweep completed"
-                            );
-                        }
-                        Ok(_) => {}
-                        Err(error) => {
-                            tracing::warn!(
-                                worker_id = %self.config.worker_id,
-                                error = %error,
-                                "certificate expiry sweep failed"
-                            );
-                        }
-                    }
-                }
-            }
         }
     }
 }
