@@ -63,11 +63,7 @@ impl DeployRepository {
         // Absent maps to the empty string, which the predicate reads as "both
         // levels" — that keeps every caller that never sends `scope` on the
         // answer it had before the parameter existed.
-        let scope = match query.scope {
-            Some(ZoneScope::User) => "USER",
-            Some(ZoneScope::Platform) => "PLATFORM",
-            None => "",
-        };
+        let scope = query.scope.map(ZoneScope::as_str).unwrap_or("");
         let keyword = query
             .keyword
             .as_deref()
@@ -90,7 +86,6 @@ impl DeployRepository {
                         OR ($5 = 'PLATFORM' AND z.user_id IS NULL))",
             zone_owner_gate(2)
         );
-        let scope = query.scope.map(ZoneScope::as_str).unwrap_or("");
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM deploy_dns_zone z WHERE {predicate}"
         )))

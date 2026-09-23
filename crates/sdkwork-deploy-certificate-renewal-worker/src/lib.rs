@@ -202,13 +202,14 @@ impl CertificateRenewalWorker {
             Sweep,
         }
         loop {
-            tokio::select! {
+            let action = tokio::select! {
                 _ = &mut shutdown => {
                     tracing::info!(
                         worker_id = %self.config.worker_id,
                         "certificate renewal worker shutdown"
                     );
                     return;
+                }
                 _ = renewal_ticker.tick() => WorkerAction::Renew,
                 _ = sweep_ticker.tick() => WorkerAction::Sweep,
             };
@@ -235,7 +236,6 @@ impl CertificateRenewalWorker {
                                 );
                             }
                         }
-                },
                 WorkerAction::Sweep => match self.sweep_once().await {
                             Ok(sweep) if !sweep.is_empty() => {
                                 tracing::info!(

@@ -73,22 +73,6 @@ pub struct ListAppsQuery {
     pub keyword: Option<String>,
 }
 
-/// Ownership level a domain-zone listing may be restricted to.
-///
-/// A zone is either user-private — a root domain an operator created through
-/// the console, which carries `user_id` — or tenant-level, the platform-owned
-/// `app.<suffix>` inventory the deployment provisions for the whole tenant,
-/// which carries none. The root-domain list asks for [`ZoneScope::User`]
-/// because those platform zones are edge infrastructure rather than anybody's
-/// root domain; a listing that omits the scope sees both, which is what the
-/// certificate coverage picker needs so it can still reach them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum ZoneScope {
-    User,
-    Platform,
-}
-
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ListDomainZonesQuery {
     #[serde(default = "crate::dto::default_page")]
@@ -97,10 +81,18 @@ pub struct ListDomainZonesQuery {
     pub page_size: i32,
     pub status: Option<String>,
     pub keyword: Option<String>,
-    /// Restrict the inventory to one ownership kind (`USER` / `PLATFORM`).
-    /// `None` keeps both, which is the audit view; the console passes `USER`
-    /// so the platform-provisioned `app.<suffix>` zones do not appear as root
-    /// domains the operator owns.
+    /// Restrict the inventory to one ownership kind (`USER` / `PLATFORM`) — the
+    /// vocabulary [`crate::dto::ZoneScope`] names.
+    ///
+    /// `None` keeps both, which is the audit view; the console passes `USER` so
+    /// the platform-provisioned `app.<suffix>` zones do not appear as root
+    /// domains the operator owns. Those platform zones are edge infrastructure
+    /// rather than anybody's root domain, while a listing that omits the scope
+    /// still sees both — which is what the certificate coverage picker needs so
+    /// it can reach them.
+    ///
+    /// A zone's scope is derived from its `user_id` (`None` ⇒ `Platform`), so
+    /// [`crate::dto::ZoneScope::for_owner`] is the one place that mapping lives.
     pub scope: Option<crate::dto::ZoneScope>,
 }
 
