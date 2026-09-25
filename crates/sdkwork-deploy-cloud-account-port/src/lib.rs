@@ -116,14 +116,41 @@ pub mod dns_provider {
             .find(|family| family.eq_ignore_ascii_case(trimmed))
     }
 
-    /// The IAM `vendorCode` that supplies this family.
-    pub fn vendor_code_for(family: &str) -> Option<&'static str> {
-        match normalize(family)? {
-            ALIYUN_DNS => Some("aliyun"),
-            DNSPOD => Some("tencent"),
-            CLOUDFLARE => Some("cloudflare"),
-            _ => None,
+    /// Every vendor code that drives this family, **canonical first**.
+    ///
+    /// The first element is exactly the code [`vendor_code_for`] writes on a newly
+    /// registered account, so "the code we write" and "the codes we read back" cannot
+    /// drift apart: adding a spelling here is enough to teach the resolver about it,
+    /// and the canonical one is pinned by test rather than by a second match arm.
+    ///
+    /// **`dnspod` is not a synonym for `tencent`.** DNSPod issues two unrelated
+    /// credential pairs: a Tencent Cloud CAM key (`SecretId` + `SecretKey`, which also
+    /// unlocks the whole Tencent Cloud account) and a DNSPod Token (`ID` + `Token`,
+    /// which can only edit DNS records). This module drives the DNSPod Token API, so
+    /// the account it resolves is the DNSPod Token one; `tencent` / `qcloud` stay
+    /// listed only because accounts registered before the split were written under
+    /// them. `alidns` is Alibaba Cloud's own spelling of its DNS product, and the
+    /// delivery console has always offered it for a declared provider.
+    ///
+    /// Read as *a set* wherever a family has to be recognised rather than written:
+    /// the account centre's `vendorCode` filter takes one exact code, so a family with
+    /// several spellings cannot be asked for in one request and has to be recognised
+    /// from each account's own code instead.
+    pub fn vendor_codes_for(family: &str) -> &'static [&'static str] {
+        match normalize(family) {
+            Some(ALIYUN_DNS) => &["aliyun", "ali", "alidns"],
+            Some(DNSPOD) => &["dnspod", "tencent", "qcloud"],
+            Some(CLOUDFLARE) => &["cloudflare", "cf"],
+            _ => &[],
         }
+    }
+
+    /// The IAM `vendorCode` to *write* on a new account for this family.
+    ///
+    /// Derived from [`vendor_codes_for`] rather than written out a second time, so the
+    /// canonical code cannot disagree with the set the resolver accepts.
+    pub fn vendor_code_for(family: &str) -> Option<&'static str> {
+        vendor_codes_for(family).first().copied()
     }
 
     /// The family a vendor code drives, or `None` when the vendor is not a DNS one.
@@ -133,6 +160,13 @@ pub mod dns_provider {
     /// the cloud-wide `aliyun` / `tencent`. A trailing `_dns` is therefore stripped
     /// before matching, which keeps both spellings working without teaching the
     /// vocabulary here about every name a tenant might invent.
+    ///
+    /// `tencent` / `qcloud` stay accepted **on purpose**, and it is a
+    /// back-compatibility fact rather than a claim about the vendor: every DNSPod
+    /// account this adapter auto-registered before [`vendor_code_for`] named
+    /// `dnspod` was written under `tencent`, so dropping the spelling here would
+    /// strand exactly those accounts. [`vendor_code_for`] is the canonical answer;
+    /// this is the resolver, and it is deliberately the wider of the two.
     pub fn family_for_vendor_code(vendor_code: &str) -> Option<&'static str> {
         let code = vendor_code.trim().to_ascii_lowercase();
         if code.is_empty() {
@@ -140,8 +174,8 @@ pub mod dns_provider {
         }
         let code = code.strip_suffix("_dns").unwrap_or(&code);
         match code {
-            "aliyun" | "ali" => Some(ALIYUN_DNS),
-            "tencent" | "dnspod" | "qcloud" => Some(DNSPOD),
+            "aliyun" | "ali" | "alidns" => Some(ALIYUN_DNS),
+            "dnspod" | "tencent" | "qcloud" => Some(DNSPOD),
             "cloudflare" | "cf" => Some(CLOUDFLARE),
             _ => None,
         }
@@ -231,9 +265,17 @@ pub struct ListCloudAccountsCommand {
     /// The acting end user. Enables the personal scope level; without it only the
     /// shared levels are walked.
     pub user_id: Option<i64>,
-    /// Restrict to one vendor. This is how the console answers "do I already have
-    /// an account for this provider".
-    pub vendor_code: Option<String>,
+    /// Restrict to one DNS family, one of [`dns_provider::ALL`]. This is how the
+    /// console answers "do I already have an account for this provider".
+    ///
+    /// Named for the *family* and not for the account centre's `vendorCode` on
+    /// purpose. A vendor code is the centre's vocabulary, and one family is written
+    /// under several of them: `DNSPOD` under `dnspod`, plus `tencent` / `qcloud` for
+    /// every account registered before the two were told apart. A caller that
+    /// narrows by code therefore has to guess a spelling, and guessing wrong hides
+    /// an account that [`CloudAccount::dns_provider`] and the binding path both
+    /// still accept. The family is the one name for it that Deploy owns.
+    pub dns_family: Option<String>,
     /// Restrict to one scope level; `None` walks every visible level.
     pub scope_type: Option<String>,
     /// Only the caller's own accounts.
@@ -246,6 +288,41 @@ pub struct ListCloudAccountsCommand {
     pub search: Option<String>,
     pub page: i32,
     pub page_size: i32,
+}
+
+impl ListCloudAccountsCommand {
+    /// The narrowing family, canonicalised, or `None` for "every family".
+    ///
+    /// Not to be confused with [`resolve_dns_family`], which answers the same question
+    /// for a *pinned account*: this one resolves a request's filter, that one resolves
+    /// an account. The error wording is shared so the same bad argument reads the same
+    /// way on both paths.
+    ///
+    /// Resolved through this port's own vocabulary rather than compared as text, so
+    /// `DNSPOD`, `dnspod` and `dnspod_dns` narrow alike — and a family nobody drives
+    /// is refused rather than quietly matching nothing, because "this tenant has no
+    /// account" is the one answer a list must not give by accident.
+    ///
+    /// Every adapter applies this **before counting and paging**, so `total` counts
+    /// the family asked for rather than the wider set a page was sliced out of. That
+    /// ordering is the whole point: filtering a page after it was sliced makes the
+    /// page short and, worse, makes page two start where page one would have ended.
+    pub(crate) fn narrowing_family(&self) -> DeployServiceResult<Option<&'static str>> {
+        match self
+            .dns_family
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(raw) => dns_provider::normalize(raw).map(Some).ok_or_else(|| {
+                DeployServiceError::validation(format!(
+                    "dnsProvider `{raw}` is not one of {}",
+                    dns_provider::ALL.join(", ")
+                ))
+            }),
+            None => Ok(None),
+        }
+    }
 }
 
 /// One page of accounts, shaped like the module's other list results.
@@ -610,4 +687,60 @@ pub(crate) fn assert_bindable(account: &CloudAccount) -> DeployServiceResult<()>
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod provider_vocabulary_tests {
+    use super::dns_provider;
+
+    /// The canonical code is the first spelling, always, and there is always one.
+    ///
+    /// This is the invariant that lets [`dns_provider::vendor_code_for`] be *derived*
+    /// from the list: the code written on a new account and the set the resolver
+    /// accepts cannot disagree, so a spelling can be added without touching the writer.
+    #[test]
+    fn every_family_writes_its_first_spelling() {
+        for family in dns_provider::ALL {
+            let codes = dns_provider::vendor_codes_for(family);
+            assert!(!codes.is_empty(), "{family} has no vendor code to write");
+            assert_eq!(
+                dns_provider::vendor_code_for(family),
+                codes.first().copied(),
+                "{family} writes a code that is not the first of its own vocabulary"
+            );
+        }
+    }
+
+    /// Every spelling reads back as the family it was listed under.
+    ///
+    /// The failure this pins is a *silent* one: a spelling nobody resolves is a code
+    /// whose accounts exist, advertise `dns`, and can never be bound — the account
+    /// centre would show them and the certificate path would refuse them.
+    #[test]
+    fn every_spelling_resolves_back_to_the_family_that_lists_it() {
+        for family in dns_provider::ALL {
+            for code in dns_provider::vendor_codes_for(family) {
+                assert_eq!(
+                    dns_provider::family_for_vendor_code(code),
+                    Some(family),
+                    "`{code}` is listed under {family} but resolves to something else"
+                );
+                // The resolver trims, folds case and strips a trailing `_dns`, so a
+                // tenant who typed the suffix gets the same family rather than `None`.
+                assert_eq!(
+                    dns_provider::family_for_vendor_code(&format!("  {code}_DNS ")),
+                    Some(family),
+                    "`{code}_dns` is not resolved like `{code}`"
+                );
+            }
+        }
+    }
+
+    /// An unknown family has no spellings rather than a default one.
+    #[test]
+    fn an_unknown_family_has_no_spellings() {
+        assert!(dns_provider::vendor_codes_for("HTTP_REQUEST").is_empty());
+        assert!(dns_provider::vendor_codes_for("").is_empty());
+        assert_eq!(dns_provider::vendor_code_for("HTTP_REQUEST"), None);
+    }
 }

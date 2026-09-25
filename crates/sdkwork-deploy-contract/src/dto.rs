@@ -755,7 +755,10 @@ fn default_certificate_ca_profile() -> String {
 }
 
 fn default_certificate_key_algorithm() -> String {
-    "ECDSA".to_owned()
+    // Not a literal: the chosen default is a platform decision that the ACME engine
+    // and the DDL-level check alike have to agree with, so it lives once, in the
+    // shared vocabulary, and changes everywhere at once.
+    sdkwork_deploy_core::CERTIFICATE_DEFAULT_KEY_ALGORITHM.to_owned()
 }
 
 fn default_certificate_auto_renew() -> bool {

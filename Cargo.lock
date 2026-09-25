@@ -3466,6 +3466,7 @@ name = "sdkwork-webserver-contract"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "sdkwork-deploy-core",
  "sdkwork-utils-rust",
  "sdkwork-webserver-core",
  "serde",

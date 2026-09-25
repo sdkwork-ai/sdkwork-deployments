@@ -294,10 +294,17 @@ function normalizeProvider(declared: string | undefined): string {
  * `deploy_dns_zone.dns_provider` is free text: the contract keeps it that way
  * because `manual` is a legitimate declaration meaning the operator publishes
  * records by hand, and because the column predates the account center. The
- * picker still needs to know which family to filter by, so the spellings the
- * server's own `family_for_vendor_code` accepts are mirrored here. Anything else
- * — `manual`, a typo, a provider this build cannot drive — yields no filter
- * rather than a guess, and the picker then offers every account.
+ * picker still needs to know which family to filter by, so this reader mirrors
+ * the spellings the engine resolves — `dns_provider::vendor_codes_for` in
+ * `sdkwork-deploy-cloud-account-port`. It is a *second copy* of that vocabulary,
+ * and one that drifts fails quietly here and loudly for the operator: the picker
+ * filters by a family no account can be bound through, or reads the provider as
+ * unfiltered and offers every account. `dns_family_spelling_parity.rs` in
+ * `sdkwork-intelligence-deploy-repository-sqlx` parses this function and fails
+ * when the two vocabularies disagree, so a spelling added on either side has to
+ * be added on both. Anything else — `manual`, a typo, a provider this build
+ * cannot drive — yields no filter rather than a guess, and the picker then
+ * offers every account.
  */
 export function dnsFamilyFromDeclared(declared: string | undefined): CloudAccountDnsProvider | undefined {
   const normalized = normalizeProvider(declared);
@@ -1925,7 +1932,11 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   const [zoneHostnames, setZoneHostnames] = useState<DomainHostnameResponse[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [validationMethod, setValidationMethod] = useState<ValidationMethodValue>("AUTO");
-  const [algorithm, setAlgorithm] = useState<CertificateKeyAlgorithm>("ECDSA");
+  // RSA rather than ECDSA because a managed certificate is renewed unattended and
+  // RSA-2048 is the leaf key every TLS client accepts: an operator who never opens
+  // this control must still end up with a certificate old stacks can validate.
+  // ECDSA stays one click away for anyone who knows all their clients support it.
+  const [algorithm, setAlgorithm] = useState<CertificateKeyAlgorithm>("RSA");
   const [caProfile, setCaProfile] = useState<CertificateCaProfile>("LETS_ENCRYPT_PRODUCTION");
   // Automatic renewal is the default because the alternative is a certificate
   // that lapses while everyone assumes something else renews it. The lead time is

@@ -161,53 +161,23 @@
   padding: 14px 20px;
 }
 
-/* ── 抽屉固定的「保存区」 ──────────────────────────────────────────────────
+/* ── 抽屉底部：**唯一**的操作条 ────────────────────────────────────────────
  *
  * 抽屉是「边翻边改」的形态：域名设置里有自定义域名清单、平台域名表单、5 环境
  * 预览三张长表，正文必然滚动。行业做法（GitHub 设置页、Vercel / Netlify /
- * Cloudflare 的域名页、Shoelace / Radix 的 drawer 示例）一致把**提交动作留在
- * 视口内**：正文滚到哪里，保存按钮都在。把保存键留在正文里，用户翻到平台域名
- * 表单时它已经滚出屏幕，只能猜「改完到底怎么生效」。
+ * Cloudflare 的域名页）一致把**提交动作留在视口内**：正文滚到哪里，保存按钮
+ * 都在，否则用户翻到平台域名表单时保存键已滚出屏幕，只能猜「改完怎么生效」。
  *
- * 做法是 `position: sticky` 而不是 `position: fixed`：sticky 仍参与
- * `.body` 的 flex 布局，占住自己的高度，因此
- *   · 正文滚动到底时它会**停在正文末尾**，不会盖住最后一行预览（fixed 的经典
- *     缺陷，需要给正文补 padding-bottom 来绕）；
- *   · 无需按面板宽度/抽屉动画计算 left/right（fixed 在 transform 祖先里还会
- *     被切成相对该祖先定位）；
- *   · 正文不滚动（内容比视口短）时它就落在原位，正是想要的底部对齐观感。
+ * 做法是「`.body`（`flex: 1` + `overflow-y: auto`）+ `.footer`（不可压缩）」
+ * 的两段式：footer 天然贴在面板底部，不再需要 `position: sticky`，也就省掉了
+ * sticky 版才有的负 margin 补偿（`bottom: -18px` + `margin-bottom: -18px`）。
  *
- * 底色 + 上边框 + 上方渐隐：让「浮」在正文之上的这一条读起来是一个明确的
- * 操作区，而不是压住内容的浮层；渐隐避免生硬的分割线切断文字。
+ * 🔴 **底部只允许一条横条**：状态槽、动作按钮、关闭全部排在 `.footer` 这一行里。
+ * 曾经的做法是「sticky 保存区 + `<footer>`」两条并列横条，于是同一条分隔线上下
+ * 重复两次、提示与结果各占一行，底部读起来是两段互不相干的内容。现在提示/结果
+ * 合并进 footer 左侧的单个状态槽（`.footerStatus`），右侧依次是
+ * 添加域名 / 登记域名 / 保存 / 关闭。
  */
-.saveBar {
-  position: sticky;
-  bottom: -18px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 4px -20px -18px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--pda-border);
-  background: var(--pda-bg);
-  box-shadow: 0 -12px 16px -12px rgba(15, 23, 42, 0.35);
-}
-
-.drawerRoot[data-theme="dark"] .saveBar {
-  box-shadow: 0 -12px 16px -12px rgba(0, 0, 0, 0.75);
-}
-
-.saveBarSpacer {
-  flex: 1;
-}
-
-/* 保存区左侧的「有无未保存改动」提示：让禁用态的保存键**有原因**。
-   禁止点击却不说明为什么，是最典型的可访问性缺陷之一。 */
-.saveBarHint {
-  font-size: 11px;
-  color: var(--pda-text-muted);
-}
 
 .header {
   display: flex;
@@ -781,15 +751,21 @@
   flex: 1;
 }
 
-/* ── 页脚状态行 ───────────────────────────────────────────────────────────
+/* ── 页脚状态槽（唯一底部操作条的左半） ────────────────────────────────────
  *
  * banner 形态（`.errorBanner` / `.successBanner`）在抽屉里有个必须避开的缺陷：
  * 它们挂在正文末尾。操作者点完保存，结果行会出现在正文**已经滚过**的位置，
  * 他要么看不见，要么得往回翻 —— 「操作没反应」的感觉就是这么来的。
- * 失败态更糟：它会换行占据页脚整行高度，把动作按钮挤下去。
+ * 失败态更糟：它会换行占据整行高度，把动作按钮挤下去。
  *
- * 因此结果摘要统一走页脚的**常驻状态行**：始终在视口内、固定位置、单行省略。
- * 完整报错仍走 `role="alert"`，只是从正文搬到了页脚 —— 断言消息是否出现依然成立。
+ * 因此状态/提示统一走页脚的**常驻状态槽**，与动作按钮同处一行：
+ *   · 三种语气**共用一个槽位**，优先级 错误 > 结果 > 「有无未保存改动」提示，
+ *     一次只渲染一条 —— 这是「底部只有一行」的前提。
+ *   · `nowrap` + `ellipsis`：状态槽**永远**不换行，因此按钮永远不会被文字挤到
+ *     第二行。全文通过 `title` 悬浮提示读取；`role="alert"` / `role="status"`
+ *     交给读屏软件的也是完整文本（截断只发生在视觉层）。
+ *   · 禁用态的保存键必须有原因，所以「暂无未保存的改动」常驻在同一槽里
+ *     （`data-tone="hint"`），而不是另起一行。
  */
 .footerStatus {
   flex: 1;
@@ -800,14 +776,18 @@
   white-space: nowrap;
 }
 
+/* 「有无未保存改动」提示：比真实结果轻，别和结果抢注意力。 */
+.footerStatus[data-tone="hint"] {
+  font-size: 11px;
+  color: var(--pda-text-muted);
+}
+
 .footerStatus[data-tone="success"] {
   color: #16a34a;
 }
 
 .footerStatus[data-tone="error"] {
   color: var(--pda-danger);
-  /* 报错是唯一允许撑高页脚的情形：截断的错误等于没有错误。 */
-  white-space: normal;
 }
 
 .drawerRoot[data-theme="dark"] .footerStatus[data-tone="success"] {

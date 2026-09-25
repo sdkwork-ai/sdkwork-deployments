@@ -261,3 +261,12 @@
 .scope-filter{height:38px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #c9d0d4;padding:0 10px;border-radius:5px}
 .scope-filter-label{color:#657178;font-size:12px;font-weight:650;white-space:nowrap}
 .scope-filter select{min-width:0;border:0;outline:none;background:transparent;color:#1d2428}
+/* The popup is painted by the browser, outside this sheet's cascade, and the
+   select above is `background:transparent`, which leaves it at the UA's light
+   default. Spelling the options' surface out here keeps the rule identical to the
+   `.deploy-surface`-scoped copy the Web Server console carries
+   (apps/sdkwork-webserver-pc/src/deploy-surface.css). Values are this sheet's own
+   light palette, so nothing moves; the reason it is written at all is that a
+   transparent select background is invisible to the page and legible-looking in
+   review while depending entirely on a UA default. */
+.scope-filter option{color:#1d2428;background:#fff}

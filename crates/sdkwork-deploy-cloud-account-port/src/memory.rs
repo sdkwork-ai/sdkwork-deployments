@@ -235,6 +235,7 @@ impl DeployCloudAccountPort for MemoryCloudAccountPort {
             ));
         }
         let caller = Caller::new(command.tenant_id, command.user_id);
+        let family = command.narrowing_family()?;
         let page = command.page.max(1);
         let page_size = command.page_size.clamp(1, 200);
         let mut accounts: Vec<CloudAccount> = self
@@ -253,8 +254,12 @@ impl DeployCloudAccountPort for MemoryCloudAccountPort {
                         return false;
                     }
                 }
-                if let Some(vendor) = command.vendor_code.as_deref() {
-                    if !projection.vendor_code.eq_ignore_ascii_case(vendor.trim()) {
+                // The family is read out of the account's own code, exactly as the
+                // account centre adapter and the binding path read it: `tencent`,
+                // `qcloud` and `dnspod` all answer a `DNSPOD` narrowing, which is the
+                // point of narrowing by family instead of by one vendor code.
+                if let Some(family) = family {
+                    if projection.dns_provider() != Some(family) {
                         return false;
                     }
                 }
@@ -703,13 +708,13 @@ mod tests {
     async fn registering_creates_the_account_when_nothing_matches() {
         let port = MemoryCloudAccountPort::new();
         let outcome = port
-            .register_account(registration(dns_provider::DNSPOD, "tencent-dns-1"))
+            .register_account(registration(dns_provider::DNSPOD, "dnspod-dns-1"))
             .await
             .expect("register");
         assert!(!outcome.reused);
         assert!(outcome.credential_applied);
         assert_eq!(outcome.account.scope_type, ACCOUNT_SCOPE_TENANT);
-        assert_eq!(outcome.account.vendor_code, "tencent");
+        assert_eq!(outcome.account.vendor_code, "dnspod");
         assert_eq!(outcome.account.dns_provider(), Some(dns_provider::DNSPOD));
     }
 
@@ -829,6 +834,14 @@ mod tests {
             dns_provider::family_for_vendor_code("dnspod"),
             Some(dns_provider::DNSPOD)
         );
+        // The canonical code is the DNS-specific one, and it is pinned because the
+        // two spellings resolve the same family: reverting it to `tencent` would
+        // leave every assertion above green while the account centre asked for a
+        // Tencent Cloud CAM key this adapter cannot use.
+        assert_eq!(
+            dns_provider::vendor_code_for(dns_provider::DNSPOD),
+            Some("dnspod")
+        );
         assert_eq!(
             dns_provider::family_for_vendor_code("cloudflare"),
             Some(dns_provider::CLOUDFLARE)
@@ -838,6 +851,69 @@ mod tests {
             let vendor = dns_provider::vendor_code_for(family).expect("a vendor per family");
             assert_eq!(dns_provider::family_for_vendor_code(vendor), Some(family));
         }
+    }
+
+    /// A `DNSPOD` narrowing answers the account a tenant registered as `tencent`.
+    ///
+    /// This is the failure the family vocabulary exists to prevent, and it is silent:
+    /// the account centre takes **one exact `vendorCode`**, so a list narrowed by the
+    /// canonical code alone drops every account written before the two were told
+    /// apart. Those accounts are still bindable — the certificate path resolves them
+    /// through the same `family_for_vendor_code` — so what the console would show is
+    /// not "an error" but "this provider has no account", which is the one answer a
+    /// list must not invent.
+    #[tokio::test]
+    async fn a_family_narrowing_keeps_the_account_written_under_a_legacy_spelling() {
+        let port = MemoryCloudAccountPort::new()
+            .with_account(MemoryCloudAccountSeed::tenant("acct-legacy", 7, "tencent").code("dnspod-legacy"))
+            .with_account(MemoryCloudAccountSeed::tenant("acct-canonical", 7, "dnspod").code("dnspod-canonical"))
+            .with_account(MemoryCloudAccountSeed::tenant("acct-aliyun", 7, "aliyun"));
+        let page = port
+            .list_accounts(ListCloudAccountsCommand {
+                tenant_id: 7,
+                dns_family: Some(dns_provider::DNSPOD.to_owned()),
+                page: 1,
+                page_size: 20,
+                ..Default::default()
+            })
+            .await
+            .expect("list");
+        let ids: Vec<&str> = page
+            .items
+            .iter()
+            .map(|account| account.id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["acct-canonical", "acct-legacy"],
+            "both spellings of one family, and nothing from another family"
+        );
+        // The count has to describe the narrowed set. Counting the wider set and then
+        // slicing a page out of it is what makes page two start where page one would
+        // have ended.
+        assert_eq!(page.total, 2);
+    }
+
+    /// A narrowing nobody drives is refused rather than answered with an empty page.
+    ///
+    /// An empty page is a claim about the tenant ("you own no accounts for this"),
+    /// while the mistake belongs to the caller's argument. Those are different facts
+    /// and only one of them is true.
+    #[tokio::test]
+    async fn a_narrowing_family_nobody_drives_is_refused() {
+        let port = MemoryCloudAccountPort::new()
+            .with_account(MemoryCloudAccountSeed::tenant("acct-aws", 7, "aws"));
+        let error = port
+            .list_accounts(ListCloudAccountsCommand {
+                tenant_id: 7,
+                dns_family: Some("ROUTE53".to_owned()),
+                page: 1,
+                page_size: 20,
+                ..Default::default()
+            })
+            .await
+            .expect_err("an unsupported family must not be answered with an empty page");
+        assert_eq!(error.kind(), DeployServiceErrorKind::Validation);
     }
 
     #[test]

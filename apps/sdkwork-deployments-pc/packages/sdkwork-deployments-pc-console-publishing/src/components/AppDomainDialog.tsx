@@ -381,6 +381,17 @@ export function AppDomainDialog({
     }
   }
 
+  /**
+   * 底部操作条左侧状态槽的内容与语气：一次只显示一条，
+   * 优先级 **错误 > 结果 > 「有无未保存改动」提示**。
+   *
+   * 三态**共用同一个槽位**是「底部只有一行」的前提 —— 提示与结果各占一个槽，
+   * 就会退回「两条横条」的旧观感（见 `.footer` 的样式注释）。
+   */
+  const footerTone: "error" | "success" | "hint" =
+    error !== undefined ? "error" : notice !== undefined ? "success" : "hint"
+  const footerText = error ?? notice ?? (dirty ? t("domainSaveHintDirty") : t("domainSaveHintClean"))
+
   return (
     <div
       className={css.drawerRoot}
@@ -458,7 +469,7 @@ export function AppDomainDialog({
                 />
               ))}
 
-              {/* 添加域名 / 保存 都不在这里 —— 它们由正文末尾的粘性保存区承载。
+              {/* 添加域名 / 保存 都不在这里 —— 它们由底部的唯一操作条（footer）承载。
                   正文只负责「看」与「改」，动作全部留在视口内。 */}
 
               {/* CNAME 指引 —— 行业标准做法：让用户把自有域名别名到平台主机名。 */}
@@ -599,7 +610,7 @@ export function AppDomainDialog({
                 </div>
               )}
 
-              {/* 保存键不再挂在正文末尾 —— 它由下面的粘性保存区承载，
+              {/* 保存键不在正文里 —— 它由底部的唯一操作条（footer）承载，
                   正文滚到哪里都留在视口内。这里只留平台域名的只读回显。 */}
 
               {/* ---------- 当前主机名清单（平台域名的只读回显） ---------- */}
@@ -618,16 +629,19 @@ export function AppDomainDialog({
           )}
         </div>
 
-        {/* 粘性保存区：正文滚到哪里，保存都留在视口内。
-            放在 `.body` 内、作为最后一个子元素 —— sticky 因此停在正文末尾，
-            而不是像 fixed 那样盖住最后一行预览。 */}
-        <div className={css.saveBar}>
-          <span className={css.saveBarHint}>
-            {dirty
-              ? t("domainSaveHintDirty")
-              : t("domainSaveHintClean")}
+        {/* 底部是**唯一**的操作条：左边一个状态槽，右边依次是动作与关闭。
+            内容与按钮同处一行 ⇒ 底部只有一条横条、一条分隔线。
+            状态槽永远单行省略（见 `.footerStatus`），所以它既不会换行，
+            也不会把按钮顶到第二行。 */}
+        <footer className={css.footer}>
+          <span
+            className={css.footerStatus}
+            data-tone={footerTone}
+            role={error !== undefined ? "alert" : notice !== undefined ? "status" : undefined}
+            title={error !== undefined || notice !== undefined ? footerText : undefined}
+          >
+            {footerText}
           </span>
-          <div className={css.saveBarSpacer} />
           <button
             type="button"
             className={css.secondaryButton}
@@ -653,13 +667,6 @@ export function AppDomainDialog({
           >
             {busy ? t("domainSaving") : t("domainSave")}
           </button>
-        </div>
-
-        <footer className={css.footer}>
-          {/* 状态行常驻页脚：结果不会随正文滚走，失败态也不再挤掉动作按钮。 */}
-          {error && <span className={css.footerStatus} data-tone="error" role="alert">{error}</span>}
-          {!error && notice && <span className={css.footerStatus} data-tone="success" role="status">{notice}</span>}
-          {!error && !notice && <span className={css.footerSpacer} />}
           <button type="button" className={css.secondaryButton} disabled={busy} onClick={onClose}>
             {t("close")}
           </button>

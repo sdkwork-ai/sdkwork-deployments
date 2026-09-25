@@ -185,11 +185,18 @@ impl DeployCloudAccountPort for IamCloudAccountPort {
             scope_type,
             owner_user_id,
         };
+        // Narrowed here rather than at the account centre. The centre's filter takes
+        // **one exact `vendorCode`**, and one family is written under several, so
+        // asking it for the canonical code would drop the accounts a tenant
+        // registered under `tencent` / `qcloud` — precisely the accounts a
+        // certificate can still be bound to, which makes the loss invisible on this
+        // side and a silent "you have no account for this provider" in the console.
+        let family = command.narrowing_family()?;
         let (accounts, _) = list_accounts(
             &self.pg,
             &visibility,
             None,
-            command.vendor_code.as_deref(),
+            None,
             None,
             command.search.as_deref(),
             ACCOUNT_WINDOW,
@@ -205,6 +212,11 @@ impl DeployCloudAccountPort for IamCloudAccountPort {
                 None => true,
             })
             .map(to_cloud_account)
+            // Recognised from each account's own vendor code, with the same function
+            // the certificate path binds by, so this list and `ensure_bindable` cannot
+            // disagree about which family an account drives. Applied before `total`
+            // below, which is what makes the page and the count describe the same set.
+            .filter(|account| family.is_none_or(|family| account.dns_provider() == Some(family)))
             .collect();
         // Narrowest scope first, then defaults, so the console lists what a resolver
         // would pick ahead of the wider fallbacks.

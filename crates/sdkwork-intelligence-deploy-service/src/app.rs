@@ -650,9 +650,15 @@ impl DeployAppApi for DeployService {
             .list_accounts(ListCloudAccountsCommand {
                 tenant_id,
                 user_id: context.actor_id,
-                vendor_code: dns_provider
-                    .and_then(dns_provider::vendor_code_for)
-                    .map(str::to_owned),
+                // Handed down as the *family*, never as the centre's `vendorCode`: one
+                // family is written under several codes (`DNSPOD` under `dnspod` and
+                // under the legacy `tencent` / `qcloud`), so narrowing by a single code
+                // would hide an account the operator can still bind — and a hidden
+                // account reads as "this provider has no account", which is the one
+                // thing this list must not say. The port owns that vocabulary and
+                // applies it before counting and paging, so `total` below is the
+                // family's own count and page two continues where page one stopped.
+                dns_family: dns_provider.map(str::to_owned),
                 scope_type: scope_type.map(str::to_owned),
                 mine: query.mine,
                 include_platform: true,
@@ -671,6 +677,9 @@ impl DeployAppApi for DeployService {
             items: page
                 .items
                 .iter()
+                // Already narrowed to the family by the port, before the page was cut,
+                // so there is nothing to filter here: filtering a page after it was
+                // sliced would shorten it and shift every later page.
                 .map(crate::cloud_accounts::cloud_account_response)
                 .collect(),
             total: page.total,

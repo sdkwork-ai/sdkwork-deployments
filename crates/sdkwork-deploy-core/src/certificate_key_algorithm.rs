@@ -8,20 +8,29 @@
 //! certificate be accepted at creation and refused at issuance — the caller then
 //! sees a failure days later, in a worker, on a certificate that already exists.
 //!
-//! `ECDSA` is the default rather than `RSA` because that is the industry posture:
+//! `RSA` is the default rather than `ECDSA` because a managed certificate is bought
+//! to be accepted by every client that will ever reach the name, and compatibility
+//! is the property an operator with no opinion needs:
 //!
-//! * Google Cloud's certificate-manager best practices name **ECDSA P-256** the
-//!   recommended key type for most TLS certificates, with RSA-2048 as a
-//!   *supplement* for clients that cannot do ECDSA rather than as the primary.
-//! * Let's Encrypt's certbot has defaulted to `ecdsa` (`secp256r1`) since 2.0.0,
-//!   and this platform's own default CA profile is Let's Encrypt production.
-//! * ECDSA P-256 is roughly RSA-3072 in strength while signing an order of
-//!   magnitude faster, on keys small enough to shrink the handshake.
+//! * RSA-2048 is the one leaf key every TLS client accepts, from old Java and
+//!   Android stacks and embedded updaters to compliance scanners that still reject
+//!   a P-256 certificate. ECDSA is universal in theory and not yet in the field:
+//!   its failure mode is a handshake only the newest clients complete.
+//! * Managed issuance is unattended, so the choice is made once by whoever fills in
+//!   the form and then silently repeated at every renewal. Defaulting to the
+//!   narrower option issues a certificate that an untested legacy client may reject
+//!   months later, which is the worst time to learn it.
+//! * RSA-2048 costs roughly 1.5 kB more per handshake — measurable in aggregate,
+//!   immaterial next to one unexplained TLS alert from one old client.
 //!
-//! RSA stays in the set as the escape hatch: older clients that predate ECDSA
-//! support, and compliance regimes that name RSA specifically. Offering it is not
-//! a compromise, because the choice is per certificate and the default is the one
-//! an operator with no opinion should end up with.
+//! ECDSA stays in the set for whoever asks for it by name: P-256 is roughly
+//! RSA-3072 in strength while signing an order of magnitude faster, and internet
+//! scale operators recommend it — Google Cloud's certificate manager best practices
+//! name ECDSA P-256 the recommended key type for most TLS certificates and certbot
+//! has defaulted to `ecdsa` (`secp256r1`) since 2.0.0. This platform does not
+//! inherit that posture as its *default*: an operator who wants ECDSA can choose it
+//! per certificate, and an operator who does not think about it at all must land on
+//! the key that works everywhere.
 //!
 //! The set is also mirrored by four DDL constraints in
 //! `database/ddl/baseline/postgres/0001_deploy_baseline.sql` —
@@ -32,11 +41,13 @@
 //! value is reported as a field error instead of as a constraint violation, and
 //! `tests/certificate_key_algorithm_parity.rs` fails if the two sets ever diverge.
 
-/// RSA, the escape hatch: older clients that predate ECDSA support, and compliance
-/// regimes that name RSA specifically.
+/// RSA, the default: the one leaf key every TLS client accepts, and therefore the
+/// one an operator who never touches the field must end up with. See the module
+/// docs for why compatibility outranks the industry posture here.
 pub const CERTIFICATE_KEY_ALGORITHM_RSA: &str = "RSA";
 
-/// ECDSA, the default. See the module docs for why.
+/// ECDSA, for operators who ask for it: stronger per bit and an order of magnitude
+/// faster to sign, at the cost of clients that predate it. See the module docs.
 pub const CERTIFICATE_KEY_ALGORITHM_ECDSA: &str = "ECDSA";
 
 /// Every key algorithm a certificate may ask for, spelled as the DDL stores it.
@@ -55,9 +66,10 @@ pub const CERTIFICATE_KEY_ALGORITHMS: &[&str] = &[
 
 /// The algorithm a certificate gets when it does not choose one.
 ///
-/// `ECDSA`, because the recommended default is the one an operator who has no
-/// opinion should end up with; see the module docs for the industry posture.
-pub const CERTIFICATE_DEFAULT_KEY_ALGORITHM: &str = CERTIFICATE_KEY_ALGORITHM_ECDSA;
+/// `RSA`, because a managed certificate is renewed unattended and must keep being
+/// accepted by every client that reaches the name; see the module docs. The
+/// narrower algorithm stays one explicit choice away, where operator intent exists.
+pub const CERTIFICATE_DEFAULT_KEY_ALGORITHM: &str = CERTIFICATE_KEY_ALGORITHM_RSA;
 
 /// Validates a declared certificate key algorithm.
 ///
@@ -115,16 +127,16 @@ mod tests {
     }
 
     #[test]
-    fn the_default_is_ecdsa_because_the_industry_recommends_it() {
+    fn the_default_is_rsa_because_it_reaches_every_client() {
         // Pins the decision, not just the mechanism: a change here is a change to
         // what every operator who never touches the field ends up with. The literal
         // is asserted too, because it is the wire value the DDL stores and the ACME
         // engine maps.
         assert_eq!(
             CERTIFICATE_DEFAULT_KEY_ALGORITHM,
-            CERTIFICATE_KEY_ALGORITHM_ECDSA
+            CERTIFICATE_KEY_ALGORITHM_RSA
         );
-        assert_eq!(CERTIFICATE_DEFAULT_KEY_ALGORITHM, "ECDSA");
+        assert_eq!(CERTIFICATE_DEFAULT_KEY_ALGORITHM, "RSA");
     }
 
     #[test]

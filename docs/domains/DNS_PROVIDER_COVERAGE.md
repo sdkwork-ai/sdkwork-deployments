@@ -12,13 +12,33 @@ form, and — for the three named vendors — a read-only **account probe**:
 
 | Family | Vendor code | Credential shape | Adapter | Account probe |
 |---|---|---|---|---|
-| `ALIYUN_DNS` | `aliyun` / `ali` | `access_key_pair` (AccessKeyId + AccessKeySecret) | `dns_aliyun.rs` | `DescribeDomainRecords`, `PageSize=1` |
-| `DNSPOD` | `tencent` / `dnspod` / `qcloud` | `access_key_pair` (LoginId + ApiToken) | `dns_dnspod.rs` | `Domain.Info` |
+| `ALIYUN_DNS` | `aliyun` / `ali` / `alidns` | `access_key_pair` (AccessKeyId + AccessKeySecret) | `dns_aliyun.rs` | `DescribeDomainRecords`, `PageSize=1` |
+| `DNSPOD` | `dnspod` (canonical) / `tencent`, `qcloud` (legacy) | `access_key_pair` (LoginId + ApiToken) | `dns_dnspod.rs` | `Domain.Info` |
 | `CLOUDFLARE` | `cloudflare` / `cf` | `bearer_token` (ApiToken) | `dns_cloudflare.rs` | `GET /zones?name=<apex>` |
 | `HTTP_REQUEST` | `custom` | `secret_text` (a request-configuration document) | `dns_http_request.rs` | none — see below |
 
 `manual` is a fifth *declaration*, not a family: it means the records are published by hand, so
 no account is involved and the operator-facing presenter is used.
+
+`DNSPOD`'s canonical vendor code is `dnspod`, because the credential this adapter consumes is a
+**DNSPod Token** (`ID` + `Token`, `dnsapi.cn`, DNSPod API 2.0) — not a Tencent Cloud CAM key
+(`SecretId` + `SecretKey`), which is a different pair against a different API that also unlocks the
+whole Tencent Cloud account. `tencent` and `qcloud` stay accepted only so the accounts this adapter
+auto-registered before the split keep resolving.
+
+The three readers are ranked on purpose and none of them narrows by a single code:
+
+| Function | Answers | Width |
+|---|---|---|
+| `vendor_code_for` | what to **write** on a new account | one code — the canonical spelling |
+| `vendor_codes_for` | every spelling a family answers to, canonical first | the whole set |
+| `family_for_vendor_code` | which family a code drives | deliberately the widest (trims, folds case, strips `_dns`) |
+
+The account centre's `vendorCode` filter takes exactly **one** code, so nothing narrows by it: the
+picker narrows by **family** and the family is read back out of each account's own code, with the
+same `family_for_vendor_code` that `ensure_bindable` uses. An account registered under `tencent`
+therefore still appears when an operator filters for DNSPod — and it has to, because that account is
+still bindable.
 
 `HTTP_REQUEST` is the one that changes the shape of the question. The other three answer "which
 providers are supported" with a list that is settled per release; `HTTP_REQUEST` answers it with
@@ -61,7 +81,7 @@ failure lands on an operator rather than on a build:
 
 | # | Surface | Where | If it lags |
 |---|---|---|---|
-| 1 | `dns_provider::ALL` (+ `normalize` / `is_supported` / `vendor_code_for` / `family_for_vendor_code` / `credential_kind_for`) | `crates/sdkwork-deploy-cloud-account-port/src/lib.rs` | a family the engine can drive cannot be registered or offered |
+| 1 | `dns_provider::ALL` (+ `normalize` / `is_supported` / `vendor_code_for` / `vendor_codes_for` / `family_for_vendor_code` / `credential_kind_for`, and `ListCloudAccountsCommand::narrowing_family`) | `crates/sdkwork-deploy-cloud-account-port/src/lib.rs` | a family the engine can drive cannot be registered or offered |
 | 2 | `DnsProviderKind` (+ `ALL` / `DEDICATED` / `as_str` / `parse`) and one adapter per variant | `sdkwork-webserver/crates/sdkwork-webserver-acme-service/src/dns*.rs` | stored credential is refused at the first order: "unsupported DNS provider kind" |
 | 3 | closed `dnsProvider` enums | `apis/app-api/deploy/openapi.yaml` → materialised JSON → generated SDK | the console offers a family the server cannot drive, or cannot offer one it can |
 | 4 | console vocabulary (`DNS_FAMILIES`, `dnsFamilyFromDeclared`, `dnsFamilyLabel`, `CLOUD_ACCOUNT_CREDENTIAL_FIELDS`, i18n) | `apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-console-delivery/src/` | a family renders as its raw token, or its form asks for the wrong fields |
@@ -79,6 +99,14 @@ is a provider the server accepts, the engine drives, and no operator can select.
 closed by the reachability gate in §2.2 rather than by the type system.
 
 ### 2.1 The gate that makes them move together
+
+> ⚠️ **Measured 2026-09-24: neither this gate nor the one in §2.2 runs.** Both files sit in
+> `crates/sdkwork-intelligence-deploy-repository-sqlx/tests/pending/`, which `cargo` does not
+> collect (a bare `.rs` in a subdirectory is neither `tests/*.rs` nor `tests/*/main.rs`), so
+> `cargo test -p sdkwork-intelligence-deploy-repository-sqlx --test dns_provider_parity` exits
+> `101` — *no test target named*. `tests/pending/README.md` records why they were parked and how
+> to reactivate them. §2.3 is the one gate described in this document that actually runs, and it
+> is a `tests/*.rs` target for exactly this reason.
 
 `crates/sdkwork-intelligence-deploy-repository-sqlx/tests/dns_provider_parity.rs` reads
 surfaces 1–3 and the bound in surface 5, and fails on **either** side of each comparison:
@@ -120,6 +148,39 @@ unit-tested `verify_account`, and **no host called it**: a wrong DNS credential 
 discovered by the CA several round trips into an order. A capability that exists, is
 tested, and is unreachable is the failure mode this half of the gate exists for, and it is
 why the assertion is over the call and its position rather than over a type.
+
+### 2.3 The gate for the spellings inside surface 4
+
+`crates/sdkwork-intelligence-deploy-repository-sqlx/tests/dns_family_spelling_parity.rs` is a
+`tests/*.rs` target, so unlike the two above it actually runs. It reads the delivery console's
+`dnsFamilyFromDeclared` out of the source and compares it, family by family, with
+`dns_provider::vendor_codes_for`:
+
+* every family the engine drives is read by the console under **exactly** the spellings the engine
+  resolves — both directions, per family, so a spelling moved from one family to another cannot keep
+  the totals equal while changing what an operator gets;
+* every spelling the console accepts resolves to the family the console answers with.
+
+It parses the console rather than carrying a third copy of the list, because a hand-written copy is
+the drift it exists to catch. `alidns` is the failure it was written for: Alibaba Cloud's own
+spelling of its DNS product was offered by the console and not resolved by the engine, which turns
+the picker into a filter by a family no account can be bound through.
+
+### 2.4 Known drift — measured 2026-09-24, not fixed here
+
+Surface 1 and surface 2 disagree by one family, and it is the direction §2's table row 1 predicts:
+
+| Surface | Where | Families |
+|---|---|---|
+| 1 | `dns_provider::ALL` (`sdkwork-deploy-cloud-account-port`) | **3** — `ALIYUN_DNS`, `DNSPOD`, `CLOUDFLARE` |
+| 2 | `DnsProviderKind::ALL` (`sdkwork-webserver-acme-service/src/dns.rs`) | **4** — the above plus `HTTP_REQUEST`, with the adapter at `dns_http_request.rs` |
+
+So the engine can drive a family that neither the account vocabulary, the account picker, nor the
+contract can name — §1 and §4 already describe `HTTP_REQUEST` as shipped, which is the state the
+engine is in, not the state surface 1 is in. Closing it is not a one-line change: it means a vendor
+code for the family, the contract's closed enums, an SDK regeneration and the console's credential
+form, i.e. the §5 checklist. Nothing in this document's other sections depends on that gap being
+closed, but no gate is currently watching it — the only gate that would have is parked (§2.1).
 
 ## 3. The DDL is deliberately not part of that
 
@@ -202,7 +263,9 @@ hatches for everything else). B is the only option that reaches "all" in one ste
 Adding a native family touches all four surfaces in §2. In order:
 
 1. `dns_provider` in `sdkwork-deploy-cloud-account-port`: add the constant to `ALL`, plus its
-   `vendor_code_for`, `family_for_vendor_code` aliases and `credential_kind_for`.
+   `vendor_codes_for` set — canonical spelling **first**, because `vendor_code_for` is derived from
+   it and that is therefore the only place a vendor code is written — its `family_for_vendor_code`
+   arm and `credential_kind_for`.
 2. `DnsProviderKind` in the ACME crate: add the variant to the enum, `ALL`, `as_str`,
    `parse`, and write the adapter (copy `dns_cloudflare.rs` as the template; it carries a
    stub-server test for publish, withdraw, zone resolution and error handling).
@@ -212,12 +275,15 @@ Adding a native family touches all four surfaces in §2. In order:
 4. Contracts: add the family to the three **closed** enums in `apis/app-api/deploy/openapi.yaml`,
    run the materialiser, then regenerate the SDK.
 5. Console: `CLOUD_ACCOUNT_CREDENTIAL_FIELDS` and the i18n labels are compile-forced once the
-   SDK is regenerated; add the family to `DNS_FAMILIES` and `DNS_PROVIDER_SUGGESTIONS`, and
-   its display name to `dnsFamilyLabel`.
+   SDK is regenerated; add the family to `DNS_FAMILIES` and `DNS_PROVIDER_SUGGESTIONS`, its display
+   name to `dnsFamilyLabel`, and its spellings to `dnsFamilyFromDeclared` — that last one is a
+   *second* copy of the vendor vocabulary, and step 6 is what keeps it honest.
 6. Run
-   `cargo test -p sdkwork-intelligence-deploy-repository-sqlx --test dns_provider_parity`
-   **and** `--test dns_provider_reachability` — the first fails on whichever of the above is
-   still missing, the second on a family that is spelled everywhere and reachable nowhere.
+   `cargo test -p sdkwork-intelligence-deploy-repository-sqlx --test dns_family_spelling_parity`.
+   It fails when `dnsFamilyFromDeclared` and `vendor_codes_for` disagree, which is one of the steps
+   above being half-done. The wider parity and reachability gates are the intended check but are
+   **parked in `tests/pending/` and do not run** (measured 2026-09-24, §2.1); reactivate them per
+   that directory's README before relying on them.
 7. If the family has a read-only call that proves an account, override `verify_account` and
    classify its refusals per §1.1. Implement it in the adapter, where the vendor's codes live,
    and add one test per class: the refusals that must stop an order, and the ones that must
