@@ -1,5 +1,7 @@
 ﻿use serde::{Deserialize, Serialize};
 
+use crate::app_source_spec::AppSourceSpecDefinition;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AppPublishEnvironment {
@@ -54,6 +56,18 @@ pub struct UpdateAppCompositionRequest {
     pub variant_rules: Vec<AppVariantRuleDefinition>,
     pub mounts: Vec<AppMountDefinition>,
     pub bindings: Vec<AppBindingDefinition>,
+    /// Replace this environment's **source specs** in the same transaction.
+    ///
+    /// Absent means "leave the spec set alone", which is what keeps a
+    /// composition update from wiping a spec the operator authored separately —
+    /// the two entry points are additive, never mutually destructive.
+    ///
+    /// Present means "make the spec set exactly this". Specs are then projected
+    /// into Variants, `CLIENT_CLASS` VariantRules, Mounts and Resources for the
+    /// revision this call compiles, so a pre-existing spec is still carried by
+    /// the descriptor even though the request never mentioned it.
+    #[serde(default)]
+    pub source_specs: Option<Vec<AppSourceSpecDefinition>>,
     #[serde(default)]
     pub delivery_policy: AppDeliveryPolicy,
     #[serde(default)]

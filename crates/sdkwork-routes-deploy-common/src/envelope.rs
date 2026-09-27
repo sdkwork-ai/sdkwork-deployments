@@ -4,19 +4,20 @@ use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppDomainResponse, AppEnvironmentPage, AppEnvironmentResponse, AppPage,
-    AppReleasePage, AppReleaseResponse, AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage,
-    AuditLogResponse, BuildPage, BuildQueueItemResponse, BuildQueuePage, BuildResponse,
-    BuildTemplatePage, BuildTemplateResponse, CertificateChallengePage,
-    CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
-    CertificateRenewalPage, CertificateRenewalResponse, CertificateResponse, ChannelPage,
-    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage,
-    CloudAccountResponse, DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse,
-    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse,
-    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
-    HealthCheckPage, HealthCheckResponse, NginxConfigPage, NginxConfigResponse,
-    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
+    AppReleasePage, AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
+    ArtifactPage, ArtifactResponse, AuditLogPage, AuditLogResponse, BuildPage,
+    BuildQueueItemResponse, BuildQueuePage, BuildResponse, BuildTemplatePage,
+    BuildTemplateResponse, CertificateChallengePage, CertificateChallengeResponse,
+    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
+    CertificateRenewalResponse, CertificateResponse, ChannelPage, ChannelResponse,
+    ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage, CloudAccountResponse,
+    DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse, DomainZonePage,
+    DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage,
+    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
+    HealthCheckResponse, NginxConfigPage, NginxConfigResponse, NginxReloadResponse,
+    NginxStatusResponse, NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage,
+    PackageResponse, PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage,
+    RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
     SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
     SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, UsageEventPage,
     UsageEventResponse,
@@ -48,6 +49,14 @@ pub fn source_repository_page(
     page: SourceRepositoryPage,
 ) -> SdkWorkPageData<SourceRepositoryResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+/// An app has at most a handful of specs, so the page envelope carries
+/// `page`/`pageSize` 1/`total` purely to satisfy the v3 list shape consumers
+/// already parse.
+pub fn source_spec_page(page: AppSourceSpecPage) -> SdkWorkPageData<AppSourceSpecResponse> {
+    let total = page.total;
+    offset_page(page.items, 1, total.max(1) as i32, total)
 }
 
 pub fn build_template_page(page: BuildTemplatePage) -> SdkWorkPageData<BuildTemplateResponse> {

@@ -61,7 +61,7 @@ impl CertificateIssuancePort for AcmeCertificateIssuance {
             .as_ref()
             .zip(zone_resolver.as_ref())
             .map(|(context, zones)| AcmeDns01Context {
-                presenter: context.presenter.as_ref(),
+                presenter: Arc::clone(&context.presenter),
                 zones,
             });
         self.issuer

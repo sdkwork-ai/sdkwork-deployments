@@ -1950,6 +1950,284 @@ CREATE INDEX IF NOT EXISTS idx_deploy_app_owner_organization
     ON deploy_app (tenant_id, organization_id)
     WHERE deleted_at IS NULL AND owner_type = 'ORGANIZATION';
 
+-- Application source specs: one row per (app, environment, spec).
+--
+-- A "spec" is a *source* dimension, deliberately separate from
+-- `deploy_app_variant`. A variant answers "which delivery of one source does
+-- this client get"; a spec answers "which source is this" — a PC bundle and an
+-- H5 bundle are two codebases, not two variants of one build. Keeping them
+-- apart is what lets one app own several independently uploaded sources while
+-- the binding stays a single hostname.
+--
+-- Routing is *not* stored here. Which client class reaches which spec — and in
+-- what order a class falls back when its preferred spec is not uploaded yet —
+-- is owned by `deploy_app_source_spec_route` below, because "at most one
+-- default spec per client class" is a per-class fact that a column on the spec
+-- cannot express. Keeping the predicate in a child table means the database,
+-- not the service layer, is what makes the routing table unambiguous.
+--
+-- The source binding is a triple (provider type, provider resource uuid,
+-- contract version) that is either wholly present or wholly absent — see
+-- `chk_deploy_app_source_spec_source_binding`. A spec is created empty and
+-- bound later by the upload flow, so the "empty" state must be expressible
+-- without NULL-vs-'' ambiguity in the read path.
+--
+-- Defined after `deploy_app` on purpose: PostgreSQL validates FK target
+-- relations at table-creation time, so a forward reference to `deploy_app`
+-- inside this script would fail (the same constraint the `deploy_build_template`
+-- note below records).
+CREATE TABLE IF NOT EXISTS deploy_app_source_spec (
+    id                            BIGINT PRIMARY KEY NOT NULL,
+    uuid                          VARCHAR(36) NOT NULL,
+    tenant_id                     BIGINT NOT NULL,
+    organization_id               BIGINT NOT NULL DEFAULT 0,
+    app_id                        BIGINT NOT NULL,
+    environment                   VARCHAR(16) NOT NULL,
+    spec_key                      VARCHAR(64) NOT NULL,
+    label                         VARCHAR(64) NOT NULL,
+    -- Canonical runtime-target vocabulary, owned by `CONFIG_SPEC.md` §2.1
+    -- (`SdkworkRuntimeTarget`). This table `MUST NOT` invent a parallel enum:
+    -- a repo-local `WEB`/`NATIVE`/`SERVICE` spelling would silently disagree
+    -- with manifests, workflow targets and release evidence that all validate
+    -- against the canonical 15 values.
+    runtime_target                VARCHAR(32) NOT NULL DEFAULT 'browser',
+    -- The *architecture* within that target. `CONFIG_SPEC.md` §2.1 states that
+    -- H5 web and PC web both use `runtimeTarget = 'browser'`, and that the app
+    -- root plus framework distinguish `react`, `react-h5` and the other browser
+    -- architectures. Without this column a PC bundle and an H5 bundle are
+    -- indistinguishable — which is precisely the pair this feature exists to
+    -- route between.
+    client_architecture           VARCHAR(32) NOT NULL DEFAULT 'react',
+    path_prefix                   VARCHAR(4096) NOT NULL DEFAULT '/',
+    handler_type                  VARCHAR(16) NOT NULL DEFAULT 'STATIC',
+    index_files_json              JSONB NOT NULL DEFAULT '[]',
+    spa_fallback_path             VARCHAR(4096) NULL,
+    source_provider_type          VARCHAR(32) NULL,
+    source_provider_resource_uuid VARCHAR(128) NULL,
+    source_contract_version       VARCHAR(64) NULL,
+    source_status                 VARCHAR(16) NOT NULL DEFAULT 'EMPTY',
+    source_updated_at             TIMESTAMPTZ NULL,
+    is_default                    BOOLEAN NOT NULL DEFAULT FALSE,
+    priority                      INTEGER NOT NULL DEFAULT 0,
+    status                        VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    -- Command identity for `apps.sourceSpecs.create`. Nullable, unlike the
+    -- sibling command tables whose every row comes from a keyed command: the
+    -- same table is also written by `apps.create` materializing its declared
+    -- spec set, which carries the *app* create's key rather than one per spec.
+    idempotency_key               VARCHAR(128) NULL,
+    request_sha256                VARCHAR(64) NULL,
+    metadata                      JSONB NOT NULL DEFAULT '{}',
+    created_by                    BIGINT NULL,
+    updated_by                    BIGINT NULL,
+    created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    version                       BIGINT NOT NULL DEFAULT 1,
+    deleted_at                    TIMESTAMPTZ NULL,
+    CONSTRAINT uk_deploy_app_source_spec_uuid UNIQUE (uuid),
+    CONSTRAINT uk_deploy_app_source_spec_key UNIQUE (app_id, environment, spec_key),
+    -- Redundant on its own (`id` is already the primary key) but required as
+    -- the target of the composite foreign key from
+    -- `deploy_app_source_spec_route`, which is what stops a route row from
+    -- naming a spec of a *different* app or environment.
+    CONSTRAINT uk_deploy_app_source_spec_id_scope UNIQUE (id, app_id, environment),
+    CONSTRAINT chk_deploy_app_source_spec_request_hash CHECK (
+        request_sha256 IS NULL OR request_sha256 ~ '^[0-9a-f]{64}$'
+    ),
+    CONSTRAINT fk_deploy_app_source_spec_app FOREIGN KEY (app_id) REFERENCES deploy_app(id),
+    CONSTRAINT chk_deploy_app_source_spec_environment CHECK (
+        environment IN ('development', 'test', 'staging', 'demo', 'production')
+    ),
+    -- The exact 15-value canonical list from `CONFIG_SPEC.md` §2.1. Spelled out
+    -- rather than derived so a value added to that spec fails loudly here until
+    -- this constraint and the Rust enum are updated together.
+    CONSTRAINT chk_deploy_app_source_spec_runtime_target CHECK (
+        runtime_target IN (
+            'browser', 'desktop', 'tablet-ipados', 'tablet-android',
+            'capacitor-ios', 'capacitor-android', 'flutter-ios', 'flutter-android',
+            'android-native', 'ios-native', 'harmony-native', 'mini-program',
+            'server', 'container', 'test-runner'
+        )
+    ),
+    -- Architecture identifiers this repository actually publishes: the browser
+    -- pair (`react` / `react-h5` / `static-web`) plus the device-class roots of
+    -- `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` §2. Package-segment spelling,
+    -- so `client_architecture` can be matched against a client root directly.
+    CONSTRAINT chk_deploy_app_source_spec_client_architecture CHECK (
+        client_architecture IN (
+            'react', 'react-h5', 'static-web',
+            'flutter-mobile', 'mini-program',
+            'android-mobile', 'ios-mobile', 'harmony-mobile',
+            'unity', 'uniapp', 'pad'
+        )
+    ),
+    CONSTRAINT chk_deploy_app_source_spec_handler CHECK (
+        handler_type IN ('STATIC', 'SPA', 'WIKI')
+    ),
+    CONSTRAINT chk_deploy_app_source_spec_status CHECK (status IN ('ACTIVE', 'DISABLED')),
+    CONSTRAINT chk_deploy_app_source_spec_priority CHECK (priority BETWEEN 0 AND 65535),
+    -- Lower-case DNS-ish key: it becomes the projected variant key, and the
+    -- frontend uses it as a stable identifier that survives a label rename.
+    CONSTRAINT chk_deploy_app_source_spec_spec_key CHECK (
+        char_length(spec_key) BETWEEN 1 AND 64
+        AND spec_key = lower(spec_key)
+        AND spec_key ~ '^[a-z0-9][a-z0-9._-]*$'
+    ),
+    CONSTRAINT chk_deploy_app_source_spec_path CHECK (path_prefix LIKE '/%'),
+    -- Same rule for index files: a JSON array of strings, bounded by the
+    -- compiler's per-mount limit so a bad row cannot fail compilation later.
+    CONSTRAINT chk_deploy_app_source_spec_index_files CHECK (
+        jsonb_typeof(index_files_json) = 'array'
+        AND jsonb_array_length(index_files_json) <= 16
+    ),
+    CONSTRAINT chk_deploy_app_source_spec_source_status CHECK (
+        source_status IN ('EMPTY', 'BOUND', 'INVALID', 'REVOKED')
+    ),
+    CONSTRAINT chk_deploy_app_source_spec_source_provider CHECK (
+        source_provider_type IS NULL
+        OR source_provider_type IN ('DRIVE', 'KNOWLEDGEBASE')
+    ),
+    -- The binding is a triple: all three columns present, or all three absent.
+    -- A half-written binding would compile into a descriptor the edge cannot
+    -- resolve, and the failure would surface as a 5xx at request time.
+    CONSTRAINT chk_deploy_app_source_spec_source_binding CHECK (
+        (
+            source_status = 'EMPTY'
+            AND source_provider_type IS NULL
+            AND source_provider_resource_uuid IS NULL
+            AND source_contract_version IS NULL
+        )
+        OR (
+            source_status <> 'EMPTY'
+            AND source_provider_type IS NOT NULL
+            AND source_provider_resource_uuid IS NOT NULL
+            AND source_contract_version IS NOT NULL
+        )
+    )
+);
+
+COMMENT ON TABLE deploy_app_source_spec IS
+    'Application source spec: one uploaded source per (app, environment, spec_key), routed by client class through deploy_app_source_spec_route';
+COMMENT ON COLUMN deploy_app_source_spec.spec_key IS
+    'Lower-case spec identity (pc, h5, mini-program, ...); projected as the runtime variant key';
+COMMENT ON COLUMN deploy_app_source_spec.runtime_target IS
+    'Canonical SdkworkRuntimeTarget value from CONFIG_SPEC.md section 2.1';
+COMMENT ON COLUMN deploy_app_source_spec.client_architecture IS
+    'Architecture within the runtime target; distinguishes react (PC web) from react-h5 (H5 web), which share runtime_target = browser';
+COMMENT ON COLUMN deploy_app_source_spec.source_status IS
+    'Source binding state: EMPTY (no upload yet), BOUND, INVALID, REVOKED';
+COMMENT ON COLUMN deploy_app_source_spec.is_default IS
+    'App-level default variant for a client matching no class route; at most one active per (app, environment). Per-client-class defaults are the lowest preference in deploy_app_source_spec_route';
+
+-- Spec listing filters by tenant then app and environment and orders by
+-- (priority, uuid) so the projected variant order is stable across recompiles.
+CREATE INDEX IF NOT EXISTS idx_deploy_app_source_spec_app
+    ON deploy_app_source_spec (tenant_id, app_id, environment, status, priority, uuid)
+    WHERE deleted_at IS NULL;
+
+-- At most one active app-level default spec per (app, environment): it is what
+-- a client matching *no* class route falls back to, so two of them would make
+-- the routing outcome depend on row order. The per-client-class default is a
+-- different fact and is owned by `deploy_app_source_spec_route`.
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_source_spec_default
+    ON deploy_app_source_spec (app_id, environment)
+    WHERE is_default = TRUE AND status = 'ACTIVE' AND deleted_at IS NULL;
+
+-- Reverse lookup from a provider resource back to the spec that owns it, so an
+-- upload can be recognised (and rejected as already-bound) without scanning.
+CREATE INDEX IF NOT EXISTS idx_deploy_app_source_spec_provider
+    ON deploy_app_source_spec (tenant_id, source_provider_type, source_provider_resource_uuid)
+    WHERE deleted_at IS NULL AND source_provider_resource_uuid IS NOT NULL;
+
+-- Command identity for `apps.sourceSpecs.create`. Partial, so the rows written
+-- by `apps.create` (no key of their own) never conflict with one another — a
+-- unique index without the WHERE would make the second NULL-keyed row look like
+-- a duplicate of the first.
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_source_spec_idempotency
+    ON deploy_app_source_spec (tenant_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
+
+-- Per-client-class routing: which spec serves which client class, and in what
+-- order a class falls back when its preferred spec has no source uploaded yet.
+--
+-- Why a child table rather than a column on the spec: the requirement is "one
+-- default spec per client class" with a cross-class fallback chain
+-- (`SDKWORK_DEPLOY_SPEC.md` §8, `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md`
+-- §2.1). A single spec legitimately serves several classes — an H5 bundle
+-- serves MOBILE and TABLET — so "the default for MOBILE" is a fact about the
+-- *class*. A `is_default` column on the spec cannot express it: two specs could
+-- both claim MOBILE and the winner would be decided by row order.
+--
+-- `preference` is the rank within the class: a class's default spec is its
+-- *lowest*-ranked spec, and `0` is the conventional way to declare one, `1..`
+-- the fallbacks tried after it. Projection emits one `CLIENT_CLASS` variant rule
+-- per row with `priority = preference`, and a spec with no uploaded source
+-- contributes no rule at all — so a class whose rank-0 spec is declared but not
+-- yet uploaded simply has no rank-0 rule and the next rank wins. The fallback
+-- chain therefore falls out of the ordering instead of being re-derived on every
+-- request.
+--
+-- Ranks are deliberately allowed to be sparse. A per-spec write sees only part
+-- of the environment, so requiring a routed class to already have a rank-0 spec
+-- would make the natural authoring order illegal — declaring the PC spec as
+-- mobile's fallback before the H5 spec that owns mobile's default exists. The
+-- unique index below still admits only one spec per `(class, rank)`, so the
+-- minimum — and with it the default — is unambiguous either way.
+CREATE TABLE IF NOT EXISTS deploy_app_source_spec_route (
+    id              BIGINT      NOT NULL,
+    uuid            VARCHAR(36) NOT NULL,
+    tenant_id       BIGINT      NOT NULL,
+    organization_id BIGINT      NOT NULL DEFAULT 0,
+    app_id          BIGINT      NOT NULL,
+    environment     VARCHAR(16) NOT NULL,
+    spec_id         BIGINT      NOT NULL,
+    client_class    VARCHAR(16) NOT NULL,
+    preference      INTEGER     NOT NULL DEFAULT 0,
+    created_by      BIGINT,
+    updated_by      BIGINT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    version         BIGINT      NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_app_source_spec_route_uuid UNIQUE (uuid),
+    -- One spec per (class, rank). This is what makes "each client class has
+    -- exactly one default spec" and "the fallback order has no ties" a database
+    -- fact rather than an application convention: the set of ranks a class is
+    -- declared at has a unique minimum, and that minimum is the class default.
+    CONSTRAINT uk_deploy_app_source_spec_route_rank UNIQUE (
+        app_id, environment, client_class, preference
+    ),
+    -- A client class is never routed to the same spec twice.
+    CONSTRAINT uk_deploy_app_source_spec_route_spec UNIQUE (spec_id, client_class),
+    -- Composite FK against `uk_deploy_app_source_spec_id_scope`, so a route can
+    -- never name a spec that belongs to a different app or environment even if
+    -- a caller passes mismatched ids.
+    CONSTRAINT fk_deploy_app_source_spec_route_spec FOREIGN KEY (
+        spec_id, app_id, environment
+    ) REFERENCES deploy_app_source_spec (id, app_id, environment) ON DELETE CASCADE,
+    CONSTRAINT fk_deploy_app_source_spec_route_app FOREIGN KEY (app_id) REFERENCES deploy_app(id),
+    CONSTRAINT chk_deploy_app_source_spec_route_environment CHECK (
+        environment IN ('development', 'test', 'staging', 'demo', 'production')
+    ),
+    -- The same closed client-class vocabulary the runtime compiler accepts.
+    CONSTRAINT chk_deploy_app_source_spec_route_class CHECK (
+        client_class IN ('DESKTOP', 'MOBILE', 'TABLET', 'TV', 'BOT', 'OTHER')
+    ),
+    CONSTRAINT chk_deploy_app_source_spec_route_preference CHECK (
+        preference BETWEEN 0 AND 255
+    )
+);
+
+COMMENT ON TABLE deploy_app_source_spec_route IS
+    'Per-client-class routing: a class is served by its lowest-ranked spec, with preference 0 the conventional default rank';
+COMMENT ON COLUMN deploy_app_source_spec_route.client_class IS
+    'Closed client-class vocabulary shared with the runtime compiler';
+COMMENT ON COLUMN deploy_app_source_spec_route.preference IS
+    'Rank within the client class; lowest rank is the class default, projected as the CLIENT_CLASS variant rule priority';
+
+-- Projection reads one environment's whole route set in rank order.
+CREATE INDEX IF NOT EXISTS idx_deploy_app_source_spec_route_scope
+    ON deploy_app_source_spec_route (tenant_id, app_id, environment, client_class, preference);
+
 -- Governed build recipe. Created before deploy_app_platform_target /
 -- deploy_build below: PostgreSQL validates FK target relations at
 -- table-creation time, so forward references inside one script fail.

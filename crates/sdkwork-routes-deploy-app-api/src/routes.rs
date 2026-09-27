@@ -474,7 +474,9 @@ async fn verify_domain_hostname(
 
 /// Parse the `If-Match` header as a strong entity tag carrying a decimal
 /// version number. Rejects wildcards (`*`) and weak entity tags (`W/"..."`).
-fn parse_if_match(headers: &HeaderMap) -> Result<i64, sdkwork_deploy_contract::DeployServiceError> {
+pub(crate) fn parse_if_match(
+    headers: &HeaderMap,
+) -> Result<i64, sdkwork_deploy_contract::DeployServiceError> {
     let raw = required_header(headers, "if-match")?;
     let tagged = raw
         .strip_prefix('"')

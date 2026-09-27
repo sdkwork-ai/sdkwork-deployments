@@ -49,6 +49,7 @@ import { DataTable, type DataTableColumn, type DataTablePaginationProps } from "
 import { deliveryText, type DeliveryMessageKey } from "./i18n.ts";
 import { relativeRecordName } from "./dns-record-name.ts";
 import { type RootDomainIssue, isRootDomainApex, validateRootDomain } from "./root-domain.ts";
+import { SideDrawer } from "./SideDrawer.tsx";
 
 type Translator = (key: DeliveryMessageKey, values?: Record<string, string | number>) => string;
 type ZoneDialog =
@@ -1447,20 +1448,24 @@ const MAX_HOSTNAME_LENGTH = 253;
 const MAX_CERTIFICATE_IDENTIFIERS = 100;
 
 /**
- * Why the chosen identifier set cannot be submitted.
+ * Why the chosen identifier cannot be submitted.
  *
  * The names double as message keys, so the reader reports its reason without a
- * second table to keep in step with the first. Every member is reachable from
- * the picker alone: the set is assembled by checking already-declared hostnames,
- * and what is checked can be invalidated afterwards by switching the scope above
- * it — which is why the reasons are reported here rather than prevented in the
- * dialog.
+ * second table to keep in step with the first. The choice itself is made in the
+ * picker, which refuses the one pair its own certificate type cannot take, so the
+ * members below are the states a *later* change can still produce: the scope
+ * switch above the picker leaves the chosen hostname where it was, and the pair
+ * on screen is what gets reported rather than the order the two clicks happened
+ * in.
+ *
+ * There is no member for "more than one hostname": a certificate is requested for
+ * a single hostname, and the "at least one" member is the only count this reader
+ * has left to state.
  */
 export type CoverageIssue =
   | "hostnameRequired"
   | "coverageTooLong"
   | "singleDomainRejectsWildcard"
-  | "coverageSingleDomainLimit"
   | "coverageIdentifierLimit"
   | "coverageWildcardRequired";
 
@@ -1568,23 +1573,27 @@ async function readZoneHostnames(
 }
 
 /**
- * Whether the certificate being requested can take `row` on top of `draft`.
+ * Whether the certificate being requested can take `row` at all.
  *
- * A row already in the draft is never blocked: unchecking it has to stay
- * possible, and a checkbox that disabled itself once checked would be a one-way
- * door. Everything else the current certificate type cannot accept is disabled
- * rather than hidden, and creating a subdomain has to answer the same question,
- * so the rule is a function the table, the create path and the select-all header
- * all call instead of a branch inside the row markup.
+ * A certificate is requested for one hostname, so the question is about the
+ * single pair on screen rather than about a growing set: the picker holds one
+ * choice, and a name the current type cannot take is refused the same way whether
+ * it is the first one clicked or the one replacing it. Nothing is ever refused
+ * for being "already chosen" — the chosen row staying selectable is what keeps a
+ * later re-click from being a dead click, and a control that disabled itself once
+ * picked would be the wrong shape for a value that can only be replaced.
+ *
+ * Exactly one pair is illegal: a single-domain certificate covers no wildcard.
+ * The row is disabled rather than hidden — the operator asked which hostnames
+ * this root domain has, and an answer that omitted the ones the current type
+ * cannot take would read as a root domain that is missing them.
+ *
+ * A function rather than a branch inside the row markup, because declaring a
+ * subdomain answers the same question: a name just created has to be refused by
+ * the same test as a name just clicked.
  */
-function rowBlockedByScope(
-  draft: readonly DomainHostnameResponse[],
-  row: DomainHostnameResponse,
-  scope: CertificateScopeValue,
-): boolean {
-  if (draft.some((item) => item.hostname === row.hostname)) return false;
-  if (scope === "SINGLE_DOMAIN") return draft.length >= 1 || row.hostnameType === "WILDCARD";
-  return planHostnames([...draft.map((item) => item.hostname), row.hostname]).length > MAX_CERTIFICATE_IDENTIFIERS;
+function rowBlockedByScope(row: DomainHostnameResponse, scope: CertificateScopeValue): boolean {
+  return scope === "SINGLE_DOMAIN" && row.hostnameType === "WILDCARD";
 }
 
 /** One root domain the picker can browse. A `DomainZoneResponse` satisfies it. */
@@ -1594,35 +1603,41 @@ interface PickerZone {
 }
 
 /**
- * Chooses the hostnames a certificate covers, one root domain at a time.
+ * Chooses the hostname a certificate covers, one root domain at a time.
  *
- * The set is edited here rather than in the form because choosing it is a
+ * The choice is made here rather than in the form because making it is a
  * two-part decision — which root domain, then which of its hostnames — and
- * splitting the two between a select and a checkbox list made the operator hold
- * half of it in their head while looking at the other half. The left column is
- * the root domains; the right is everything the selected one declares.
+ * splitting the two between a select and a list made the operator hold half of it
+ * in their head while looking at the other half. The left column is the root
+ * domains; the right is everything the selected one declares.
+ *
+ * One hostname, not a set: a certificate is requested for a single name, so the
+ * right-hand pane is a radio group rather than the framework's checkboxes and
+ * their select-all header. Reading it is unchanged — the columns are what let an
+ * operator compare down the pane — but the gesture is one choice, and a second
+ * click re-points the first instead of adding to it.
  *
  * The root domain is in that list rather than derived on top of it: a zone
  * declares its own apex when it is created (`create_zone` writes the row in the
  * same transaction), so the name is something the server reports rather than
  * something this dialog has to know how to spell.
  *
- * The selection is a draft until "confirm". A picker that applied as it was
- * checked could not be cancelled, and the point of moving the choice in here is
- * that what the form shows is a result the operator agreed to.
+ * The choice is a draft until "confirm". A picker that applied as it was clicked
+ * could not be cancelled, and the point of moving the choice in here is that what
+ * the form shows is a result the operator agreed to.
  *
- * Browsing another root domain clears the draft rather than adding to it — a
+ * Browsing another root domain clears the draft rather than carrying it over — a
  * certificate covers one root domain, so a name kept from the previous one could
- * never be submitted alongside the new one, and keeping it would only look like
+ * never be submitted under the new one, and keeping it would only look like
  * coverage that is not there.
  */
 function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope, selection, t, zones }: {
-  apply(next: { zoneId: string; rows: readonly DomainHostnameResponse[]; selection: readonly DomainHostnameResponse[] }): void;
+  apply(next: { zoneId: string; rows: readonly DomainHostnameResponse[]; selection: DomainHostnameResponse | undefined }): void;
   close(): void;
   initialRows: readonly DomainHostnameResponse[];
   initialZoneId: string;
   scope: CertificateScopeValue;
-  selection: readonly DomainHostnameResponse[];
+  selection: DomainHostnameResponse | undefined;
   t: Translator;
   zones: readonly PickerZone[];
 }) {
@@ -1636,7 +1651,7 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
     initialZoneId !== "" && initialRows.length > 0 ? [[initialZoneId, [...initialRows]]] : [],
   ));
   const [rows, setRows] = useState<DomainHostnameResponse[]>(cache.current.get(activeZoneId) ?? []);
-  const [draft, setDraft] = useState<DomainHostnameResponse[]>([...selection]);
+  const [draft, setDraft] = useState<DomainHostnameResponse | undefined>(selection);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -1651,21 +1666,21 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
   const activeZone = zones.find((zone) => zone.id === activeZoneId);
 
   /**
-   * Adopts a list the server just reported, dragging the draft along with it.
+   * Adopts a list the server just reported, dragging the choice along with it.
    *
-   * A rename changes the identifier a chosen row stands for and a delete takes
+   * A rename changes the identifier the chosen row stands for and a delete takes
    * the row away, so the draft is re-pointed at what the server now returns
-   * instead of keeping the copies the dialog was opened with. That is also why
-   * every write re-reads rather than patching this list locally: the server's
-   * order — apex first, then by name — is the order the table shows, and a row
-   * patched in place would sit where it was created rather than where it sorts.
+   * instead of keeping the copy the dialog was opened with — and a row the
+   * re-read no longer lists clears it, because a choice that is not on screen is
+   * not one the operator can see or confirm. That is also why every write
+   * re-reads rather than patching this list locally: the server's order — apex
+   * first, then by name — is the order the table shows, and a row patched in
+   * place would sit where it was created rather than where it sorts.
    */
   const adopt = useCallback((zoneId: string, next: DomainHostnameResponse[]) => {
     cache.current.set(zoneId, next);
     setRows(next);
-    setDraft((current) => current
-      .map((row) => next.find((item) => item.id === row.id))
-      .filter((row): row is DomainHostnameResponse => row !== undefined));
+    setDraft((current) => (current === undefined ? undefined : next.find((row) => row.id === current.id)));
     return next;
   }, []);
 
@@ -1726,25 +1741,28 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
     }
   }
 
+  /**
+   * Points the pane at another root domain.
+   *
+   * The draft is dropped rather than carried across. A certificate covers one
+   * root domain, so a name kept from the previous one could never be submitted
+   * under the new apex, and leaving it standing would look like coverage that is
+   * not there. The filter goes with it for the same reason: it was typed to find
+   * a name in the list being left.
+   */
   function switchZone(id: string) {
     if (id === activeZoneId) return;
-    setDraft([]);
+    setDraft(undefined);
     setFilter("");
     setActiveZoneId(id);
     setRows(cache.current.get(id) ?? []);
   }
 
-  const chosen = new Set(draft.map((row) => row.hostname));
-  // A row that cannot join the set is disabled rather than hidden: the operator
-  // asked which hostnames this root domain has, and an answer that silently
-  // omitted the ones the current scope cannot take would read as a root domain
+  // The rule lives on `rowBlockedByScope` because the create path answers the
+  // same question; the rows it refuses are shown but not selectable rather than
+  // left out, since a list that silently omitted them would read as a root domain
   // that is missing them.
-  //
-  // The rules are the same ones the form reports afterwards, applied one row at
-  // a time: they refuse a row that cannot be added, and leave the set's own
-  // problems (a wildcard scope with no wildcard in it) to be stated once, in
-  // full, rather than repeated on every row.
-  const blocked = (row: DomainHostnameResponse) => rowBlockedByScope(draft, row, scope);
+  const blocked = (row: DomainHostnameResponse) => rowBlockedByScope(row, scope);
   const needle = normalizeHostname(filter);
   // Searched over the record's own spellings — the full name and the relative
   // name — rather than over whatever words the table happens to print, so `@`
@@ -1764,10 +1782,12 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
           onClick={() => switchZone(zone.id)}
         >
           <strong>{zone.apexHostname}</strong>
-          {/* Only the root domain being browsed can carry a count: the draft is
-              one root domain's worth by construction, so a number on the others
-              would be a claim about a set that does not exist. */}
-          {zone.id === activeZoneId && draft.length > 0 && <small>{t("hostnamePickerSelected", { count: draft.length })}</small>}
+          {/* Only the root domain being browsed can carry the mark: the draft
+              belongs to it by construction, so a mark on the others would be a
+              claim about a choice that is not there. It says *that* a name is
+              chosen rather than which one — the rail is 208px wide and the name
+              already has a row of its own on the other side. */}
+          {zone.id === activeZoneId && draft !== undefined && <small>{t("hostnamePickerChosen")}</small>}
         </button>)}
         {zones.length === 0 && <div className="selector-empty">{t("noActiveRootDomain")}</div>}
       </div>
@@ -1800,9 +1820,33 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
             which record it is, what it resolves to, whether control of it is
             proven, what already references it, and what can be done to it — and
             columns are what let an operator read down the page and compare, where a
-            card per row only lets them re-read one row at a time. */}
+            card per row only lets them re-read one row at a time.
+
+            It stays the framework's `DataTable`, with its own selection mode off
+            and a radio drawn as the first column, because `selectable` is a *set*:
+            checkboxes under a select-all header, and a selection bar counting what
+            is ticked. A certificate is requested for one hostname. What the
+            composite still brings is the part that belongs to a composite — the
+            sticky header, compact density, the row action column, and the
+            `data-state="selected"` highlight — and that highlight is driven here
+            from the one chosen id. */}
         <DataTable<DomainHostnameResponse>
           columns={[
+            {
+              // No header of its own: each control is named by the hostname in its
+              // own row, so a header could only repeat what the column labels.
+              id: "choice",
+              header: "",
+              cell: (row) => <input
+                aria-label={t("hostnamePickerChooseHostname", { hostname: row.hostname })}
+                checked={draft !== undefined && draft.id === row.id}
+                disabled={blocked(row)}
+                name="certificateHostname"
+                onChange={() => setDraft(row)}
+                type="radio"
+              />,
+              width: 48,
+            },
             // `@` is read out as the root domain rather than left as a symbol:
             // the row it labels is that name, and the operator choosing coverage
             // is the one who has to recognise it.
@@ -1819,29 +1863,16 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
           ]}
           density="compact"
           emptyState={<span>{needle === "" ? t("noHostnames") : t("hostnamePickerNoMatch")}</span>}
-          // Rows the current certificate type refuses are disabled rather than
-          // hidden: the operator asked which hostnames this root domain has, and
-          // an answer that silently omitted the ones the current scope cannot
-          // take would read as a root domain that is missing them.
           getRowProps={(row) => (blocked(row) ? { "aria-disabled": true } : undefined)}
           getRowId={(row) => row.id}
-          getRowSelectionLabel={(row) => `${t("select")} ${row.hostname}`}
           loading={busy && rows.length === 0}
-          onSelectedRowIdsChange={(ids) => {
-            // The framework reports the whole selection, so the draft is rebuilt
-            // from it rather than toggled one row at a time. Rows the current
-            // scope refuses are dropped on the way in by the same rule their own
-            // checkboxes use, so select-all and one click per row agree.
-            const byId = new Map(listed.map((row) => [row.id, row]));
-            const next: DomainHostnameResponse[] = [];
-            for (const id of ids) {
-              const row = byId.get(String(id));
-              if (row === undefined || next.some((item) => item.id === row.id)) continue;
-              if (rowBlockedByScope(next, row, scope)) continue;
-              next.push(row);
-            }
-            setDraft(next);
-          }}
+          // The row is the click target as well as its control: a hostname is one
+          // line of a table read down, and aiming at a 16px circle is how the
+          // wrong name ends up chosen. Both paths set the draft to this row, so a
+          // click that lands on both is still one answer — and the composite stops
+          // the row action cell's own clicks from reaching here, so a delete
+          // button does not also choose the row it is about to remove.
+          onRowClick={(row) => { if (!blocked(row)) setDraft(row); }}
           rowActions={(row) => {
             const locks = rowLocks(row, activeZone);
             return <div className="row-actions">
@@ -1860,31 +1891,35 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
           }}
           rowActionsLabel={t("operations")}
           rows={listed}
-          selectable
-          selectedRowIds={listed.filter((row) => chosen.has(row.hostname)).map((row) => row.id)}
-          selectionBar={{ description: t("hostnamePickerCount", { count: draft.length }) }}
+          // One id, handed to the composite's own row state — that is what paints
+          // `data-state="selected"` — and handed in without an
+          // `onSelectedRowIdsChange`, so the highlight is written by the radio
+          // alone and no second editor can disagree with it.
+          selectedRowIds={draft === undefined ? [] : [draft.id]}
         />
       </div>
     </div>
     <footer className="dialog-footer">
-      <span className="hostname-picker-count">{t("hostnamePickerCount", { count: draft.length })}</span>
+      {/* What Confirm will carry back, on the side the reading starts — see
+          `.hostname-picker-count`'s `margin-right:auto`. */}
+      <span className="hostname-picker-count">{draft === undefined ? t("hostnamePickerNoChoice") : t("hostnamePickerChosenName", { hostname: draft.hostname })}</span>
       <button className="secondary-button" type="button" onClick={close}>{t("cancel")}</button>
-      {/* Confirming an empty set is allowed and means what it says: the picker is
-          how the set is changed, and removing the last name from it is a change
-          the operator may make here rather than chip by chip in the form. */}
+      {/* Confirming with nothing chosen is allowed and means what it says: the
+          picker is how the choice is changed, and clearing it here is a change the
+          operator may make rather than only by removing the chip in the form. */}
       <button className="command-button" type="button" disabled={activeZoneId === ""} onClick={() => apply({ zoneId: activeZoneId, rows, selection: draft })}>{t("confirm")}</button>
     </footer>
-    {/* A name typed into a coverage picker is a name the operator wants covered,
-        so a newly created one arrives checked — after the re-read, so the draft
+    {/* A name typed into a coverage picker is a name the operator wants covered, so
+        a newly created one becomes the choice — after the re-read, so the draft
         holds the row the server reports rather than the reply to the create. The
-        form states both halves of that before the click, and the row stays
-        unchecked when the certificate type on screen cannot take it. */}
+        form states both halves of that before the click, and a name the
+        certificate type on screen cannot take leaves the choice where it was. */}
     {createOpen && <HostnameFormDialog t={t} note={t("hostnameDeclareNote")} close={() => setCreateOpen(false)} submit={async (relativeName) => {
       const created = await service.createDomainHostname(activeZoneId, { relativeName });
       const next = await reloadZone(activeZoneId);
       setCreateOpen(false);
       const fresh = next.find((row) => row.id === created.id);
-      if (fresh !== undefined) setDraft((current) => (current.some((item) => item.id === fresh.id) || rowBlockedByScope(current, fresh, scope) ? current : [...current, fresh]));
+      if (fresh !== undefined && !rowBlockedByScope(fresh, scope)) setDraft(fresh);
     }} />}
     {editTarget && <HostnameFormDialog hostname={editTarget} t={t} close={() => setEditTarget(undefined)} submit={async (relativeName) => {
       await service.updateDomainHostname(activeZoneId, editTarget.id, { relativeName });
@@ -1920,11 +1955,11 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   // than by a select of its own: a certificate covers one root domain, and that
   // root domain is chosen in the same place its hostnames are.
   const [zoneId, setZoneId] = useState(initialTarget?.zoneId ?? "");
-  // The chosen identifier set, held as the declared rows themselves. One root
-  // domain's worth of rows, because the picker switches rather than mixes: a
-  // name folded against one apex is the wrong name against another, so a set
-  // spanning two root domains could not be submitted as one certificate anyway.
-  const [selectedRows, setSelectedRows] = useState<DomainHostnameResponse[]>([]);
+  // The chosen hostname, held as the declared row itself. One root domain's
+  // worth, because the picker switches rather than mixes: a name folded against
+  // one apex is the wrong name against another, so a second root domain's
+  // hostname could not be submitted under this one anyway.
+  const [selection, setSelection] = useState<DomainHostnameResponse>();
   // The declared hostnames of the chosen root domain. Kept so the "will be
   // created" preview can tell a name that still needs declaring from one that
   // already exists, and so the picker opens on what the last claim batch left
@@ -2042,7 +2077,7 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
         // fallback covers a root-domain link, which carries no id.
         const row = items.find((item) => item.id === seedDomainId)
           ?? items.find((item) => item.hostname === seedHostname);
-        if (row) setSelectedRows([row]);
+        if (row) setSelection(row);
       })
       .catch((cause) => { if (active) setError(errorText(cause)); })
       .finally(() => { if (active) setLoadingOptions(false); });
@@ -2073,14 +2108,14 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   const zoneDeclaredProvider = zoneDnsProviderText !== "" && zoneDnsFamily === undefined && !zoneRecordsPublishedByHand
     ? zoneDnsProviderText
     : undefined;
-  // The set that was chosen, and the set the server will plan for it. They differ
-  // by each wildcard's apex, which a wildcard SAN does not cover and the server
-  // adds on top (`plan_certificate_identifiers`); every planned identifier has to
-  // be a proven claim. The preview, the claim batch and the submit all read the
+  // The identifier that was chosen, and the list the server will plan for it. They
+  // differ by a wildcard's apex, which a wildcard SAN does not cover and the server
+  // adds on top (`plan_certificate_identifiers`); every planned identifier has to be
+  // a proven claim. The preview, the claim batch and the submit all read the
   // planned list, and none of them re-derive it — an apex that only the submit
-  // remembered is how a request gets rejected for a hostname the operator was
-  // never shown.
-  const coverageHostnames = selectedRows.map((row) => row.hostname);
+  // remembered is how a request gets rejected for a hostname the operator was never
+  // shown.
+  const coverageHostnames = selection === undefined ? [] : [selection.hostname];
   const plannedHostnames = planHostnames(coverageHostnames);
   // A wildcard's apex, planned by the server on top of what was chosen. Shown as
   // a derived row rather than as a removable chip, because the plan would put it
@@ -2093,22 +2128,24 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   // is what made adding a hostname feel like something had gone wrong.
   const hostnamesToDeclare = plannedHostnames.filter((hostname) => !declaredNames.has(hostname));
 
-  // The set's own state. Every reason here is reachable from the picker alone:
-  // the set is assembled by checking declared hostnames, and what was checked can
-  // be invalidated afterwards by switching the scope above it. `hostnameRequired`
-  // is the one reachable with nothing chosen, and it is rendered as a hint rather
-  // than an error so a freshly opened dialog is not already complaining.
+  // The choice's own state. The pair the picker's own certificate type refuses is
+  // kept out of the list there, so what is left here is what a *later* change can
+  // still produce: switching the scope above the picker does not unset the chosen
+  // hostname, and this reader then reports the pair that is on screen rather than
+  // the order the two clicks happened in. `hostnameRequired` is the one reachable
+  // with nothing chosen, and it is rendered as a hint rather than an error so a
+  // freshly opened dialog is not already complaining.
   //
-  // The two single-domain rules are contract rules, reported here so the refusal
-  // is a field message rather than a rejected request: a single-domain
-  // certificate covers exactly one hostname, and it cannot cover a wildcard.
+  // The single-domain and wildcard rules are contract rules, reported here so the
+  // refusal is a field message rather than a rejected request: a single-domain
+  // certificate covers no wildcard, and a wildcard certificate has to be built
+  // around one.
   const coverageIssue: CoverageIssue | undefined = (() => {
-    if (plannedHostnames.length === 0) return "hostnameRequired";
+    if (selection === undefined) return "hostnameRequired";
     if (plannedHostnames.length > MAX_CERTIFICATE_IDENTIFIERS) return "coverageIdentifierLimit";
     if (plannedHostnames.some((hostname) => hostname.length > MAX_HOSTNAME_LENGTH)) return "coverageTooLong";
-    if (scope === "SINGLE_DOMAIN" && selectedRows.length !== 1) return "coverageSingleDomainLimit";
-    if (scope === "SINGLE_DOMAIN" && selectedRows.some((row) => row.hostnameType === "WILDCARD")) return "singleDomainRejectsWildcard";
-    if (scope === "WILDCARD" && !selectedRows.some((row) => row.hostnameType === "WILDCARD")) return "coverageWildcardRequired";
+    if (scope === "SINGLE_DOMAIN" && selection.hostnameType === "WILDCARD") return "singleDomainRejectsWildcard";
+    if (scope === "WILDCARD" && selection.hostnameType !== "WILDCARD") return "coverageWildcardRequired";
     return undefined;
   })();
 
@@ -2135,16 +2172,13 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   })();
 
   // Named after what the certificate leads with: the wildcard base it is built
-  // around, or the single hostname it covers. Derived from the chosen set, so it
-  // stops being a name the operator has to keep in step with the hostnames.
-  const nameSource = scope === "WILDCARD"
-    ? selectedRows.find((row) => row.hostnameType === "WILDCARD")
-    : selectedRows[0];
-  const derivedCertName = nameSource === undefined
+  // around, or the single hostname it covers. Derived from the chosen hostname, so
+  // it stops being a name the operator has to keep in step with that choice.
+  const derivedCertName = selection === undefined
     ? ""
     : scope === "WILDCARD"
-      ? `${nameSource.hostname.slice(2)} ${t("wildcard")}`
-      : nameSource.hostname;
+      ? `${selection.hostname.slice(2)} ${t("wildcard")}`
+      : selection.hostname;
   const certName = certNameDraft ?? derivedCertName;
 
   // What the picker's left column lists: every ACTIVE root domain, plus the one
@@ -2170,13 +2204,14 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   }
 
   /**
-   * Takes the picker's result as the identifier set.
+   * Takes the picker's result as the chosen identifier.
    *
-   * The whole result at once, not one name at a time: the picker is the only
-   * place the set is edited, and it is also the only place that knows which root
-   * domain the names came from. A set from another root domain replaces the
-   * previous one rather than merging with it — a certificate covers one root
-   * domain, and a quiet merge would submit names the operator never saw.
+   * The whole result at once, not one name at a time: the picker is the only place
+   * the choice is made, and it is also the only place that knows which root domain
+   * the name came from. A name from another root domain replaces the previous one
+   * rather than sitting beside it — a certificate is requested under one root
+   * domain, and a quiet merge would put a name on the form the operator never saw
+   * there.
    *
    * `rows` is what the picker read for that root domain, kept because the "will
    * be created" preview has to tell a name that still needs declaring from one
@@ -2186,19 +2221,19 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
   function applyHostnameSelection(next: {
     zoneId: string;
     rows: readonly DomainHostnameResponse[];
-    selection: readonly DomainHostnameResponse[];
+    selection: DomainHostnameResponse | undefined;
   }) {
     resetOwnershipPanel();
     setZoneId(next.zoneId);
     setZoneHostnames([...next.rows]);
-    setSelectedRows([...next.selection]);
+    setSelection(next.selection);
     setPickerOpen(false);
   }
 
-  /** Drops one hostname from the set, by name: the chips carry no other handle. */
-  function removeSelected(hostname: string) {
+  /** Clears the chosen hostname. The chip carries no handle other than its name. */
+  function clearSelection() {
     resetOwnershipPanel();
-    setSelectedRows((current) => current.filter((row) => row.hostname !== hostname));
+    setSelection(undefined);
   }
 
   async function submitWith(rows: readonly DomainHostnameResponse[]): Promise<void> {
@@ -2316,8 +2351,23 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
     || renewBeforeDaysIssue !== undefined
     || !certName.trim();
 
-  return <Modal close={close} closeLabel={t("close")} title={t("requestCertificateTitle")} width="wide">
-    <form onSubmit={(event) => void onSubmit(event)}>
+  const formId = "certificate-request-form";
+
+  // The wizard is a side panel, not a centred dialog, and the action row is a
+  // band of that panel rather than its last scrollable child.
+  //
+  // The row still has to submit, and it now sits outside the `<form>` it submits
+  // — that is what the button's `form` attribute is for, so the form's own
+  // `onSubmit` (and the Enter key) stay the one path that runs, instead of a
+  // second `onClick` re-implementing the submit. The form's rules are unchanged
+  // by the move: same fields, same order, same footer.
+  return <SideDrawer
+    close={close}
+    closeLabel={t("close")}
+    title={t("requestCertificateTitle")}
+    footer={<DialogFooter busy={busy} disabled={submitDisabled} close={close} formId={formId} submitLabel={t("requestCertificate")} t={t} />}
+  >
+    <form id={formId} onSubmit={(event) => void onSubmit(event)}>
       {/* The scope drives everything else: it decides how many identifiers the
           certificate plans, whether a wildcard's apex is added on top of the
           chosen names, and which validation methods stay legal. */}
@@ -2352,12 +2402,12 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
               : t("coverageRootDomain", { apex: selectedZone.apexHostname })}
           </small>
         </div>
-        {/* What the certificate will actually cover, which is not the same list as
-            the chosen one: a wildcard plans its apex in as well. It sits directly
-            under the trigger that opens the picker, both because that is where the
-            question is asked and because the pinned footer would otherwise cover
-            it at the dialog's initial scroll position. */}
-        {selectedRows.length === 0
+        {/* What the certificate will actually cover, which is not always the same
+            list as the chosen one: a wildcard plans its apex in as well. It sits
+            directly under the trigger that opens the picker, both because that is
+            where the question is asked and because the pinned footer would
+            otherwise cover it at the dialog's initial scroll position. */}
+        {selection === undefined
           ? <small className="form-hint">{loadingOptions ? t("loading") : t("hostnameRequired")}</small>
           : <>
             <div className="selected-hostnames">
@@ -2367,11 +2417,11 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
                   one line tall. */}
               <span title={t("coverageRetention")}>{t("coverageTitle", { count: plannedHostnames.length })}</span>
               <div>
-                {selectedRows.map((row) => <span key={row.hostname}>
-                  <strong>{row.hostname}</strong>
-                  <small>{row.hostnameType === "WILDCARD" ? t("wildcard") : t("exact")}</small>
-                  <button type="button" title={t("delete")} aria-label={`${t("delete")} ${row.hostname}`} onClick={() => removeSelected(row.hostname)}><X size={13} /></button>
-                </span>)}
+                <span>
+                  <strong>{selection.hostname}</strong>
+                  <small>{selection.hostnameType === "WILDCARD" ? t("wildcard") : t("exact")}</small>
+                  <button type="button" title={t("delete")} aria-label={`${t("delete")} ${selection.hostname}`} onClick={clearSelection}><X size={13} /></button>
+                </span>
                 {derivedHostnames.map((hostname) => <span key={hostname}>
                   <strong>{hostname}</strong>
                   <small>{t("coverageIncludedApex")}</small>
@@ -2487,7 +2537,6 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
       </div>}
 
       {error && <ErrorBanner message={error} t={t} />}
-      <DialogFooter busy={busy} disabled={submitDisabled} close={close} submitLabel={t("requestCertificate")} t={t} />
     </form>
     {/* The picker is a sibling of the form, not a descendant of it. A dialog opened
         from inside a form brings its own <form> — the record dialog does — and a
@@ -2500,12 +2549,12 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
       initialZoneId={zoneId}
       initialRows={zoneHostnames}
       scope={scope}
-      selection={selectedRows}
+      selection={selection}
       t={t}
       close={() => setPickerOpen(false)}
       apply={applyHostnameSelection}
     />}
-  </Modal>;
+  </SideDrawer>;
 }
 
 function ConfirmDialog({ close, dangerous = false, message, submit, t, title }: { close(): void; dangerous?: boolean; message: string; submit(): Promise<void>; t: Translator; title: string }) {
@@ -2530,8 +2579,19 @@ function Modal({ children, close, closeLabel, title, width = "default" }: { chil
   return <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><div className={`dialog delivery-dialog${MODAL_WIDTH_CLASSES[width]}`} role="dialog" aria-modal="true" aria-labelledby="delivery-dialog-title"><header><h2 id="delivery-dialog-title">{title}</h2><button className="icon-button" type="button" title={closeLabel} onClick={close}><X size={18} /></button></header>{children}</div></div>;
 }
 
-function DialogFooter({ busy, close, disabled = false, submitLabel, t }: { busy: boolean; close(): void; disabled?: boolean; submitLabel: string; t: Translator }) {
-  return <footer className="dialog-footer"><button className="secondary-button" type="button" onClick={close}>{t("cancel")}</button><button className="command-button" type="submit" disabled={busy || disabled}>{submitLabel}</button></footer>;
+/**
+ * The action row for a dialog.
+ *
+ * `formId` is for the callers whose row is *not* inside the `<form>` it submits —
+ * a side panel hands its footer to the drawer, which renders it as a band
+ * outside the scrolling body, so the button would otherwise be a submit with no
+ * form to submit. The attribute points it back at the form by id, which keeps
+ * `type="submit"` meaning "submit that form" instead of being replaced by a
+ * second `onClick` that re-derives the same call. Centred dialogs keep their row
+ * inside the form and pass nothing.
+ */
+function DialogFooter({ busy, close, disabled = false, formId, submitLabel, t }: { busy: boolean; close(): void; disabled?: boolean; formId?: string; submitLabel: string; t: Translator }) {
+  return <footer className="dialog-footer"><button className="secondary-button" type="button" onClick={close}>{t("cancel")}</button><button className="command-button" type="submit" {...(formId === undefined ? {} : { form: formId })} disabled={busy || disabled}>{submitLabel}</button></footer>;
 }
 
 /**

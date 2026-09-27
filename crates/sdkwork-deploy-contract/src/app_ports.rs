@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_composition::{AppCompositionResponse, UpdateAppCompositionRequest};
 use crate::app_delivery::*;
+use crate::app_source_spec::*;
 use crate::dto::*;
 use crate::problem::DeployServiceResult;
 use crate::usage::{IngestUsageEventsRequest, UsageIngestResult};
@@ -1044,6 +1045,78 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<EnvironmentPromotionPage> {
         Err(crate::DeployServiceError::Internal(
             "list_environment_promotions API is not implemented".to_owned(),
+        ))
+    }
+
+    // -- source specs ---------------------------------------------------------
+
+    async fn list_app_source_specs(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _environment: Option<&str>,
+    ) -> DeployServiceResult<AppSourceSpecPage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_app_source_specs API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn create_app_source_spec(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _idempotency_key: &str,
+        _request: &CreateAppSourceSpecRequest,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "create_app_source_spec API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn retrieve_app_source_spec(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _spec_id: &str,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "retrieve_app_source_spec API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn update_app_source_spec(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _spec_id: &str,
+        _expected_spec_version: i64,
+        _request: &UpdateAppSourceSpecRequest,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "update_app_source_spec API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn delete_app_source_spec(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _spec_id: &str,
+    ) -> DeployServiceResult<()> {
+        Err(crate::DeployServiceError::Internal(
+            "delete_app_source_spec API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn bind_app_source_spec_source(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _spec_id: &str,
+        _request: &BindAppSourceSpecSourceRequest,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "bind_app_source_spec_source API is not implemented".to_owned(),
         ))
     }
 }

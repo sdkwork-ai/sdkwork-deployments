@@ -8,6 +8,7 @@ mod common;
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     AppKind, AuditLogQuery, CreateAppRequest, CreateEnvVariableRequest, DeployServiceErrorKind,
+    ListAppsQuery,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::repository::InsertAuditLogCommand;
@@ -45,6 +46,8 @@ async fn create_app(repo: &DeployRepository, tenant_id: i64, name: &str) -> Stri
                 default_environment: None,
                 app_domain_label: None,
                 app_domain_suffixes: None,
+                owner_type: None,
+                source_specs: None,
                 idempotency_key: None,
             },
         )
@@ -167,8 +170,26 @@ async fn audit_logs_keyset_pages_and_requires_tenant() {
 }
 
 /// How many apps the tenant currently has, for asserting a replay added none.
+///
+/// The ownership gate is passed no actor and no organization, which narrows the
+/// answer to the `PLATFORM` / `TENANT` levels — and `deploy_app.owner_type`
+/// defaults to `TENANT`, so a count taken here is exactly the count the tenant
+/// owns. The test is about cursor replay, not about narrowing, so no facet is
+/// set either.
 async fn count_apps(repo: &DeployRepository, tenant_id: i64) -> i64 {
-    let page = repo.list_apps(tenant_id, 1, 100).await.expect("list apps");
+    let page = repo
+        .list_apps(
+            tenant_id,
+            None,
+            None,
+            &ListAppsQuery {
+                page: 1,
+                page_size: 100,
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("list apps");
     page.items.len() as i64
 }
 
@@ -186,6 +207,8 @@ fn create_request(name: &str, slug: Option<&str>) -> CreateAppRequest {
         default_environment: None,
         app_domain_label: None,
         app_domain_suffixes: None,
+        owner_type: None,
+        source_specs: None,
         idempotency_key: None,
     }
 }

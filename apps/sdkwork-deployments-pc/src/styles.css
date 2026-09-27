@@ -270,3 +270,82 @@
    transparent select background is invisible to the page and legible-looking in
    review while depending entirely on a UA default. */
 .scope-filter option{color:#1d2428;background:#fff}
+
+/* The side panel a console form is filled in on, as three bands.
+   `SideDrawer.tsx` renders the markup and this is the geometry it needs, mirroring
+   the `.deploy-surface`-scoped copy the Web Server console carries
+   (apps/sdkwork-webserver-pc/src/deploy-surface.css). Values are this sheet's own
+   light palette.
+
+   The panel slides in from the *left* edge, which is what the two things that
+   differ from the centred dialog are here for: the backdrop is a flex row that
+   packs its only child against `flex-start` instead of the grid that centres it,
+   and the entry animation moves the panel with `left` rather than with
+   `transform`.
+
+   `position:relative` is declared for that animation. A `transform` on the panel
+   would make it the containing block for `position:fixed` descendants, and this
+   wizard opens three dialogs of its own — the hostname picker, the account picker
+   and the account form. A relative offset paints the same slide and leaves no
+   containing block behind. */
+.delivery-dialog.delivery-drawer{position:relative;width:min(720px,94vw);height:100%;max-height:100vh;padding:0;border-radius:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid #d5dbde;box-shadow:0 24px 70px #0004}
+/* Only the middle band scrolls. Header and action row are `flex:0 0 auto`, so a
+   form taller than the window spends its height in the middle: the title the
+   operator reads first and the button they press last both stay where they were
+   put.
+
+   `min-height:0` on the body is load-bearing rather than tidying. A flex item's
+   automatic minimum size is its content, so without it the body refuses to shrink
+   below the form and grows the panel past the window instead of scrolling — the
+   action row ends up below the viewport, which is the defect this arrangement
+   exists to fix. */
+.delivery-drawer>header{flex:0 0 auto;padding:16px;border-bottom:1px solid #e1e5e7}
+.delivery-drawer-body{flex:1 1 auto;min-height:0;overflow:auto;padding:16px}
+/* The pinned action row, as the panel's last band.
+   The row arrived here from inside the form, where it was the last thing in the
+   scroller and was pinned with `position:sticky;bottom:-16px`. Nothing about that
+   survives the move and none of it is needed: a band that is a flex sibling of the
+   scroller is already pinned, and a sticky offset inside a non-scrolling box is an
+   offset that never applies.
+
+   `justify-content:flex-end` is written here because the row is a `<footer>`
+   element inside `.dialog`, so the shared `.dialog footer` rule would otherwise
+   spread the two buttons to the panel's two edges instead of grouping them on the
+   side the eye ends on. No background of its own either: nothing scrolls under a
+   band, so the panel's opaque surface shows through. */
+.delivery-drawer-footer{flex:0 0 auto;display:grid;gap:10px;padding:12px 16px;border-top:1px solid #e1e5e7}
+/* The band can hold two things — a refusal and the row — and they are spaced by the
+   band's own `gap` instead of by a margin each, which inside a grid would be added
+   to the gap rather than absorbed by it. */
+.delivery-dialog .delivery-drawer-footer>*{margin:0}
+/* `position`/`z-index`/`bottom` as well as the box: the shared rule pins its row
+   with all four, and a band that reset only the margins would still paint a second
+   top border under its own. */
+.delivery-dialog .delivery-drawer-footer .dialog-footer{position:static;bottom:auto;z-index:auto;margin:0;padding:0;border-top:0;background:none;display:flex;justify-content:flex-end;gap:10px}
+/* The rhythm the single column needs.
+   Every spacing in this wizard was set for a form that had to fit an 864px
+   scrollport: the group margins, the field gaps and the label-to-control gap all
+   landed within a pixel of 8px, so nothing said where one field ended and the next
+   began. Stacked, that is what reads as a mess — the fields are one column of
+   equally-spaced blocks with no grouping in them. Three steps, in the order the eye
+   needs them: 18px between groups, 14px between the fields inside a group (the
+   `.certificate-form-grid` gap above), and the 7px the label already leaves its own
+   control. The drawer has the height to spend on this; the centred dialog did not. */
+.delivery-dialog.delivery-drawer form>.form-fieldset{margin:0 0 18px}
+/* The fields inside a group are spaced by that group's own `gap`, not by a margin
+   each: a grid item's margin does not collapse, so a margin here would be added to
+   the gap instead of being absorbed by it. */
+.delivery-dialog.delivery-drawer .dialog-pair>.form-fieldset,.delivery-dialog.delivery-drawer .certificate-form-grid>.form-fieldset{margin:0}
+/* A full-height column with the panel on its left edge: the dialog backdrop's own
+   centring grid is the part that used to put the wizard in the middle of the page.
+   The dimming is the same value the centred dialog uses, so the drawer and the
+   dialog read as the same kind of interruption. */
+.delivery-drawer-backdrop{position:fixed;inset:0;z-index:50;display:flex;justify-content:flex-start;background:#111a1fb8}
+/* The slide is motion and therefore optional; the dim is what carries the state
+   change for anyone who has asked for less of it. */
+@media(prefers-reduced-motion:no-preference){.delivery-drawer-backdrop{animation:delivery-drawer-dim 160ms ease-out}.delivery-dialog.delivery-drawer{animation:delivery-drawer-slide 200ms cubic-bezier(.22,.61,.36,1)}}
+@keyframes delivery-drawer-dim{from{opacity:0}to{opacity:1}}
+@keyframes delivery-drawer-slide{from{left:-28px;opacity:.55}to{left:0;opacity:1}}
+/* A window too narrow for a side panel gets the whole width rather than a 94% sliver
+   of it. */
+@media(max-width:760px){.delivery-dialog.delivery-drawer{width:100%}}

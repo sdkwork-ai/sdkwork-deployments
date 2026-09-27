@@ -292,6 +292,49 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/source_specs",
+        "app",
+        "apps.sourceSpecs.list",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/source_specs",
+        "app",
+        "apps.sourceSpecs.create",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/source_specs/{specId}",
+        "app",
+        "apps.sourceSpecs.retrieve",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/app/v3/api/apps/{appId}/source_specs/{specId}",
+        "app",
+        "apps.sourceSpecs.update",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/app/v3/api/apps/{appId}/source_specs/{specId}",
+        "app",
+        "apps.sourceSpecs.delete",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
+        "app",
+        "apps.sourceSpecs.bindSource",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/apps/{appId}/platform_targets",
         "app",
         "platformTargets.list",

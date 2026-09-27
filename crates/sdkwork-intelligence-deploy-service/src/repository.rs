@@ -179,8 +179,15 @@ pub struct DnsChallengeZone {
 }
 
 // The trait's methods are grouped by the aggregate they read or write.
+//
+// `AppSourceSpecRepositoryPort` is a supertrait rather than another block of
+// methods here because the source-spec aggregate has its own port shape: it is
+// implemented by the same repository but its CRUD surface is derived from the
+// spec contract, not from the deploy repository's request-level methods.
 #[async_trait]
-pub trait DeployRepositoryPort: crate::AppCompositionRepositoryPort + Send + Sync {
+pub trait DeployRepositoryPort:
+    crate::AppCompositionRepositoryPort + crate::AppSourceSpecRepositoryPort + Send + Sync
+{
     async fn ready_check(&self) -> DeployServiceResult<()>;
 
     /// Resolves the zone that owns `hostname` and the account pinned to it.

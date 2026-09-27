@@ -1,0 +1,2 @@
+/** The architecture within the runtime target, spelled as the package segment of the corresponding client root in `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` section 2. `react` is the PC browser root and `react-h5` the H5 mobile root; both carry `runtimeTarget = browser`, so this field is what makes a PC bundle and an H5 bundle distinguishable. */
+export type AppClientArchitecture = 'react' | 'react-h5' | 'static-web' | 'flutter-mobile' | 'mini-program' | 'android-mobile' | 'ios-mobile' | 'harmony-mobile' | 'unity' | 'uniapp' | 'pad';

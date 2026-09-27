@@ -5,21 +5,23 @@ use sdkwork_deploy_contract::{
     is_deploy_package_artifact_type, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, BuildPage, BuildResponse, BuildTemplatePage,
+    AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
+    BindAppSourceSpecSourceRequest, BuildPage, BuildResponse, BuildTemplatePage,
     BuildTemplateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
     ChannelRolloutResponse, CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
-    CreateAppReleaseRequest, CreateAppRequest, CreateArtifactRequest, CreateBuildRequest,
-    CreateBuildTemplateRequest, CreateCertificateRequest, CreateDeployUploadSessionRequest,
-    CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployAppApi, DeployAppRequestContext, DeployServiceResult,
-    DeployUploadSessionResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
-    ListAppsQuery, ListDomainZonesQuery, PackagePage, PackageResponse, PlatformTargetPage,
-    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
-    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, SigningIdentityPage,
-    SigningIdentityResponse, SourceRepositoryPage, SourceRepositoryResponse,
-    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
+    CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateArtifactRequest,
+    CreateBuildRequest, CreateBuildTemplateRequest, CreateCertificateRequest,
+    CreateDeployUploadSessionRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest,
+    CreateEnvVariableRequest, CreateHealthCheckRequest, CreatePlatformTargetRequest,
+    CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DeployAppApi,
+    DeployAppRequestContext, DeployServiceResult, DeployUploadSessionResponse,
+    EnvironmentPromotionPage, EnvironmentPromotionResponse, ListAppsQuery, ListDomainZonesQuery,
+    PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
+    PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
+    RequestCertificateOrderRequest, SigningIdentityPage, SigningIdentityResponse,
+    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
+    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateAppSourceSpecRequest,
     UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
     UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
 };
@@ -1626,6 +1628,71 @@ impl DeployAppApi for DeployService {
         page_size: i32,
     ) -> DeployServiceResult<EnvironmentPromotionPage> {
         self.list_environment_promotions(context, app_id, environment_id, page, page_size)
+            .await
+    }
+
+    // -- source specs ---------------------------------------------------------
+
+    async fn list_app_source_specs(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        environment: Option<&str>,
+    ) -> DeployServiceResult<AppSourceSpecPage> {
+        self.list_app_source_specs(context, app_id, environment)
+            .await
+    }
+
+    async fn create_app_source_spec(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        idempotency_key: &str,
+        request: &CreateAppSourceSpecRequest,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        self.create_app_source_spec(context, app_id, idempotency_key, request)
+            .await
+    }
+
+    async fn retrieve_app_source_spec(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        spec_id: &str,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        self.retrieve_app_source_spec(context, app_id, spec_id)
+            .await
+    }
+
+    async fn update_app_source_spec(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        spec_id: &str,
+        expected_spec_version: i64,
+        request: &UpdateAppSourceSpecRequest,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        self.update_app_source_spec(context, app_id, spec_id, expected_spec_version, request)
+            .await
+    }
+
+    async fn delete_app_source_spec(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        spec_id: &str,
+    ) -> DeployServiceResult<()> {
+        self.delete_app_source_spec(context, app_id, spec_id).await
+    }
+
+    async fn bind_app_source_spec_source(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        spec_id: &str,
+        request: &BindAppSourceSpecSourceRequest,
+    ) -> DeployServiceResult<AppSourceSpecResponse> {
+        self.bind_app_source_spec_source(context, app_id, spec_id, request)
             .await
     }
 }

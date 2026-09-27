@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppResponse, CreateAppRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRequest } from '../types';
+import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppPublishEnvironment, AppResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRequest, UpdateAppSourceSpecRequest } from '../types';
 
 
 export interface AppSourceRepositoriesCreateParams {
@@ -72,6 +72,72 @@ export class AppPlatformTargetsApi {
   }
 }
 
+export interface AppSourceSpecsListParams {
+  environment?: AppPublishEnvironment;
+}
+
+export interface AppSourceSpecsCreateParams {
+  idempotencyKey: string;
+}
+
+export interface AppSourceSpecsUpdateParams {
+  ifMatch: string;
+}
+
+export class AppSourceSpecsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List an app's source specs */
+  async list(appId: string, params?: AppSourceSpecsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: AppSourceSpecResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'environment', value: params?.environment, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: AppSourceSpecResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Declare a source spec for an app */
+  async create(appId: string, body: CreateAppSourceSpecRequest, params: AppSourceSpecsCreateParams, requestOptions?: ApiRequestOptions): Promise<AppSourceSpecResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<AppSourceSpecResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Retrieve a source spec */
+  async retrieve(appId: string, specId: string, requestOptions?: ApiRequestOptions): Promise<AppSourceSpecResponse> {
+    return this.client.request<AppSourceSpecResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Update a source spec */
+  async update(appId: string, specId: string, body: UpdateAppSourceSpecRequest, params: AppSourceSpecsUpdateParams, requestOptions?: ApiRequestOptions): Promise<AppSourceSpecResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'If-Match': { value: params.ifMatch, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<AppSourceSpecResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Delete a source spec */
+  async delete(appId: string, specId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+
+/** Register the uploaded source behind a spec */
+  async bindSource(appId: string, specId: string, body: BindAppSourceSpecSourceRequest, requestOptions?: ApiRequestOptions): Promise<AppSourceSpecResponse> {
+    return this.client.request<AppSourceSpecResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}/source`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+}
+
 export interface AppCompositionUpdateParams {
   ifMatch: string;
   idempotencyKey: string;
@@ -135,6 +201,7 @@ export class AppApi {
   private client: HttpClient;
   public readonly domains: AppDomainsApi;
   public readonly composition: AppCompositionApi;
+  public readonly sourceSpecs: AppSourceSpecsApi;
   public readonly platformTargets: AppPlatformTargetsApi;
   public readonly sourceRepositories: AppSourceRepositoriesApi;
 
@@ -142,6 +209,7 @@ export class AppApi {
     this.client = client;
     this.domains = new AppDomainsApi(client);
     this.composition = new AppCompositionApi(client);
+    this.sourceSpecs = new AppSourceSpecsApi(client);
     this.platformTargets = new AppPlatformTargetsApi(client);
     this.sourceRepositories = new AppSourceRepositoriesApi(client);
   }

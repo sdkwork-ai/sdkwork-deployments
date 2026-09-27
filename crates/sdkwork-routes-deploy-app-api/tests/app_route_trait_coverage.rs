@@ -39,6 +39,7 @@ use std::sync::Arc;
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     DeployAppApi, DeployAppRequestContext, DeployServiceError, DeployServiceErrorKind,
+    ListAppsQuery,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployService;
@@ -121,7 +122,23 @@ async fn no_app_operation_falls_back_to_a_default_trait_body() {
         "apps.domains.list",
         api.list_app_domains(&context, "probe-id").await
     );
-    record_default_body!(unbacked, "apps.list", api.list_apps(&context, 1, 20).await);
+    // The first page with no filters, which is what the two positional arguments
+    // this call used to take meant. Nothing here asserts on filtering — the probe
+    // only asks whether the method has a real body — so the values only have to
+    // stay in range.
+    record_default_body!(
+        unbacked,
+        "apps.list",
+        api.list_apps(
+            &context,
+            &ListAppsQuery {
+                page: 1,
+                page_size: 20,
+                ..Default::default()
+            },
+        )
+        .await
+    );
     record_default_body!(
         unbacked,
         "apps.retrieve",

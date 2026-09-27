@@ -315,8 +315,14 @@ pub enum RuntimeMountMode {
     Alias,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+// The four policy blocks below are `Deserialize` as well as `Serialize`, and
+// carry a container-level `#[serde(default)]`, so a spec-only recompile can read
+// the policies back out of the previous revision's descriptor instead of
+// inventing them. Without the `default` a descriptor written before a policy
+// field existed would fail to read and force a silent reset to `Default`, which
+// is exactly the "policy quietly reverted" failure this avoids.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct RuntimeDeliveryPolicy {
     pub provider_timeout_ms: u64,
     pub metadata_cache_ttl_seconds: u32,
@@ -337,8 +343,8 @@ impl Default for RuntimeDeliveryPolicy {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct RuntimeSecurityPolicy {
     pub force_https: bool,
     pub deny_dot_files: bool,
@@ -355,8 +361,8 @@ impl Default for RuntimeSecurityPolicy {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct RuntimeLimits {
     pub maximum_bindings: usize,
     pub maximum_variants: usize,
@@ -383,8 +389,8 @@ impl Default for RuntimeLimits {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct RuntimeObservabilityPolicy {
     pub access_log_enabled: bool,
     pub usage_metering_enabled: bool,

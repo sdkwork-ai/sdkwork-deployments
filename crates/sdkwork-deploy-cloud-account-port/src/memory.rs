@@ -865,8 +865,13 @@ mod tests {
     #[tokio::test]
     async fn a_family_narrowing_keeps_the_account_written_under_a_legacy_spelling() {
         let port = MemoryCloudAccountPort::new()
-            .with_account(MemoryCloudAccountSeed::tenant("acct-legacy", 7, "tencent").code("dnspod-legacy"))
-            .with_account(MemoryCloudAccountSeed::tenant("acct-canonical", 7, "dnspod").code("dnspod-canonical"))
+            .with_account(
+                MemoryCloudAccountSeed::tenant("acct-legacy", 7, "tencent").code("dnspod-legacy"),
+            )
+            .with_account(
+                MemoryCloudAccountSeed::tenant("acct-canonical", 7, "dnspod")
+                    .code("dnspod-canonical"),
+            )
             .with_account(MemoryCloudAccountSeed::tenant("acct-aliyun", 7, "aliyun"));
         let page = port
             .list_accounts(ListCloudAccountsCommand {

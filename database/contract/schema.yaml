@@ -183,3 +183,9 @@ tables:
   - name: deploy_dns_zone_wechat_verification
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_app_source_spec
+    lifecycle_status: active
+    owner: deploy-platform
+  - name: deploy_app_source_spec_route
+    lifecycle_status: active
+    owner: deploy-platform

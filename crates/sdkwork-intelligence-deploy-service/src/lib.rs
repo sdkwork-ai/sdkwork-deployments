@@ -4,6 +4,7 @@ pub mod app;
 pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;
+pub mod app_source_specs;
 pub mod backend;
 pub mod certificate_caa;
 pub mod certificate_dns;
@@ -18,6 +19,11 @@ pub mod repository;
 pub mod runtime_publication;
 
 pub use app_composition::{AppCompositionRepositoryPort, ReplaceAppCompositionCommand};
+pub use app_source_specs::{
+    AppSourceSpecRepositoryPort, BindAppSourceSpecSourceCommand, CreateAppSourceSpecCommand,
+    DeclareAppSourceSpecsCommand, DeleteAppSourceSpecCommand, ListAppSourceSpecsQuery,
+    UpdateAppSourceSpecCommand,
+};
 pub use certificate_caa::{
     caa_base_name, caa_parent_name, combine_order_caa_observations, evaluate_caa_policy,
     issuer_domains_for_directory, observe_identifier_caa, observe_order_caa,

@@ -4,6 +4,7 @@ pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;
 pub mod app_ports;
+pub mod app_source_spec;
 pub mod certificate_plan;
 pub mod dto;
 pub mod problem;
@@ -17,6 +18,7 @@ pub use app_ports::{
     DeployAppApi, DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
     ListAppsQuery, ListDomainZonesQuery, UsageEventQuery,
 };
+pub use app_source_spec::*;
 pub use certificate_plan::*;
 pub use dto::*;
 pub use problem::{DeployServiceError, DeployServiceErrorKind, DeployServiceResult};

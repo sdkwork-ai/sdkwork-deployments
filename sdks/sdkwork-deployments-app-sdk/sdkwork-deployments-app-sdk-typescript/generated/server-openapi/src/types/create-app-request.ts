@@ -1,5 +1,6 @@
 import type { AppKind } from './app-kind';
 import type { AppOwnerType } from './app-owner-type';
+import type { AppSourceSpecDefinition } from './app-source-spec-definition';
 
 export interface CreateAppRequest {
   name: string;
@@ -15,5 +16,7 @@ export interface CreateAppRequest {
   appDomainLabel?: string;
   /** Per-app override of the platform app-domain suffix catalog. Each entry is a lowercase dotted domain without a leading dot; absent means the platform catalog applies. */
   appDomainSuffixes?: string[];
+  /** Optional source specs declared with the app. One app legitimately owns several sources of different specs (a PC build and an H5 build), so declaring them here lets a single create call produce an app whose one publishing hostname already routes by client class. They land in the app's default environment. Exactly one may set `isDefault` when the array is non-empty: it is the fallback for clients no rule classifies. */
+  sourceSpecs?: AppSourceSpecDefinition[];
   idempotencyKey?: string;
 }

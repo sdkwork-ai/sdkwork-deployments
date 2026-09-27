@@ -8,23 +8,30 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
     response::Response,
-    routing::{get, patch, post},
+    routing::{get, patch, post, put},
     Extension, Json, Router,
 };
 use sdkwork_deploy_contract::{
-    CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest,
-    CreateAppEnvironmentRequest, CreateAppReleaseRequest, CreateAppRequest, CreateBuildRequest,
+    BindAppSourceSpecSourceRequest, CreateAppDatabaseMigrationRequest,
+    CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
+    CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateBuildRequest,
     CreateBuildTemplateRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
     CreateSourceRepositoryRequest, DeployAppRequestContext, ListAppsQuery, PromoteChannelRequest,
     PromoteEnvironmentRequest, RegisterPackageRequest, UpdateAppDatabaseProfileRequest,
     UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRequest,
-    UpdateBuildStateRequest, UsageEventQuery,
+    UpdateAppSourceSpecRequest, UpdateBuildStateRequest, UsageEventQuery,
 };
-use sdkwork_routes_deploy_common::{envelope, finish_api_json, finish_created_api_json, ok_json};
+use sdkwork_routes_deploy_common::{
+    envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
+};
 use sdkwork_web_core::WebRequestContext;
 use serde::Deserialize;
 
-use crate::{auth::require_app_context, paths, routes::required_header, routes::AppState};
+use crate::{
+    auth::require_app_context,
+    paths,
+    routes::{parse_if_match, required_header, AppState},
+};
 
 #[derive(Deserialize)]
 struct PageQuery {
@@ -119,6 +126,191 @@ pub fn build_app_delivery_router() -> Router<AppState> {
             paths::APP_ENVIRONMENT_PROMOTIONS,
             get(list_environment_promotions).post(promote_environment),
         )
+        .route(
+            paths::APP_SOURCE_SPECS,
+            get(list_app_source_specs).post(create_app_source_spec),
+        )
+        .route(
+            paths::APP_SOURCE_SPEC,
+            get(retrieve_app_source_spec)
+                .patch(update_app_source_spec)
+                .delete(delete_app_source_spec),
+        )
+        .route(
+            paths::APP_SOURCE_SPEC_SOURCE,
+            put(bind_app_source_spec_source),
+        )
+}
+
+// -- source specs ----------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SourceSpecQuery {
+    /// `None` lists every environment; the console passes one when it is
+    /// showing a single environment's routing table.
+    environment: Option<String>,
+}
+
+/// Reads `appId`/`specId` out of the matched path.
+///
+/// A `HashMap` rather than a tuple extractor for the same reason
+/// `update_app_composition` uses one: the route table is generated from the
+/// OpenAPI paths, so the parameter names are the contract's and reading them by
+/// name keeps a renamed path segment a compile-time-visible miss instead of a
+/// silent positional shift.
+fn source_spec_path(
+    params: &HashMap<String, String>,
+) -> Result<(String, String), sdkwork_deploy_contract::DeployServiceError> {
+    let app_id = params.get("appId").cloned().ok_or_else(|| {
+        sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
+    })?;
+    let spec_id = params.get("specId").cloned().ok_or_else(|| {
+        sdkwork_deploy_contract::DeployServiceError::validation("specId is required")
+    })?;
+    Ok((app_id, spec_id))
+}
+
+async fn list_app_source_specs(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Query(query): Query<SourceSpecQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .list_app_source_specs(&context, &app_id, query.environment.as_deref())
+                .await?;
+            ok_json(envelope::source_spec_page(result))
+        }
+        .await,
+    )
+}
+
+async fn create_app_source_spec(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<CreateAppSourceSpecRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            // `apps.sourceSpecs.create` is declared `x-sdkwork-idempotent` and
+            // `IdempotencyKeyParam` is `required: true`. Validated here and
+            // forwarded to the repository, which replays the row the first
+            // attempt wrote; validating without forwarding is what turns a retry
+            // into a 409 on `uk_deploy_app_source_spec_key`.
+            let idempotency_key = required_header(&headers, "idempotency-key")?;
+            let result = state
+                .api
+                .create_app_source_spec(&context, &app_id, &idempotency_key, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn retrieve_app_source_spec(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let (app_id, spec_id) = source_spec_path(&params)?;
+            let result = state
+                .api
+                .retrieve_app_source_spec(&context, &app_id, &spec_id)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn update_app_source_spec(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateAppSourceSpecRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let (app_id, spec_id) = source_spec_path(&params)?;
+            // The precondition is the *spec's* version, not the app's: the
+            // console reads it from `AppSourceSpecResponse.version`, whereas the
+            // app version is only ever observed on a composition response. The
+            // parameter is declared inline for exactly that reason — the shared
+            // `IfMatchParam` documents itself as the app version.
+            let expected_version = parse_if_match(&headers)?;
+            let result = state
+                .api
+                .update_app_source_spec(&context, &app_id, &spec_id, expected_version, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn delete_app_source_spec(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+) -> Response {
+    finish_no_content(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let (app_id, spec_id) = source_spec_path(&params)?;
+            service_result(
+                state
+                    .api
+                    .delete_app_source_spec(&context, &app_id, &spec_id)
+                    .await,
+            )
+        }
+        .await,
+    )
+}
+
+async fn bind_app_source_spec_source(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+    Json(request): Json<BindAppSourceSpecSourceRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let (app_id, spec_id) = source_spec_path(&params)?;
+            let result = state
+                .api
+                .bind_app_source_spec_source(&context, &app_id, &spec_id, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
 }
 
 // -- apps ------------------------------------------------------------------

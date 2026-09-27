@@ -41,6 +41,15 @@ pub const APP_PLATFORM_TARGET: &str =
 pub const APP_SOURCE_REPOSITORIES: &str = "/app/v3/api/apps/{appId}/source_repositories";
 pub const APP_SOURCE_REPOSITORY: &str =
     "/app/v3/api/apps/{appId}/source_repositories/{sourceRepositoryId}";
+/// An app's source specs: one row per *source* the app serves.
+///
+/// A spec is a source dimension, not a delivery variant — a PC bundle and an H5
+/// bundle are two rows here, each uploaded on its own, and the published app
+/// keeps one hostname while the edge picks the spec from the request's client
+/// classification.
+pub const APP_SOURCE_SPECS: &str = "/app/v3/api/apps/{appId}/source_specs";
+pub const APP_SOURCE_SPEC: &str = "/app/v3/api/apps/{appId}/source_specs/{specId}";
+pub const APP_SOURCE_SPEC_SOURCE: &str = "/app/v3/api/apps/{appId}/source_specs/{specId}/source";
 pub const BUILD_TEMPLATES: &str = "/app/v3/api/build_templates";
 pub const BUILD_TEMPLATE: &str = "/app/v3/api/build_templates/{buildTemplateId}";
 pub const APP_BUILDS: &str = "/app/v3/api/apps/{appId}/builds";

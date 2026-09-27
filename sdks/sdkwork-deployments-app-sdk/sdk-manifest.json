@@ -21,7 +21,7 @@
   },
   "sdkOwner": "sdkwork-deploy",
   "apiAuthority": "sdkwork-deploy-app-api",
-  "ownerOnlyOperationCount": 83,
+  "ownerOnlyOperationCount": 89,
   "standardProfile": "sdkwork-v3",
   "discoverySurface": {
     "sdkTarget": "app",

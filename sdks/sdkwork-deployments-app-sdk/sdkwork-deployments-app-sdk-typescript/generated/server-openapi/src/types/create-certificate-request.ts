@@ -6,6 +6,7 @@ export interface CreateCertificateRequest {
   /** Operator preference. `AUTO` resolves to HTTP_01 for a `SINGLE_DOMAIN` scope and always to DNS_01 for `WILDCARD`. `HTTP_01` is rejected for a `WILDCARD` scope. */
   validationMethod?: 'AUTO' | 'HTTP_01' | 'DNS_01';
   caProfile?: 'LETS_ENCRYPT_STAGING' | 'LETS_ENCRYPT_PRODUCTION';
+  /** Key algorithm of the issued leaf. Defaults to RSA: a managed certificate is renewed unattended and RSA-2048 is the leaf key every TLS client accepts, so a certificate requested without an opinion on this stays reachable from old stacks as well. Ask for ECDSA explicitly where every client is known to support P-256. */
   preferredKeyAlgorithm?: 'RSA' | 'ECDSA';
   /** Whether the control plane keeps this certificate renewed on its own. Defaults to true: asking for a managed certificate means asking for a name that stays covered, not for a reminder to renew it. */
   autoRenew?: boolean;

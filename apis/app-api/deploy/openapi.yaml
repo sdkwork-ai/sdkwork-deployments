@@ -1861,6 +1861,338 @@ paths:
                       properties:
                         item:
                           $ref: '#/components/schemas/HealthCheckResponse'
+  /app/v3/api/apps/{appId}/source_specs:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: apps.sourceSpecs.list
+      summary: List an app's source specs
+      description: >-
+        The app's sources, one row per spec. A spec is a *source* dimension, not
+        a delivery variant: a PC bundle and an H5 bundle are two rows here, and
+        the published app keeps a single hostname while the edge picks the spec
+        from the request's client classification.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - name: environment
+        in: query
+        description: Restrict the listing to one lifecycle environment.
+        schema:
+          $ref: '#/components/schemas/AppPublishEnvironment'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/AppSourceSpecResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    post:
+      operationId: apps.sourceSpecs.create
+      summary: Declare a source spec for an app
+      description: >-
+        Declares a spec without a source. The source is registered afterwards by
+        `apps.sourceSpecs.bindSource`, so the routing shape can be reviewed
+        before anything is uploaded. The spec takes effect when the environment
+        is next composed or published (`apps.composition.update`), which is the
+        moment every other composition change takes effect; declaring it here
+        does not publish on its own.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppSourceSpecRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceSpecResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/source_specs/{specId}:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: specId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: apps.sourceSpecs.retrieve
+      summary: Retrieve a source spec
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceSpecResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    patch:
+      operationId: apps.sourceSpecs.update
+      summary: Update a source spec
+      description: >-
+        Partial update. `specKey` is immutable: it is the projected variant key,
+        and renaming it would silently re-point every CLIENT_CLASS rule that
+        names it. The change takes effect at the next compose or publish, like
+        every other composition change.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - name: If-Match
+        in: header
+        required: true
+        description: >-
+          Strong ETag containing the decimal-string **source-spec** version, as
+          reported by `AppSourceSpecResponse.version`. Declared inline rather
+          than reusing `IfMatchParam`, whose contract is the app version.
+        schema:
+          type: string
+          pattern: ^("[0-9]+"|[0-9]+)$
+          maxLength: 24
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppSourceSpecRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceSpecResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      operationId: apps.sourceSpecs.delete
+      summary: Delete a source spec
+      description: >-
+        Soft-deletes the spec. The change takes effect at the next compose or
+        publish, after which the clients the spec used to serve fall through to
+        the environment's default variant.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/source_specs/{specId}/source:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: specId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    put:
+      operationId: apps.sourceSpecs.bindSource
+      summary: Register the uploaded source behind a spec
+      description: >-
+        Resolves a Drive directory or knowledgebase wiki through the content
+        provider and stores the resolved reference on the spec, replacing any
+        previous binding. Idempotent by construction: repeating the same call
+        converges on the same provider reference. The binding takes effect at
+        the next compose or publish.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindAppSourceSpecSourceRequest'
+      responses:
+        '200':
+          description: Bound
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceSpecResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/apps/{appId}/platform_targets:
     parameters:
     - name: appId
@@ -4105,6 +4437,20 @@ components:
           maxItems: 1024
           items:
             $ref: '#/components/schemas/AppBindingDefinition'
+        sourceSpecs:
+          type: array
+          maxItems: 32
+          description: >-
+            Replace this environment's source specs in the same transaction.
+            Absent means "leave the spec set alone", which keeps a composition
+            update from wiping a spec authored through the source-spec endpoints;
+            present means "make the set exactly this". Declared specs are
+            projected into Variants, CLIENT_CLASS VariantRules, Mounts and
+            Resources for the revision this call compiles, and pre-existing specs
+            are carried by the descriptor even though the request never mentioned
+            them.
+          items:
+            $ref: '#/components/schemas/AppSourceSpecDefinition'
         deliveryPolicy:
           $ref: '#/components/schemas/AppDeliveryPolicy'
         securityPolicy:
@@ -4522,6 +4868,404 @@ components:
           minimum: 0
           maximum: 1000
           default: 10
+    SdkworkRuntimeTarget:
+      type: string
+      description: >-
+        Where the executable config for this source is consumed. The canonical
+        fifteen-value vocabulary owned by `CONFIG_SPEC.md` section 2.1
+        (`SdkworkRuntimeTarget`); that spec states other specs must not invent
+        alternate deployment-mode values, so this enum is never extended
+        locally. Note that PC web and H5 web are both `browser` — the pair is
+        distinguished by `clientArchitecture`.
+      enum:
+      - browser
+      - desktop
+      - tablet-ipados
+      - tablet-android
+      - capacitor-ios
+      - capacitor-android
+      - flutter-ios
+      - flutter-android
+      - android-native
+      - ios-native
+      - harmony-native
+      - mini-program
+      - server
+      - container
+      - test-runner
+    AppClientArchitecture:
+      type: string
+      description: >-
+        The architecture within the runtime target, spelled as the package
+        segment of the corresponding client root in
+        `APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md` section 2. `react` is the PC
+        browser root and `react-h5` the H5 mobile root; both carry
+        `runtimeTarget = browser`, so this field is what makes a PC bundle and an
+        H5 bundle distinguishable.
+      enum:
+      - react
+      - react-h5
+      - static-web
+      - flutter-mobile
+      - mini-program
+      - android-mobile
+      - ios-mobile
+      - harmony-mobile
+      - unity
+      - uniapp
+      - pad
+    AppClientClass:
+      type: string
+      description: >-
+        The closed client-class vocabulary the runtime compiler accepts, shared
+        by composition variants and source-spec routes.
+      enum:
+      - DESKTOP
+      - MOBILE
+      - TABLET
+      - TV
+      - BOT
+      - OTHER
+    AppSourceSpecRoute:
+      type: object
+      additionalProperties: false
+      required:
+      - clientClass
+      - preference
+      description: >-
+        One client class this source spec serves, with its rank in that class's
+        preference order. A class's default spec is its lowest-ranked spec, with
+        `preference` 0 the conventional way to declare one; lower ranks win, so a
+        class whose rank-0 spec has no source uploaded yet falls through to the
+        next rank. Within one (app, environment) a `(clientClass, preference)`
+        pair belongs to exactly one spec, which is what makes the default
+        unambiguous. Ranks may be sparse: a class may be declared at rank 1
+        before any spec claims rank 0.
+      properties:
+        clientClass:
+          $ref: '#/components/schemas/AppClientClass'
+        preference:
+          type: integer
+          minimum: 0
+          maximum: 255
+          default: 0
+    AppSourceSpecStatus:
+      type: string
+      enum:
+      - ACTIVE
+      - DISABLED
+    AppSourceBindingStatus:
+      type: string
+      description: >-
+        Whether an uploaded source exists behind the spec. Deliberately separate
+        from AppSourceSpecStatus: a spec is normally declared first and filled by
+        the upload that follows, and collapsing the two would make "declared but
+        not yet uploaded" indistinguishable from "switched off".
+      enum:
+      - EMPTY
+      - BOUND
+      - INVALID
+      - REVOKED
+    AppSourceBindingResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - providerType
+      - providerResourceUuid
+      - contractVersion
+      - status
+      properties:
+        providerType:
+          type: string
+          enum:
+          - DRIVE
+          - KNOWLEDGEBASE
+        providerResourceUuid:
+          type: string
+          minLength: 1
+          maxLength: 128
+        contractVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+        status:
+          $ref: '#/components/schemas/AppSourceBindingStatus'
+        updatedAt:
+          type: string
+          format: date-time
+    AppSourceSpecResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - specKey
+      - label
+      - runtimeTarget
+      - clientArchitecture
+      - clientClassRoutes
+      - pathPrefix
+      - handler
+      - indexFiles
+      - isDefault
+      - priority
+      - status
+      - sourceStatus
+      - createdAt
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        specKey:
+          $ref: '#/components/schemas/CompositionKey'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+        runtimeTarget:
+          $ref: '#/components/schemas/SdkworkRuntimeTarget'
+        clientArchitecture:
+          $ref: '#/components/schemas/AppClientArchitecture'
+        clientClassRoutes:
+          type: array
+          maxItems: 12
+          description: >-
+            The client classes this spec serves, each with its preference rank.
+            Each becomes one CLIENT_CLASS routing rule whose priority is the
+            rank, so one source can serve several classes (an H5 bundle serves
+            MOBILE and TABLET) and a class can name fallbacks after its default.
+          items:
+            $ref: '#/components/schemas/AppSourceSpecRoute'
+        pathPrefix:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        handler:
+          type: string
+          enum:
+          - STATIC
+          - SPA
+          - WIKI
+        indexFiles:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+        spaFallback:
+          type: string
+          maxLength: 4096
+        isDefault:
+          type: boolean
+          description: >-
+            App-level default variant, used for a client that matches no class
+            route at all; at most one active per (app, environment). Per-client-class
+            defaults are the `preference: 0` entries of `clientClassRoutes`.
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        status:
+          $ref: '#/components/schemas/AppSourceSpecStatus'
+        sourceStatus:
+          $ref: '#/components/schemas/AppSourceBindingStatus'
+        source:
+          $ref: '#/components/schemas/AppSourceBindingResponse'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          pattern: ^[0-9]+$
+    AppSourceSpecDefinition:
+      type: object
+      additionalProperties: false
+      required:
+      - specKey
+      - label
+      properties:
+        specKey:
+          $ref: '#/components/schemas/CompositionKey'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+        runtimeTarget:
+          $ref: '#/components/schemas/SdkworkRuntimeTarget'
+        clientArchitecture:
+          $ref: '#/components/schemas/AppClientArchitecture'
+        clientClassRoutes:
+          type: array
+          maxItems: 12
+          default: []
+          description: >-
+            Which client classes this spec serves and at which preference. A
+            class's default is its lowest-ranked spec, and each rank within a
+            class belongs to one spec only, so "the default spec for MOBILE" is
+            always defined. Ranks may be sparse while a set is being built up.
+          items:
+            $ref: '#/components/schemas/AppSourceSpecRoute'
+        pathPrefix:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          default: /
+        handler:
+          type: string
+          enum:
+          - STATIC
+          - SPA
+          - WIKI
+          default: STATIC
+        indexFiles:
+          type: array
+          maxItems: 16
+          default: []
+          items:
+            type: string
+        spaFallback:
+          type: string
+          maxLength: 4096
+        isDefault:
+          type: boolean
+          default: false
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          default: 0
+    CreateAppSourceSpecRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - environment
+      - specKey
+      - label
+      properties:
+        environment:
+          $ref: '#/components/schemas/AppPublishEnvironment'
+        specKey:
+          $ref: '#/components/schemas/CompositionKey'
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+        runtimeTarget:
+          $ref: '#/components/schemas/SdkworkRuntimeTarget'
+        clientArchitecture:
+          $ref: '#/components/schemas/AppClientArchitecture'
+        clientClassRoutes:
+          type: array
+          maxItems: 12
+          default: []
+          description: >-
+            Which client classes this spec serves and at which preference. A
+            class's default is its lowest-ranked spec, and each rank within a
+            class belongs to one spec only, so "the default spec for MOBILE" is
+            always defined. Ranks may be sparse while a set is being built up.
+          items:
+            $ref: '#/components/schemas/AppSourceSpecRoute'
+        pathPrefix:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          default: /
+        handler:
+          type: string
+          enum:
+          - STATIC
+          - SPA
+          - WIKI
+          default: STATIC
+        indexFiles:
+          type: array
+          maxItems: 16
+          default: []
+          items:
+            type: string
+        spaFallback:
+          type: string
+          maxLength: 4096
+        isDefault:
+          type: boolean
+          default: false
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          default: 0
+    UpdateAppSourceSpecRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Partial update. `specKey` is intentionally absent: it is the projected
+        variant key, and renaming it would silently re-point every CLIENT_CLASS
+        rule that names it.
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 64
+        runtimeTarget:
+          $ref: '#/components/schemas/SdkworkRuntimeTarget'
+        clientArchitecture:
+          $ref: '#/components/schemas/AppClientArchitecture'
+        clientClassRoutes:
+          type: array
+          maxItems: 12
+          description: >-
+            Whole-set replacement of this spec's routes. Not additive: a class
+            left out loses its routing rule, which is the only way "stop serving
+            phones from this spec" is expressible.
+          items:
+            $ref: '#/components/schemas/AppSourceSpecRoute'
+        pathPrefix:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        handler:
+          type: string
+          enum:
+          - STATIC
+          - SPA
+          - WIKI
+        indexFiles:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+        spaFallback:
+          type: string
+          nullable: true
+          maxLength: 4096
+        isDefault:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        status:
+          $ref: '#/components/schemas/AppSourceSpecStatus'
+    BindAppSourceSpecSourceRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - source
+      properties:
+        source:
+          description: >-
+            Where the uploaded bytes live. Described with the same vocabulary
+            `apps.composition.update` uses for a resource, and resolved through
+            the content provider before it is stored, so a spec can only ever
+            carry a provider reference the delivery plane already accepted.
+          oneOf:
+          - $ref: '#/components/schemas/DriveDirectorySource'
+          - $ref: '#/components/schemas/KnowledgebaseWikiSource'
+          discriminator:
+            propertyName: type
     AppCompositionResponse:
       type: object
       additionalProperties: false
@@ -6211,6 +6955,19 @@ components:
           items:
             type: string
             maxLength: 253
+        sourceSpecs:
+          type: array
+          maxItems: 32
+          description: >-
+            Optional source specs declared with the app. One app legitimately
+            owns several sources of different specs (a PC build and an H5 build),
+            so declaring them here lets a single create call produce an app whose
+            one publishing hostname already routes by client class. They land in
+            the app's default environment. Exactly one may set `isDefault` when
+            the array is non-empty: it is the fallback for clients no rule
+            classifies.
+          items:
+            $ref: '#/components/schemas/AppSourceSpecDefinition'
         idempotencyKey:
           type: string
           maxLength: 128

@@ -87,6 +87,8 @@ async fn create_app(repository: &DeployRepository, slug: &str) -> String {
                 default_environment: None,
                 app_domain_label: None,
                 app_domain_suffixes: None,
+                owner_type: None,
+                source_specs: None,
                 idempotency_key: None,
             },
         )

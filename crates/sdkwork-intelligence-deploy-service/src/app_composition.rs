@@ -131,13 +131,24 @@ fn validate_composition_request(
         ));
     }
     validate_identifier(idempotency_key, 128, "Idempotency-Key")?;
-    if request.resources.is_empty()
-        || request.variants.is_empty()
-        || request.mounts.is_empty()
-        || request.bindings.is_empty()
+    // A composition may be declared from source specs alone. In that case its
+    // resources, variants and mounts are projected from the spec set during the
+    // publish, and it serves through the platform publishing domains that the
+    // same publish reconciles, so none of the four have to be declared.
+    //
+    // The relaxation is keyed on the *field being present*, not on the spec set
+    // being non-empty: an explicitly empty `sourceSpecs` means "retire every
+    // spec", and such a composition still has to carry its own variants.
+    let declared_from_specs = request.source_specs.is_some();
+    if !declared_from_specs
+        && (request.resources.is_empty()
+            || request.variants.is_empty()
+            || request.mounts.is_empty()
+            || request.bindings.is_empty())
     {
         return Err(DeployServiceError::validation(
-            "resources, variants, mounts, and bindings must not be empty",
+            "resources, variants, mounts, and bindings must not be empty unless the composition \
+             is declared from sourceSpecs",
         ));
     }
     if request.resources.len() > request.limits.maximum_resources
@@ -174,7 +185,10 @@ fn validate_composition_request(
         request.bindings.iter().map(|binding| binding.key.as_str()),
         "binding",
     )?;
-    if !variant_keys.contains(request.default_variant_key.as_str()) {
+    // With no hand-authored variant there is nothing for `defaultVariantKey` to
+    // name; the app-level default comes from the spec marked `isDefault`
+    // instead, which the projection enforces when the specs are written.
+    if !variant_keys.is_empty() && !variant_keys.contains(request.default_variant_key.as_str()) {
         return Err(DeployServiceError::validation(
             "defaultVariantKey must reference a variant",
         ));
@@ -318,6 +332,9 @@ mod tests {
                     forced_variant_key: None,
                 },
             }],
+            // `None` means "leave the stored spec set alone"; this unit test is
+            // about provider validation ordering, not about specs.
+            source_specs: None,
             delivery_policy: Default::default(),
             security_policy: Default::default(),
             limits: Default::default(),

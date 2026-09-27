@@ -126,6 +126,23 @@ impl DeployService {
                 request,
             )
             .await?;
+        // `sourceSpecs` on create is materialized on the app's own default
+        // environment. It runs as a step of its own rather than inside the app
+        // INSERT because the app row is already committed by then; the
+        // declaration itself is one transaction, so a failure here leaves an app
+        // whose spec set can still be authored through the source-spec
+        // endpoints rather than a half-written spec table.
+        if let Some(definitions) = request.source_specs.as_deref() {
+            if !definitions.is_empty() {
+                self.declare_app_source_specs(
+                    context,
+                    &app.id,
+                    &app.default_environment,
+                    definitions,
+                )
+                .await?;
+            }
+        }
         self.audit_app_action(context, "app.create", &app.id)
             .await?;
         // Every app is a publishable surface: reconcile the app's default

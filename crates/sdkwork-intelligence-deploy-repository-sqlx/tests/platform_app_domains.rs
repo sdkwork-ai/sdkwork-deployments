@@ -301,6 +301,8 @@ async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
                 default_environment: None,
                 app_domain_label: Some("with-override".to_owned()),
                 app_domain_suffixes: Some(vec!["example.com".to_owned(), "example.cn".to_owned()]),
+                owner_type: None,
+                source_specs: None,
                 idempotency_key: Some("create-with-override".to_owned()),
             },
         )
@@ -357,6 +359,8 @@ async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
                 app_status: None,
                 default_environment: None,
                 app_domain_label: None,
+                owner_type: None,
+                owner_user_id: None,
                 app_domain_suffixes: Some(Some(vec!["updated.example.net".to_owned()])),
             },
         )
@@ -383,6 +387,8 @@ async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
                 app_status: None,
                 default_environment: None,
                 app_domain_label: None,
+                owner_type: None,
+                owner_user_id: None,
                 app_domain_suffixes: Some(None),
             },
         )

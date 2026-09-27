@@ -5,6 +5,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::app_source_spec::AppSourceSpecDefinition;
+
 // ---------------------------------------------------------------------------
 // Enums (canonical string vocabulary; no ad hoc integer meanings)
 // ---------------------------------------------------------------------------
@@ -661,6 +663,18 @@ pub struct CreateAppRequest {
     /// (`PLATFORM_APP_DOMAIN_SUFFIXES`). Absent means the catalog applies.
     #[serde(rename = "appDomainSuffixes", default)]
     pub app_domain_suffixes: Option<Vec<String>>,
+    /// Optional **source specs** declared with the app.
+    ///
+    /// One app legitimately owns several sources of different specs (a PC build
+    /// and an H5 build); declaring them here is what lets a single create call
+    /// produce an app whose one publishing hostname already routes by client
+    /// class, instead of forcing "create an empty shell, then compose".
+    ///
+    /// Absent and empty are the same thing: no specs. The specs land in the
+    /// app's `default_environment`, so a caller that also overrides
+    /// `defaultEnvironment` gets them in the environment it named.
+    #[serde(rename = "sourceSpecs", default)]
+    pub source_specs: Option<Vec<AppSourceSpecDefinition>>,
     #[serde(rename = "idempotencyKey", default)]
     pub idempotency_key: Option<String>,
 }
@@ -725,7 +739,9 @@ pub struct UpdateAppRequest {
 
 /// Distinguishes "field absent" (`None`) from "field present and `null`"
 /// (`Some(None)`) for PATCH-style optional clears.
-fn deserialize_double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+pub(crate) fn deserialize_double_option<'de, D, T>(
+    deserializer: D,
+) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::Deserialize<'de>,

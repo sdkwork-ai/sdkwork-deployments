@@ -164,20 +164,21 @@ const en = {
   // problem code on the submit. The picker applies the same rules one row at a
   // time; these describe the set those rows add up to.
   coverageIdentifierLimit: "A certificate may cover at most 100 hostnames; remove some before adding more.",
-  coveragePick: "Choose hostnames",
+  coveragePick: "Choose a hostname",
   coverageRootDomain: "Root domain: {apex}",
-  coverageRootDomainUnset: "No root domain chosen yet. Open the list to choose one and the hostnames to cover.",
-  coverageSingleDomainLimit: "A single-domain certificate covers exactly one hostname. Remove it first, or switch to Wildcard to cover subdomains.",
+  coverageRootDomainUnset: "No root domain chosen yet. Open the list to choose one and the hostname to cover.",
   coverageTooLong: "Too long: one label allows up to 63 characters and the whole hostname up to 253.",
   coverageWildcardRequired: "A wildcard certificate needs at least one wildcard hostname, so that it covers the subdomains.",
   coverageWillDeclare: "{count} of these are not declared under this root domain yet and will be created when you submit: {hostnames}.",
   hostnameCandidates: "Declared hostnames in this root domain",
-  hostnamePickerCount: "{count} hostnames chosen",
+  hostnamePickerChooseHostname: "Choose {hostname}",
+  hostnamePickerChosen: "Chosen",
+  hostnamePickerChosenName: "Chosen: {hostname}",
   hostnamePickerHint: "The root domain itself is in this list; select it to cover the bare name.",
+  hostnamePickerNoChoice: "No hostname chosen yet",
   hostnamePickerNoMatch: "No hostname in this root domain matches the filter.",
-  hostnamePickerSelected: "{count} chosen",
-  hostnamePickerTitle: "Choose covered hostnames",
-  hostnameRequired: "Choose the hostnames to cover.",
+  hostnamePickerTitle: "Choose the covered hostname",
+  hostnameRequired: "Choose the hostname to cover.",
   noActiveRootDomain: "Define and activate a root domain under Domains first.",
   ownershipCheckNow: "Check now",
   ownershipChecking: "Checking...",
@@ -248,8 +249,7 @@ const en = {
   // a heading that has to be ellipsised is not a heading.
   bindings: "Bindings",
   hostnameQualified: "Full hostname",
-  hostnameDeclareNote: "The name is declared under this root domain as soon as it is created, and is selected for coverage when the certificate type allows it.",
-  select: "Select",
+  hostnameDeclareNote: "The name is declared under this root domain as soon as it is created, and is chosen for coverage when the certificate type allows it.",
   // 「每页条数」是框架 DataTable 分页控件的标签，四张表共用同一份文案。
   rowsPerPage: "Rows per page",
 } as const;
@@ -413,23 +413,24 @@ const zh: Record<keyof typeof en, string> = {
   coverageIncludedApex: "随通配符自动包含",
   coverageRetention: "到期前自动续期（默认 30 天，可按证书配置 7–90 天）；同一根域名每 7 天最多签发 50 张。",
   coverageTitle: "将签发的证书覆盖 {count} 个域名",
-  // 下列每条文案各对应"已选域名集合无法提交"的一种原因，用操作员的话直说，
-  // 避免只在提交时收到一个被掩码的问题码。弹窗逐行套用同一批规则，
-  // 这些文案描述的则是这些行加起来的集合。
+  // 下列每条文案各对应"已选域名无法提交"的一种原因，用操作员的话直说，
+  // 避免只在提交时收到一个被掩码的问题码。弹窗已经挡掉本方证书类型唯一不接受
+  // 的那种组合，这里报出的是此后改动仍可能造成的情形。
   coverageIdentifierLimit: "一张证书最多覆盖 100 个域名；请先移除部分域名再继续新增。",
   coveragePick: "选择域名",
   coverageRootDomain: "根域名：{apex}",
   coverageRootDomainUnset: "尚未选择根域名。点开列表即可选择根域名及其下要覆盖的域名。",
-  coverageSingleDomainLimit: "单域名证书只能覆盖一个域名。请先移除它，或切换到泛域名以覆盖子域名。",
   coverageTooLong: "域名过长：单个标签最多 63 个字符，整个域名最多 253 个字符。",
   coverageWildcardRequired: "泛域名证书至少需要一个通配符域名，否则无法覆盖子域名。",
   coverageWillDeclare: "其中 {count} 个尚未在该根域名下声明，提交时将一并创建：{hostnames}。",
   hostnameCandidates: "该根域名下已声明的域名",
-  hostnamePickerCount: "已选择 {count} 个域名",
-  hostnamePickerHint: "根域名本身也在列表中，勾选它即可覆盖裸域名。",
+  hostnamePickerChooseHostname: "选择 {hostname}",
+  hostnamePickerChosen: "已选",
+  hostnamePickerChosenName: "已选择 {hostname}",
+  hostnamePickerHint: "根域名本身也在列表中，选中它即可覆盖裸域名。",
+  hostnamePickerNoChoice: "尚未选择域名",
   hostnamePickerNoMatch: "该根域名下没有匹配此筛选的域名。",
-  hostnamePickerSelected: "已选 {count} 个",
-  hostnamePickerTitle: "选择覆盖域名",
+  hostnamePickerTitle: "选择覆盖的域名",
   hostnameRequired: "请选择要覆盖的域名。",
   noActiveRootDomain: "请先在域名管理中定义并启用根域名。",
   ownershipCheckNow: "立即检查",
@@ -499,8 +500,7 @@ const zh: Record<keyof typeof en, string> = {
   // 需要省略号才能放下的表头不算表头。
   bindings: "绑定",
   hostnameQualified: "完整域名",
-  hostnameDeclareNote: "创建后立即声明在该根域名下；证书类型允许时会自动勾选为覆盖域名。",
-  select: "选择",
+  hostnameDeclareNote: "创建后立即声明在该根域名下；证书类型允许时会自动选中为覆盖域名。",
   rowsPerPage: "每页条数",
 };
 

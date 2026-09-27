@@ -119,6 +119,7 @@ fn request(handler: AppMountHandler) -> UpdateAppCompositionRequest {
         delivery_policy: AppDeliveryPolicy::default(),
         security_policy: AppSecurityPolicy::default(),
         limits: AppRuntimeLimits::default(),
+        source_specs: None,
         observability_policy: AppObservabilityPolicy::default(),
     }
 }

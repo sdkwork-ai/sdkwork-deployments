@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use sdkwork_deploy_content_provider_port::ValidatedContentProviderResource;
@@ -22,6 +22,9 @@ use sdkwork_intelligence_deploy_service::{
 };
 use sqlx::{AssertSqlSafe, PgPool, Postgres, Row, Transaction};
 
+use crate::app_source_specs::{
+    load_environment_source_specs, project_source_specs, replace_environment_source_specs,
+};
 use crate::platform_app_domains::{reconcile_app_default_domains_tx, DEFAULT_BINDING_KEY_PREFIX};
 use crate::support::{new_uuid, next_id};
 use crate::DeployRepository;
@@ -30,7 +33,7 @@ const MAXIMUM_RUNTIME_GENERATION: i64 = 9_007_199_254_740_991;
 const MAXIMUM_RUNTIME_SITES: usize = 10_000;
 
 #[derive(Clone, Debug)]
-struct StoredApp {
+pub(crate) struct StoredApp {
     id: i64,
     organization_id: i64,
     version: i64,
@@ -55,7 +58,7 @@ struct StoredDomain {
 }
 
 #[derive(Clone, Debug)]
-struct StoredTarget {
+pub(crate) struct StoredTarget {
     id: i64,
     uuid: String,
     node_uuid: String,
@@ -129,10 +132,16 @@ impl DeployRepository {
         .await?;
         let resources = insert_resources(self, &mut transaction, &command, &app).await?;
         let variants = insert_variants(self, &mut transaction, &command, &app).await?;
-        let default_variant = variants
-            .get(&command.request.default_variant_key)
-            .ok_or_else(|| DeployServiceError::validation("default variant is missing"))?
-            .clone();
+        // A composition may be declared entirely from source specs, in which
+        // case it has no hand-authored variant and the spec marked `isDefault`
+        // supplies the app-level default. When the request *does* declare
+        // variants its `defaultVariantKey` decides: an explicit request field
+        // outranks a value derived from the stored spec set.
+        let composition_default_variant =
+            variants.get(&command.request.default_variant_key).cloned();
+        if composition_default_variant.is_none() && !command.request.variants.is_empty() {
+            return Err(DeployServiceError::validation("default variant is missing"));
+        }
         let runtime_rules =
             insert_variant_rules(self, &mut transaction, &command, &app, &variants).await?;
         let runtime_mounts = insert_mounts(
@@ -150,15 +159,51 @@ impl DeployRepository {
         let runtime_bindings =
             load_environment_bindings(&mut transaction, app.id, environment).await?;
 
+        // 3. Source specs. The stored set is replaced only when the request
+        //    declares one (an absent `sourceSpecs` means "leave the spec set
+        //    alone"); the *projection*, by contrast, always runs over the
+        //    environment's current set. That asymmetry is deliberate: a spec
+        //    authored on its own must be carried by every later revision rather
+        //    than dropped by the next unrelated publish.
+        if let Some(definitions) = command.request.source_specs.as_deref() {
+            replace_environment_source_specs(
+                self,
+                &mut transaction,
+                command.tenant_id,
+                app.organization_id,
+                command.actor_id,
+                app.id,
+                environment,
+                &command.generated_at,
+                definitions,
+            )
+            .await?;
+        }
+        let source_specs =
+            load_environment_source_specs(&mut transaction, command.tenant_id, app.id, environment)
+                .await?;
+        let composition_variant_keys = command
+            .request
+            .variants
+            .iter()
+            .map(|variant| variant.key.clone())
+            .collect::<BTreeSet<_>>();
+        let spec_projection = project_source_specs(&source_specs, &composition_variant_keys)?;
+        let mut runtime_rules = runtime_rules;
+        runtime_rules.extend(spec_projection.variant_rules.iter().cloned());
+        let mut runtime_mounts = runtime_mounts;
+        runtime_mounts.extend(spec_projection.mounts.iter().cloned());
+
         let revision_id = next_id(self.id_generator())?;
         let revision_uuid = new_uuid();
         let revision_number = next_revision_number(&mut transaction, app.id).await?;
-        let runtime_resources = command
+        let mut runtime_resources = command
             .resources
             .iter()
             .map(|resource| runtime_resource(resource, &resources))
             .collect::<DeployServiceResult<Vec<_>>>()?;
-        let runtime_variants = command
+        runtime_resources.extend(spec_projection.resources.iter().cloned());
+        let mut runtime_variants = command
             .request
             .variants
             .iter()
@@ -166,14 +211,31 @@ impl DeployRepository {
                 variant_uuid: variants[&variant.key].uuid.clone(),
                 label: variant.label.clone(),
             })
-            .collect();
+            .collect::<Vec<_>>();
+        runtime_variants.extend(spec_projection.variants.iter().cloned());
+        if runtime_variants.is_empty() {
+            return Err(DeployServiceError::validation(no_servable_variant_message(
+                &spec_projection.skipped_unbound,
+            )));
+        }
         let compiled = compile_app_revision(AppRuntimeCompilationInput {
             revision_uuid: revision_uuid.clone(),
             app_uuid: command.app_uuid.clone(),
             tenant_scope_hash,
             environment: runtime_environment(command.request.environment),
             generated_at: command.generated_at.clone(),
-            app_default_variant_uuid: default_variant.uuid.clone(),
+            app_default_variant_uuid: match &composition_default_variant {
+                Some(variant) => variant.uuid.clone(),
+                None => spec_projection
+                    .default_variant_uuid
+                    .clone()
+                    .ok_or_else(|| {
+                        DeployServiceError::validation(
+                            "a composition declared from source specs needs exactly one spec with \
+                         isDefault set",
+                        )
+                    })?,
+            },
             bindings: runtime_bindings,
             variants: runtime_variants,
             variant_rules: runtime_rules,
@@ -236,7 +298,9 @@ impl DeployRepository {
             &mut transaction,
             &command,
             app.id,
-            default_variant.id,
+            composition_default_variant
+                .as_ref()
+                .map(|variant| variant.id),
             revision_id,
         )
         .await?;
@@ -280,7 +344,35 @@ impl DeployRepository {
     }
 }
 
-async fn begin_transaction(pool: &PgPool) -> DeployServiceResult<Transaction<'static, Postgres>> {
+/// The publish that has nothing to route.
+///
+/// An empty variant set has two very different causes, and the operator can only
+/// act on the difference: a spec declared without a source needs an upload,
+/// whereas a composition that declared neither needs another field. Naming the
+/// unbound specs is the point -- "no variants" alone sends the caller to the
+/// wrong place.
+fn no_servable_variant_message(skipped_unbound: &[String]) -> String {
+    if skipped_unbound.is_empty() {
+        "a composition must declare at least one variant, or at least one source spec with a \
+         bound source"
+            .to_owned()
+    } else {
+        format!(
+            "no source spec is servable yet: {} {} declared without a source; upload a source to \
+             at least one spec and mark it isDefault before publishing",
+            skipped_unbound.join(", "),
+            if skipped_unbound.len() == 1 {
+                "is"
+            } else {
+                "are"
+            },
+        )
+    }
+}
+
+pub(crate) async fn begin_transaction(
+    pool: &PgPool,
+) -> DeployServiceResult<Transaction<'static, Postgres>> {
     pool.begin()
         .await
         .map_err(|error| composition_store_error("begin app composition transaction", error))
@@ -321,7 +413,7 @@ async fn load_idempotent_result(
         .map_err(|_| DeployServiceError::Internal("invalid idempotency result".to_owned()))
 }
 
-async fn lock_app(
+pub(crate) async fn lock_app(
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
 ) -> DeployServiceResult<StoredApp> {
@@ -354,7 +446,7 @@ async fn lock_app(
     Ok(app)
 }
 
-async fn reserve_app_version(
+pub(crate) async fn reserve_app_version(
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
     app: &StoredApp,
@@ -377,7 +469,7 @@ async fn reserve_app_version(
     Ok(())
 }
 
-async fn load_targets(
+pub(crate) async fn load_targets(
     transaction: &mut Transaction<'static, Postgres>,
     tenant_id: i64,
     environment: &str,
@@ -415,7 +507,9 @@ async fn load_targets(
         .collect()
 }
 
-fn consistent_tenant_scope_hash(targets: &[StoredTarget]) -> DeployServiceResult<String> {
+pub(crate) fn consistent_tenant_scope_hash(
+    targets: &[StoredTarget],
+) -> DeployServiceResult<String> {
     let scope = targets
         .first()
         .map(|target| target.tenant_scope_hash.clone())
@@ -848,7 +942,7 @@ async fn reconcile_bindings(
 /// `deploy_app_binding` rows the Web Server lookup matches on are the rows the
 /// compiled descriptor routes on, so an auto-provisioned platform publishing
 /// domain is routable without the client re-declaring it.
-async fn load_environment_bindings(
+pub(crate) async fn load_environment_bindings(
     transaction: &mut Transaction<'static, Postgres>,
     app_id: i64,
     environment: &str,
@@ -1069,7 +1163,7 @@ fn runtime_resource(
     })
 }
 
-async fn next_revision_number(
+pub(crate) async fn next_revision_number(
     transaction: &mut Transaction<'static, Postgres>,
     app_id: i64,
 ) -> DeployServiceResult<i64> {
@@ -1086,7 +1180,7 @@ async fn next_revision_number(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn insert_revision(
+pub(crate) async fn insert_revision(
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
     app: &StoredApp,
@@ -1144,11 +1238,17 @@ async fn insert_revision(
     Ok(())
 }
 
-async fn update_site_revision_pointers(
+/// Points the app at the revision just compiled.
+///
+/// `default_variant_id` is `Option` because a composition declared entirely from
+/// source specs has no `deploy_app_variant` row to name: its default variant
+/// exists only in the descriptor, where the edge reads it. Writing `NULL` states
+/// that honestly and keeps the foreign key satisfied.
+pub(crate) async fn update_site_revision_pointers(
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
     app_id: i64,
-    default_variant_id: i64,
+    default_variant_id: Option<i64>,
     revision_id: i64,
 ) -> DeployServiceResult<()> {
     sqlx::query(
@@ -1173,7 +1273,7 @@ async fn update_site_revision_pointers(
 /// deliberately not used: it holds whichever environment converged last, so a
 /// runtime set published for `development` could carry another environment's
 /// composition for the sibling apps.
-async fn load_other_descriptors(
+pub(crate) async fn load_other_descriptors(
     transaction: &mut Transaction<'static, Postgres>,
     tenant_id: i64,
     excluded_app_id: i64,
@@ -1214,7 +1314,7 @@ async fn load_other_descriptors(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn insert_runtime_assignments(
+pub(crate) async fn insert_runtime_assignments(
     repository: &DeployRepository,
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
@@ -1315,7 +1415,7 @@ async fn next_target_generation(
         .map_err(|_| DeployServiceError::Internal("invalid runtime generation".to_owned()))
 }
 
-async fn persist_command_result(
+pub(crate) async fn persist_command_result(
     transaction: &mut Transaction<'static, Postgres>,
     revision_id: i64,
     response: &AppCompositionResponse,
@@ -1332,7 +1432,7 @@ async fn persist_command_result(
     Ok(())
 }
 
-async fn insert_composition_audit(
+pub(crate) async fn insert_composition_audit(
     repository: &DeployRepository,
     transaction: &mut Transaction<'static, Postgres>,
     command: &ReplaceAppCompositionCommand,
@@ -1369,7 +1469,7 @@ async fn insert_composition_audit(
     Ok(())
 }
 
-fn runtime_environment(
+pub(crate) fn runtime_environment(
     environment: sdkwork_deploy_contract::AppPublishEnvironment,
 ) -> RuntimeEnvironment {
     match environment {
@@ -1392,7 +1492,7 @@ fn provider_type_name(provider_type: RuntimeProviderType) -> &'static str {
     }
 }
 
-fn client_class_name(client_class: AppClientClass) -> &'static str {
+pub(crate) fn client_class_name(client_class: AppClientClass) -> &'static str {
     match client_class {
         AppClientClass::Desktop => "DESKTOP",
         AppClientClass::Mobile => "MOBILE",
@@ -1403,7 +1503,7 @@ fn client_class_name(client_class: AppClientClass) -> &'static str {
     }
 }
 
-fn runtime_client_class(client_class: AppClientClass) -> RuntimeClientClass {
+pub(crate) fn runtime_client_class(client_class: AppClientClass) -> RuntimeClientClass {
     match client_class {
         AppClientClass::Desktop => RuntimeClientClass::Desktop,
         AppClientClass::Mobile => RuntimeClientClass::Mobile,
@@ -1428,7 +1528,7 @@ fn runtime_mount_mode(mode: AppMountMode) -> RuntimeMountMode {
     }
 }
 
-fn mount_handler_name(handler: AppMountHandler) -> &'static str {
+pub(crate) fn mount_handler_name(handler: AppMountHandler) -> &'static str {
     match handler {
         AppMountHandler::Static => "STATIC",
         AppMountHandler::Spa => "SPA",
@@ -1436,7 +1536,7 @@ fn mount_handler_name(handler: AppMountHandler) -> &'static str {
     }
 }
 
-fn runtime_handler(handler: AppMountHandler) -> RuntimeHandler {
+pub(crate) fn runtime_handler(handler: AppMountHandler) -> RuntimeHandler {
     match handler {
         AppMountHandler::Static => RuntimeHandler::Static,
         AppMountHandler::Spa => RuntimeHandler::Spa,
@@ -1455,7 +1555,7 @@ fn invalid_stored_target() -> DeployServiceError {
     DeployServiceError::Internal("invalid Web Node target".to_owned())
 }
 
-fn composition_store_error(context: &str, error: sqlx::Error) -> DeployServiceError {
+pub(crate) fn composition_store_error(context: &str, error: sqlx::Error) -> DeployServiceError {
     tracing::error!(error = %error, "{context}");
     match &error {
         sqlx::Error::Database(database) if database.is_unique_violation() => {
