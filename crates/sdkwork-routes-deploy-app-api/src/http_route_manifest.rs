@@ -45,7 +45,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "domain",
         "domainZones.hostnames.list",
     )
-    .with_required_permission("deploy.domainZones.write"),
+    .with_required_permission("deploy.domainZones.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/domain_zones/{zoneId}/hostnames",
@@ -60,7 +60,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "domain",
         "domainZones.hostnames.retrieve",
     )
-    .with_required_permission("deploy.domainZones.write"),
+    .with_required_permission("deploy.domainZones.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
@@ -149,7 +149,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "certificate",
         "certificates.renewals.list",
     )
-    .with_required_permission("deploy.certificates.write"),
+    .with_required_permission("deploy.certificates.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/upload_sessions",
@@ -243,7 +243,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "app",
         "apps.domains.list",
     )
-    .with_required_permission("deploy.apps.write"),
+    .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Put,
         "/app/v3/api/apps/{appId}/composition",
@@ -266,7 +266,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "envVariable",
         "apps.envVariables.list",
     )
-    .with_required_permission("deploy.apps.write"),
+    .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/env_variables",
@@ -281,7 +281,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "monitor",
         "apps.healthChecks.list",
     )
-    .with_required_permission("deploy.apps.write"),
+    .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/health_checks",
@@ -296,7 +296,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "app",
         "apps.sourceSpecs.list",
     )
-    .with_required_permission("deploy.apps.write"),
+    .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/source_specs",
@@ -311,7 +311,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "app",
         "apps.sourceSpecs.retrieve",
     )
-    .with_required_permission("deploy.apps.write"),
+    .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
         "/app/v3/api/apps/{appId}/source_specs/{specId}",
@@ -500,7 +500,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "release",
         "channels.rollouts.list",
     )
-    .with_required_permission("deploy.channels.write"),
+    .with_required_permission("deploy.channels.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/deployments",

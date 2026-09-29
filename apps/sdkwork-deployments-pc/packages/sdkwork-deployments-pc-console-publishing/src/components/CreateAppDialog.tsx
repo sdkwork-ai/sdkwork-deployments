@@ -8,10 +8,15 @@
  *
  * 交互（单页，非分步）：
  *   1. 应用类型（appKind，网格；决定平台目标与截图尺寸档位）
- *   2. 应用名称 + slug（留空由名称推导）
- *   3. 应用分类（deploy_app.metadata.category）
+ *   2. 应用名称（slug 不再出现在表单里 —— v7 起一律自动生成）
+ *   3. 应用分类（可选，最多三级）
  *   4. 应用资料（可选）：图标 / 封面图 / 应用预览效果图（多图，按设备尺寸档位）
- *   5. 应用描述（deploy_app.description）
+ *   5. 应用描述
+ *
+ * v7：应用标识（slug）从表单移除。它是面向机器的路由键，不是用户要决策的
+ * 内容：ASCII 名称由 service 层从名称推导（`deriveAppSlug`），纯中文名称
+ * 推导不出时由服务端生成随机 slug，两条路径都不需要人工介入。推导冲突
+ * （同名应用）在提交时以「换个应用名称」的可操作文案报出。
  *
  * 持久化严格走 sdkwork-deployments 现有表结构：`deploy_app`
  * （name/slug/app_kind/description/metadata），媒体先落 Drive 再以
@@ -85,7 +90,6 @@ export function CreateAppDialog({
 
   const [cardId, setCardId] = useState<string>()
   const [name, setName] = useState("")
-  const [slug, setSlug] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState<DeployAppCategorySelection>()
   const [media, setMedia] = useState<DeployAppMediaFiles>({ screenshots: {} })
@@ -166,10 +170,11 @@ export function CreateAppDialog({
     setUploadingLabel(undefined)
     try {
       // 1) 只登记应用身份（名称/类型/分类/描述）—— 不发布、不写平台目标。
+      //    slug 一律自动生成：不传该字段，service 层由名称推导，纯中文等
+      //    推导不出的名称由服务端生成随机 slug。
       const created = await service.createAppRecord({
         name,
         appKind,
-        ...(slug.trim() === "" ? {} : { slug: slug.trim() }),
         ...(description.trim() === "" ? {} : { description: description.trim() }),
         ...(category === undefined ? {} : { category }),
       })
@@ -233,18 +238,6 @@ export function CreateAppDialog({
               placeholder={t("applicationNamePlaceholder")}
               onChange={(event) => { setName(event.target.value) }}
             />
-            <span className={css.fieldHint}>{t("applicationNameHint")}</span>
-          </div>
-
-          <div className={css.field}>
-            <span className={css.fieldLabel}>{t("appSlug")}</span>
-            <input
-              className={css.input}
-              value={slug}
-              placeholder={t("appSlugPlaceholder")}
-              onChange={(event) => { setSlug(event.target.value) }}
-            />
-            <span className={css.fieldHint}>{t("appSlugHint")}</span>
           </div>
 
           <div className={css.field}>

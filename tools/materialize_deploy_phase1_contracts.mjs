@@ -192,11 +192,19 @@ function enrichOpenApi(openapi, profile) {
         // x-sdkwork-auth-mode, but no specific permission is required.
         delete operation["x-sdkwork-permission"];
       } else if (!operation["x-sdkwork-permission"] && operation.operationId) {
-        const [resource, action] = operation.operationId.split(".");
+        // The verb is carried by the operationId's **last** segment, not its
+        // second. A nested resource puts a sub-domain in the middle
+        // (`apps.sourceSpecs.list`), and reading that segment as the action
+        // classified every nested read as a write — nine `list`/`retrieve`
+        // routes (apps.domains, apps.envVariables, apps.healthChecks,
+        // apps.sourceSpecs, domainZones.hostnames, certificates.renewals,
+        // channels.rollouts) demanded `write` from read-only callers.
+        const segments = operation.operationId.split(".");
+        const action = segments[segments.length - 1];
         const verb = action?.includes("list") || action?.includes("retrieve")
           ? "read"
           : "write";
-        operation["x-sdkwork-permission"] = `deploy.${resource}.${verb}`;
+        operation["x-sdkwork-permission"] = `deploy.${segments[0]}.${verb}`;
       }
       if (
         method === "post" &&

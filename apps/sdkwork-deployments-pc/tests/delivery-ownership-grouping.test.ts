@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  groupOwnershipRecords,
-  rowMatchesFilterTab,
-  scopeFilterTab,
-} from "../packages/sdkwork-deployments-pc-console-delivery/src/DeliveryManagement.tsx";
+import { groupOwnershipRecords } from "../packages/sdkwork-deployments-pc-console-delivery/src/DeliveryManagement.tsx";
 import type { DomainHostnameClaimResponse, DomainHostnameResponse } from "@sdkwork/deployments-app-sdk";
 
 // The panel used to be built claim by claim, and a wildcard certificate plans two
@@ -16,9 +12,9 @@ import type { DomainHostnameClaimResponse, DomainHostnameResponse } from "@sdkwo
 // check the code had: the claims were correct, the values were correct, and only
 // the grouping was wrong.
 //
-// The routing and filtering cases are here for the same reason: they are the two
-// decisions the coverage picker makes, extracted so they can be driven without a
-// browser.
+// The picker-routing half of the original specification — `scopeFilterTab` and
+// `rowMatchesFilterTab` — is still parked in `tests/pending/`, and for a reason
+// the grouping does not share: see that directory's README.
 
 const ZONE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -130,30 +126,5 @@ describe("ownership records are grouped by DNS record, not by hostname", () => {
     expect(groups[0]?.hostnames).toEqual(["example.com"]);
     // Publishing the same digest twice is a duplicate TXT, not a second record.
     expect(groups[0]?.values).toEqual(["same", "other"]);
-  });
-});
-
-describe("the coverage picker's filter follows the certificate type", () => {
-  it("opens on the tab the certificate type can actually cover", () => {
-    expect(scopeFilterTab("WILDCARD")).toBe("wildcard");
-    expect(scopeFilterTab("SINGLE_DOMAIN")).toBe("exact");
-  });
-
-  it("offers only the names the open tab stands for", () => {
-    const wildcard = hostname("*.example.com", "WILDCARD");
-    const apex = hostname("example.com");
-    const sub = hostname("api.example.com");
-
-    expect(rowMatchesFilterTab(wildcard, "wildcard")).toBe(true);
-    expect(rowMatchesFilterTab(apex, "wildcard")).toBe(false);
-    expect(rowMatchesFilterTab(sub, "wildcard")).toBe(false);
-
-    expect(rowMatchesFilterTab(apex, "exact")).toBe(true);
-    expect(rowMatchesFilterTab(sub, "exact")).toBe(true);
-    expect(rowMatchesFilterTab(wildcard, "exact")).toBe(false);
-
-    // "All" is the union, and stays a union: it is the tab that would hide nothing
-    // if the certificate type ever left it open.
-    for (const row of [wildcard, apex, sub]) expect(rowMatchesFilterTab(row, "all")).toBe(true);
   });
 });

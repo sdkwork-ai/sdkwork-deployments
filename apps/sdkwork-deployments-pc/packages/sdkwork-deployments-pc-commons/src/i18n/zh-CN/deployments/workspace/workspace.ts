@@ -56,6 +56,8 @@ export const deploymentsWorkspaceZhCn = {
   "resource.audit.description": "查看运维操作证据",
   "resource.localProjects.label": "本地项目",
   "resource.localProjects.description": "管理 Docker 部署模块、本地节点与 Drive 沙箱文件浏览器",
+  "resource.sourceSpecs.label": "源码规格",
+  "resource.sourceSpecs.description": "逐应用查看每类客户端由哪份已上传源码服务",
   "action.apps.create": "创建应用",
   "action.apps.update": "更新",
   "action.apps.activate": "启用",

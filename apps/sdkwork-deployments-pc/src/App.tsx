@@ -1,4 +1,5 @@
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
+import { sourceSpecsModule, SourceSpecsAdminPage } from "@sdkwork/deployments-pc-admin-core";
 import { deploymentsModule as adminAudit } from "@sdkwork/deployments-pc-admin-audit";
 import { deploymentsModule as infrastructure } from "@sdkwork/deployments-pc-admin-infrastructure";
 import {
@@ -18,6 +19,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { DeploymentsAuthGate } from "./auth/DeploymentsAuthGate.tsx";
 import type { BootstrappedDeploymentsRuntime } from "./bootstrap/runtime.ts";
+import { createSourceSpecsAdminPort } from "./ports/source-specs-admin-port.ts";
 
 const consoleModules = [publishing, delivery, monitoring] satisfies readonly DeploymentsPcModuleDefinition[];
 const LazyDomainManagementPage = lazy(() => import("@sdkwork/deployments-pc-console-delivery/management").then((module) => ({ default: module.DomainManagementPage })));
@@ -34,8 +36,13 @@ function PublishingAppsBridge({ locale }: { locale: DeploymentsLocale }) {
 }
 
 const consoleResourcePages = { apps: PublishingAppsBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
-const adminModules = [localProjects, infrastructure, adminNodes, adminAudit] satisfies readonly DeploymentsPcModuleDefinition[];
-const adminResourcePages = { localProjects: LocalProjectsPage } as const;
+const adminModules = [localProjects, infrastructure, adminNodes, adminAudit, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
+/**
+ * The source-specs ledger mounts straight from the capability that owns the
+ * vocabulary: unlike `PublishingAppsBridge`, it needs no clients injected —
+ * it reads through its port from context. So the component goes in as-is.
+ */
+const adminResourcePages = { localProjects: LocalProjectsPage, sourceSpecs: SourceSpecsAdminPage } as const;
 const LazyAuth = lazy(() => import("./auth/DeploymentsAuthRoutes.tsx").then((module) => ({ default: module.DeploymentsAuthRoutes })));
 const LazyAdmin = lazy(() => import("./surfaces/DeploymentsAdminSurface.tsx").then((module) => ({ default: module.DeploymentsAdminSurface })));
 
@@ -53,6 +60,13 @@ function Authenticated({ runtime }: { runtime: BootstrappedDeploymentsRuntime })
   const sandboxExplorerPort = useMemo(
     () => createDriveSandboxExplorerSdkPort({ client: runtime.clients.drive }),
     [runtime.clients.drive],
+  );
+  // Same shape of adapter, same reason: the admin surface's own client is the
+  // backend-admin one, which cannot answer "which source serves this client
+  // class". The app-plane client can, so the projection is built here.
+  const sourceSpecsPort = useMemo(
+    () => createSourceSpecsAdminPort({ deployClient: runtime.clients.deploy, locale: runtime.locale }),
+    [runtime.clients.deploy, runtime.locale],
   );
   const permissionScope = state.session?.context?.permissionScope ?? [];
   const userLabel = state.user?.displayName || state.user?.email;
@@ -95,6 +109,7 @@ function Authenticated({ runtime }: { runtime: BootstrappedDeploymentsRuntime })
                   permissionScope={permissionScope}
                   resourcePages={adminResourcePages}
                   sandboxExplorerPort={sandboxExplorerPort}
+                  sourceSpecsPort={sourceSpecsPort}
                   tokenManager={runtime.tokenManager}
                   userLabel={userLabel}
                   onSignOut={signOut}

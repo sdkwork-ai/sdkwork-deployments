@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Boxes, FileKey2, FolderTree, Globe2, LogOut, Network, Package, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shield, Tags, Upload, X } from "lucide-react";
+import { Activity, AppWindow, Boxes, FileKey2, FolderTree, Globe2, Layers, LogOut, Network, Package, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shield, Tags, Upload, X } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
@@ -181,6 +181,10 @@ function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
     nodes: Server,
     audit: ScrollText,
     localProjects: FolderTree,
+    // `Layers` rather than a second `AppWindow`: on the admin surface this
+    // resource is *not* the application ledger, it is the stack of sources
+    // behind it, and the console already uses `Layers` for the same idea.
+    sourceSpecs: Layers,
   } satisfies Record<DeploymentsResourceKey, typeof AppWindow>;
   const Icon = icons[resource];
   return <Icon size={17} />;

@@ -168,7 +168,12 @@ export function AppDetailDrawer({
             {detail === undefined
               ? <span className={css.fieldHint}>{t("detailLoading")}</span>
               : detail.platformTargets.length === 0
-                ? <span className={css.fieldHint}>{t("detailTargetsEmpty")}</span>
+                // An empty list has two causes and they are not interchangeable:
+                // the read failed (the section stays tolerant so the rest of the
+                // drawer still renders) or the application genuinely has none.
+                ? <span className={css.fieldHint}>
+                  {t(detail.unavailableSections.includes("platformTargets") ? "detailSectionUnavailable" : "detailTargetsEmpty")}
+                </span>
                 : (
                   <div className={css.domainTable}>
                     {detail.platformTargets.map((target) => (
@@ -198,7 +203,10 @@ export function AppDetailDrawer({
             {detail === undefined
               ? <span className={css.fieldHint}>{t("detailLoading")}</span>
               : detail.sourceRepositories.length === 0
-                ? <span className={css.fieldHint}>{t("detailSourceEmpty")}</span>
+                // Same two causes as the targets section above.
+                ? <span className={css.fieldHint}>
+                  {t(detail.unavailableSections.includes("sourceRepositories") ? "detailSectionUnavailable" : "detailSourceEmpty")}
+                </span>
                 : detail.sourceRepositories.map((repository) => (
                   <div key={repository.id} className={css.dnsGuide}>
                     <span className={css.dnsGuideTitle}>

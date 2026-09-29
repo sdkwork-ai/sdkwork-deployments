@@ -110,6 +110,7 @@ const en = {
   providerZoneRef: "Provider zone reference",
   recordName: "TXT record name",
   recordValue: "TXT record value",
+  recordValueOf: "TXT record value {index} of {total}",
   refresh: "Refresh",
   relativeName: "Host record",
   relativeNameHint: "What the provider's host/name field wants: the record owner without the root domain. Use @ for the root, a label path such as api.eu for multi-level subdomains, or * / *.a for wildcards (leftmost label only).",
@@ -171,12 +172,23 @@ const en = {
   coverageWildcardRequired: "A wildcard certificate needs at least one wildcard hostname, so that it covers the subdomains.",
   coverageWillDeclare: "{count} of these are not declared under this root domain yet and will be created when you submit: {hostnames}.",
   hostnameCandidates: "Declared hostnames in this root domain",
+  hostnamePickerAddWildcard: "Add {wildcard}",
   hostnamePickerChooseHostname: "Choose {hostname}",
   hostnamePickerChosen: "Chosen",
   hostnamePickerChosenName: "Chosen: {hostname}",
   hostnamePickerHint: "The root domain itself is in this list; select it to cover the bare name.",
+  // The wildcard scope reads the same pane the opposite way, and the line above
+  // would be advice that cannot be followed there.
+  hostnamePickerHintWildcard: "A wildcard certificate is built from a wildcard hostname; the root domain is included with it automatically, and DNS-01 is required.",
   hostnamePickerNoChoice: "No hostname chosen yet",
   hostnamePickerNoMatch: "No hostname in this root domain matches the filter.",
+  // The one state where every row is refused, so it has to say what is missing
+  // *and* be the place that declares it.
+  hostnamePickerNoWildcardHostname: "This root domain declares no wildcard hostname, and a wildcard certificate can only be built from one. Add {wildcard} here and verify its TXT record, then choose it.",
+  // Why a row is refused. Both are `PLAN-2026-0003` §5.2 rules, so the row names
+  // the rule it broke instead of leaving a dead control to be guessed at.
+  hostnamePickerRefusedExactUnderWildcard: "A wildcard certificate is built from a wildcard hostname, so this exact name cannot be covered. Choose the wildcard hostname instead.",
+  hostnamePickerRefusedWildcardUnderSingleDomain: "A single-domain certificate covers one exact hostname. Switch the certificate type to wildcard to cover this name.",
   hostnamePickerTitle: "Choose the covered hostname",
   hostnameRequired: "Choose the hostname to cover.",
   noActiveRootDomain: "Define and activate a root domain under Domains first.",
@@ -184,6 +196,7 @@ const en = {
   ownershipChecking: "Checking...",
   ownershipRequiredHint: "A certificate can only cover hostnames this tenant has proven control of. Publish the TXT records below, then check again.",
   ownershipRequiredTitle: "Verify hostname ownership first",
+  ownershipSharedRecordHint: "Both values belong at that one name: the wildcard and the root domain share this TXT record, so publish every value rather than one of them.",
   ownershipWillSubmit: "The certificate request is submitted automatically once every hostname is verified.",
   scopeSingleDomain: "Single domain",
   scopeSingleDomainHint: "Issues one exact hostname.",
@@ -364,6 +377,7 @@ const zh: Record<keyof typeof en, string> = {
   providerZoneRef: "服务商 Zone 标识",
   recordName: "TXT 记录名称",
   recordValue: "TXT 记录值",
+  recordValueOf: "TXT 记录值 {index}/{total}",
   refresh: "刷新",
   relativeName: "主机记录",
   relativeNameHint: "填入服务商控制台的「主机记录」/「Host」字段：不含根域名的那部分。根域名填 @；多级子域名如 api.eu；通配符填 * 或 *.a（仅限最左侧标签）。",
@@ -424,12 +438,21 @@ const zh: Record<keyof typeof en, string> = {
   coverageWildcardRequired: "泛域名证书至少需要一个通配符域名，否则无法覆盖子域名。",
   coverageWillDeclare: "其中 {count} 个尚未在该根域名下声明，提交时将一并创建：{hostnames}。",
   hostnameCandidates: "该根域名下已声明的域名",
+  hostnamePickerAddWildcard: "新增 {wildcard}",
   hostnamePickerChooseHostname: "选择 {hostname}",
   hostnamePickerChosen: "已选",
   hostnamePickerChosenName: "已选择 {hostname}",
   hostnamePickerHint: "根域名本身也在列表中，选中它即可覆盖裸域名。",
+  // 泛域名作用域对同一份列表的读法相反，上面那句在这里是照做不了的提示。
+  hostnamePickerHintWildcard: "泛域名证书由通配符主机名构成；根域名会随之自动包含，且必须使用 DNS-01 验证。",
   hostnamePickerNoChoice: "尚未选择域名",
   hostnamePickerNoMatch: "该根域名下没有匹配此筛选的域名。",
+  // 唯一一种「整屏都不可选」的状态，因此必须说明缺什么，并且就地把它补上。
+  hostnamePickerNoWildcardHostname: "该根域名下没有通配符主机名，而泛域名证书只能由通配符主机名构成。请先在此新增 {wildcard} 并完成 TXT 验证，然后再选择它。",
+  // 行被拒的原因。两条都是 `PLAN-2026-0003` §5.2 的规则，所以行内直接说明违反了哪条，
+  // 而不是留下一个只能靠猜的禁用控件。
+  hostnamePickerRefusedExactUnderWildcard: "泛域名证书由通配符主机名构成，此精确域名不可选。请改选通配符主机名。",
+  hostnamePickerRefusedWildcardUnderSingleDomain: "单域名证书只覆盖一个精确域名。如需覆盖该名，请把证书类型切换为泛域名。",
   hostnamePickerTitle: "选择覆盖的域名",
   hostnameRequired: "请选择要覆盖的域名。",
   noActiveRootDomain: "请先在域名管理中定义并启用根域名。",
@@ -437,6 +460,7 @@ const zh: Record<keyof typeof en, string> = {
   ownershipChecking: "检查中...",
   ownershipRequiredHint: "证书只能覆盖已证明归属的域名。请发布下列 DNS TXT 记录后点击立即检查。",
   ownershipRequiredTitle: "需要先完成域名所有权验证",
+  ownershipSharedRecordHint: "两个记录值必须并存于同一条记录：通配符与根域名共用这条 TXT 记录，请全部发布，不要只留一个。",
   ownershipWillSubmit: "全部域名验证通过后将自动提交证书申请。",
   scopeSingleDomain: "单域名",
   scopeSingleDomainHint: "签发单个精确域名。",

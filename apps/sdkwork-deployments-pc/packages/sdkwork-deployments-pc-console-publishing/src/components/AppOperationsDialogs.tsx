@@ -8,7 +8,10 @@
  *
  * - `edit`     -> deploy_app metadata (name / description)
  * - `code`     -> deploy_app_source_repository
- * - `publish`  -> deploy_app_release, cut from an already-registered package
+ * - `publish`  -> deploy_app_release (cut from an already-registered package)
+ *                 plus deploy_deployment (the execution request against that
+ *                 release); the two stay separate commands so the ledger can
+ *                 report the deployment as submitted rather than live
  * - `delete`   -> deliberately has no dialog: the app-api contract defines no
  *                 `apps.delete`, so the ledger renders that slot disabled with
  *                 the reason instead of a button that cannot act.
@@ -25,7 +28,7 @@ import type { AppResponse } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { publishingTranslator, type PublishingTranslator } from "../i18n.ts";
-import { isValidSemver, type DeployAppPublishingService } from "../service/deploy-app-publishing.ts";
+import { cardsOfAppKind, isValidSemver, type DeployAppPublishingService } from "../service/deploy-app-publishing.ts";
 
 /** Repo hosts the app-api accepts; the picker offers exactly the contract's set. */
 const REPO_PROVIDERS = ["GITHUB", "GITEE", "GITLAB", "SELF_HOSTED"] as const;
@@ -324,6 +327,9 @@ export function AppPublishDialog({ app, locale, onClose, onSaved, service }: App
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // Set once both commands land. It holds the deployment's *own* status so the
+  // panel can report what the server said instead of a phrase we picked.
+  const [submitted, setSubmitted] = useState<{ releaseId: string; deploymentStatus: string }>();
 
   useEffect(() => {
     let active = true;
@@ -348,37 +354,119 @@ export function AppPublishDialog({ app, locale, onClose, onSaved, service }: App
 
   const options = targets !== undefined && packages !== undefined;
   const versionValid = isValidSemver(version);
-  const ready = platformTargetId.length > 0 && packageId.length > 0 && versionValid;
+  // `cardsOfAppKind` is the service's documented reverse lookup: `app_kind` → the
+  // cards that could have produced it. Exactly one candidate is the case its
+  // contract hands to this dialog ("只有一个候选时直接锁定"); more than one means
+  // the kind does not record the surface, which it explicitly forbids guessing
+  // ("不能武断取第一个") — so that state stays refused instead of inventing one.
+  const candidates = useMemo(() => cardsOfAppKind(app.appKind), [app.appKind]);
+  const targetMode: "select" | "bootstrap" | "unsupported" | "ambiguous" =
+    (targets?.length ?? 0) > 0
+      ? "select"
+      : candidates.length === 0
+        ? "unsupported"
+        : candidates.length === 1
+          ? "bootstrap"
+          : "ambiguous";
+  const bootstrapCard = targetMode === "bootstrap" ? candidates[0] : undefined;
+  const ready =
+    (targetMode === "select" ? platformTargetId.length > 0 : targetMode === "bootstrap")
+    && packageId.length > 0
+    && versionValid;
 
   async function submit(): Promise<void> {
     setBusy(true);
     setError(undefined);
+    // Two commands, in order: the release is an immutable record, the
+    // deployment is the execution request that points at it. They are separate
+    // on the wire (`DEPLOYMENT_SPEC.md` §1.4), so a refused deployment leaves a
+    // real release behind — and the error has to say so, or the operator's
+    // retry silently cuts a second release for the same package.
+    let released = false;
     try {
-      await service.publishAppRelease(app.id, { packageId, platformTargetId, releaseNotes: notes, semanticVersion: version });
+      // A freshly created application owns no platform target: the create step
+      // deliberately leaves that to publication, so publishing is the step that
+      // has to write it — otherwise the release would land nowhere.
+      const targetId = bootstrapCard === undefined
+        ? platformTargetId
+        : (await service.createPlatformTargetForCard(app.id, bootstrapCard.id)).id;
+      const release = await service.publishAppRelease(app.id, {
+        packageId,
+        platformTargetId: targetId,
+        releaseNotes: notes,
+        semanticVersion: version,
+      });
+      released = true;
+      const deployment = await service.createAppDeployment(app.id, {
+        releaseId: release.id,
+        platformTargetId: targetId,
+      });
+      // `PRD-FR-026`: command acceptance is not a live publication. Report the
+      // deployment's *own* status and keep the dialog open so the operator reads
+      // it, instead of closing on a success this console cannot observe.
+      setSubmitted({ releaseId: release.id, deploymentStatus: deployment.deploymentStatus });
+      setBusy(false);
       onSaved();
     } catch (cause) {
-      setError(t("operationFailed", { message: messageOf(cause) }));
+      setError(released
+        ? t("releaseCreatedDeploymentFailed", { message: messageOf(cause) })
+        : t("operationFailed", { message: messageOf(cause) }));
       setBusy(false);
     }
+  }
+
+  // `PRD-FR-026`: a command was accepted — say exactly that, and show what the
+  // server reported. The dialog stays open on purpose so the status is readable
+  // rather than flashed away by an auto-close.
+  if (submitted !== undefined) {
+    return (
+      <Modal close={onClose} closeLabel={t("close")} title={t("publishReleaseTitle")}>
+        <p className="form-hint" data-testid="publish-submitted">{t("publishSubmittedPending")}</p>
+        <p className="form-hint" data-testid="publish-submitted-release">
+          {`${t("publishSubmittedReleaseLabel")}: ${submitted.releaseId}`}
+        </p>
+        <p className="form-hint" data-testid="publish-submitted-status">
+          {`${t("publishSubmittedStatusLabel")}: ${submitted.deploymentStatus}`}
+        </p>
+        <footer className="dialog-footer">
+          <button className="command-button" type="button" onClick={onClose}>{t("close")}</button>
+        </footer>
+      </Modal>
+    );
   }
 
   return (
     <Modal close={onClose} closeLabel={t("close")} title={t("publishReleaseTitle")}>
       {!options ? (
         <p className="form-hint">{t("optionsLoading")}</p>
-      ) : targets.length === 0 ? (
-        <p className="form-hint">{t("releaseNoTargets")}</p>
       ) : packages.length === 0 ? (
-        <p className="form-hint">{t("releaseNoPackages")}</p>
+        // `PRD-FR-035`: the source-version refusal is checked first — a release is
+        // cut from a package, so nothing else about this app is actionable yet.
+        <>
+          <p className="form-hint">{t("releaseNoPackages")}</p>
+          <p className="form-hint">{t("releaseNeedsSource")}</p>
+        </>
+      ) : targetMode === "unsupported" ? (
+        <p className="form-hint">{t("releaseNoTargets")}</p>
+      ) : targetMode === "ambiguous" ? (
+        <p className="form-hint">
+          {t("releaseTargetAmbiguous", { candidates: candidates.map((card) => t(card.labelKey)).join(", ") })}
+        </p>
       ) : (
         <div className="form-grid">
-          <label>
-            <span>{t("releasePlatformTarget")}</span>
-            <select value={platformTargetId} onChange={(event) => setPlatformTargetId(event.target.value)}>
-              <option value="">-</option>
-              {targets.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
-            </select>
-          </label>
+          {bootstrapCard === undefined ? (
+            <label>
+              <span>{t("releasePlatformTarget")}</span>
+              <select value={platformTargetId} onChange={(event) => setPlatformTargetId(event.target.value)}>
+                <option value="">-</option>
+                {targets?.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
+              </select>
+            </label>
+          ) : (
+            <p className="form-hint">
+              {t("releaseTargetBootstrap", { kind: t(bootstrapCard.labelKey) })}
+            </p>
+          )}
           <label>
             <span>{t("releasePackage")}</span>
             <select

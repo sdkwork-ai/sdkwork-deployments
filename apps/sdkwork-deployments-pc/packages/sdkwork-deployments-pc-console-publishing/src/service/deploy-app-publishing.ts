@@ -16,12 +16,14 @@
  */
 import type { SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
+  AppDeploymentResponse,
   AppKind,
   AppOwnerType,
   AppResponse,
   AppReleaseResponse,
   AppStatus,
   CreatePlatformTargetRequest,
+  CreateAppDeploymentRequest,
   CreateAppRequest,
   CreateAppReleaseRequest,
   CreateSourceRepositoryRequest,
@@ -750,6 +752,27 @@ export interface DeployAppReleaseInput {
   readonly releaseNotes?: string | undefined
 }
 
+/**
+ * `deploy`: push a cut release onto a typed target.
+ *
+ * Cutting a release and deploying it are two commands, not one.
+ * `DEPLOYMENT_SPEC.md` §1.4 puts a hard line between them ("release packaging
+ * `MUST NOT` apply a deployment, and deployment `MUST NOT` rebuild an
+ * artifact"), and `PRD-FR-026` requires the console to show command acceptance
+ * as pending rather than as a live publication. So the publish action issues
+ * this second, separate command and reports the deployment's `PENDING` status
+ * to the operator as *submitted*.
+ */
+export interface DeployAppDeploymentInput {
+  readonly releaseId: string
+  readonly platformTargetId: string
+  /** Defaults to `ARTIFACT_RELEASE` — the only deployment kind this console cuts. */
+  readonly deploymentKind?: CreateAppDeploymentRequest["deploymentKind"] | undefined
+  /** Defaults to `WEB_NODE` — where a released browser/static package lands. */
+  readonly deploymentTarget?: CreateAppDeploymentRequest["deploymentTarget"] | undefined
+  readonly environment?: string | undefined
+}
+
 export interface DeployAppPublishingService {
   /** 需求 1: 可关联的已有应用列表。 */
   listApps(params?: {
@@ -773,7 +796,17 @@ export interface DeployAppPublishingService {
    */
   createAppRecord(input: CreateAppRecordInput): Promise<AppResponse>
   /** 给已有应用追加平台目标。 */
-  createPlatformTarget(appId: string, request: CreatePlatformTargetRequest): Promise<unknown>
+  createPlatformTarget(appId: string, request: CreatePlatformTargetRequest): Promise<PlatformTargetResponse>
+  /**
+   * `publish` 前置：应用还没有平台目标时，按**已建应用的应用类型**补一个。
+   *
+   * 创建阶段刻意不写 `deploy_app_platform_target`（见 `CreateAppDialog` 头注释：
+   * 「平台目标由后续发布流程按实际发布的表面写入」），而当前没有任何界面会写它
+   * ⇒ 不补这一步，「发布」对每个新建应用都是死路。目标三元组复用
+   * {@link resolveDeployAppType}（卡片 → 解析行），与 `createApp` 创建分支写的是
+   * 同一组值，不另造约定。
+   */
+  createPlatformTargetForCard(appId: string, cardId: string): Promise<PlatformTargetResponse>
   /** 组装 deploy_app.metadata JSONB。 */
   buildMetadata(input: CreateDeployAppInput): Record<string, unknown>
   // ── 行级操作（deploy_app 自己的生命周期；对齐宿主旧台账 update/update-source/publish）──
@@ -794,8 +827,14 @@ export interface DeployAppPublishingService {
   archiveApp(appId: string): Promise<AppResponse>
   /** `update-source`: 给应用关联一个源码仓库。 */
   createSourceRepository(appId: string, input: DeployAppSourceRepositoryInput): Promise<SourceRepositoryResponse>
-  /** `publish`: 用已注册的制品包发一个版本。 */
+  /** `publish`: 用已注册的制品包切一个 release（不可变记录，不是执行）。 */
   publishAppRelease(appId: string, input: DeployAppReleaseInput): Promise<AppReleaseResponse>
+  /**
+   * `deploy`: 把一个已切出的 release 推到目标环境执行。
+   *
+   * 与 `publishAppRelease` 成对使用 —— 受理的是命令（状态 `PENDING`），不是上线。
+   */
+  createAppDeployment(appId: string, input: DeployAppDeploymentInput): Promise<AppDeploymentResponse>
   /** publish 表单的可选项：平台目标（同一应用下）。 */
   listPlatformTargets(appId: string): Promise<PlatformTargetResponse[]>
   /** publish 表单的可选项：已注册的制品包。 */
@@ -834,7 +873,6 @@ export function createDeployAppPublishingService(
 
   return {
     listApps(params) {
-      console.log("SVC-DIAG params=", JSON.stringify(params))
       return deployClient.app.list(
         params && {
           ...(params.page === undefined ? {} : { page: params.page }),
@@ -965,6 +1003,28 @@ export function createDeployAppPublishingService(
       })
     },
 
+    createPlatformTargetForCard(appId, cardId) {
+      // The resolution row is the writing authority: `createApp`'s create branch
+      // writes the same table from (option.id, option.platform, option.techStack),
+      // so this mirrors it verbatim instead of introducing a second convention
+      // that could drift from the one the legacy path already established.
+      const option = resolveDeployAppType(cardId)
+      if (option === undefined) {
+        return Promise.reject(new Error(`no publishable surface is registered for card "${cardId}"`))
+      }
+      const idempotencyKey = createIdempotencyKey()
+      return deployClient.app.platformTargets.create(
+        appId,
+        {
+          targetKey: option.id,
+          platform: toSdkPlatform(option.platform),
+          ...(option.techStack === undefined ? {} : { techStack: option.techStack }),
+          idempotencyKey,
+        },
+        { idempotencyKey },
+      )
+    },
+
     updateApp(appId, patch) {
       const name = patch.name?.trim()
       const description = patch.description?.trim()
@@ -1027,6 +1087,22 @@ export function createDeployAppPublishingService(
           : { releaseNotes: { note: releaseNotes } }),
       }
       return deployClient.release.create(appId, request, { idempotencyKey })
+    },
+
+    createAppDeployment(appId, input) {
+      const idempotencyKey = createIdempotencyKey()
+      const request: CreateAppDeploymentRequest = {
+        platformTargetId: input.platformTargetId,
+        releaseId: input.releaseId,
+        // Both defaults name the concrete case this console cuts (a stored
+        // package released onto a web node) instead of leaving the field to a
+        // server default the operator cannot see.
+        deploymentKind: input.deploymentKind ?? "ARTIFACT_RELEASE",
+        deploymentTarget: input.deploymentTarget ?? "WEB_NODE",
+        ...(input.environment === undefined ? {} : { environment: input.environment }),
+        idempotencyKey,
+      }
+      return deployClient.deployment.create(appId, request, { idempotencyKey })
     },
 
     async listPlatformTargets(appId) {

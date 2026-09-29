@@ -156,7 +156,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.domainZones.write",
+      "permission": "deploy.domainZones.read",
       "idempotent": false
     },
     {
@@ -204,7 +204,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.domainZones.write",
+      "permission": "deploy.domainZones.read",
       "idempotent": false
     },
     {
@@ -492,7 +492,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.certificates.write",
+      "permission": "deploy.certificates.read",
       "idempotent": false
     },
     {
@@ -828,7 +828,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.apps.write",
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -900,7 +900,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.apps.write",
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -948,7 +948,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.apps.write",
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -996,7 +996,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.apps.write",
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -1044,7 +1044,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.apps.write",
+      "permission": "deploy.apps.read",
       "idempotent": false
     },
     {
@@ -1668,7 +1668,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.channels.write",
+      "permission": "deploy.channels.read",
       "idempotent": false
     },
     {

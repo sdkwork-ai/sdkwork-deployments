@@ -167,7 +167,7 @@
 /* The hint sits on the line below the caption rather than inside it: it is a
    sentence about the list, and a sentence sharing a line with a toolbar is the
    half that gets ellipsised. */
-.hostname-picker-hostnames>.form-hint{display:block;margin:0 0 9px}
+.hostname-picker-hostnames>.form-hint,.hostname-picker-hostnames>.form-error{display:block;margin:0 0 9px}
 /* The count leads the footer rather than trailing the buttons: it reports on the
    set the buttons will act on, so it belongs on the side the reading starts. */
 .hostname-picker-count{margin-right:auto;align-self:center;font-size:12px;color:#657178}
@@ -256,21 +256,6 @@
    state it did not author, so it is visibly not the operator's to edit. */
 .scope-badge-platform{background:#fff0c7;color:#755407}
 
-/* Ownership facet selector in the applications ledger header. Mirrors the
-   `.scope-input` box the domain ledger uses so the two toolbars line up. */
-.scope-filter{height:38px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #c9d0d4;padding:0 10px;border-radius:5px}
-.scope-filter-label{color:#657178;font-size:12px;font-weight:650;white-space:nowrap}
-.scope-filter select{min-width:0;border:0;outline:none;background:transparent;color:#1d2428}
-/* The popup is painted by the browser, outside this sheet's cascade, and the
-   select above is `background:transparent`, which leaves it at the UA's light
-   default. Spelling the options' surface out here keeps the rule identical to the
-   `.deploy-surface`-scoped copy the Web Server console carries
-   (apps/sdkwork-webserver-pc/src/deploy-surface.css). Values are this sheet's own
-   light palette, so nothing moves; the reason it is written at all is that a
-   transparent select background is invisible to the page and legible-looking in
-   review while depending entirely on a UA default. */
-.scope-filter option{color:#1d2428;background:#fff}
-
 /* The side panel a console form is filled in on, as three bands.
    `SideDrawer.tsx` renders the markup and this is the geometry it needs, mirroring
    the `.deploy-surface`-scoped copy the Web Server console carries
@@ -349,3 +334,69 @@
 /* A window too narrow for a side panel gets the whole width rather than a 94% sliver
    of it. */
 @media(max-width:760px){.delivery-dialog.delivery-drawer{width:100%}}
+
+/* The applications ledger's toolbar. Every facet sits directly above the rows it
+   narrows; nothing lives in a side rail any more. Two facets, and they differ in
+   where they are applied:
+   - **ownership** is the *server's* (a tab is pushed down as `scope`), and it is
+     offered **only on the admin surface**, whose reach spans several levels; the
+     console reaches one level, so it gets no control rather than a control with a
+     single answer;
+   - **type** is the *browser's* (the contract has no type parameter), shown as a
+     row of toggle chips — each chip carries its own count and its own on/off
+     state, which is exactly the property a collapsed `<select>` cannot have and
+     the reason it was replaced.
+   Mirrored, against this console's `--sdk-color-*` / `--webserver-color-*`
+   tokens, in sdkwork-webserver/apps/sdkwork-webserver-pc/src/deploy-surface.css.
+   Keep the two in step. */
+.apps-ledger{display:flex;flex-direction:column;gap:10px;margin-top:18px;min-width:0}
+/* The ownership group: its label and its tab strip travel together, exactly like
+   `.apps-kind-facets` below. Both groups share ONE toolbar row with the search
+   box — they narrow three orthogonal axes (ownership / type / keyword), and
+   stacking them would read as if the lower row were a child of the upper one.
+   The label is inside the group so a wrapped toolbar never leaves it stranded on
+   the previous line, away from the strip it names. */
+.apps-owner-facets{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+/* The ownership tab row. Only the admin surface renders it — that is the one
+   surface whose reach spans several ownership levels, so it is the only one with
+   a choice to offer. It is a **server** facet (a tab is pushed down as
+   `apps.list`'s `scope`), so it reads as one tab strip rather than as independent
+   chips, and it carries no counts: a count would need a second request, and the
+   tab does not hide rows the page already has — it re-reads them at another level.
+
+   It wraps instead of scrolling: five levels already run past a narrow console,
+   and a strip that clips its last tab is a control the operator cannot see. */
+.apps-owner-tabs{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding:2px;border:1px solid #d9dfe2;border-radius:6px;background:#f2f5f6;min-width:0}
+.apps-owner-tab{min-height:28px;padding:0 12px;border:0;border-radius:4px;background:transparent;color:#536067;font-size:12px;font-weight:650}
+.apps-owner-tab:hover{background:#e4eaec;color:#1d2428}
+/* The selected fill is the same slate `.segmented-control button[aria-pressed]`
+   and `.apps-kind-chip[aria-pressed]` take, so "this one is in effect" reads the
+   same wherever this console paints it. */
+.apps-owner-tab[aria-selected="true"]{background:#333e44;color:#fff}
+.apps-owner-tab:focus-visible{outline:2px solid #b9820b;outline-offset:1px}
+/* The chip row: one toggle per type that actually has rows. A zero-count entry
+   is not rendered — it could only ever produce an empty table — and it cannot
+   strand a selection either, because the counts are taken over the whole loaded
+   set, which the type facet itself never shrinks. */
+.apps-kind-facets{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+.apps-facet-label{font-size:12px;font-weight:650;color:#657178}
+.apps-kind-chip{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:1px solid #c9d0d4;border-radius:999px;background:#fff;color:#46545b;font-size:12px;font-weight:650}
+.apps-kind-chip:hover{border-color:#9aa6ac;background:#f2f5f6;color:#1d2428}
+/* The pressed fill is the same slate `.segmented-control button[aria-pressed]`
+   takes, so "on" looks the same wherever this console paints it. */
+.apps-kind-chip[aria-pressed="true"]{border-color:#333e44;background:#333e44;color:#fff}
+.apps-kind-chip:focus-visible{outline:2px solid #b9820b;outline-offset:1px}
+.apps-kind-chip-count{font-size:11px;font-weight:400;color:#78848a;font-variant-numeric:tabular-nums}
+.apps-kind-chip[aria-pressed="true"] .apps-kind-chip-count{color:inherit;opacity:.8}
+.apps-facet-clear{min-height:30px;padding:0 10px;border:1px solid transparent;border-radius:5px;background:transparent;color:#8a6206;font-size:12px}
+.apps-facet-clear:hover{border-color:#e3c77c;background:#fff8e8;color:#604a0a}
+.apps-ledger-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.apps-ledger-toolbar .search-box{flex:1 1 240px}
+.apps-search-clear{display:inline-flex;align-items:center;justify-content:center;flex:0 0 22px;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:transparent;color:#536067}
+.apps-search-clear:hover{background:#eceff1;color:#1d2428}
+.apps-ledger-summary{margin-left:auto;font-size:12px;color:#657178;white-space:nowrap}
+/* Two notes share this treatment: the page-ceiling caveat, and the "why is there
+   no H5 chip" explanation that appears once the type facet is in use. Both are
+   the contract's state rather than the operator's, which is what the amber marks
+   in this sheet. The toolbar itself needs no breakpoint — the chips wrap. */
+.apps-ledger-note{margin:0;font-size:12px;line-height:1.5;color:#755407}

@@ -126,3 +126,24 @@ function selected(context: DeploymentsActionContext, field: string): string {
 function idempotencyParams(): { idempotencyKey: string } {
   return { idempotencyKey: uuid() };
 }
+
+/* ------------------------------------------------------------------ *
+ * 源码规格运维视图
+ * ------------------------------------------------------------------ *
+ * 它自带的是**端口**而不是 SDK 客户端 —— backend-admin SDK 没有源码规格面
+ * （见 `source-specs/port.tsx` 的说明），所以本包不为它多引一个依赖，由应用壳
+ * （组合根）把端口喂进来。放在 admin-core 而不是新开一个包，是因为新增工作区包
+ * 需要一次跨仓 `pnpm install` 才能建好 `node_modules` 链接，而本次改动不需要
+ * 为它付这个代价。
+ */
+export { SourceSpecsAdminPage } from "./source-specs/SourceSpecsAdminPage.tsx";
+export type { SourceSpecsAdminPageProps } from "./source-specs/SourceSpecsAdminPage.tsx";
+export { sourceSpecsModule } from "./source-specs/module.ts";
+export { SourceSpecsAdminPortProvider, useSourceSpecsAdminPort } from "./source-specs/port.tsx";
+export type {
+  SourceSpecsAdminApplication,
+  SourceSpecsAdminPage as SourceSpecsAdminLedgerPage,
+  SourceSpecsAdminPort,
+  SourceSpecsAdminRoute,
+  SourceSpecsAdminSpec,
+} from "./source-specs/port.tsx";

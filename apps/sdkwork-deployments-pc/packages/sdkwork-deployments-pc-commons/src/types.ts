@@ -1,7 +1,22 @@
 import type { ComponentType } from "react";
 
 export type DeploymentsSurface = "app-console" | "backend-admin";
-export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects";
+/**
+ * The resource ids a module may contribute on either surface.
+ *
+ * A **closed** union on purpose: the admin shell renders one route and one icon
+ * per member, and the catalog needs a `resource.<key>.label` for each, so an
+ * unknown id has nothing to render with. Adding a member is therefore a
+ * deliberate multi-site change (this union, {@link resourceIcon}, both language
+ * catalogs, and the module that contributes it) rather than something a feature
+ * package can do on its own — which is what keeps a typo'd resource id from
+ * producing a blank admin route.
+ *
+ * `sourceSpecs` is the operation-plane counterpart of the console's per-app
+ * "source specs" drawer: same rows, read across applications instead of within
+ * one.
+ */
+export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs";
 export interface DeploymentsModuleEntry { description: string; label: string; order: number; permission?: string | undefined; resource: DeploymentsResourceKey; }
 export interface DeploymentsPcModuleDefinition { entries: readonly DeploymentsModuleEntry[]; id: string; label: string; surface: DeploymentsSurface; }
 export interface DeploymentsQuery { page: number; pageSize: number; scopeId?: string | undefined; search?: string | undefined; }

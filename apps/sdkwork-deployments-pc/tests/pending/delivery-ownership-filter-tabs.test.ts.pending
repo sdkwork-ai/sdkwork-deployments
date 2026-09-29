@@ -1,0 +1,76 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  rowMatchesFilterTab,
+  scopeFilterTab,
+} from "../../packages/sdkwork-deployments-pc-console-delivery/src/DeliveryManagement.tsx";
+import type { DomainHostnameResponse } from "@sdkwork/deployments-app-sdk";
+
+// The two decisions the coverage picker makes about *which* names it is showing:
+// which tab a certificate type opens on, and which names a tab stands for.
+// Extracted so they can be driven without a browser.
+//
+// Still parked, and not for the reason the grouping half was. The grouping was
+// unimplemented and unarguable. This half is a live design question about the
+// same picker: hiding the names a certificate type cannot take, versus showing
+// them disabled and explaining the rule. `DeliveryManagement.tsx` currently
+// documents the second answer ("the row is disabled rather than hidden — the
+// operator asked which hostnames this root domain has, and an answer that
+// omitted the ones the current type cannot take would read as a root domain that
+// is missing them"), and the refusal tooltips added on 2026-09-28 implement it.
+// A tab that filtered the list to the scope would contradict that sentence.
+//
+// So this file waits on a decision, not on code: land the tabs only after the
+// row-hiding question is settled, and delete the refusal tooltips if hiding wins.
+// Reactivating it as-is also needs the picker's tab strip wired.
+
+const ZONE_ID = "11111111-1111-4111-8111-111111111111";
+
+function firstLabel(name: string): string {
+  return name.split(".")[0] ?? name;
+}
+
+function hostname(hostname: string, hostnameType: "EXACT" | "WILDCARD" = "EXACT"): DomainHostnameResponse {
+  const relativeName = hostname.startsWith("*.")
+    ? `*.${firstLabel(hostname.slice(2))}`
+    : firstLabel(hostname);
+  return {
+    id: `${hostnameType}:${hostname}`,
+    zoneId: ZONE_ID,
+    hostname,
+    relativeName: hostname === "example.com" ? "@" : relativeName,
+    hostnameType,
+    verificationStatus: "PENDING",
+    status: "ACTIVE",
+    certificateCount: "0",
+    bindingCount: "0",
+    createdAt: "2026-09-22T00:00:00.000Z",
+    updatedAt: "2026-09-22T00:00:00.000Z",
+    version: "1",
+  };
+}
+
+describe("the coverage picker's filter follows the certificate type", () => {
+  it("opens on the tab the certificate type can actually cover", () => {
+    expect(scopeFilterTab("WILDCARD")).toBe("wildcard");
+    expect(scopeFilterTab("SINGLE_DOMAIN")).toBe("exact");
+  });
+
+  it("offers only the names the open tab stands for", () => {
+    const wildcard = hostname("*.example.com", "WILDCARD");
+    const apex = hostname("example.com");
+    const sub = hostname("api.example.com");
+
+    expect(rowMatchesFilterTab(wildcard, "wildcard")).toBe(true);
+    expect(rowMatchesFilterTab(apex, "wildcard")).toBe(false);
+    expect(rowMatchesFilterTab(sub, "wildcard")).toBe(false);
+
+    expect(rowMatchesFilterTab(apex, "exact")).toBe(true);
+    expect(rowMatchesFilterTab(sub, "exact")).toBe(true);
+    expect(rowMatchesFilterTab(wildcard, "exact")).toBe(false);
+
+    // "All" is the union, and stays a union: it is the tab that would hide nothing
+    // if the certificate type ever left it open.
+    for (const row of [wildcard, apex, sub]) expect(rowMatchesFilterTab(row, "all")).toBe(true);
+  });
+});

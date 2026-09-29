@@ -26,20 +26,28 @@ interface Recorded {
   readonly appUpdate: ReturnType<typeof vi.fn>
   readonly releaseCreate: ReturnType<typeof vi.fn>
   readonly sourceCreate: ReturnType<typeof vi.fn>
+  readonly deploymentCreate: ReturnType<typeof vi.fn>
+  readonly platformTargetCreate: ReturnType<typeof vi.fn>
 }
 
 function stubClient(recorded: Partial<Recorded> = {}): SdkworkDeployAppClient {
   const releaseCreate = recorded.releaseCreate ?? vi.fn().mockResolvedValue({ id: "release-1" })
   const appUpdate = recorded.appUpdate ?? vi.fn().mockResolvedValue({ id: "app-1" })
   const sourceCreate = recorded.sourceCreate ?? vi.fn().mockResolvedValue({ id: "source-1" })
+  const deploymentCreate = recorded.deploymentCreate
+    ?? vi.fn().mockResolvedValue({ id: "deployment-1", deploymentStatus: "PENDING" })
+  const platformTargetCreate = recorded.platformTargetCreate
+    ?? vi.fn().mockResolvedValue({ id: "target-1" })
   const client = {
     app: {
       update: appUpdate,
       platformTargets: {
         list: vi.fn().mockResolvedValue({ items: [{ id: "target-1", targetKey: "pc-web", platform: "WEB" }] }),
+        create: platformTargetCreate,
       },
       sourceRepositories: { create: sourceCreate },
     },
+    deployment: { create: deploymentCreate },
     package: { list: vi.fn().mockResolvedValue({ items: [{ id: "pkg-1" }] }) },
     release: { create: releaseCreate },
   }
@@ -160,5 +168,95 @@ describe("publish option lists", () => {
       { id: "target-1", targetKey: "pc-web", platform: "WEB" },
     ])
     await expect(service.listPackages("app-1")).resolves.toEqual([{ id: "pkg-1" }])
+  })
+});
+
+/**
+ * Publishing is two commands, not one (`DEPLOYMENT_SPEC.md` §1.4): a release is
+ * cut, then a deployment is requested against it. The second is what makes the
+ * console report *submitted/pending* rather than published (`PRD-FR-026`), so its
+ * payload is pinned here alongside the release's.
+ */
+describe("createAppDeployment (deploy row operation)", () => {
+  it("names the concrete kind and target, and pairs the key with the header", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "deployment-1", deploymentStatus: "PENDING" })
+    const service = serviceOf({ deploymentCreate: create })
+
+    await service.createAppDeployment("app-1", { releaseId: "release-1", platformTargetId: "target-1" })
+
+    expect(create).toHaveBeenCalledTimes(1)
+    const [appId, body, params] = create.mock.calls[0] as [string, Record<string, unknown>, { idempotencyKey: string }]
+    expect(appId).toBe("app-1")
+    expect(body.releaseId).toBe("release-1")
+    expect(body.platformTargetId).toBe("target-1")
+    // Both defaults name the concrete case this console cuts, so they are stated
+    // on the wire rather than left to a server default the operator cannot see.
+    expect(body.deploymentKind).toBe("ARTIFACT_RELEASE")
+    expect(body.deploymentTarget).toBe("WEB_NODE")
+    expect(body.idempotencyKey).toBe(KEY)
+    expect(params.idempotencyKey).toBe(KEY)
+    expect(body).not.toHaveProperty("environment")
+  })
+
+  it("sends the environment only when one is given", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "deployment-1", deploymentStatus: "PENDING" })
+    const service = serviceOf({ deploymentCreate: create })
+
+    await service.createAppDeployment("app-1", {
+      releaseId: "release-1",
+      platformTargetId: "target-1",
+      environment: "staging",
+    })
+
+    const [, body] = create.mock.calls[0] as [string, Record<string, unknown>]
+    expect(body.environment).toBe("staging")
+  })
+});
+
+/**
+ * `CreateAppDialog` deliberately leaves `deploy_app_platform_target` empty and
+ * hands that write to publication, so without this step every application made
+ * through the create dialog would be a dead end at the publish button.
+ *
+ * The expected triples below are read off the resolution tables themselves
+ * (`pc-web` → `react` → row `pc-web`; `mini-program` → `wechat-native` → row
+ * `wechat-mini-program`), not off the helper being tested.
+ */
+describe("createPlatformTargetForCard (publish bootstrap)", () => {
+  it("writes the resolution row that the card's default framework points at", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "target-9" })
+    const service = serviceOf({ platformTargetCreate: create })
+
+    await service.createPlatformTargetForCard("app-1", "pc-web")
+
+    const [appId, body, params] = create.mock.calls[0] as [string, Record<string, unknown>, { idempotencyKey: string }]
+    expect(appId).toBe("app-1")
+    expect(body.targetKey).toBe("pc-web")
+    expect(body.platform).toBe("WEB")
+    // The row declares no techStack, so the member is absent rather than empty.
+    expect(body).not.toHaveProperty("techStack")
+    expect(body.idempotencyKey).toBe(KEY)
+    expect(params.idempotencyKey).toBe(KEY)
+  })
+
+  it("carries the techStack declared by the row it resolves to", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "target-9" })
+    const service = serviceOf({ platformTargetCreate: create })
+
+    await service.createPlatformTargetForCard("app-1", "mini-program")
+
+    const [, body] = create.mock.calls[0] as [string, Record<string, unknown>]
+    expect(body.targetKey).toBe("wechat-mini-program")
+    expect(body.platform).toBe("WECHAT")
+    expect(body.techStack).toBe("NATIVE")
+  })
+
+  it("refuses a card with no registered surface instead of guessing a target", async () => {
+    const create = vi.fn().mockResolvedValue({ id: "target-9" })
+    const service = serviceOf({ platformTargetCreate: create })
+
+    await expect(service.createPlatformTargetForCard("app-1", "not-a-card"))
+      .rejects.toThrow(/no publishable surface/)
+    expect(create).not.toHaveBeenCalled()
   })
 });

@@ -556,3 +556,67 @@ describe("filterDomainsByEnvironment / environmentTabsInUse", () => {
   })
 })
 
+/**
+ * `loadAppDetail` fans the drawer's reads out concurrently and keeps each one
+ * tolerant, so one unreachable endpoint cannot blank the whole drawer.
+ *
+ * Tolerance without a record is what made it lie: every failed read collapsed
+ * into `[]`, which the drawer rendered as its *empty* state — "this application
+ * has no platform targets" for what was really "we could not read them". These
+ * assertions pin both halves: the load still succeeds, and the section is named.
+ */
+describe("loadAppDetail (tolerant reads that stay legible)", () => {
+  function serviceWith(reads: {
+    readonly platformTargets?: () => Promise<{ items: readonly unknown[] }>
+    readonly sourceRepositories?: () => Promise<{ items: readonly unknown[] }>
+    readonly sourceSpecs?: () => Promise<{ items: readonly unknown[] }>
+  }) {
+    const empty = async () => ({ items: [] })
+    return createDeployAppOperationsService({
+      deployClient: {
+        app: {
+          retrieve: async () => appFixture(),
+          domains: { list: async () => ({ items: [] }) },
+          platformTargets: { list: reads.platformTargets ?? empty },
+          sourceRepositories: { list: reads.sourceRepositories ?? empty },
+          sourceSpecs: { list: reads.sourceSpecs ?? empty },
+        },
+      } as never,
+      driveClient: {} as never,
+    })
+  }
+
+  const refuses = async () => {
+    throw new Error("403")
+  }
+
+  it("still returns the application when a section throws, and names that section", async () => {
+    const service = serviceWith({
+      platformTargets: refuses,
+      sourceSpecs: refuses,
+      sourceRepositories: async () => ({ items: [{ id: "repo-1" }] }),
+    })
+
+    const detail = await service.loadAppDetail("app-1")
+
+    // Tolerant: the drawer still opens with the application in it.
+    expect(detail.app.id).toBe("app-1")
+    expect(detail.platformTargets).toEqual([])
+    expect(detail.sourceSpecs).toEqual([])
+    // …and the failed sections are named, which is what lets the drawer say
+    // "could not load" instead of rendering "there are none".
+    expect([...detail.unavailableSections].sort()).toEqual(["platformTargets", "sourceSpecs"])
+    // A section that did load is never reported as unavailable.
+    expect(detail.sourceRepositories).toHaveLength(1)
+    expect(detail.unavailableSections).not.toContain("sourceRepositories")
+  })
+
+  it("reports nothing unavailable when every read succeeds", async () => {
+    const service = serviceWith({})
+
+    const detail = await service.loadAppDetail("app-1")
+
+    expect(detail.unavailableSections).toEqual([])
+  })
+})
+

@@ -2024,7 +2024,11 @@ CREATE TABLE IF NOT EXISTS deploy_app_source_spec (
     version                       BIGINT NOT NULL DEFAULT 1,
     deleted_at                    TIMESTAMPTZ NULL,
     CONSTRAINT uk_deploy_app_source_spec_uuid UNIQUE (uuid),
-    CONSTRAINT uk_deploy_app_source_spec_key UNIQUE (app_id, environment, spec_key),
+    -- `uk_deploy_app_source_spec_key` is deliberately *not* a table constraint:
+    -- PostgreSQL's UNIQUE takes no predicate, and a soft-deleted spec must
+    -- release its (app_id, environment, spec_key) — otherwise deleting a spec
+    -- and re-creating the same key answers 409 forever. It is a partial unique
+    -- index, created with this table's other partial indexes below.
     -- Redundant on its own (`id` is already the primary key) but required as
     -- the target of the composite foreign key from
     -- `deploy_app_source_spec_route`, which is what stops a route row from
@@ -2122,6 +2126,14 @@ COMMENT ON COLUMN deploy_app_source_spec.is_default IS
 -- (priority, uuid) so the projected variant order is stable across recompiles.
 CREATE INDEX IF NOT EXISTS idx_deploy_app_source_spec_app
     ON deploy_app_source_spec (tenant_id, app_id, environment, status, priority, uuid)
+    WHERE deleted_at IS NULL;
+
+-- One live spec per (app, environment, spec_key). Partial for the reason given
+-- at the table definition: a soft-deleted row must release its key so the same
+-- spec can be re-created. The name is unchanged, so the repository's 409
+-- mapping still matches the violation it reports.
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_source_spec_key
+    ON deploy_app_source_spec (app_id, environment, spec_key)
     WHERE deleted_at IS NULL;
 
 -- At most one active app-level default spec per (app, environment): it is what

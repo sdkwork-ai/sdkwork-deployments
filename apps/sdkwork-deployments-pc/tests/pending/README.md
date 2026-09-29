@@ -1,36 +1,46 @@
 # Parked console specifications
 
-`delivery-ownership-grouping.test.ts.pending` is the specification for the
-certificate-coverage panel's *grouping* redesign: ownership claims folded by the
-DNS record they land in (so a wildcard and the apex it leaves out become one row
-with two values), plus the two decisions the coverage picker makes — which tab a
-certificate type opens on, and which names a tab stands for.
+`delivery-ownership-filter-tabs.test.ts.pending` is the **unlanded half** of the
+certificate-coverage picker's specification. It covers the two decisions the
+picker makes about *which* names it is showing — which tab a certificate type
+opens on (`scopeFilterTab`), and which names a tab stands for
+(`rowMatchesFilterTab`).
 
-None of that exists. The test imports three helpers from
-`console-delivery/src/DeliveryManagement.tsx`:
+## Why this half is parked, and the grouping half is not
 
-```
-groupOwnershipRecords
-rowMatchesFilterTab
-scopeFilterTab
-```
+The original file was one piece of work with two halves. They are parked for
+**different** reasons, and only one of them has been resolved:
 
-and a repository-wide grep finds **zero** occurrences of any of them — not in
-`main`, and not in the `wip/deploy-certificate` commit `1b4acfe` that added this
-file. The panel is still built claim by claim, which is the behaviour the test
-exists to forbid.
+| Half | State |
+| --- | --- |
+| Grouping — ownership claims folded by the DNS record they land in | **Landed 2026-09-28.** `groupOwnershipRecords` is exported from `DeliveryManagement.tsx`, its cases now run at `apps/sdkwork-deployments-pc/tests/delivery-ownership-grouping.test.ts`, and the panel renders one block per record with one value per hostname. |
+| Filter tabs — `scopeFilterTab` / `rowMatchesFilterTab` | **Still parked.** No implementation, and a live design question behind it: see below. |
 
-So the file is a specification that arrived ahead of its implementation: it was
-merged into `main` while the code it describes stayed unwritten. It failed for
-that reason and no other.
+The grouping half was a specification that arrived ahead of its implementation,
+and it failed for that reason and no other. It also turned out to be an operator
+-reported defect that was still live: on 2026-09-28 an operator reported the
+duplicate `_sdkwork-verification` rows again, which is what landed it.
 
-## Why parked instead of deleted
+The filter half is different. It is not blocked on code; it is blocked on a
+question the same picker already answers the other way:
 
-The comment at the top of the file records the operator-reported defect the fold
-fixes ("two blocks naming the same record read as the panel having duplicated a
-row"). That is the requirement. Deleting the file deletes the requirement;
-leaving it running keeps `vitest` red for as long as the feature is unbuilt,
-which is how a suite stops being read.
+> `DeliveryManagement.tsx`: "The row is disabled rather than hidden — the operator
+> asked which hostnames this root domain has, and an answer that omitted the ones
+> the current type cannot take would read as a root domain that is missing them."
+
+A tab that filtered the list down to the certificate type's scope would **hide**
+exactly those rows, contradicting that sentence and the per-row refusal tooltips
+added on 2026-09-28 (`rowRefusalKey`). One of the two answers has to go:
+
+- land the tabs ⇒ delete `rowRefusalKey` and the "disabled rather than hidden"
+  rationale, and accept that a root domain under `WILDCARD` shows nothing but its
+  wildcard rows; or
+- keep the tooltips ⇒ drop the tabs, and delete this file.
+
+Parked rather than deleted, because it records a requirement nothing else does.
+Note also that reactivating it needs more than the two helpers: the picker has no
+tab strip today, and a scope change has to re-derive the active tab rather than
+leaving a stale one selected.
 
 ## The `.pending` suffix is load-bearing
 
@@ -42,11 +52,12 @@ test targets in `crates/sdkwork-intelligence-deploy-repository-sqlx`.
 
 ## Re-activating
 
-When the grouping lands:
+Once the row-hiding question is settled, and after adding the helpers and the tab
+strip:
 
 ```sh
 cd apps/sdkwork-deployments-pc/tests
-git mv pending/delivery-ownership-grouping.test.ts.pending delivery-ownership-grouping.test.ts
+git mv pending/delivery-ownership-filter-tabs.test.ts.pending delivery-ownership-filter-tabs.test.ts
 rmdir pending 2>/dev/null || true
 ```
 

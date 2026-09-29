@@ -1240,8 +1240,11 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
  * wizard's coverage picker a new name is declared the instant it is created, and
  * that is not something the rename copy can say on the ledger's behalf.
  */
-function HostnameFormDialog({ close, hostname, note, submit, t }: { close(): void; hostname?: DomainHostnameResponse; note?: string; submit(relativeName: string): Promise<void>; t: Translator }) {
-  const [relativeName, setRelativeName] = useState(hostname?.relativeName ?? "");
+function HostnameFormDialog({ close, hostname, initialRelativeName, note, submit, t }: { close(): void; hostname?: DomainHostnameResponse; initialRelativeName?: string | undefined; note?: string; submit(relativeName: string): Promise<void>; t: Translator }) {
+  // `initialRelativeName` is the one caller that already knows which name it wants
+  // declared — the coverage picker's missing-wildcard hint. Editing an existing row
+  // keeps that row's own name; a fresh declaration starts from the preset or blank.
+  const [relativeName, setRelativeName] = useState(hostname?.relativeName ?? initialRelativeName ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   async function onSubmit(event: FormEvent) {
@@ -1526,6 +1529,64 @@ function mergeClaimsWithPublishedValue(
   });
 }
 
+/** One DNS record the operator has to publish, and everything it proves. */
+export interface OwnershipRecordGroup {
+  /** The fully qualified owner the TXT record lands on. */
+  recordName?: string | undefined;
+  /** What the provider's own "host record" field wants, when it is derivable. */
+  relativeName?: string | undefined;
+  /** Every hostname this one record proves, in the order the claims arrived. */
+  hostnames: string[];
+  /** Every value to publish at that owner, deduplicated. */
+  values: string[];
+}
+
+/**
+ * Folds ownership claims onto the DNS records they land in.
+ *
+ * The panel used to be built claim by claim, and *one* wildcard certificate plans
+ * two identifiers into *one* record: `*.example.com` and the apex the wildcard
+ * leaves out both fold to `_sdkwork-verification.example.com`. Two blocks naming
+ * the same record read as the panel having duplicated a row — an operator
+ * reported exactly that — while what DNS actually wants is both TXT values
+ * published at that one name. The claims were right and the values were right;
+ * only the grouping was wrong, which is why no check caught it.
+ *
+ * So the key is the record, not the hostname, and a group names every hostname it
+ * proves: a shared record that does not say it is shared reads as a duplicate to
+ * be cleaned up.
+ *
+ * A claim the server sent no record name for still folds by the relative name it
+ * resolves to, so a response from a server that predates `dnsRecordRelativeName`
+ * lands on one row instead of one per hostname.
+ */
+export function groupOwnershipRecords(
+  claims: readonly DomainHostnameClaimResponse[],
+  zoneApex: string | undefined,
+): OwnershipRecordGroup[] {
+  const groups = new Map<string, OwnershipRecordGroup>();
+  for (const claim of claims) {
+    // The server resolves the provider-facing host record (it owns the zone); the
+    // local fold is only a fallback for a response that predates
+    // `dnsRecordRelativeName`.
+    const relative = claim.dnsRecordRelativeName ?? (claim.dnsRecordName === undefined
+      ? undefined
+      : relativeRecordName(claim.dnsRecordName, zoneApex));
+    const key = claim.dnsRecordName ?? `relative:${relative ?? ""}`;
+    const group = groups.get(key) ?? {
+      ...(claim.dnsRecordName === undefined ? {} : { recordName: claim.dnsRecordName }),
+      ...(relative === undefined ? {} : { relativeName: relative }),
+      hostnames: [],
+      values: [],
+    };
+    if (!group.hostnames.includes(claim.hostname.hostname)) group.hostnames.push(claim.hostname.hostname);
+    // Publishing the same digest twice is a duplicate TXT, not a second record.
+    if (claim.dnsRecordValue !== undefined && !group.values.includes(claim.dnsRecordValue)) group.values.push(claim.dnsRecordValue);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
 /**
  * The two reasons a declared name resists being renamed or removed.
  *
@@ -1583,7 +1644,14 @@ async function readZoneHostnames(
  * later re-click from being a dead click, and a control that disabled itself once
  * picked would be the wrong shape for a value that can only be replaced.
  *
- * Exactly one pair is illegal: a single-domain certificate covers no wildcard.
+ * Both directions are illegal, and the reason is one rule read twice
+ * (`PLAN-2026-0003` §5.2 rules 1 and 3): a wildcard certificate is built from a
+ * wildcard claim and a single-domain certificate covers one exact hostname, so
+ * each scope refuses the other shape. Only the single-domain half used to be
+ * written, which left the apex selectable under `WILDCARD` and offered the exact
+ * pair the wizard then refused — a dead end, and one with no row left in the
+ * list that the scope would take.
+ *
  * The row is disabled rather than hidden — the operator asked which hostnames
  * this root domain has, and an answer that omitted the ones the current type
  * cannot take would read as a root domain that is missing them.
@@ -1593,7 +1661,27 @@ async function readZoneHostnames(
  * the same test as a name just clicked.
  */
 function rowBlockedByScope(row: DomainHostnameResponse, scope: CertificateScopeValue): boolean {
-  return scope === "SINGLE_DOMAIN" && row.hostnameType === "WILDCARD";
+  return scope === "WILDCARD"
+    ? row.hostnameType !== "WILDCARD"
+    : row.hostnameType === "WILDCARD";
+}
+
+/**
+ * The rule a refused row broke, so the control can say why it is disabled.
+ *
+ * A disabled control named by nothing is one the operator can only guess at, and
+ * here the guess is the wrong one: the row that looks most selectable under
+ * `WILDCARD` is the root domain itself. Kept beside [`rowBlockedByScope`] so the
+ * two cannot disagree about which rows are refused.
+ */
+function rowRefusalKey(
+  row: DomainHostnameResponse,
+  scope: CertificateScopeValue,
+): DeliveryMessageKey | undefined {
+  if (!rowBlockedByScope(row, scope)) return undefined;
+  return scope === "WILDCARD"
+    ? "hostnamePickerRefusedExactUnderWildcard"
+    : "hostnamePickerRefusedWildcardUnderSingleDomain";
 }
 
 /** One root domain the picker can browse. A `DomainZoneResponse` satisfies it. */
@@ -1659,6 +1747,11 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
   // is opened by a different control and the dialogs are disjoint in practice, so
   // a discriminant would add a variant without removing a state.
   const [createOpen, setCreateOpen] = useState(false);
+  // The relative name a declaration opens with. Empty for the toolbar's own
+  // button; `*` when the missing-wildcard hint opened it, because that button
+  // exists to declare one specific name and making the operator retype it would
+  // be the same dead end with an extra step.
+  const [createPreset, setCreatePreset] = useState<string>();
   const [editTarget, setEditTarget] = useState<DomainHostnameResponse>();
   const [deleteTarget, setDeleteTarget] = useState<DomainHostnameResponse>();
   const [verification, setVerification] = useState<DomainVerifyResponse>();
@@ -1769,6 +1862,27 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
   // finds the apex and `*` finds the wildcards in every locale.
   const listed = needle === "" ? rows : rows.filter((row) => `${row.hostname} ${row.relativeName}`.includes(needle));
 
+  // The one name that would make this root domain usable under `WILDCARD`, and
+  // whether it is missing.
+  //
+  // `WILDCARD` is built from a wildcard claim (§5.2 rule 1), so a root domain
+  // that declares none has no row the scope can take — every row is refused and
+  // the wizard reads as a dead end. The state is reachable by definition: a root
+  // domain is created with its apex row and nothing else. So the pane has to name
+  // the missing hostname *and* be where it is declared, because the page that
+  // declares hostnames is a different page and leaving the wizard to find it is
+  // not a step the dialog can leave unsaid.
+  //
+  // Read from `rows` rather than from `listed`: a filter that hides the wildcard
+  // row is not the same as a root domain that has none, and telling the operator
+  // to declare what they already declared is its own kind of wrong.
+  const wildcardHostname = activeZone === undefined ? undefined : `*.${activeZone.apexHostname}`;
+  const missingWildcardHostname = scope === "WILDCARD"
+    && wildcardHostname !== undefined
+    && !rows.some((row) => row.hostnameType === "WILDCARD")
+    ? wildcardHostname
+    : undefined;
+
   return <Modal close={close} closeLabel={t("close")} title={t("hostnamePickerTitle")} width="picker">
     {error && <ErrorBanner message={error} t={t} />}
     <div className="hostname-picker">
@@ -1801,14 +1915,25 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
               dialog does. */}
           <div className="actions">
             <button className="icon-button" type="button" disabled={busy || activeZoneId === ""} title={t("refresh")} aria-label={t("refresh")} onClick={() => void refreshZone()}><RefreshCw size={16} /></button>
-            <button className="secondary-button" type="button" disabled={busy || activeZoneId === ""} title={t("hostnameDeclareNote")} onClick={() => setCreateOpen(true)}><Plus size={15} />{t("addHostname")}</button>
+            <button className="secondary-button" type="button" disabled={busy || activeZoneId === ""} title={t("hostnameDeclareNote")} onClick={() => { setCreatePreset(undefined); setCreateOpen(true); }}><Plus size={15} />{t("addHostname")}</button>
           </div>
         </div>
         {/* Said out loud rather than left implicit: the apex row is the root
             domain itself, and an operator told to cover a root domain's hostnames
             has no way to know the root domain is among them unless the list says
             so. */}
-        <small className="form-hint">{t("hostnamePickerHint")}</small>
+        {/* The hint is the scope's, not the pane's: under `WILDCARD` the line that
+            says to select the root domain itself is advice the operator cannot
+            follow and would only report as a broken control. */}
+        <small className="form-hint">{t(scope === "WILDCARD" ? "hostnamePickerHintWildcard" : "hostnamePickerHint")}</small>
+        {/* The state where every row is refused, stated with the way out rather
+            than left as a table of dead controls. `*` is pre-filled because the
+            name is already known here — asking for it again is the same dead end
+            with an extra step. */}
+        {missingWildcardHostname !== undefined && <>
+          <small className="form-error" role="alert">{t("hostnamePickerNoWildcardHostname", { wildcard: missingWildcardHostname })}</small>
+          <button className="secondary-button" type="button" disabled={busy} onClick={() => { setCreatePreset("*"); setCreateOpen(true); }}><Plus size={15} />{t("hostnamePickerAddWildcard", { wildcard: missingWildcardHostname })}</button>
+        </>}
         {/* Filtering earns its 38px only once the list is long enough to need it:
             under a screenful the search box pushes the rows it filters out of
             view, which is the opposite of what it is for. */}
@@ -1837,14 +1962,21 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
               // own row, so a header could only repeat what the column labels.
               id: "choice",
               header: "",
-              cell: (row) => <input
-                aria-label={t("hostnamePickerChooseHostname", { hostname: row.hostname })}
-                checked={draft !== undefined && draft.id === row.id}
-                disabled={blocked(row)}
-                name="certificateHostname"
-                onChange={() => setDraft(row)}
-                type="radio"
-              />,
+              cell: (row) => {
+                // The reason rides on the control itself, as it does for every
+                // other locked control in this file: the row stays visible, and
+                // the one thing the operator cannot do explains why.
+                const refusal = rowRefusalKey(row, scope);
+                return <input
+                  aria-label={t("hostnamePickerChooseHostname", { hostname: row.hostname })}
+                  checked={draft !== undefined && draft.id === row.id}
+                  disabled={refusal !== undefined}
+                  title={refusal === undefined ? undefined : t(refusal)}
+                  name="certificateHostname"
+                  onChange={() => setDraft(row)}
+                  type="radio"
+                />;
+              },
               width: 48,
             },
             // `@` is read out as the root domain rather than left as a symbol:
@@ -1863,7 +1995,10 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
           ]}
           density="compact"
           emptyState={<span>{needle === "" ? t("noHostnames") : t("hostnamePickerNoMatch")}</span>}
-          getRowProps={(row) => (blocked(row) ? { "aria-disabled": true } : undefined)}
+          getRowProps={(row) => {
+            const refusal = rowRefusalKey(row, scope);
+            return refusal === undefined ? undefined : { "aria-disabled": true, title: t(refusal) };
+          }}
           getRowId={(row) => row.id}
           loading={busy && rows.length === 0}
           // The row is the click target as well as its control: a hostname is one
@@ -1914,10 +2049,11 @@ function HostnamePickerDialog({ apply, close, initialRows, initialZoneId, scope,
         holds the row the server reports rather than the reply to the create. The
         form states both halves of that before the click, and a name the
         certificate type on screen cannot take leaves the choice where it was. */}
-    {createOpen && <HostnameFormDialog t={t} note={t("hostnameDeclareNote")} close={() => setCreateOpen(false)} submit={async (relativeName) => {
+    {createOpen && <HostnameFormDialog t={t} note={t("hostnameDeclareNote")} initialRelativeName={createPreset} close={() => { setCreateOpen(false); setCreatePreset(undefined); }} submit={async (relativeName) => {
       const created = await service.createDomainHostname(activeZoneId, { relativeName });
       const next = await reloadZone(activeZoneId);
       setCreateOpen(false);
+      setCreatePreset(undefined);
       const fresh = next.find((row) => row.id === created.id);
       if (fresh !== undefined && !rowBlockedByScope(fresh, scope)) setDraft(fresh);
     }} />}
@@ -2351,6 +2487,11 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
     || renewBeforeDaysIssue !== undefined
     || !certName.trim();
 
+  // The claims folded onto the records they land in. Derived from what is
+  // outstanding rather than stored, so a re-check that proves one hostname of a
+  // shared record cannot leave the surviving value on a group of its own.
+  const ownershipGroups = groupOwnershipRecords(pendingClaims, selectedZone?.apexHostname);
+
   const formId = "certificate-request-form";
 
   // The wizard is a side panel, not a centred dialog, and the action row is a
@@ -2516,21 +2657,21 @@ export function CertificateFormDialog({ close, initialTarget, submit, t }: Certi
         <div>
           <strong>{t("ownershipRequiredTitle")}</strong>
           <small className="form-hint">{t("ownershipRequiredHint")}</small>
-          {pendingClaims.map((claim, index) => {
-            const row = claim.hostname;
-            // The server resolves the provider-facing host record (it owns the
-            // zone); the local fold is only a fallback for a response that
-            // predates `dnsRecordRelativeName`.
-            const relative = claim.dnsRecordRelativeName ?? (claim.dnsRecordName === undefined
-              ? undefined
-              : relativeRecordName(claim.dnsRecordName, selectedZone?.apexHostname));
-            return <div key={row.id}>
-              <small className="form-hint">{row.hostname}</small>
-              {relative !== undefined && <CopyField label={t("relativeName")} value={relative} copied={copiedField === `relative-${index}`} copy={() => void copyValue(`relative-${index}`, relative)} t={t} hint={t("relativeNameHint")} />}
-              {claim.dnsRecordName && <CopyField label={t("recordName")} value={claim.dnsRecordName} copied={copiedField === `name-${index}`} copy={() => void copyValue(`name-${index}`, claim.dnsRecordName!)} t={t} />}
-              {claim.dnsRecordValue && <CopyField label={t("recordValue")} value={claim.dnsRecordValue} copied={copiedField === `token-${index}`} copy={() => void copyValue(`token-${index}`, claim.dnsRecordValue!)} t={t} />}
-            </div>;
-          })}
+          {/* One block per DNS record, not per hostname. A wildcard certificate
+              plans two identifiers into one record, so drawing the claims one by
+              one printed the same record name twice with two values — which reads
+              as a duplicated row rather than as one record that wants both values
+              at once. */}
+          {ownershipGroups.map((group, groupIndex) => <div key={group.recordName ?? `relative-${groupIndex}`}>
+            <small className="form-hint">{group.hostnames.join(" · ")}</small>
+            {group.relativeName !== undefined && <CopyField label={t("relativeName")} value={group.relativeName} copied={copiedField === `relative-${groupIndex}`} copy={() => void copyValue(`relative-${groupIndex}`, group.relativeName!)} t={t} hint={groupIndex === 0 ? t("relativeNameHint") : undefined} />}
+            {group.recordName !== undefined && <CopyField label={t("recordName")} value={group.recordName} copied={copiedField === `name-${groupIndex}`} copy={() => void copyValue(`name-${groupIndex}`, group.recordName!)} t={t} />}
+            {group.values.map((value, valueIndex) => <CopyField key={`value-${groupIndex}-${valueIndex}`} label={group.values.length > 1 ? t("recordValueOf", { index: valueIndex + 1, total: group.values.length }) : t("recordValue")} value={value} copied={copiedField === `token-${groupIndex}-${valueIndex}`} copy={() => void copyValue(`token-${groupIndex}-${valueIndex}`, value)} t={t} />)}
+            {/* Two values at one name are not alternatives: DNS holds both at
+                once, and publishing only one leaves the other hostname pending
+                forever. Said out loud because the field labels alone cannot. */}
+            {group.values.length > 1 && <small className="form-hint">{t("ownershipSharedRecordHint")}</small>}
+          </div>)}
           <small className="form-hint">{t("ownershipWillSubmit")}</small>
           <button className="command-button" type="button" disabled={busy} onClick={() => void recheck()}>{busy ? t("ownershipChecking") : t("ownershipCheckNow")}</button>
         </div>

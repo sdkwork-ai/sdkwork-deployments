@@ -25,12 +25,19 @@
  *   bindings (read back through `apps.domains.list`).
  */
 import type {
+  AppClientClass,
   AppCompositionResponse,
+  AppDeploymentResponse,
   AppDomainResponse,
   AppKind,
+  AppPublishEnvironment,
   AppResponse,
+  AppSourceSpecResponse,
   AppStatus,
   ArtifactResponse,
+  BindAppSourceSpecSourceRequest,
+  CreateAppDeploymentRequest,
+  CreateAppSourceSpecRequest,
   CreateArtifactRequest,
   CreateSourceRepositoryRequest,
   DomainHostnameResponse,
@@ -39,6 +46,7 @@ import type {
   PlatformTargetResponse,
   SourceRepositoryResponse,
   SdkworkDeployAppClient,
+  UpdateAppSourceSpecRequest,
 } from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   DriveUploaderBlobLike,
@@ -52,6 +60,14 @@ import type {
 } from "@sdkwork/deployments-pc-console-core/sdk";
 import { createDeployApplicationPublisher } from "@sdkwork/deployments-pc-console-core/sdk";
 import { uuid } from "@sdkwork/utils/id";
+import {
+  mergeReleaseHistory,
+  RELEASE_HISTORY_PAGE_SIZE,
+  type DeployAppHistorySection,
+  type DeployAppReleaseHistory,
+  type DeployAppRollbackPlan,
+} from "./app-release-history.ts";
+import { planClientClassDefault, type SourceSpecRoutingInput } from "./app-source-spec-routing.ts";
 
 /* ------------------------------------------------------------------ *
  * Upload code
@@ -192,12 +208,36 @@ export interface DeployReplaceBindingsInput {
  * Detail
  * ------------------------------------------------------------------ */
 
+/**
+ * Sections of the detail drawer whose read can fail on its own.
+ *
+ * The drawer fans its reads out concurrently and keeps each one *tolerant* — one
+ * unreachable endpoint must not blank the whole drawer. What it must not do is
+ * render that failure as "there is nothing here": an operator who may not read
+ * source repositories would otherwise be told the application has none. So the
+ * section is named here and the drawer says "could not load" instead.
+ */
+export type DeployAppDetailSection = "platformTargets" | "sourceRepositories" | "sourceSpecs"
+
 /** Everything the detail drawer renders, gathered from four endpoints. */
 export interface DeployAppDetail {
   readonly app: AppResponse
   readonly domains: readonly DeployAppDomain[]
   readonly platformTargets: readonly PlatformTargetResponse[]
   readonly sourceRepositories: readonly SourceRepositoryResponse[]
+  /**
+   * 源码规格：这个应用有哪些源码，各自服务哪些客户端。
+   *
+   * 与 `sourceRepositories` 是两个不同的来源面 —— 那个是 **git 仓库**（代码从哪来），
+   * 这个是**已上传的分发来源**（每次访问由哪份产物服务）。两者同名「来源」但不可合并：
+   * 一个应用可以只绑了 git 仓库而没有任何可分发产物。
+   */
+  readonly sourceSpecs: readonly AppSourceSpecResponse[]
+  /**
+   * The sections above that came back empty because their read *failed*, not
+   * because the application has none. Empty when every read succeeded.
+   */
+  readonly unavailableSections: readonly DeployAppDetailSection[]
 }
 
 /* ------------------------------------------------------------------ *
@@ -222,6 +262,65 @@ export interface DeployAppOperationsService {
   /** Compute the SHA-256 the artifact registration requires, in the browser. */
   archiveChecksum(file: DriveUploaderBlobLike): Promise<string>
 
+  /* ---------------------------------------------------------------- *
+   * 源码规格（source specs）
+   * ---------------------------------------------------------------- *
+   * A spec is one uploaded source of the app (a PC bundle, an H5 bundle, …)
+   * plus the client classes it serves. The console owns two things here that
+   * the wire does not spell out: which spec is a class's default (lowest
+   * `preference`), and that a spec with no uploaded source serves nothing.
+   * Both are computed by `app-source-spec-routing.ts`; these methods only carry
+   * the bytes of the round trip.
+   */
+
+  /** 源码规格 — 一个应用在某环境下的全部规格（含每端路由与来源状态）。 */
+  listSourceSpecs(appId: string, environment?: AppPublishEnvironment): Promise<readonly AppSourceSpecResponse[]>
+  createSourceSpec(appId: string, input: CreateAppSourceSpecRequest): Promise<AppSourceSpecResponse>
+  /**
+   * 源码规格 — 更新一个规格。
+   *
+   * `version` is the optimistic-concurrency token and becomes `If-Match`: the
+   * contract declares the endpoint idempotent-conditioned, so a stale write must
+   * fail loudly rather than overwrite a concurrent edit. `specKey` is not in the
+   * patch — it is the projected variant key, and renaming it would silently
+   * re-point every routing rule that names it.
+   */
+  updateSourceSpec(
+    appId: string,
+    specId: string,
+    input: UpdateAppSourceSpecRequest,
+    version: string,
+  ): Promise<AppSourceSpecResponse>
+  deleteSourceSpec(appId: string, specId: string): Promise<void>
+  /**
+   * 源码规格 — 把已上传的来源登记到某个规格上。
+   *
+   * Separate from `updateSourceSpec` because it is a different fact: the spec
+   * describes *how* a source is served, this says *which* source it is. A spec
+   * is normally declared first and filled by the upload that follows, which is
+   * why `sourceStatus` is its own field.
+   */
+  bindSourceSpecSource(
+    appId: string,
+    specId: string,
+    source: BindAppSourceSpecSourceRequest["source"],
+  ): Promise<AppSourceSpecResponse>
+  /**
+   * 源码规格 — 把某个客户端类别的**默认**规格改成 `targetSpecId`。
+   *
+   * `specs` is the set the decision was made from, and each spec's `version`
+   * travels with its write, so a concurrent edit surfaces as a failed
+   * precondition instead of a lost route. The sequence is planned by
+   * {@link planClientClassDefault} — the outgoing default is *demoted*, not
+   * dropped, so the class keeps serving while the new default is still `EMPTY`.
+   */
+  setClientClassDefault(
+    appId: string,
+    clientClass: AppClientClass,
+    targetSpecId: string,
+    specs: readonly (SourceSpecRoutingInput & { readonly version: string })[],
+  ): Promise<void>
+
   /** 域名设置 — read the app's publishing-domain configuration and hostnames. */
   loadDomainState(appId: string): Promise<DeployAppDomainState>
   /** 域名设置 — set/clear the `<appId>` label and the suffix catalog. */
@@ -245,6 +344,31 @@ export interface DeployAppOperationsService {
 
   /** 详情 — everything the detail drawer shows. */
   loadAppDetail(appId: string): Promise<DeployAppDetail>
+
+  /** 发布历史 — 制品包 / 版本 / 部署三段读结果合并成一条时间线。 */
+  loadReleaseHistory(appId: string): Promise<DeployAppReleaseHistorySnapshot>
+  /**
+   * 发布历史 — 回滚：把历史版本重新部署一次。
+   *
+   * 契约里没有回滚端点（`CreateAppDeploymentRequest` 既不含
+   * `rollbackFromDeploymentId`，也是 `additionalProperties: false`），所以回滚在
+   * 协议上的唯一正解就是再发一次 `deployments.create`。四元组
+   * `platformTargetId` / `deploymentKind` / `deploymentTarget` / `environment`
+   * 由 {@link rollbackAvailability} 从既有部署记录里抄出来，本方法只负责把它
+   * 送上路 —— 幂等键与头部成对，与其他写命令一致。
+   */
+  rollbackRelease(appId: string, plan: DeployAppRollbackPlan): Promise<AppDeploymentResponse>
+}
+
+/**
+ * 发布历史的完整读结果：合并后的时间线 **加上**哪几段没读到。
+ *
+ * `unavailableSections` 与 {@link DeployAppDetail.unavailableSections} 是同一条
+ * 判据、同一个理由：三段读各自容错，容错之后「读失败」与「本来就没有」必须还能
+ * 分开说。一个制品包都没有，和一个读不到制品包的调用者，看到的应该是两句话。
+ */
+export interface DeployAppReleaseHistorySnapshot extends DeployAppReleaseHistory {
+  readonly unavailableSections: readonly DeployAppHistorySection[]
 }
 
 export interface DeployAppOperationsServiceOptions {
@@ -492,20 +616,129 @@ export function createDeployAppOperationsService(
     },
 
     async loadAppDetail(appId) {
-      // Four independent reads: fan them out so the drawer opens in one round
-      // trip rather than four sequential ones. Each is individually tolerant —
-      // a tenant without any source repository should still see the app.
-      const [app, domains, targets, repositories] = await Promise.all([
+      // Five independent reads: fan them out so the drawer opens in one round
+      // trip rather than five sequential ones. Each is individually tolerant —
+      // a tenant without any source repository should still see the app, and an
+      // app whose specs have not been declared yet should still show its domains.
+      //
+      // Tolerance on its own is what made this misleading: swallowing the error
+      // left each section rendering its *empty* state, so "we could not read this"
+      // and "there is nothing here" were indistinguishable. The catch still
+      // returns an empty list, but it also records which section it was.
+      const unavailableSections: DeployAppDetailSection[] = []
+      const tolerant = <T>(section: DeployAppDetailSection, read: Promise<readonly T[]>): Promise<readonly T[]> =>
+        read.catch(() => {
+          unavailableSections.push(section)
+          return []
+        })
+      const [app, domains, targets, repositories, sourceSpecs] = await Promise.all([
         deployClient.app.retrieve(appId),
         listAppDomains(deployClient, appId),
-        deployClient.app.platformTargets.list(appId).then((page) => page.items).catch(() => []),
-        deployClient.app.sourceRepositories.list(appId).then((page) => page.items).catch(() => []),
+        tolerant("platformTargets", deployClient.app.platformTargets.list(appId).then((page) => page.items)),
+        tolerant("sourceRepositories", deployClient.app.sourceRepositories.list(appId).then((page) => page.items)),
+        tolerant("sourceSpecs", deployClient.app.sourceSpecs.list(appId).then((page) => page.items)),
       ])
       return {
         app,
         domains,
         platformTargets: targets,
         sourceRepositories: repositories,
+        sourceSpecs,
+        // `Promise.all` settles only after every catch handler has run, so the
+        // pushes above are all visible here.
+        unavailableSections,
+      }
+    },
+
+    async loadReleaseHistory(appId) {
+      // 三段读并发，且**各自容错** —— 理由与详情抽屉同一套：读不到部署记录不该
+      // 让整屏变成错误页，但也不能把「读失败」渲染成「从没发布过」。容错只负责
+      // 给出空数组，失败的那一段记在 `unavailableSections` 里由界面说清。
+      //
+      // 三段都只取一页，且页大小取到契约上限（200）：历史是只读审计面，一次取满
+      // 比翻页更贴合「打开就看到全貌」。超出上限时 `mergeReleaseHistory` 会把
+      // `truncated` 置真，界面明说只显示了前 N 条。
+      const unavailableSections: DeployAppHistorySection[] = []
+      const tolerant = <T>(
+        section: DeployAppHistorySection,
+        read: Promise<readonly T[]>,
+      ): Promise<readonly T[]> => read.catch(() => {
+        unavailableSections.push(section)
+        return []
+      })
+      const [packages, releases, deployments] = await Promise.all([
+        tolerant("packages", deployClient.package.list(appId, { pageSize: RELEASE_HISTORY_PAGE_SIZE }).then((page) => page.items)),
+        tolerant("releases", deployClient.release.list(appId, { pageSize: RELEASE_HISTORY_PAGE_SIZE }).then((page) => page.items)),
+        tolerant("deployments", deployClient.deployment.list(appId, { pageSize: RELEASE_HISTORY_PAGE_SIZE }).then((page) => page.items)),
+      ])
+      return {
+        ...mergeReleaseHistory({ packages, releases, deployments }),
+        unavailableSections,
+      }
+    },
+
+    rollbackRelease(appId, plan) {
+      // 幂等键同时进 body 与 `Idempotency-Key` 头。`CreateAppDeploymentRequest`
+      // 把 `idempotencyKey` 声明成 **required body** 成员（`additionalProperties:
+      // false`），而 Rust 授权层对空白串直接拒绝，所以两处必须来自同一个值 ——
+      // 各自新生成一次会让重试看起来像第二条命令。
+      const idempotencyKey = createIdempotencyKey()
+      const request: CreateAppDeploymentRequest = {
+        platformTargetId: plan.platformTargetId,
+        releaseId: plan.releaseId,
+        deploymentKind: plan.deploymentKind,
+        deploymentTarget: plan.deploymentTarget,
+        environment: plan.environment,
+        idempotencyKey,
+      }
+      return deployClient.deployment.create(appId, request, { idempotencyKey })
+    },
+
+    async listSourceSpecs(appId, environment) {
+      const page = await deployClient.app.sourceSpecs.list(
+        appId,
+        environment === undefined ? undefined : { environment },
+      )
+      return page.items
+    },
+
+    createSourceSpec(appId, input) {
+      // `environment` is part of the create body, not a query parameter: the
+      // spec belongs to one environment and the row's uniqueness is scoped by it.
+      return deployClient.app.sourceSpecs.create(appId, input, {
+        idempotencyKey: createIdempotencyKey(),
+      })
+    },
+
+    updateSourceSpec(appId, specId, input, version) {
+      return deployClient.app.sourceSpecs.update(appId, specId, input, { ifMatch: version })
+    },
+
+    deleteSourceSpec(appId, specId) {
+      return deployClient.app.sourceSpecs.delete(appId, specId)
+    },
+
+    bindSourceSpecSource(appId, specId, source) {
+      return deployClient.app.sourceSpecs.bindSource(appId, specId, { source })
+    },
+
+    async setClientClassDefault(appId, clientClass, targetSpecId, specs) {
+      const plan = planClientClassDefault(specs, clientClass, targetSpecId)
+      // Sequential, not concurrent: the first write releases rank 0 and the
+      // second claims it. Racing them can land the claim first, which the
+      // database rejects with the unique index on (class, preference).
+      for (const update of plan.updates) {
+        await deployClient.app.sourceSpecs.update(
+          appId,
+          update.specId,
+          {
+            clientClassRoutes: update.routes.map((route) => ({
+              clientClass: route.clientClass,
+              preference: route.preference,
+            })),
+          },
+          { ifMatch: update.version },
+        )
       }
     },
   }

@@ -56,6 +56,8 @@ export const deploymentsWorkspaceEnUs = {
   "resource.audit.description": "Operator action evidence",
   "resource.localProjects.label": "Local Projects",
   "resource.localProjects.description": "Docker deploy modules, local nodes, and Drive sandbox file browser",
+  "resource.sourceSpecs.label": "Source specs",
+  "resource.sourceSpecs.description": "Which uploaded source serves each kind of client, per application",
   "action.apps.create": "Create application",
   "action.apps.update": "Update",
   "action.apps.activate": "Enable",

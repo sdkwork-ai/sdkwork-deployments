@@ -4,6 +4,40 @@
  * registration, so hosts can import the whole capability from the package root
  * (console shell + BirdCoder plugin) without reaching into package internals.
  */
+/**
+ * The routing kernel is part of the capability's public surface, not an internal
+ * detail: the backend-admin operations view needs the same "declared vs
+ * effective" answer, and the app shell projects it into that surface's port.
+ * Re-exporting it here is what keeps a single implementation of the rule — see
+ * `projectSourceSpecLedger`'s doc for why a second one is unacceptable.
+ */
+export {
+  APP_CLIENT_CLASSES,
+  APP_PUBLISH_ENVIRONMENTS,
+  describeClientClassRouting,
+  describeRoutingOverview,
+  projectSourceSpecLedger,
+  resolveAppEnvironment,
+  SOURCE_BINDING_LABEL_KEYS,
+  /**
+   * `STATIC | SPA | WIKI` — the third column of a spec row, alongside its
+   * runtime target and client architecture. Exported for the same reason as the
+   * other three tables: the admin ledger renders the same row.
+   */
+  SOURCE_SPEC_HANDLER_LABEL_KEYS,
+  SOURCE_SPEC_STATUS_LABEL_KEYS,
+  CLIENT_ARCHITECTURE_LABEL_KEYS,
+  CLIENT_CLASS_LABEL_KEYS,
+  RUNTIME_TARGET_LABEL_KEYS,
+} from "./service/app-source-spec-routing.ts";
+export type {
+  ClientClassRouting,
+  SourceSpecLedgerEntry,
+  SourceSpecLedgerInput,
+  SourceSpecRouteFact,
+  SourceSpecRoutingInput,
+  SourceSpecRoutingOverview,
+} from "./service/app-source-spec-routing.ts";
 export { CreateDeployAppDialog } from "./components/CreateDeployAppDialog.tsx";
 export type { CreateDeployAppDialogProps, DeployAppPublishResult } from "./components/CreateDeployAppDialog.tsx";
 export { CreateAppDialog } from "./components/CreateAppDialog.tsx";
@@ -38,6 +72,40 @@ export { AppDomainDialog } from "./components/AppDomainDialog.tsx";
 export type { AppDomainDialogProps } from "./components/AppDomainDialog.tsx";
 export { AppDetailDrawer } from "./components/AppDetailDrawer.tsx";
 export type { AppDetailDrawerProps } from "./components/AppDetailDrawer.tsx";
+export { AppReleaseHistoryDrawer } from "./components/AppReleaseHistoryDrawer.tsx";
+export type { AppReleaseHistoryDrawerProps } from "./components/AppReleaseHistoryDrawer.tsx";
+/**
+ * 发布历史的判定内核：合并三段读结果、判定这一版能否回滚。
+ *
+ * 与 `app-source-spec-routing` 同理，这是能力本身的规则而不是内部细节 —— 后端管理
+ * 视图要给出同一个「哪一版在线上 / 能不能退回去」的答案，而第二份实现必然与第一份
+ * 漂移。导出的是**纯函数**，调用方不必构造任何客户端。
+ */
+export {
+  DEPLOYABLE_RELEASE_STATUSES,
+  deploymentStatusTone,
+  formatByteSize,
+  formatHistoryTime,
+  IN_FLIGHT_DEPLOYMENT_STATUSES,
+  mergeReleaseHistory,
+  packageStatusTone,
+  RELEASE_HISTORY_PAGE_SIZE,
+  releaseStatusTone,
+  RETIRED_PACKAGE_STATUSES,
+  rollbackAvailability,
+  SERVING_DEPLOYMENT_STATUSES,
+  shortDigest,
+} from "./service/app-release-history.ts";
+export type {
+  DeployAppHistorySection,
+  DeployAppReleaseHistory,
+  DeployAppReleaseHistoryEntry,
+  DeployAppReleaseHistoryInput,
+  DeployAppRollbackAvailability,
+  DeployAppRollbackBlockReason,
+  DeployAppRollbackPlan,
+  DeployStatusTone,
+} from "./service/app-release-history.ts";
 export {
   compositionKey,
   createDeployAppOperationsService,
@@ -50,6 +118,7 @@ export type {
   DeployAppDomainState,
   DeployAppOperationsService,
   DeployAppOperationsServiceOptions,
+  DeployAppReleaseHistorySnapshot,
   DeployCodeArchiveUpload,
   DeployCodeSource,
   DeployCustomHostnameInput,
@@ -178,7 +247,24 @@ export {
   publishingText,
   publishingTranslator,
   APP_KIND_LABEL_KEYS,
+  /**
+   * `deploy_app.app_status` → copy. The admin ledger shows an application's own
+   * status above its specs, and re-declaring these six keys there would make a
+   * seventh status render as a raw token on one surface and as a label on the
+   * other.
+   */
   APP_STATUS_LABEL_KEYS,
   APP_SURFACE_LABEL_KEYS,
+  /**
+   * 发布历史的六个枚举词表一并导出，理由同上：`TAR_GZ` / `PENDING_REVIEW` 这类裸
+   * 枚举值一旦在某个面上漏出来，就会和另一个面已经本地化的同一状态并列显示，
+   * 读起来像两个不同的东西。
+   */
+  DEPLOYMENT_KIND_LABEL_KEYS,
+  DEPLOYMENT_STATUS_LABEL_KEYS,
+  DEPLOYMENT_TARGET_LABEL_KEYS,
+  PACKAGE_FORMAT_LABEL_KEYS,
+  PACKAGE_STATUS_LABEL_KEYS,
+  RELEASE_STATUS_LABEL_KEYS,
 } from "./i18n.ts";
 export type { PublishingMessageKey, PublishingTranslator } from "./i18n.ts";
