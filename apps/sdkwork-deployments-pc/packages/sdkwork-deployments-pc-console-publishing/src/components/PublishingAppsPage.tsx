@@ -5,14 +5,22 @@
  *   │ 归属 [ 全部 | 平台应用 | 租户应用 | 组织应用 | 个人应用 ]  ← 服务端分面   │
  *   │ [ 关键字 ]  [ 应用类型: SPA 2 · Android 1 ]  [ 清空 ]      显示 3 / 共 3  │
  *   │ ───────────────────────────────────────────────────────────────────────── │
- *   │ 名称 | 标识 | 类型 | 状态 | 归属类型 | 归属用户 | 域名 | …               │
+ *   │ [◼] 名称      | 类型 | 状态 | 归属类型 | 归属用户 | 域名 | …             │
+ *   │     标识副行  │                                                          │
  *   └────────────────────────────────────────────────────────────────────────────┘
  *
  *   ┌ console ───────────────────────────────────────────────────────────────────┐
  *   │ [ 关键字 ]  [ 应用类型: SPA 2 · Android 1 ]  [ 清空 ]      显示 3 / 共 3  │
  *   │ ───────────────────────────────────────────────────────────────────────── │
- *   │ 名称 | 标识 | 类型 | 状态 | 归属类型 | 归属用户 | 域名 | …               │
+ *   │ [◼] 名称      | 类型 | 状态 | 归属类型 | 归属用户 | 域名 | …             │
+ *   │     标识副行  │                                                          │
  *   └────────────────────────────────────────────────────────────────────────────┘
+ *
+ * The identity column leads with an avatar tile (`AppAvatar`): a deterministic
+ * gradient + application-kind glyph always, the uploaded store icon
+ * (`metadata.media.icon`, resolved to a signed URL) fading in over it when the
+ * app carries one. Name and slug share that one column — the industry ledger
+ * pattern — so the row is recognized by shape before it is read.
  *
  * **Every facet sits above the table, on both surfaces.** An earlier cut put the
  * ownership levels in a left rail next to an application-type panel. The rail is
@@ -103,6 +111,7 @@ import {
   type PublishingTranslator,
 } from "../i18n.ts";
 import { createDeployAppPublishingService } from "../service/deploy-app-publishing.ts";
+import { createAppIconUrlResolver } from "../service/app-icon.ts";
 import {
   APP_LIST_PAGE_SIZE,
   countAppKinds,
@@ -112,6 +121,7 @@ import {
   orderAppKindFacets,
 } from "../service/app-list-facets.ts";
 import { AppDetailDrawer } from "./AppDetailDrawer.tsx";
+import { AppAvatar } from "./AppAvatar.tsx";
 import { AppDomainDialog } from "./AppDomainDialog.tsx";
 import { AppReleaseHistoryDrawer } from "./AppReleaseHistoryDrawer.tsx";
 import { AppSourceSpecsDrawer } from "./AppSourceSpecsDrawer.tsx";
@@ -203,6 +213,16 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, surface 
   const service = useMemo(
     () => createDeployAppPublishingService({ deployClient, driveClient }),
     [deployClient, driveClient],
+  )
+  /**
+   * 身份列头像的签名 URL 解析器。每页一个实例 —— 缓存与在途去重都长在闭包里，
+   * 换客户端（重新挂载）才换缓存；整个台账共用一个，行复用、翻页、切分面都
+   * 不会重复兑换同一枚图标的下载 URL。失败返回 `undefined`，由头像自己落回
+   * 渐变底（见 service/app-icon.ts：头像缺失是展示事实，不进错误横幅）。
+   */
+  const resolveIconUrl = useMemo(
+    () => createAppIconUrlResolver({ drive: driveClient.drive }),
+    [driveClient],
   )
   /**
    * 归属分面是不是一道**真正的选择** —— 即，这个面到不到得了多于一档的归属。
@@ -365,22 +385,29 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, surface 
   }
 
   /**
-   * 列定义：名称 / 标识 / 类型 / 状态 / 归属类型 / 归属用户 / 域名 / 平台目标 /
-   * 版本 / 更新时间。
+   * 列定义：身份（头像 + 名称 + 标识）/ 类型 / 状态 / 归属类型 / 归属用户 /
+   * 域名 / 平台目标 / 版本 / 更新时间。
    * 行内八命令走框架的行动作槽，不再手写单元格。
    */
   const columns = useMemo<DataTableColumn<AppResponse>[]>(() => [
     {
       id: "name",
       header: t("columnName"),
-      cell: (app) => <strong>{app.name}</strong>,
-      width: 180,
-    },
-    {
-      id: "slug",
-      header: t("columnSlug"),
-      cell: (app) => app.slug,
-      width: 160,
+      cell: (app) => (
+        // 身份单元格：头像 + 名称 + 标识。名称与标识原本是两列 —— 同一个应用
+        // 的两行事实被一个竖线隔开，扫读时眼睛要跳两次才能把「它叫什么」和
+        // 「它是什么」对上。行业台账（Vercel 项目表、Cloudflare 应用表）的答案
+        // 一致：一列身份，图标打头，标识做名称下的次要行。合并后省出的 160px
+        // 让十列台账在最常拥挤的域名列上多喘一口气的余地。
+        <span className="apps-identity">
+          <AppAvatar app={app} resolveIconUrl={resolveIconUrl} />
+          <span className="apps-identity-text">
+            <strong className="apps-identity-name">{app.name}</strong>
+            <code className="apps-identity-slug">{app.slug}</code>
+          </span>
+        </span>
+      ),
+      width: 260,
     },
     {
       id: "kind",
@@ -422,9 +449,10 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, surface 
         const ownerId = app.ownerId
         if (ownerId !== undefined && ownerId !== "") {
           // 长 id 折尾：单元格自己的 `max-width` + 省略号由宿主样式兜住，这里
-          // 只保证最短可用辨识长度，`title` 留全量值。
+          // 只保证最短可用辨识长度，`title` 留全量值。`owner-id` 是语义锚点 ——
+          // 行内还有身份列的 slug `<code>`，按元素选择器取 code 会拿错列。
           const display = ownerId.length > 18 ? `…${ownerId.slice(-12)}` : ownerId
-          return <code title={ownerId}>{display}</code>
+          return <code className="owner-id" title={ownerId}>{display}</code>
         }
         const scopeKey = APP_OWNER_SCOPE_LABEL_KEYS[app.ownerType]
         return <span className="muted">{scopeKey === undefined ? t("detailNoValue") : t(scopeKey)}</span>
@@ -469,7 +497,7 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, surface 
       cell: (app) => new Date(app.updatedAt).toLocaleString(locale),
       width: 180,
     },
-  ], [locale, t])
+  ], [locale, t, resolveIconUrl])
 
   /**
    * 启停走 `apps.pause` / `apps.activate` 两条各自的命令（各自要幂等键），不是同一次
@@ -604,10 +632,10 @@ export function PublishingAppsPage({ deployClient, driveClient, locale, surface 
                   `role="tab"` 换的是同一个表格的行集合，没有各自的 `aria-controls`
                   面板：这里真正表达的是 `aria-selected`（哪一档现在生效）。
 
-                  标签与 tab 条包在同一个 group 里（同 `.apps-kind-facets`）：否则工具条
-                  换行时标签会被留下、tab 条被推到下一排，读起来像两个不相干的控件。 */}
-              <span className="apps-facet-label" id="publishing-apps-owner-label">{t("ownerTypeFilter")}</span>
-              <div className="apps-owner-tabs" role="tablist" aria-labelledby="publishing-apps-owner-label">
+                  不带可见标签：首枚 tab 就是「全部归属类型」，轴名已由 tab 文案自明，
+                  再挂一个「归属类型」只是复读。group 名由 `aria-label` 承担 ——
+                  tab 条仍是被命名的控件，只是名字不占版面。 */}
+              <div className="apps-owner-tabs" role="tablist" aria-label={t("ownerTypeFilter")}>
                 <button
                   type="button"
                   role="tab"

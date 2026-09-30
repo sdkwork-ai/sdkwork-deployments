@@ -165,7 +165,7 @@ describe("applications ledger ownership face — both surfaces", () => {
     const row = scope.querySelector("tbody tr") as HTMLElement;
 
     expect(row.textContent).toContain("Personal app");
-    expect(row.querySelector("code")?.textContent).toBe("user-42");
+    expect(row.querySelector("code.owner-id")?.textContent).toBe("user-42");
   });
 });
 
@@ -237,12 +237,13 @@ describe("applications ledger ownership face — admin", () => {
     expect(tablist.closest(".apps-ledger-toolbar"), "the ownership control is in that row")
       .toBe(chips.closest(".apps-ledger-toolbar"));
 
-    // The label travels inside the strip's own group. Left as a sibling it would be
-    // stranded on the previous line the moment the toolbar wraps, naming a control
-    // that moved away from it.
+    // The strip is named for assistive tech without a visible label: the first tab
+    // ("All ownership levels") already says which axis this is, so a rendered
+    // caption would only repeat it. The group name travels on the tablist itself.
     const group = tablist.closest(".apps-owner-facets");
-    expect(group, "the label and the strip share a group").toBeTruthy();
-    expect(group?.querySelector(".apps-facet-label")?.id).toBe(tablist.getAttribute("aria-labelledby"));
+    expect(group, "the strip keeps its own group").toBeTruthy();
+    expect(tablist.getAttribute("aria-label"), "the ownership strip stays a named group").toBeTruthy();
+    expect(group?.querySelector(".apps-facet-label"), "no visible label rides the ownership strip").toBeNull();
   });
 
   it("pushes the chosen level down as `scope` rather than filtering locally", async () => {

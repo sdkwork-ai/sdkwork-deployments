@@ -80,6 +80,12 @@ export type {
 export { createDeployApplicationPublisher } from "@sdkwork/deployments-app-sdk/application-publisher";
 
 export type {
+  /**
+   * 应用头像媒体的另一半：把 `deploy_app.metadata.media` 里的 Drive 节点引用
+   * 换成可展示的签名下载 URL。不镜像它，能力包就只能拿裸字符串与响应
+   * 对赌 —— 而签名 URL 有过期时间，过期语义必须按契约承载。
+   */
+  CreateDownloadUrlResponse,
   DriveUploaderBlobLike,
   DriveUploaderProgress,
   DriveUploaderUploadResult,

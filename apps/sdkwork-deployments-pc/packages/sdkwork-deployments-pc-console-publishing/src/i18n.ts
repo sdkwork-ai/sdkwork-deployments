@@ -294,8 +294,9 @@ const en = {
   appsPageTitle: "Applications",
   appsPageDescription: "Create and publish deploy_app applications",
   refresh: "Refresh",
+  // The name column is the identity cell: avatar, then the name with the slug
+  // as its secondary line (one column, not two — see PublishingAppsPage).
   columnName: "Name",
-  columnSlug: "Slug",
   columnKind: "Kind",
   columnStatus: "Status",
   columnPlatformTargets: "Platform targets",
@@ -317,13 +318,15 @@ const en = {
   ownerScopeTenant: "Whole tenant",
   ownerScopeOrganization: "Whole organization",
 
-  // The ledger toolbar's two facets, top row first. `ownerTypeFilter` labels the
+  // The ledger toolbar's two facets, top row first. `ownerTypeFilter` names the
   // **ownership tab row**, which only the admin surface renders: the console
   // reaches one ownership level, so it has nothing to choose and gets no control.
-  // `appTypeFilter` labels the **type chip row** beneath it — the one facet every
-  // surface has. `appTypeFilterHint` says the thing the chips cannot: one
-  // `app_kind` per app, and the contract folds H5 and PC web into `SPA_WEB`, so
-  // there is no chip that would separate the two ends.
+  // The name is the tab row's `aria-label`, not rendered text — the first tab
+  // ("All ownership levels") already says the axis, so a visible caption would
+  // only repeat it. `appTypeFilter` labels the **type chip row** beneath it —
+  // the one facet every surface has. `appTypeFilterHint` says the thing the
+  // chips cannot: one `app_kind` per app, and the contract folds H5 and PC web
+  // into `SPA_WEB`, so there is no chip that would separate the two ends.
   ownerTypeFilter: "Ownership",
   ownerTypeFilterAll: "All ownership levels",
   appTypeFilter: "Application type",
@@ -1258,8 +1261,9 @@ const zh: Record<keyof typeof en, string> = {
   appsPageTitle: "应用管理",
   appsPageDescription: "创建并发布 deploy_app 应用",
   refresh: "刷新",
+  // 名称列是身份单元格：头像打头，名称为主行、标识为副行（一列，不是两列 ——
+  // 见 PublishingAppsPage 的列定义）。
   columnName: "名称",
-  columnSlug: "标识",
   columnKind: "类型",
   columnStatus: "状态",
   columnPlatformTargets: "平台目标",
@@ -1280,11 +1284,13 @@ const zh: Record<keyof typeof en, string> = {
   ownerScopeTenant: "全租户",
   ownerScopeOrganization: "全组织",
 
-  // 台账工具条的两个分面，上排在前。`ownerTypeFilter` 是**归属 tab 条**的组标签，
+  // 台账工具条的两个分面，上排在前。`ownerTypeFilter` 是**归属 tab 条**的组名，
   // 只有 admin 面渲染它：console 只到得一档归属，没有可选项，因此不给控件。
-  // `appTypeFilter` 是它下面那排**类型芯片**的组标签 —— 两个面都有这一个分面。
-  // `appTypeFilterHint` 必需说出芯片说不出的话：每个应用只有一个 `app_kind`，
-  // 而契约把 H5 与 PC 网页并进 `SPA_WEB`，所以没有一个芯片能分开这两端。
+  // 组名走 tab 条的 `aria-label`，不渲染成可见文字 —— 首枚 tab 就是「全部归属
+  // 类型」，轴名已自明，可见标签只会复读。`appTypeFilter` 是它下面那排**类型
+  // 芯片**的组标签 —— 两个面都有这一个分面。`appTypeFilterHint` 必需说出芯片
+  // 说不出的话：每个应用只有一个 `app_kind`，而契约把 H5 与 PC 网页并进
+  // `SPA_WEB`，所以没有一个芯片能分开这两端。
   ownerTypeFilter: "归属类型",
   ownerTypeFilterAll: "全部归属类型",
   appTypeFilter: "应用类型",
