@@ -11,8 +11,9 @@
  * - Drive node refs (icon/cover/screenshots) <- drive uploader, referenced from metadata.media
  *
  * The service is UI-framework-free: callers (deployments console or the
- * birdcoder publish plugin) construct it with the two generated clients and a
- * Drive upload result type, so it stays reusable and decoupled.
+ * birdcoder publish plugin) construct it with the two generated clients; media
+ * uploads run through the shared Drive image-upload service bound to the
+ * application upload declaration, so it stays reusable and decoupled.
  */
 import type { SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
@@ -36,10 +37,10 @@ import type {
 } from "@sdkwork/deployments-pc-console-core/sdk";
 import type {
   DriveUploaderBlobLike,
-  DriveUploaderUploadResult,
   SdkworkDriveAppClient,
 } from "@sdkwork/deployments-pc-console-core/sdk";
-import { DEPLOY_APP_MEDIA_UPLOAD } from "@sdkwork/deployments-pc-commons";
+import type { DriveUploadImageService, DriveUploadImageValue } from "@sdkwork/drive-upload-image-core";
+import { createDeployAppMediaImageService } from "@sdkwork/deployments-pc-commons";
 import { uuid } from "@sdkwork/utils/id";
 import {
   APP_SURFACE_DIRECTORY_SUFFIX,
@@ -569,12 +570,17 @@ export interface DeployAppCategorySelection {
  * known after the browser image decoder has run, so `undefined` is a real
  * third state besides "absent", and `exactOptionalPropertyTypes` requires the
  * type to say so instead of forcing a cast at every assignment.
+ *
+ * `uploadItemId` / `uploadSessionId` are legacy members: rows written through
+ * the previous archive-uploader path still carry them, but the shared Drive
+ * image-upload value contract no longer surfaces upload session identity —
+ * new rows carry only the stable Drive node reference.
  */
 export interface DeployAppMediaRef {
   readonly driveNodeId: string
   readonly driveSpaceId: string
-  readonly uploadItemId: string
-  readonly uploadSessionId: string
+  readonly uploadItemId?: string | undefined
+  readonly uploadSessionId?: string | undefined
   readonly fileName: string
   readonly contentType: string
   readonly width?: number | undefined
@@ -848,16 +854,24 @@ export interface DeployAppPublishingServiceOptions {
   readonly createIdempotencyKey?: () => string
 }
 
-/** Drive 上传结果 → 持久化引用（取 console-core artifacts 同一字段集）。 */
-export function toDeployAppMediaRef(
-  uploaded: DriveUploaderUploadResult,
+/**
+ * 共享图片上传 value → 持久化引用（metadata.media 的字段集）。
+ *
+ * The shared image service returns the persist-safe value
+ * (`drive://spaces/{spaceId}/nodes/{nodeId}` + `metadata.drive`), so the
+ * reference carries the stable Drive node identity only.
+ */
+export function deployAppMediaRefFromImageValue(
+  value: DriveUploadImageValue,
   meta: Omit<DeployAppMediaRef, "driveNodeId" | "driveSpaceId" | "uploadItemId" | "uploadSessionId">,
 ): DeployAppMediaRef {
+  const drive = value.metadata?.drive
+  if (drive === undefined) {
+    throw new Error("Drive image upload did not return the drive metadata block.")
+  }
   return {
-    driveNodeId: uploaded.uploadItem.nodeId,
-    driveSpaceId: uploaded.uploadItem.spaceId,
-    uploadItemId: uploaded.uploadItem.id,
-    uploadSessionId: uploaded.uploadSession.id,
+    driveNodeId: drive.nodeId,
+    driveSpaceId: drive.spaceId,
     fileName: meta.fileName,
     contentType: meta.contentType,
     width: meta.width,
@@ -870,6 +884,18 @@ export function createDeployAppPublishingService(
 ): DeployAppPublishingService {
   const createIdempotencyKey = options.createIdempotencyKey ?? (() => uuid())
   const { deployClient, driveClient } = options
+
+  // Media 上传走共享 Drive image-upload 服务：绑定本应用声明
+  // (`DRIVE_SPEC.md` §18)，UI 永不内联 appResourceType/scene/source。
+  // 懒绑定让「无 client 的纯函数单测」仍可直接构造服务。
+  let mediaImageService: DriveUploadImageService | undefined
+  const imageService = (): DriveUploadImageService => {
+    mediaImageService ??= createDeployAppMediaImageService({
+      uploader: driveClient.uploader,
+      nodes: driveClient.drive.nodes,
+    })
+    return mediaImageService
+  }
 
   return {
     listApps(params) {
@@ -884,20 +910,16 @@ export function createDeployAppPublishingService(
     },
 
     async uploadMedia(input, appResourceId) {
-      // Upload identity comes from the application upload declaration
-      // (`DRIVE_SPEC.md` §18). `kind` is a closed media dimension and does not
-      // enter `scene`, so one upload origin is not split into one statistic row
-      // per media kind.
-      const uploaded = await driveClient.uploader.uploadArchive({
+      // Media enters Drive through the shared image-upload service bound to
+      // the application upload declaration (`DRIVE_SPEC.md` §18) — the
+      // declared image profile, never a generic archive upload. `kind` stays
+      // a closed media dimension outside `scene`, so one upload origin is not
+      // split into one statistic row per media kind.
+      const value = await imageService().upload({
         file: input.file,
-        appResourceType: DEPLOY_APP_MEDIA_UPLOAD.appResourceType,
         appResourceId,
-        scene: DEPLOY_APP_MEDIA_UPLOAD.scene,
-        source: DEPLOY_APP_MEDIA_UPLOAD.source,
-        originalFileName: input.fileName,
-        contentType: input.contentType,
       })
-      return toDeployAppMediaRef(uploaded, {
+      return deployAppMediaRefFromImageValue(value, {
         fileName: input.fileName,
         contentType: input.contentType,
         width: input.width,

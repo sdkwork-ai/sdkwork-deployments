@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@sdkwork/ui-pc-react": "workspace:*",
+    "@sdkwork/drive-upload-image-core": "workspace:*",
     "react": "catalog:",
     "react-router-dom": "^7.15.0",
     "lucide-react": "catalog:"

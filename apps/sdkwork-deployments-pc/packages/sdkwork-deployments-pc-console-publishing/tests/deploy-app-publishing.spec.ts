@@ -22,7 +22,7 @@ import {
   isValidSemver,
   requiredSurfaceDirectory,
   resolveDeployAppType,
-  toDeployAppMediaRef,
+  deployAppMediaRefFromImageValue,
   type CreateDeployAppInput,
   type DeployAppTypeOption,
 } from "../src/service/deploy-app-publishing.ts";
@@ -143,7 +143,7 @@ describe("createDeployAppPublishingService metadata assembly", () => {
         path: [{ id: "developer", label: "开发者" }, { id: "dev-tools", label: "开发工具" }],
       },
       media: {
-        icon: { driveNodeId: "n1", driveSpaceId: "s1", uploadItemId: "i1", uploadSessionId: "u1", fileName: "icon.png", contentType: "image/png" },
+        icon: { driveNodeId: "n1", driveSpaceId: "s1", fileName: "icon.png", contentType: "image/png" },
         cover: undefined,
         screenshots: {},
       },
@@ -319,25 +319,33 @@ describe("createAppRecord (v5 create-only lifecycle step)", () => {
   });
 });
 
-describe("toDeployAppMediaRef", () => {
-  it("maps the Drive upload result onto the persisted media reference", () => {
-    const ref = toDeployAppMediaRef(
+describe("deployAppMediaRefFromImageValue", () => {
+  it("maps the shared image-upload value onto the persisted media reference", () => {
+    const ref = deployAppMediaRefFromImageValue(
       {
-        uploadSession: { id: "session-1" },
-        uploadItem: { id: "item-1", spaceId: "space-1", nodeId: "node-1" },
-      } as never,
+        uri: "drive://spaces/space-1/nodes/node-1",
+        source: "drive",
+        metadata: { drive: { spaceId: "space-1", nodeId: "node-1", contentType: "image/png" } },
+      },
       { fileName: "cover.png", contentType: "image/png", width: 1200, height: 400 },
     );
     expect(ref).toEqual({
       driveNodeId: "node-1",
       driveSpaceId: "space-1",
-      uploadItemId: "item-1",
-      uploadSessionId: "session-1",
       fileName: "cover.png",
       contentType: "image/png",
       width: 1200,
       height: 400,
     });
+  });
+
+  it("rejects a value without the drive metadata block instead of persisting a dangling ref", () => {
+    expect(() =>
+      deployAppMediaRefFromImageValue(
+        { uri: "https://elsewhere/cover.png", source: "external" },
+        { fileName: "cover.png", contentType: "image/png" },
+      ),
+    ).toThrow(/drive metadata/i);
   });
 });
 
