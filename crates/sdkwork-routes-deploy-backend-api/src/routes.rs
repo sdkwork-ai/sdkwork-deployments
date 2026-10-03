@@ -9,10 +9,9 @@ use sdkwork_deploy_contract::{
     CreateNodeClusterRequest, CreateServerRequest, CreateTemplateCategoryRequest, DeployBackendApi,
     DeployBackendRequestContext, FailCertificateOrderRequest, IngestUsageEventsRequest,
     ListAppTemplatesAdminQuery, ListNginxConfigsQuery, ListTemplatePurchasesQuery,
-    RequestCertificateOrderRequest, RetentionRunRequest, SettleTemplatePurchaseRequest,
-    StoreCertificateVersionRequest, UpdateAppTemplateAdminRequest, UpdateNginxConfigRequest,
-    UpdateNodeClusterRequest, UpdateServerRequest, UpdateTemplateCategoryRequest,
-    UsageReconciliationRequest,
+    RequestCertificateOrderRequest, RetentionRunRequest, StoreCertificateVersionRequest,
+    UpdateAppTemplateAdminRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
+    UpdateServerRequest, UpdateTemplateCategoryRequest, UsageReconciliationRequest,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -120,10 +119,6 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> R
         .route(
             paths::TEMPLATE_PURCHASE,
             get(retrieve_template_purchase_admin),
-        )
-        .route(
-            paths::TEMPLATE_PURCHASE_SETTLE,
-            post(settle_template_purchase_admin),
         )
         .route(
             paths::TEMPLATE_PURCHASE_REVOKE,
@@ -1104,27 +1099,6 @@ async fn retrieve_template_purchase_admin(
             let item = state
                 .api
                 .retrieve_template_purchase(&context, &purchase_uuid)
-                .await?;
-            ok_json(envelope::resource(item))
-        }
-        .await,
-    )
-}
-
-async fn settle_template_purchase_admin(
-    ctx: WebRequestContext,
-    State(state): State<BackendState>,
-    context: Option<Extension<DeployBackendRequestContext>>,
-    Path(purchase_uuid): Path<String>,
-    Json(request): Json<SettleTemplatePurchaseRequest>,
-) -> Response {
-    finish_api_json(
-        &ctx,
-        async {
-            let context = require_backend_context(context)?;
-            let item = state
-                .api
-                .settle_template_purchase(&context, &purchase_uuid, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }

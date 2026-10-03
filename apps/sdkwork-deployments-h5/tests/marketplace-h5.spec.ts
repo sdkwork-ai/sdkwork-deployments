@@ -11,7 +11,7 @@ describe("h5 marketplace i18n", () => {
       "tab.marketplace",
       "tab.myTemplates",
       "marketplace.acquire",
-      "marketplace.acquirePending",
+      "marketplace.acquireCommerce",
       "myTemplates.submit",
       "common.retry",
     ];

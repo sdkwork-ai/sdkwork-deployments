@@ -324,13 +324,6 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.templatePurchases.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/backend/v3/api/template_purchases/{purchaseUuid}/settle",
-        "template",
-        "templatePurchases.settle",
-    )
-    .with_required_permission("deploy.templatePurchases.write"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
         "/backend/v3/api/template_purchases/{purchaseUuid}/revoke",
         "template",
         "templatePurchases.revoke",

@@ -121,7 +121,7 @@ export interface TemplateTemplatePurchasesCreateParams {
 export interface TemplateTemplatePurchasesListParams {
   page?: number;
   pageSize?: number;
-  status?: 'PENDING' | 'ACTIVE' | 'REVOKED';
+  status?: 'ACTIVE' | 'REVOKED';
 }
 
 export class TemplateTemplatePurchasesApi {

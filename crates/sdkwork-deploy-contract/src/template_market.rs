@@ -2,11 +2,13 @@
 //!
 //! An author publishes a `deploy_app` as a template listing (`AppTemplate`),
 //! optionally with versions (`AppTemplateVersion`); buyers acquire it
-//! (`TemplatePurchase`). FREE templates acquire instantly; PAID templates park
-//! a `PENDING` purchase until the backend settles it with a `payment_ref` —
-//! the deployments module records the entitlement, it never settles money
-//! itself. Everything is tenant-scoped: the marketplace browse surface only
-//! ever sees the caller's tenant's `PUBLIC` + `PUBLISHED` listings.
+//! (`TemplatePurchase`). FREE templates acquire instantly through the deploy
+//! API. A PAID listing is never granted here: its checkout, payment and
+//! pre-payment state belong to sdkwork-order / sdkwork-payment, and the
+//! `ACTIVE` entitlement is written by order fulfillment. This module records
+//! entitlements and revocations; it never settles money itself. Everything is
+//! tenant-scoped: the marketplace browse surface only ever sees the caller's
+//! tenant's `PUBLIC` + `PUBLISHED` listings.
 
 use serde::{Deserialize, Serialize};
 
@@ -30,8 +32,9 @@ pub const TEMPLATE_VERSION_STATUS_DRAFT: &str = "DRAFT";
 pub const TEMPLATE_VERSION_STATUS_PUBLISHED: &str = "PUBLISHED";
 pub const TEMPLATE_VERSION_STATUS_WITHDRAWN: &str = "WITHDRAWN";
 
-/// Wire vocabulary for `deploy_app_template_purchase.status`.
-pub const TEMPLATE_PURCHASE_STATUS_PENDING: &str = "PENDING";
+/// Wire vocabulary for `deploy_app_template_purchase.status`. There is no
+/// PENDING: a paid template's pre-payment state lives on the commerce_order
+/// (sdkwork-order); this table only ever holds granted/revoked entitlements.
 pub const TEMPLATE_PURCHASE_STATUS_ACTIVE: &str = "ACTIVE";
 pub const TEMPLATE_PURCHASE_STATUS_REVOKED: &str = "REVOKED";
 
@@ -233,8 +236,12 @@ pub struct TemplatePurchaseResponse {
     #[serde(rename = "priceMinor")]
     pub price_minor: String,
     pub currency: String,
-    #[serde(rename = "paymentRef", skip_serializing_if = "Option::is_none")]
-    pub payment_ref: Option<String>,
+    /// commerce 订单引用（sdkwork-order）。FREE 授权行为 NULL；PAID 行由
+    /// 订单履约产生，支付与待支付状态以 commerce 侧为权威。
+    #[serde(rename = "orderId", skip_serializing_if = "Option::is_none")]
+    pub order_id: Option<String>,
+    #[serde(rename = "orderNo", skip_serializing_if = "Option::is_none")]
+    pub order_no: Option<String>,
     pub status: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,
@@ -374,12 +381,6 @@ pub struct UpdateAppTemplateAdminRequest {
     pub is_featured: Option<bool>,
     #[serde(default)]
     pub visibility: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct SettleTemplatePurchaseRequest {
-    #[serde(rename = "paymentRef")]
-    pub payment_ref: String,
 }
 
 // -- queries ------------------------------------------------------------------

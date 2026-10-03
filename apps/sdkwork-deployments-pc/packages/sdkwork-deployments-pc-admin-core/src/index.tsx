@@ -121,13 +121,8 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
     templatePurchases: source(
       (query) => client.template.templatePurchases.list({ page: query.page, pageSize: query.pageSize }),
       [
-        // PAID acquisitions park in PENDING until settlement records the
-        // external payment reference; FREE acquisitions are ACTIVE on arrival.
-        action("settle", "Settle payment", { paymentRef: "" }, (context) =>
-          client.template.templatePurchases.settle(
-            selected(context, "id"),
-            cleanBody(context.body) as unknown as Parameters<typeof client.template.templatePurchases.settle>[1],
-          ), { selection: true }),
+        // 付费购买由 sdkwork-order/sdkwork-payment 的订单履约直接产生 ACTIVE
+        // 权益（支付回调驱动），这里只保留售后作废。
         action("revoke", "Revoke entitlement", {}, (context) =>
           client.template.templatePurchases.revoke(selected(context, "id")), { dangerous: true, selection: true }),
       ],

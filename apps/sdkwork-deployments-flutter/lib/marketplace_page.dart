@@ -6,8 +6,9 @@ import 'marketplace_service.dart';
 
 /// H5/PC-parity storefront: category chips and keyword search over `PUBLIC` +
 /// `PUBLISHED` listings, a detail bottom sheet, and the idempotent acquire
-/// command. PAID templates report the honest "待结算" state — the deployments
-/// service records the entitlement and settles out of band.
+/// command. FREE listings grant their entitlement through this surface; PAID
+/// listings disable acquire and route the buyer to the commerce checkout, so
+/// the button never implies the entitlement was minted here.
 class MarketplacePage extends StatefulWidget {
   final MarketplacePort port;
 
@@ -287,8 +288,10 @@ class _DetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: entitled ? null : () => _acquire(context),
-                  child: Text(entitled ? '已获取' : (detail.pricingModel == 'PAID' ? '获取（待结算）' : '获取模板')),
+                  // PAID 模板的购买走 commerce checkout（订单履约回写权益），
+                  // 这里的直接获取只授予 FREE 模板。
+                  onPressed: entitled || detail.pricingModel == 'PAID' ? null : () => _acquire(context),
+                  child: Text(entitled ? '已获取' : (detail.pricingModel == 'PAID' ? '通过订单流程购买' : '获取模板')),
                 ),
               ],
             ),

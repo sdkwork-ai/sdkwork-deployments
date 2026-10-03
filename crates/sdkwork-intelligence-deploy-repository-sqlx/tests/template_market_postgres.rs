@@ -1,6 +1,7 @@
-//! App template marketplace end-to-end integration test: the commercial flow
+//! App template marketplace end-to-end integration test: the entitlement flow
 //! against a real PostgreSQL (category → publish → submit → review → browse
-//! facets → acquire FREE/PAID → settle → revoke → tenancy isolation).
+//! facets → acquire FREE → commerce fulfillment for PAID → revoke → tenancy
+//! isolation).
 //!
 //! Runs only with `SDKWORK_DATABASE_TEST_POSTGRES_URL` set; the schema is the
 //! disposable `postgres_pool()` baseline (see tests/common/mod.rs).
@@ -8,14 +9,16 @@
 mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
+use sdkwork_database_id::SnowflakeIdGenerator as FulfillmentIdGenerator;
 use sdkwork_deploy_contract::{
     AppTemplatePage, CreateAppTemplateRequest, CreateAppTemplateVersionRequest,
     CreateTemplateCategoryRequest, CreateTemplatePurchaseRequest, DeployAppApi,
     DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
-    ListMarketplaceTemplatesQuery, ListTemplatePurchasesQuery, SettleTemplatePurchaseRequest,
-    UpdateAppTemplateAdminRequest,
+    ListMarketplaceTemplatesQuery, ListTemplatePurchasesQuery, UpdateAppTemplateAdminRequest,
 };
-use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
+use sdkwork_intelligence_deploy_repository_sqlx::{
+    DeployRepository, FulfillPaidTemplatePurchaseCommand, PostgresCommerceTemplatePurchaseStore,
+};
 use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
 use std::sync::Arc;
 
@@ -87,7 +90,7 @@ fn template_request(
 
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
-async fn postgres_marketplace_commercial_flow_is_settlement_safe_and_tenant_bounded() {
+async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded() {
     let pool = common::postgres_pool().await;
     let repository = Arc::new(DeployRepository::new(
         pool.clone(),
@@ -228,8 +231,8 @@ async fn postgres_marketplace_commercial_flow_is_settlement_safe_and_tenant_boun
     .expect("browse by type");
     assert!(typed.items.is_empty(), "no VIDEO templates exist yet");
 
-    // 5. FREE acquire settles instantly and is idempotent; the install count
-    //    moves exactly once.
+    // 5. FREE acquire grants the entitlement immediately and is idempotent;
+    //    the install count moves exactly once.
     let entitlement = DeployAppApi::create_template_purchase(
         &*service,
         &buyer_ctx,
@@ -256,33 +259,46 @@ async fn postgres_marketplace_commercial_flow_is_settlement_safe_and_tenant_boun
         .expect("reread template");
     assert_eq!(free_after.install_count, "1");
 
-    // 6. PAID acquire parks in PENDING; settlement without a payment_ref is
-    //    impossible by contract, and settle activates the entitlement.
-    let pending = DeployAppApi::create_template_purchase(
+    // 6. PAID templates are purchased through the commerce checkout: the
+    //    deploy acquire API refuses to mint a PAID row, the order system
+    //    drives payment, and the fulfillment store grants the entitlement.
+    let paid_direct = DeployAppApi::create_template_purchase(
         &*service,
         &buyer_ctx,
         &paid.id,
         "acquire-key-2",
         &CreateTemplatePurchaseRequest::default(),
     )
-    .await
-    .expect("acquire paid template");
-    assert_eq!(pending.status, "PENDING");
-    let settled = service
-        .settle_template_purchase(
-            &operator(),
-            &pending.id,
-            &SettleTemplatePurchaseRequest {
-                payment_ref: format!("pay-{suffix}"),
-            },
-        )
-        .await
-        .expect("settle purchase");
-    assert_eq!(settled.status, "ACTIVE");
-    assert_eq!(
-        settled.payment_ref.as_deref(),
-        Some(format!("pay-{suffix}").as_str())
+    .await;
+    assert!(
+        paid_direct.is_err(),
+        "acquire must not grant paid templates"
     );
+    let store = PostgresCommerceTemplatePurchaseStore::new(
+        pool.clone(),
+        FulfillmentIdGenerator::new(9).expect("fulfillment snowflake generator"),
+    );
+    let fulfill_command = FulfillPaidTemplatePurchaseCommand {
+        tenant_id: "7".to_owned(),
+        organization_id: Some("0".to_owned()),
+        owner_user_id: "12".to_owned(),
+        order_id: format!("order-{suffix}"),
+        order_no: format!("NO-{suffix}"),
+        request_no: format!("req-{suffix}"),
+        idempotency_key: format!("fulfill-{suffix}"),
+        template_uuid: paid.id.clone(),
+    };
+    let granted = store
+        .fulfill_paid_template_purchase(&fulfill_command)
+        .await
+        .expect("fulfill paid template purchase");
+    assert!(!granted.replayed);
+    let replayed = store
+        .fulfill_paid_template_purchase(&fulfill_command)
+        .await
+        .expect("replay paid fulfillment");
+    assert!(replayed.replayed);
+    assert_eq!(replayed.purchase_uuid, granted.purchase_uuid);
 
     // 7. Buyer inventory sees both entitlements.
     let purchases = DeployAppApi::list_template_purchases(

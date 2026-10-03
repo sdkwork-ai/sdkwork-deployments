@@ -84,10 +84,11 @@ Page({
         void wx.showModal({
           title: detail.displayName,
           content: [detail.summary, detail.description].filter((part) => part.trim() !== '').join(String.fromCharCode(10) + String.fromCharCode(10)),
-          confirmText: detail.pricingModel === 'PAID' ? '获取（待结算）' : '获取模板',
+          confirmText: detail.pricingModel === 'PAID' ? '知道了' : '获取模板',
           cancelText: '关闭',
+          showCancel: detail.pricingModel !== 'PAID',
           success: (result) => {
-            if (!result.confirm) return;
+            if (!result.confirm || detail.pricingModel === 'PAID') return;
             globals.marketplace
               .acquire(uuid)
               .then(() => this.reload())

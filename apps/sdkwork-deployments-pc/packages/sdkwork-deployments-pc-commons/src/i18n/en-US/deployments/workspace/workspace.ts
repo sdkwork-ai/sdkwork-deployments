@@ -63,7 +63,7 @@ export const deploymentsWorkspaceEnUs = {
   "resource.appTemplates.label": "App templates",
   "resource.appTemplates.description": "Author-published app template listings and moderation",
   "resource.templatePurchases.label": "Template purchases",
-  "resource.templatePurchases.description": "Acquisition entitlements and settlement",
+  "resource.templatePurchases.description": "Acquisition entitlements and revocations",
   "resource.marketplace.label": "Marketplace",
   "resource.marketplace.description": "Browse and acquire published app templates",
   "resource.myTemplates.label": "My templates",
@@ -104,6 +104,5 @@ export const deploymentsWorkspaceEnUs = {
   "action.appTemplates.feature": "Feature",
   "action.appTemplates.unfeature": "Unfeature",
   "action.appTemplates.delete": "Delete listing",
-  "action.templatePurchases.settle": "Settle payment",
   "action.templatePurchases.revoke": "Revoke entitlement",
 } as const;

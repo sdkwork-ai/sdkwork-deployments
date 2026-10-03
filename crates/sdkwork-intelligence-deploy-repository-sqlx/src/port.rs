@@ -1836,19 +1836,6 @@ impl DeployRepositoryPort for DeployRepository {
         .await
     }
 
-    async fn settle_template_purchase(
-        &self,
-        tenant_id: Option<i64>,
-        operator_id: Option<i64>,
-        purchase_uuid: &str,
-        request: &sdkwork_deploy_contract::SettleTemplatePurchaseRequest,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<
-        sdkwork_deploy_contract::TemplatePurchaseResponse,
-    > {
-        self.settle_template_purchase_repo(tenant_id, operator_id, purchase_uuid, request)
-            .await
-    }
-
     async fn revoke_template_purchase(
         &self,
         tenant_id: Option<i64>,

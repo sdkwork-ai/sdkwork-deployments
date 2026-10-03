@@ -3630,7 +3630,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "PENDING",
                 "ACTIVE",
                 "REVOKED"
               ]
@@ -3774,103 +3773,6 @@
         "x-sdkwork-request-context": "WebRequestContext",
         "x-sdkwork-auth-mode": "dual-token",
         "x-sdkwork-permission": "deploy.templatePurchases.read"
-      }
-    },
-    "/backend/v3/api/template_purchases/{purchaseUuid}/settle": {
-      "parameters": [
-        {
-          "name": "purchaseUuid",
-          "in": "path",
-          "required": true,
-          "schema": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      ],
-      "post": {
-        "operationId": "templatePurchases.settle",
-        "summary": "结算模板购买记录",
-        "tags": [
-          "template"
-        ],
-        "security": [
-          {
-            "AuthToken": [],
-            "AccessToken": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SettleTemplatePurchaseRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "成功",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SdkWorkApiResponse"
-                    },
-                    {
-                      "type": "object",
-                      "required": [
-                        "data"
-                      ],
-                      "properties": {
-                        "data": {
-                          "type": "object",
-                          "required": [
-                            "item"
-                          ],
-                          "properties": {
-                            "item": {
-                              "$ref": "#/components/schemas/TemplatePurchaseResponse"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "资源冲突",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "校验错误",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetail"
-                }
-              }
-            }
-          }
-        },
-        "x-sdkwork-api-surface": "backend-api",
-        "x-sdkwork-owner": "sdkwork-deploy",
-        "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
-        "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-permission": "deploy.templatePurchases.write"
       }
     },
     "/backend/v3/api/template_purchases/{purchaseUuid}/revoke": {
@@ -4338,14 +4240,15 @@
             "type": "string",
             "maxLength": 8
           },
-          "paymentRef": {
-            "type": "string",
-            "maxLength": 128
+          "orderId": {
+            "type": "string"
+          },
+          "orderNo": {
+            "type": "string"
           },
           "status": {
             "type": "string",
             "enum": [
-              "PENDING",
               "ACTIVE",
               "REVOKED"
             ]
@@ -4452,20 +4355,6 @@
               "PUBLIC",
               "PRIVATE"
             ]
-          }
-        }
-      },
-      "SettleTemplatePurchaseRequest": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "paymentRef"
-        ],
-        "properties": {
-          "paymentRef": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 128
           }
         }
       },

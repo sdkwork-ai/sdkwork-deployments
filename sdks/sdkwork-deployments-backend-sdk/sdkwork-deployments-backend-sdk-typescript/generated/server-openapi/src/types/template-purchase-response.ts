@@ -6,8 +6,9 @@ export interface TemplatePurchaseResponse {
   pricingModel: 'FREE' | 'PAID';
   priceMinor: string;
   currency: string;
-  paymentRef?: string;
-  status: 'PENDING' | 'ACTIVE' | 'REVOKED';
+  orderId?: string;
+  orderNo?: string;
+  status: 'ACTIVE' | 'REVOKED';
   createdAt: string;
   updatedAt: string;
   version: string;

@@ -1641,13 +1641,6 @@ pub trait DeployBackendApi: Send + Sync {
         purchase_uuid: &str,
     ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
 
-    async fn settle_template_purchase(
-        &self,
-        context: &DeployBackendRequestContext,
-        purchase_uuid: &str,
-        request: &crate::template_market::SettleTemplatePurchaseRequest,
-    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
-
     async fn revoke_template_purchase(
         &self,
         context: &DeployBackendRequestContext,

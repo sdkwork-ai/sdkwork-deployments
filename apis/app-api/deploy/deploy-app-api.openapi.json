@@ -8822,7 +8822,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "PENDING",
                 "ACTIVE",
                 "REVOKED"
               ]
@@ -9470,14 +9469,15 @@
             "type": "string",
             "maxLength": 8
           },
-          "paymentRef": {
-            "type": "string",
-            "maxLength": 128
+          "orderId": {
+            "type": "string"
+          },
+          "orderNo": {
+            "type": "string"
           },
           "status": {
             "type": "string",
             "enum": [
-              "PENDING",
               "ACTIVE",
               "REVOKED"
             ]

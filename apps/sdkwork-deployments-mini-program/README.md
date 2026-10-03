@@ -6,7 +6,8 @@ template marketplace mobile surface
 
 - **模板市场 tab** — category chips + keyword search over `PUBLIC` + `PUBLISHED`
   listings, a modal detail/confirm dialog, and the idempotent acquire command
-  (FREE settles instantly; PAID reports the honest 待结算 state).
+  (FREE grants immediately; PAID disables acquire and routes to the commerce
+  checkout).
 - **我的模板 tab** — the author's listings with review state, version history,
   and submit-for-review. Publishing a NEW listing stays on the PC console for
   v1 (Drive-packaged artifact flow).

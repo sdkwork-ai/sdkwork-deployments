@@ -10,19 +10,20 @@
 //!    (`COALESCE($n, tenant) = tenant` keeps one predicate for both shapes).
 //!    The marketplace browse surface is the only ownerless read, and it is
 //!    still fenced to one tenant plus `PUBLIC` + `PUBLISHED`.
-//! 2. **Entitlement settlement.** A PAID purchase only becomes `ACTIVE`
-//!    through `settle` writing a `payment_ref`; the DDL CHECK enforces the
-//!    row invariant and the install counter is moved inside the same
-//!    transaction that flips the status, so counts cannot drift from
-//!    entitlements.
+//! 2. **Entitlement grants.** A purchase row is only ever `ACTIVE` or
+//!    `REVOKED`. The FREE grant inserts its `ACTIVE` row and moves the install
+//!    counter inside one transaction; the PAID grant arrives from commerce
+//!    fulfillment (`commerce_fulfillment.rs`) and is fenced by the
+//!    `order_id` unique index, so a replayed payment webhook cannot
+//!    double-grant and counts cannot drift from entitlements.
 
 use sdkwork_deploy_contract::{
     AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage, AppTemplateSummaryResponse,
     AppTemplateVersionPage, AppTemplateVersionResponse, CreateAppTemplateRequest,
     CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest, CreateTemplatePurchaseRequest,
     DeployServiceError, DeployServiceResult, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
-    ListMarketplaceTemplatesQuery, ListTemplatePurchasesQuery, SettleTemplatePurchaseRequest,
-    TemplateCategoryPage, TemplateCategoryResponse, TemplatePurchasePage, TemplatePurchaseResponse,
+    ListMarketplaceTemplatesQuery, ListTemplatePurchasesQuery, TemplateCategoryPage,
+    TemplateCategoryResponse, TemplatePurchasePage, TemplatePurchaseResponse,
     UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest, UpdateTemplateCategoryRequest,
     MARKETPLACE_SORT_NEWEST, MARKETPLACE_SORT_POPULAR, TEMPLATE_CATEGORY_STATUS_ACTIVE,
     TEMPLATE_PRICING_FREE, TEMPLATE_PRICING_PAID, TEMPLATE_STATUS_DISABLED,
@@ -58,7 +59,7 @@ const VERSION_SELECT: &str = "v.uuid, t.uuid AS template_uuid, v.template_versio
     v.checksum_sha256, v.status, v.published_at, v.created_at, v.updated_at, v.version";
 
 const PURCHASE_SELECT: &str = "p.uuid, t.uuid AS template_uuid, p.version_uuid, p.buyer_user_id,
-    p.pricing_model, p.price_minor, p.currency, p.payment_ref, p.status, p.created_at,
+    p.pricing_model, p.price_minor, p.currency, p.order_id, p.order_no, p.status, p.created_at,
     p.updated_at, p.version";
 
 /// `($n = 0 OR x.tenant_id = $n)` scoped to one bound parameter: the admin
@@ -165,7 +166,8 @@ fn map_purchase_row(row: &PgRow) -> Result<TemplatePurchaseResponse, sqlx::Error
         pricing_model: row.try_get("pricing_model")?,
         price_minor: row.try_get::<i64, _>("price_minor")?.to_string(),
         currency: row.try_get("currency")?,
-        payment_ref: row.try_get::<Option<String>, _>("payment_ref")?,
+        order_id: row.try_get::<Option<String>, _>("order_id")?,
+        order_no: row.try_get::<Option<String>, _>("order_no")?,
         status: row.try_get("status")?,
         created_at: datetime_from_row(row, "created_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,
@@ -1630,13 +1632,16 @@ impl DeployRepository {
                 DeployServiceError::conflict("template has no published version to acquire")
             })?,
         };
-        // FREE settles at acquire time; PAID parks in PENDING until the
-        // backend settles it with a payment_ref (never fake success).
-        let purchase_status = if pricing_model == TEMPLATE_PRICING_FREE {
-            "ACTIVE"
-        } else {
-            "PENDING"
-        };
+        // Acquire is the FREE grant path only. A PAID template's pre-payment
+        // state lives on the commerce_order (sdkwork-order) and the ACTIVE
+        // entitlement is written by order fulfillment — this API must not
+        // mint a PAID row, or it would bypass the payment system entirely.
+        if pricing_model != TEMPLATE_PRICING_FREE {
+            return Err(DeployServiceError::validation(
+                "paid templates are purchased through the commerce checkout; acquire grants free templates only",
+            ));
+        }
+        let purchase_status = "ACTIVE";
         let purchase_id = next_id(self.id_generator())?;
         let purchase_uuid = new_uuid();
         sqlx::query(
@@ -1661,72 +1666,6 @@ impl DeployRepository {
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("insert deploy_app_template_purchase", error))?;
-        if purchase_status == "ACTIVE" {
-            sqlx::query(
-                "UPDATE deploy_app_template SET install_count = install_count + 1 WHERE id = $1",
-            )
-            .bind(template_id)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|error| store_error("count install", error))?;
-        }
-        transaction
-            .commit()
-            .await
-            .map_err(|error| store_error("commit create deploy_app_template_purchase", error))?;
-        self.retrieve_template_purchase_repo(Some(tenant_id), &purchase_uuid)
-            .await
-    }
-
-    pub(super) async fn settle_template_purchase_repo(
-        &self,
-        tenant_id: Option<i64>,
-        operator_id: Option<i64>,
-        purchase_uuid: &str,
-        request: &SettleTemplatePurchaseRequest,
-    ) -> DeployServiceResult<TemplatePurchaseResponse> {
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| store_error("begin settle deploy_app_template_purchase", error))?;
-        let row = sqlx::query(
-            "SELECT p.id, p.template_id, p.status FROM deploy_app_template_purchase p
-             WHERE p.uuid = $1 AND p.deleted_at IS NULL AND (p.tenant_id = $2 OR $2 = 0)
-             FOR UPDATE",
-        )
-        .bind(purchase_uuid)
-        .bind(tenant_id.unwrap_or(0))
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|error| store_error("lock deploy_app_template_purchase", error))?;
-        let row =
-            row.ok_or_else(|| DeployServiceError::not_found("template purchase not found"))?;
-        let purchase_id: i64 = row
-            .try_get("id")
-            .map_err(|error| DeployServiceError::Internal(format!("read id: {error}")))?;
-        let template_id: i64 = row
-            .try_get("template_id")
-            .map_err(|error| DeployServiceError::Internal(format!("read template: {error}")))?;
-        let status: String = row
-            .try_get("status")
-            .map_err(|error| DeployServiceError::Internal(format!("read status: {error}")))?;
-        if status != "PENDING" {
-            return Err(DeployServiceError::conflict(&format!(
-                "a purchase in status {status} cannot be settled"
-            )));
-        }
-        sqlx::query(
-            "UPDATE deploy_app_template_purchase SET status = 'ACTIVE', payment_ref = $2,
-                updated_by = COALESCE($3, updated_by), updated_at = NOW(), version = version + 1
-             WHERE id = $1",
-        )
-        .bind(purchase_id)
-        .bind(request.payment_ref.trim())
-        .bind(operator_id)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| store_error("settle deploy_app_template_purchase", error))?;
         sqlx::query(
             "UPDATE deploy_app_template SET install_count = install_count + 1 WHERE id = $1",
         )
@@ -1737,8 +1676,8 @@ impl DeployRepository {
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit settle deploy_app_template_purchase", error))?;
-        self.retrieve_template_purchase_repo(tenant_id, purchase_uuid)
+            .map_err(|error| store_error("commit create deploy_app_template_purchase", error))?;
+        self.retrieve_template_purchase_repo(Some(tenant_id), &purchase_uuid)
             .await
     }
 

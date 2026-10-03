@@ -19,9 +19,9 @@ function translator(locale: string) {
 
 /**
  * H5 storefront: category chips over the `PUBLIC` + `PUBLISHED` listings,
- * card list, detail sheet, and the idempotent acquire command. `PAID`
- * templates report the honest `PENDING` settlement state instead of implying
- * the entitlement is live.
+ * card list, detail sheet, and the idempotent acquire command. Acquire grants
+ * FREE listings; a `PAID` listing disables the button and points at the
+ * commerce checkout rather than implying the entitlement is live.
  */
 export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) {
   const t = translator(runtime.locale);
@@ -232,14 +232,14 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
               </button>
               <button
                 className="h5-primary"
-                disabled={entitled.has(detail.id) || busy}
+                disabled={entitled.has(detail.id) || busy || detail.pricingModel === "PAID"}
                 type="button"
                 onClick={() => void acquire(detail.id)}
               >
                 {entitled.has(detail.id)
                   ? t("marketplace.acquired")
                   : detail.pricingModel === "PAID"
-                    ? t("marketplace.acquirePending")
+                    ? t("marketplace.acquireCommerce")
                     : t("marketplace.acquire")}
               </button>
             </footer>

@@ -11,6 +11,7 @@ mod audit;
 mod builds;
 mod certificate_renewals;
 mod certificates;
+mod commerce_fulfillment;
 mod database_profiles;
 mod domain_zones;
 mod entitlement;
@@ -33,6 +34,11 @@ mod template_market;
 mod tls_control;
 mod upload_sessions;
 mod usage;
+
+pub use commerce_fulfillment::{
+    FulfillPaidTemplatePurchaseCommand, FulfillPaidTemplatePurchaseOutcome,
+    PostgresCommerceTemplatePurchaseStore,
+};
 
 #[derive(Clone)]
 pub struct DeployRepository {

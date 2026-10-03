@@ -4,8 +4,8 @@ Flutter client root of `sdkwork-deployments`, shipping the app template
 marketplace mobile surface (`docs/domains/APP_TEMPLATE_MARKETPLACE.md`):
 
 - **模板市场 tab** — category chips + keyword search over `PUBLIC` + `PUBLISHED`
-  listings, detail bottom sheet, idempotent acquire (FREE settles instantly;
-  PAID reports the honest "待结算" state).
+  listings, detail bottom sheet, idempotent acquire (FREE grants immediately;
+  PAID disables acquire and routes to the commerce checkout).
 - **我的模板 tab** — the author's listings with review state and version
   history, submit-for-review. Publishing a NEW listing stays on the PC
   console for v1 (Drive-packaged artifact flow).

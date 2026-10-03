@@ -63,7 +63,7 @@ export const deploymentsWorkspaceZhCn = {
   "resource.appTemplates.label": "应用模板",
   "resource.appTemplates.description": "作者发布的应用模板与审核",
   "resource.templatePurchases.label": "模板购买",
-  "resource.templatePurchases.description": "获取权益与结算记录",
+  "resource.templatePurchases.description": "获取权益与作废记录",
   "resource.marketplace.label": "模板市场",
   "resource.marketplace.description": "浏览并获取已发布的应用模板",
   "resource.myTemplates.label": "我的模板",
@@ -104,6 +104,5 @@ export const deploymentsWorkspaceZhCn = {
   "action.appTemplates.feature": "设为精选",
   "action.appTemplates.unfeature": "取消精选",
   "action.appTemplates.delete": "删除模板",
-  "action.templatePurchases.settle": "结算付款",
   "action.templatePurchases.revoke": "作废权益",
 } as const;

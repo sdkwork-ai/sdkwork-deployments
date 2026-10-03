@@ -25,9 +25,9 @@ const PAGE_SIZE = 20;
 /**
  * Storefront for the tenant marketplace: category/pricing facets over the
  * `PUBLIC` + `PUBLISHED` listings, a detail dialog, and the acquire action.
- * PAID templates settle out of band, so the acquisition button reports the
- * honest state (`PENDING` settlement) instead of implying the install
- * entitlement is already live.
+ * Acquire grants FREE listings only — a PAID listing routes the buyer to the
+ * commerce checkout, so the button says so instead of implying this surface
+ * can mint the entitlement.
  */
 export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) {
   const t = marketplaceTranslator(locale);
@@ -287,14 +287,14 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
               </button>
               <button
                 className="command-button"
-                disabled={activeEntitlements.has(detail.id)}
+                disabled={activeEntitlements.has(detail.id) || detail.pricingModel === "PAID"}
                 type="button"
                 onClick={() => void acquire(detail.id)}
               >
                 {activeEntitlements.has(detail.id)
                   ? t("marketplace.acquired")
                   : detail.pricingModel === "PAID"
-                    ? t("marketplace.acquirePending")
+                    ? t("marketplace.acquireCommerce")
                     : t("marketplace.acquire")}
               </button>
             </footer>

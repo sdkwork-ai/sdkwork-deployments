@@ -6,7 +6,6 @@ export type { TemplatePurchaseResponse } from './template-purchase-response';
 export type { CreateTemplateCategoryRequest } from './create-template-category-request';
 export type { UpdateTemplateCategoryRequest } from './update-template-category-request';
 export type { UpdateAppTemplateAdminRequest } from './update-app-template-admin-request';
-export type { SettleTemplatePurchaseRequest } from './settle-template-purchase-request';
 export type { ProblemDetail } from './problem-detail';
 export type { CreateNginxConfigRequest } from './create-nginx-config-request';
 export type { UpdateNginxConfigRequest } from './update-nginx-config-request';
@@ -104,5 +103,4 @@ export type { AppTemplateVersionsListResponse } from './app-template-versions-li
 export type { AppTemplateVersionsRetrieveResponse } from './app-template-versions-retrieve-response';
 export type { TemplatePurchasesListResponse } from './template-purchases-list-response';
 export type { TemplatePurchasesRetrieveResponse } from './template-purchases-retrieve-response';
-export type { TemplatePurchasesSettleResponse } from './template-purchases-settle-response';
 export type { TemplatePurchasesRevokeResponse } from './template-purchases-revoke-response';

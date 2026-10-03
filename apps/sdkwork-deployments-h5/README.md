@@ -5,8 +5,8 @@ marketplace user surface (`docs/domains/APP_TEMPLATE_MARKETPLACE.md`):
 
 - **Marketplace tab** — category chips and keyword search over `PUBLIC` +
   `PUBLISHED` listings, a bottom-sheet detail view, and the idempotent acquire
-  command (FREE settles instantly; PAID reports the honest `PENDING`
-  settlement state).
+  command (FREE grants the entitlement immediately; PAID disables acquire and
+  routes the buyer to the commerce checkout).
 - **My templates tab** — the author's listings with review state, version
   history, submit-for-review, and withdraw. Publishing a NEW listing stays on
   the PC console for v1 (it is a Drive-packaged artifact flow).

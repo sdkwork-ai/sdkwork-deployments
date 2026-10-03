@@ -7,7 +7,7 @@ describe("marketplace i18n", () => {
     const samples: MarketplaceMessageKey[] = [
       "marketplace.title",
       "marketplace.acquire",
-      "marketplace.acquirePending",
+      "marketplace.acquireCommerce",
       "myTemplates.create",
       "myTemplates.submit",
       "common.confirm",

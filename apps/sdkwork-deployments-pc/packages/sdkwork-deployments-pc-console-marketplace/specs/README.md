@@ -7,7 +7,7 @@ Contributes two custom pages to the shared console workspace:
 
 - `marketplace` — the storefront: category/pricing facets over `PUBLIC` +
   `PUBLISHED` listings, a detail dialog, and the idempotent acquire command
-  (`FREE` settles instantly, `PAID` reports the honest `PENDING` state).
+  (`FREE` grants the entitlement, `PAID` routes to the commerce checkout).
 - `myTemplates` — the author workbench: publish one of your apps as a listing,
   add versions, submit for review, withdraw.
 

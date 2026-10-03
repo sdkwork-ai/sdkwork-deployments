@@ -679,7 +679,8 @@ class TemplatePurchaseResponse {
   final String pricingModel;
   final String priceMinor;
   final String currency;
-  final String? paymentRef;
+  final String? orderId;
+  final String? orderNo;
   final String status;
   final String createdAt;
   final String updatedAt;
@@ -693,7 +694,8 @@ class TemplatePurchaseResponse {
     required this.pricingModel,
     required this.priceMinor,
     required this.currency,
-    this.paymentRef,
+    this.orderId,
+    this.orderNo,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -751,7 +753,8 @@ class TemplatePurchaseResponse {
         }
         return value;
       })(),
-      paymentRef: json['paymentRef']?.toString(),
+      orderId: json['orderId']?.toString(),
+      orderNo: json['orderNo']?.toString(),
       status: (() {
         final value = json['status']?.toString();
         if (value == null) {
@@ -792,7 +795,8 @@ class TemplatePurchaseResponse {
       'pricingModel': pricingModel,
       'priceMinor': priceMinor,
       'currency': currency,
-      'paymentRef': paymentRef,
+      'orderId': orderId,
+      'orderNo': orderNo,
       'status': status,
       'createdAt': createdAt,
       'updatedAt': updatedAt,

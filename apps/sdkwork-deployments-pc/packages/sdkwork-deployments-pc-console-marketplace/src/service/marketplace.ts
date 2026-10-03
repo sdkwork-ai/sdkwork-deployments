@@ -68,7 +68,7 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient) {
     async retrieve(templateUuid: string): Promise<AppTemplateResponse> {
       return deployClient.template.marketplaceTemplates.retrieve(templateUuid);
     },
-    /** Acquires the template; FREE settles instantly, PAID parks in PENDING. */
+    /** Acquires the template; FREE grants the entitlement, PAID is rejected by the API. */
     async acquire(templateUuid: string, versionUuid?: string | undefined): Promise<TemplatePurchaseResponse> {
       return deployClient.template.templatePurchases.create(
         templateUuid,

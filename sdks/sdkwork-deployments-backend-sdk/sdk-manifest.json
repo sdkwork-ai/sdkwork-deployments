@@ -21,7 +21,7 @@
   },
   "sdkOwner": "sdkwork-deploy",
   "apiAuthority": "sdkwork-deploy-backend-api",
-  "ownerOnlyOperationCount": 48,
+  "ownerOnlyOperationCount": 47,
   "standardProfile": "sdkwork-v3",
   "discoverySurface": {
     "sdkTarget": "backend",

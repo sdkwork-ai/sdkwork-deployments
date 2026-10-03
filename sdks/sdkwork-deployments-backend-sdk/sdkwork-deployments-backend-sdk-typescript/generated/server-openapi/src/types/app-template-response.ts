@@ -5,6 +5,7 @@ export interface AppTemplateResponse {
   summary: string;
   description: string;
   appUuid: string;
+  templateType: 'APP' | 'PPT' | 'VIDEO';
   categoryUuid: string;
   authorUserId: string;
   iconMediaRef?: string;

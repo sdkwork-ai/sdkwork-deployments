@@ -1950,8 +1950,7 @@ fn validate_template_status(status: &str) -> DeployServiceResult<()> {
 fn validate_purchase_status(status: &str) -> DeployServiceResult<()> {
     let valid = matches!(
         status,
-        sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_PENDING
-            | sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_ACTIVE
+        sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_ACTIVE
             | sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_REVOKED
     );
     if valid {

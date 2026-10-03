@@ -4862,7 +4862,6 @@ paths:
         schema:
           type: string
           enum:
-          - PENDING
           - ACTIVE
           - REVOKED
       responses:
@@ -5352,13 +5351,13 @@ components:
         currency:
           type: string
           maxLength: 8
-        paymentRef:
+        orderId:
           type: string
-          maxLength: 128
+        orderNo:
+          type: string
         status:
           type: string
           enum:
-          - PENDING
           - ACTIVE
           - REVOKED
         createdAt:

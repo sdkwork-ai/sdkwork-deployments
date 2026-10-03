@@ -32,15 +32,14 @@ use sdkwork_deploy_contract::{
     PackageResponse, PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest,
     PromoteEnvironmentRequest, ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
     RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
-    ServerPage, ServerResponse, SettleTemplatePurchaseRequest, SigningIdentityHealthPage,
-    SigningIdentityPage, SigningIdentityResponse, SourceEventPage, SourceEventResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse,
-    TemplatePurchasePage, TemplatePurchaseResponse, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateAppSourceSpecRequest,
-    UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest, UpdateBuildStateRequest,
-    UpdateDomainZoneRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
-    UpdateServerRequest, UpdateTemplateCategoryRequest, UsageEventPage, UsageEventResponse,
-    UsageReconciliationResponse,
+    ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
+    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
+    SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse, TemplatePurchasePage,
+    TemplatePurchaseResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
+    UpdateAppRequest, UpdateAppSourceSpecRequest, UpdateAppTemplateAdminRequest,
+    UpdateAppTemplateRequest, UpdateBuildStateRequest, UpdateDomainZoneRequest,
+    UpdateNginxConfigRequest, UpdateNodeClusterRequest, UpdateServerRequest,
+    UpdateTemplateCategoryRequest, UsageEventPage, UsageEventResponse, UsageReconciliationResponse,
 };
 
 use crate::{CertificateOrderCaaSubject, DomainVerificationChallenge};
@@ -1535,14 +1534,6 @@ pub trait DeployRepositoryPort:
         template_uuid: &str,
         idempotency_key: &str,
         request: &CreateTemplatePurchaseRequest,
-    ) -> DeployServiceResult<TemplatePurchaseResponse>;
-
-    async fn settle_template_purchase(
-        &self,
-        tenant_id: Option<i64>,
-        operator_id: Option<i64>,
-        purchase_uuid: &str,
-        request: &SettleTemplatePurchaseRequest,
     ) -> DeployServiceResult<TemplatePurchaseResponse>;
 
     async fn revoke_template_purchase(

@@ -4,9 +4,9 @@ Backend-admin module for the app template marketplace (`docs/domains/APP_TEMPLAT
 
 Contributes the `templateCategories`, `appTemplates`, and `templatePurchases`
 resource entries to the shared admin workspace. The pages are the generic
-registry-driven `Page`; the data sources and moderation/settlement actions live
-in `@sdkwork/deployments-pc-admin-core` (`createDeploymentsAdminRegistry`), which
-is the only place this module's surface touches the backend SDK.
+registry-driven `Page`; the data sources and the moderation/revocation actions
+live in `@sdkwork/deployments-pc-admin-core` (`createDeploymentsAdminRegistry`),
+which is the only place this module's surface touches the backend SDK.
 
 ## Verification
 

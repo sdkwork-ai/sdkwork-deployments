@@ -1,13 +1,13 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppTemplateResponse, AppTemplateVersionResponse, CreateTemplateCategoryRequest, PageInfo, SettleTemplatePurchaseRequest, TemplateCategoryResponse, TemplatePurchaseResponse, UpdateAppTemplateAdminRequest, UpdateTemplateCategoryRequest } from '../types';
+import type { AppTemplateResponse, AppTemplateVersionResponse, CreateTemplateCategoryRequest, PageInfo, TemplateCategoryResponse, TemplatePurchaseResponse, UpdateAppTemplateAdminRequest, UpdateTemplateCategoryRequest } from '../types';
 
 
 export interface TemplateTemplatePurchasesListParams {
   page?: number;
   pageSize?: number;
-  status?: 'PENDING' | 'ACTIVE' | 'REVOKED';
+  status?: 'ACTIVE' | 'REVOKED';
 }
 
 export class TemplateTemplatePurchasesApi {
@@ -31,11 +31,6 @@ export class TemplateTemplatePurchasesApi {
 /** 获取模板购买详情 */
   async retrieve(purchaseUuid: string, requestOptions?: ApiRequestOptions): Promise<TemplatePurchaseResponse> {
     return this.client.request<TemplatePurchaseResponse>(backendApiPath(`/template_purchases/${serializePathParameter(purchaseUuid, { name: 'purchaseUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
-  }
-
-/** 结算模板购买记录 */
-  async settle(purchaseUuid: string, body: SettleTemplatePurchaseRequest, requestOptions?: ApiRequestOptions): Promise<TemplatePurchaseResponse> {
-    return this.client.request<TemplatePurchaseResponse>(backendApiPath(`/template_purchases/${serializePathParameter(purchaseUuid, { name: 'purchaseUuid', style: 'simple', explode: false })}/settle`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 
 /** 作废模板购买记录 */
@@ -79,6 +74,7 @@ export interface TemplateAppTemplatesListParams {
   status?: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' | 'REJECTED' | 'DISABLED';
   categoryUuid?: string;
   visibility?: 'PUBLIC' | 'PRIVATE';
+  templateType?: 'APP' | 'PPT' | 'VIDEO';
 }
 
 export interface TemplateAppTemplatesUpdateParams {
@@ -102,6 +98,7 @@ export class TemplateAppTemplatesApi {
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
       { name: 'category_uuid', value: params?.categoryUuid, style: 'form', explode: true, allowReserved: false },
       { name: 'visibility', value: params?.visibility, style: 'form', explode: true, allowReserved: false },
+      { name: 'template_type', value: params?.templateType, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: AppTemplateResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/app_templates`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

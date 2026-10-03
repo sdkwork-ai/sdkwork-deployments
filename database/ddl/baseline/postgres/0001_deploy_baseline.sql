@@ -3158,10 +3158,15 @@ CREATE TABLE IF NOT EXISTS deploy_app_template_purchase (
     pricing_model   VARCHAR(16)   NOT NULL,
     price_minor     BIGINT        NOT NULL DEFAULT 0,
     currency        VARCHAR(8)    NOT NULL DEFAULT 'CNY',
-    -- 外部结算凭证。FREE 直接 ACTIVE 不经结算；PAID 停在 PENDING，
-    -- settle 动作写入 payment_ref 后才成为安装权益，避免假成功。
-    payment_ref     VARCHAR(128),
-    status          VARCHAR(16)   NOT NULL DEFAULT 'PENDING',
+    -- commerce 订单引用（sdkwork-order，TEXT 主键体系）。付费购买的行由
+    -- 订单履约写入：支付成功（sdkwork-payment 回调 → order 履约端口）才
+    -- 产生 ACTIVE 行，本模块不落 PENDING、不做手工结算——待支付状态由
+    -- commerce_order 持有，避免两套待结算账。FREE 获取不经订单直接授权，
+    -- 订单引用为 NULL。
+    order_id        TEXT,
+    order_no        TEXT,
+    request_no      TEXT,
+    status          VARCHAR(16)   NOT NULL DEFAULT 'ACTIVE',
     idempotency_key VARCHAR(128),
     metadata        JSONB         NOT NULL DEFAULT '{}',
     created_by      BIGINT,
@@ -3174,12 +3179,17 @@ CREATE TABLE IF NOT EXISTS deploy_app_template_purchase (
     CONSTRAINT uk_deploy_app_template_purchase_uuid UNIQUE (uuid),
     CONSTRAINT fk_deploy_app_template_purchase_template FOREIGN KEY (template_id) REFERENCES deploy_app_template(id),
     CONSTRAINT chk_deploy_app_template_purchase_pricing CHECK (pricing_model IN ('FREE', 'PAID')),
-    CONSTRAINT chk_deploy_app_template_purchase_status CHECK (status IN ('PENDING', 'ACTIVE', 'REVOKED')),
-    -- 付费模板只有结算落账（payment_ref 非空）后才算 ACTIVE，防止假成功。
-    CONSTRAINT chk_deploy_app_template_purchase_payment CHECK (
-        pricing_model = 'FREE' OR status <> 'ACTIVE' OR payment_ref IS NOT NULL
+    CONSTRAINT chk_deploy_app_template_purchase_status CHECK (status IN ('ACTIVE', 'REVOKED')),
+    -- 付费行的权益只能来自订单履约：PAID 行必须携带 commerce 订单引用。
+    CONSTRAINT chk_deploy_app_template_purchase_order CHECK (
+        pricing_model = 'FREE' OR (order_id IS NOT NULL AND order_no IS NOT NULL)
     )
 );
+
+-- commerce 订单幂等：同一订单只产生一条权益（履约重放安全）。
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_purchase_order
+    ON deploy_app_template_purchase (order_id)
+    WHERE order_id IS NOT NULL AND deleted_at IS NULL;
 
 -- 同一用户对同一模板只持有一条生效权益；REVOKED 后可重新获取。
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_purchase_entitlement
@@ -3199,11 +3209,12 @@ COMMENT ON COLUMN deploy_app_template_category.category_key IS '租户内稳定�
 COMMENT ON TABLE deploy_app_template IS '应用模板：作者发布的可获取应用形态，含可见性、定价与审核状态';
 COMMENT ON COLUMN deploy_app_template.app_uuid IS '来源 deploy_app.uuid，引用不级联：模板独立于应用行存在';
 COMMENT ON COLUMN deploy_app_template.visibility IS 'PUBLIC 进市场浏览；PRIVATE 仅作者与自己租户可见';
-COMMENT ON COLUMN deploy_app_template.pricing_model IS 'FREE 零元直接获取；PAID 走 PENDING→settle 结算缝';
+COMMENT ON COLUMN deploy_app_template.pricing_model IS 'FREE 零元直接获取；PAID 经 sdkwork-order 下单、sdkwork-payment 支付后由履约写入权益';
 COMMENT ON COLUMN deploy_app_template.price_minor IS '标价，货币最小单位（分）；FREE 恒为 0';
 COMMENT ON COLUMN deploy_app_template.status IS 'DRAFT→PENDING_REVIEW→PUBLISHED；REJECTED 退回作者；DISABLED 平台下架';
 COMMENT ON TABLE deploy_app_template_version IS '应用模板版本：一次发布的不可变快照，含产物引用与校验和';
 COMMENT ON COLUMN deploy_app_template_version.artifact_uuid IS '打包产物 deploy_artifact.uuid；未打包为 NULL';
 COMMENT ON TABLE deploy_app_template_purchase IS '应用模板获取/购买记录；ACTIVE 行即安装权益';
-COMMENT ON COLUMN deploy_app_template_purchase.payment_ref IS '外部结算凭证；PAID 未结算时为 NULL，状态停在 PENDING';
+COMMENT ON COLUMN deploy_app_template_purchase.order_id IS 'commerce 订单（sdkwork-order）引用；PAID 行由订单履约产生，FREE 行为 NULL';
+COMMENT ON COLUMN deploy_app_template_purchase.status IS 'ACTIVE 安装权益；REVOKED 售后作废；待支付状态由 commerce_order 持有，本表不落 PENDING';
 

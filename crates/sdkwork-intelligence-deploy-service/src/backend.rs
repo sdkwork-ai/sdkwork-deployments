@@ -832,18 +832,6 @@ impl DeployBackendApi for DeployService {
             .await
     }
 
-    async fn settle_template_purchase(
-        &self,
-        context: &DeployBackendRequestContext,
-        purchase_uuid: &str,
-        request: &sdkwork_deploy_contract::SettleTemplatePurchaseRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
-        let tenant_id = Self::backend_tenant_scope(context)?;
-        self.repository
-            .settle_template_purchase(tenant_id, context.operator_id, purchase_uuid, request)
-            .await
-    }
-
     async fn revoke_template_purchase(
         &self,
         context: &DeployBackendRequestContext,
