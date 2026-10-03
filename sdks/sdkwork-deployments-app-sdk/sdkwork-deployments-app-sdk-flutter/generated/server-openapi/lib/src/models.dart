@@ -671,140 +671,6 @@ class AppTemplateVersionResponse {
   }
 }
 
-class TemplatePurchaseResponse {
-  final String id;
-  final String templateUuid;
-  final String versionUuid;
-  final String buyerUserId;
-  final String pricingModel;
-  final String priceMinor;
-  final String currency;
-  final String? orderId;
-  final String? orderNo;
-  final String status;
-  final String createdAt;
-  final String updatedAt;
-  final String version;
-
-  TemplatePurchaseResponse({
-    required this.id,
-    required this.templateUuid,
-    required this.versionUuid,
-    required this.buyerUserId,
-    required this.pricingModel,
-    required this.priceMinor,
-    required this.currency,
-    this.orderId,
-    this.orderNo,
-    required this.status,
-    required this.createdAt,
-    required this.updatedAt,
-    required this.version
-  });
-
-  factory TemplatePurchaseResponse.fromJson(Map<String, dynamic> json) {
-    return TemplatePurchaseResponse(
-      id: (() {
-        final value = json['id']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.id is required');
-        }
-        return value;
-      })(),
-      templateUuid: (() {
-        final value = json['templateUuid']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.templateUuid is required');
-        }
-        return value;
-      })(),
-      versionUuid: (() {
-        final value = json['versionUuid']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.versionUuid is required');
-        }
-        return value;
-      })(),
-      buyerUserId: (() {
-        final value = json['buyerUserId']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.buyerUserId is required');
-        }
-        return value;
-      })(),
-      pricingModel: (() {
-        final value = json['pricingModel']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.pricingModel is required');
-        }
-        return value;
-      })(),
-      priceMinor: (() {
-        final value = json['priceMinor']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.priceMinor is required');
-        }
-        return value;
-      })(),
-      currency: (() {
-        final value = json['currency']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.currency is required');
-        }
-        return value;
-      })(),
-      orderId: json['orderId']?.toString(),
-      orderNo: json['orderNo']?.toString(),
-      status: (() {
-        final value = json['status']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.status is required');
-        }
-        return value;
-      })(),
-      createdAt: (() {
-        final value = json['createdAt']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.createdAt is required');
-        }
-        return value;
-      })(),
-      updatedAt: (() {
-        final value = json['updatedAt']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.updatedAt is required');
-        }
-        return value;
-      })(),
-      version: (() {
-        final value = json['version']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchaseResponse.version is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'id': id,
-      'templateUuid': templateUuid,
-      'versionUuid': versionUuid,
-      'buyerUserId': buyerUserId,
-      'pricingModel': pricingModel,
-      'priceMinor': priceMinor,
-      'currency': currency,
-      'orderId': orderId,
-      'orderNo': orderNo,
-      'status': status,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
-      'version': version,
-    };
-  }
-}
-
 class CreateAppTemplateRequest {
   final String appUuid;
   final String? templateType;
@@ -1021,26 +887,6 @@ class CreateAppTemplateVersionRequest {
       'platformTargets': platformTargets?.map((item) => item).toList(),
       'packageSizeBytes': packageSizeBytes,
       'checksumSha256': checksumSha256,
-    };
-  }
-}
-
-class CreateTemplatePurchaseRequest {
-  final String? versionUuid;
-
-  CreateTemplatePurchaseRequest({
-    this.versionUuid
-  });
-
-  factory CreateTemplatePurchaseRequest.fromJson(Map<String, dynamic> json) {
-    return CreateTemplatePurchaseRequest(
-      versionUuid: json['versionUuid']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'versionUuid': versionUuid,
     };
   }
 }
@@ -12667,52 +12513,6 @@ class MarketplaceTemplatesRetrieveResponse {
   }
 }
 
-class TemplatePurchasesCreateResponse201 {
-  final int code;
-  final dynamic data;
-  final String traceId;
-
-  TemplatePurchasesCreateResponse201({
-    required this.code,
-    required this.data,
-    required this.traceId
-  });
-
-  factory TemplatePurchasesCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return TemplatePurchasesCreateResponse201(
-      code: (() {
-        final value = json['code'];
-        if (value is! int) {
-          throw FormatException('TemplatePurchasesCreateResponse201.code is required');
-        }
-        return value;
-      })(),
-      data: (() {
-        final map = _sdkworkAsMap(json['data']);
-        if (map == null) {
-          throw FormatException('TemplatePurchasesCreateResponse201.data is required');
-        }
-        return map;
-      })(),
-      traceId: (() {
-        final value = json['traceId']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchasesCreateResponse201.traceId is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
-    };
-  }
-}
-
 class AppTemplatesListResponse {
   final int code;
   final dynamic data;
@@ -13020,52 +12820,6 @@ class AppTemplateVersionsCreateResponse201 {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AppTemplateVersionsCreateResponse201.traceId is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
-    };
-  }
-}
-
-class TemplatePurchasesListResponse {
-  final int code;
-  final dynamic data;
-  final String traceId;
-
-  TemplatePurchasesListResponse({
-    required this.code,
-    required this.data,
-    required this.traceId
-  });
-
-  factory TemplatePurchasesListResponse.fromJson(Map<String, dynamic> json) {
-    return TemplatePurchasesListResponse(
-      code: (() {
-        final value = json['code'];
-        if (value is! int) {
-          throw FormatException('TemplatePurchasesListResponse.code is required');
-        }
-        return value;
-      })(),
-      data: (() {
-        final map = _sdkworkAsMap(json['data']);
-        if (map == null) {
-          throw FormatException('TemplatePurchasesListResponse.data is required');
-        }
-        return map;
-      })(),
-      traceId: (() {
-        final value = json['traceId']?.toString();
-        if (value == null) {
-          throw FormatException('TemplatePurchasesListResponse.traceId is required');
         }
         return value;
       })()

@@ -4,15 +4,26 @@ interface MarketplaceGlobals {
   marketplace: SdkworkMiniMarketplacePort;
 }
 
+const PAGE_SIZE = 20;
+
 Page({
   data: {
     categories: [] as TemplateCategory[],
     items: [] as TemplateSummary[],
-    entitled: new Set<string>(),
+    // A plain lookup object, not a Set: page data crosses into WXML as JSON, so
+    // a Set would arrive as `{}` and every `entitledMap[item.id]` test would be
+    // falsy — the acquired badge would never render.
+    entitledMap: {} as Record<string, boolean>,
     activeCategory: '',
     activeType: '',
+    activePricing: '',
+    activeSort: 'NEWEST',
     keyword: '',
+    page: 1,
+    hasMore: false,
+    total: 0,
     loading: true,
+    loadingMore: false,
     error: '',
   },
 
@@ -24,33 +35,68 @@ Page({
     { key: 'VIDEO', label: '视频' },
   ],
 
+  pricingModels: [
+    { key: '', label: '免费与付费' },
+    { key: 'FREE', label: '免费' },
+    { key: 'PAID', label: '付费' },
+  ],
+
+  sorts: [
+    { key: 'NEWEST', label: '最新' },
+    { key: 'POPULAR', label: '热门' },
+  ],
+
   onLoad() {
     this.reload();
   },
 
+  /** First page for the current facets: replaces the list instead of appending. */
   reload() {
+    this.setData({ loading: true, loadingMore: false, error: '', page: 1 });
+    this.fetch(1).catch(() => this.setData({ loading: false, error: '模板市场加载失败，请重试。' }));
+  },
+
+  /** Next page: appends to the loaded rows and keeps the facet state. */
+  loadMore() {
+    if (!this.data.hasMore || this.data.loadingMore) return;
+    const next = this.data.page + 1;
+    this.setData({ loadingMore: true });
+    this.fetch(next).catch(() => {
+      this.setData({ loadingMore: false });
+      wx.showToast({ title: '加载失败，请重试', icon: 'none' });
+    });
+  },
+
+  fetch(page: number): Promise<void> {
     const globals = getApp<{ globalData: MarketplaceGlobals }>().globalData;
-    this.setData({ loading: true, error: '' });
-    Promise.all([
+    return Promise.all([
       globals.marketplace.categories(),
       globals.marketplace.browse({
-        page: 1,
-        pageSize: 20,
+        page,
+        pageSize: PAGE_SIZE,
         keyword: this.data.keyword,
         ...(this.data.activeCategory === '' ? {} : { categoryUuid: this.data.activeCategory }),
         ...(this.data.activeType === '' ? {} : { templateType: this.data.activeType }),
+        ...(this.data.activePricing === '' ? {} : { pricingModel: this.data.activePricing }),
+        sort: this.data.activeSort,
       }),
       globals.marketplace.myPurchases(),
-    ])
-      .then(([categories, items, purchases]) => {
-        this.setData({
-          categories,
-          items,
-          entitled: new Set(purchases.filter((purchase) => purchase.status === 'ACTIVE').map((purchase) => purchase.templateUuid)),
-          loading: false,
-        });
-      })
-      .catch(() => this.setData({ loading: false, error: '模板市场加载失败，请重试。' }));
+    ]).then(([categories, listings, purchases]) => {
+      const entitledMap: Record<string, boolean> = {};
+      for (const purchase of purchases) {
+        if (purchase.status === 'ACTIVE') entitledMap[purchase.templateUuid] = true;
+      }
+      this.setData({
+        categories,
+        items: page === 1 ? listings.items : this.data.items.concat(listings.items),
+        entitledMap,
+        page,
+        hasMore: listings.hasMore,
+        total: listings.total,
+        loading: false,
+        loadingMore: false,
+      });
+    });
   },
 
   onKeywordInput(input: WechatMiniprogram.Input) {
@@ -70,6 +116,18 @@ Page({
   onCategoryTap(event: WechatMiniprogram.TouchEvent) {
     const key = event.currentTarget.dataset.key as string | undefined;
     this.setData({ activeCategory: key ?? '' });
+    this.reload();
+  },
+
+  onPricingTap(event: WechatMiniprogram.TouchEvent) {
+    const key = event.currentTarget.dataset.key as string | undefined;
+    this.setData({ activePricing: key ?? '' });
+    this.reload();
+  },
+
+  onSortTap(event: WechatMiniprogram.TouchEvent) {
+    const key = event.currentTarget.dataset.key as string | undefined;
+    this.setData({ activeSort: key === 'POPULAR' ? 'POPULAR' : 'NEWEST' });
     this.reload();
   },
 

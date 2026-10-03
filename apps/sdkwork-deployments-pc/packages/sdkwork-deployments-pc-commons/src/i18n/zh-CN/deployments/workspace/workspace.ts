@@ -62,6 +62,8 @@ export const deploymentsWorkspaceZhCn = {
   "resource.templateCategories.description": "应用模板市场的分类体系",
   "resource.appTemplates.label": "应用模板",
   "resource.appTemplates.description": "作者发布的应用模板与审核",
+  "resource.appTemplateVersions.label": "模板版本",
+  "resource.appTemplateVersions.description": "单个模板的已发布版本快照（范围填模板 UUID）",
   "resource.templatePurchases.label": "模板购买",
   "resource.templatePurchases.description": "获取权益与作废记录",
   "resource.marketplace.label": "模板市场",

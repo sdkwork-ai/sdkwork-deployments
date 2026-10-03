@@ -2,7 +2,6 @@ export * from './common';
 export type { TemplateCategoryResponse } from './template-category-response';
 export type { AppTemplateResponse } from './app-template-response';
 export type { AppTemplateVersionResponse } from './app-template-version-response';
-export type { TemplatePurchaseResponse } from './template-purchase-response';
 export type { CreateTemplateCategoryRequest } from './create-template-category-request';
 export type { UpdateTemplateCategoryRequest } from './update-template-category-request';
 export type { UpdateAppTemplateAdminRequest } from './update-app-template-admin-request';
@@ -101,6 +100,3 @@ export type { AppTemplatesRetrieveResponse } from './app-templates-retrieve-resp
 export type { AppTemplatesUpdateResponse } from './app-templates-update-response';
 export type { AppTemplateVersionsListResponse } from './app-template-versions-list-response';
 export type { AppTemplateVersionsRetrieveResponse } from './app-template-versions-retrieve-response';
-export type { TemplatePurchasesListResponse } from './template-purchases-list-response';
-export type { TemplatePurchasesRetrieveResponse } from './template-purchases-retrieve-response';
-export type { TemplatePurchasesRevokeResponse } from './template-purchases-revoke-response';

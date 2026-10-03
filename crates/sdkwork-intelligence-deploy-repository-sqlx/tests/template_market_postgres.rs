@@ -1,7 +1,10 @@
-//! App template marketplace end-to-end integration test: the entitlement flow
-//! against a real PostgreSQL (category → publish → submit → review → browse
-//! facets → acquire FREE → commerce fulfillment for PAID → revoke → tenancy
-//! isolation).
+//! App template marketplace catalog integration test against a real
+//! PostgreSQL: category administration, author listing create/update, review
+//! approval, marketplace browse facets, and the tenant boundary.
+//!
+//! The module is catalog-only. Acquisition, payment and entitlement are owned
+//! by the sdkwork-order order center and sdkwork-payment, so this test never
+//! acquires, lists an inventory or revokes anything.
 //!
 //! Runs only with `SDKWORK_DATABASE_TEST_POSTGRES_URL` set; the schema is the
 //! disposable `postgres_pool()` baseline (see tests/common/mod.rs).
@@ -9,16 +12,12 @@
 mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
-use sdkwork_database_id::SnowflakeIdGenerator as FulfillmentIdGenerator;
 use sdkwork_deploy_contract::{
-    AppTemplatePage, CreateAppTemplateRequest, CreateAppTemplateVersionRequest,
-    CreateTemplateCategoryRequest, CreateTemplatePurchaseRequest, DeployAppApi,
-    DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
-    ListMarketplaceTemplatesQuery, ListTemplatePurchasesQuery, UpdateAppTemplateAdminRequest,
+    CreateAppTemplateRequest, CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest,
+    DeployAppApi, DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
+    ListMarketplaceTemplatesQuery, UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest,
 };
-use sdkwork_intelligence_deploy_repository_sqlx::{
-    DeployRepository, FulfillPaidTemplatePurchaseCommand, PostgresCommerceTemplatePurchaseStore,
-};
+use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
 use std::sync::Arc;
 
@@ -31,7 +30,7 @@ fn author(actor: i64) -> DeployAppRequestContext {
     }
 }
 
-fn buyer(actor: i64) -> DeployAppRequestContext {
+fn viewer(actor: i64) -> DeployAppRequestContext {
     author(actor)
 }
 
@@ -64,7 +63,7 @@ fn template_request(
         category_uuid: category_uuid.to_owned(),
         template_key: key.to_owned(),
         display_name: format!("Template {key}"),
-        summary: "A purchasable template".to_owned(),
+        summary: "A catalog listing".to_owned(),
         description: None,
         visibility: Some("PUBLIC".to_owned()),
         pricing_model: Some(pricing.to_owned()),
@@ -90,7 +89,7 @@ fn template_request(
 
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
-async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded() {
+async fn postgres_marketplace_catalog_flow_publishes_and_stays_tenant_bounded() {
     let pool = common::postgres_pool().await;
     let repository = Arc::new(DeployRepository::new(
         pool.clone(),
@@ -103,14 +102,18 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
     ));
     let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
     let author_ctx = author(11);
-    let buyer_ctx = buyer(12);
+    let viewer_ctx = viewer(12);
 
-    // 1. Admin category CRUD.
+    // 1. Admin category CRUD, then the author-visible category tree.
     let category = service
         .create_template_category(&operator(), &category_request(&format!("cat{suffix}")))
         .await
         .expect("create category");
     assert_eq!(category.status, "ACTIVE");
+    let categories = DeployAppApi::list_template_categories(&*service, &author_ctx, false)
+        .await
+        .expect("list categories");
+    assert!(categories.items.iter().any(|item| item.id == category.id));
 
     // 2. Author publishes a FREE template over an owned app. The app must
     //    exist first: resolve_app_internal_id refuses foreign or deleted rows.
@@ -146,8 +149,29 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
         .expect("create free template");
     assert_eq!(free.status, "DRAFT");
     assert_eq!(free.template_type, "APP");
+    assert_eq!(
+        free.install_count, "0",
+        "the commerce-fed install counter starts at zero and is not module-written"
+    );
 
-    // 3. Submit refuses nothing less than a version; approval publishes both.
+    // 3. The author edits the draft listing; the catalog keeps the new copy and
+    //    stays in DRAFT until review.
+    let edited = DeployAppApi::update_app_template(
+        &*service,
+        &author_ctx,
+        &free.id,
+        &UpdateAppTemplateRequest {
+            display_name: Some(format!("Template free{suffix} v2")),
+            summary: Some("An edited catalog listing".to_owned()),
+            ..UpdateAppTemplateRequest::default()
+        },
+    )
+    .await
+    .expect("edit draft template");
+    assert_eq!(edited.display_name, format!("Template free{suffix} v2"));
+    assert_eq!(edited.status, "DRAFT");
+
+    // 4. Submit refuses nothing less than a version; approval publishes both.
     let submitted = DeployAppApi::submit_app_template(&*service, &author_ctx, &free.id)
         .await
         .expect("submit for review");
@@ -171,8 +195,8 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
         "approval pins the newest published version"
     );
 
-    // 4. Marketplace browse facets: type + keyword hit; a PAID PPT template by
-    //    a second author stays visible while a DRAFT one does not.
+    // 5. Marketplace browse facets: pricing + type filters; a PUBLISHED PAID
+    //    listing stays catalogue-visible while only PUBLISHED ones appear.
     let paid = service
         .create_app_template(
             &author(13),
@@ -199,11 +223,11 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
     )
     .await
     .expect("approve paid template");
-    assert_eq!(paid_approved.latest_version_uuid.is_some(), true);
+    assert!(paid_approved.latest_version_uuid.is_some());
 
     let browsed = DeployAppApi::list_marketplace_templates(
         &*service,
-        &buyer_ctx,
+        &viewer_ctx,
         &ListMarketplaceTemplatesQuery {
             page: 1,
             page_size: 20,
@@ -219,9 +243,24 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
     assert!(browsed.items.iter().any(|item| item.id == free.id));
     assert!(!browsed.items.iter().any(|item| item.id == paid.id));
 
+    let popular = DeployAppApi::list_marketplace_templates(
+        &*service,
+        &viewer_ctx,
+        &ListMarketplaceTemplatesQuery {
+            sort: Some("POPULAR".to_owned()),
+            ..ListMarketplaceTemplatesQuery::default()
+        },
+    )
+    .await
+    .expect("browse by install count");
+    assert!(
+        popular.items.iter().any(|item| item.id == free.id),
+        "install-count ranking reads the commerce-fed counter"
+    );
+
     let typed = DeployAppApi::list_marketplace_templates(
         &*service,
-        &buyer_ctx,
+        &viewer_ctx,
         &ListMarketplaceTemplatesQuery {
             template_type: Some("VIDEO".to_owned()),
             ..ListMarketplaceTemplatesQuery::default()
@@ -231,103 +270,8 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
     .expect("browse by type");
     assert!(typed.items.is_empty(), "no VIDEO templates exist yet");
 
-    // 5. FREE acquire grants the entitlement immediately and is idempotent;
-    //    the install count moves exactly once.
-    let entitlement = DeployAppApi::create_template_purchase(
-        &*service,
-        &buyer_ctx,
-        &free.id,
-        "acquire-key-1",
-        &CreateTemplatePurchaseRequest::default(),
-    )
-    .await
-    .expect("acquire free template");
-    assert_eq!(entitlement.status, "ACTIVE");
-    let replay = DeployAppApi::create_template_purchase(
-        &*service,
-        &buyer_ctx,
-        &free.id,
-        "acquire-key-1",
-        &CreateTemplatePurchaseRequest::default(),
-    )
-    .await
-    .expect("replay acquire");
-    assert_eq!(replay.id, entitlement.id);
-    let free_after = service
-        .retrieve_marketplace_template(&buyer_ctx, &free.id)
-        .await
-        .expect("reread template");
-    assert_eq!(free_after.install_count, "1");
-
-    // 6. PAID templates are purchased through the commerce checkout: the
-    //    deploy acquire API refuses to mint a PAID row, the order system
-    //    drives payment, and the fulfillment store grants the entitlement.
-    let paid_direct = DeployAppApi::create_template_purchase(
-        &*service,
-        &buyer_ctx,
-        &paid.id,
-        "acquire-key-2",
-        &CreateTemplatePurchaseRequest::default(),
-    )
-    .await;
-    assert!(
-        paid_direct.is_err(),
-        "acquire must not grant paid templates"
-    );
-    let store = PostgresCommerceTemplatePurchaseStore::new(
-        pool.clone(),
-        FulfillmentIdGenerator::new(9).expect("fulfillment snowflake generator"),
-    );
-    let fulfill_command = FulfillPaidTemplatePurchaseCommand {
-        tenant_id: "7".to_owned(),
-        organization_id: Some("0".to_owned()),
-        owner_user_id: "12".to_owned(),
-        order_id: format!("order-{suffix}"),
-        order_no: format!("NO-{suffix}"),
-        request_no: format!("req-{suffix}"),
-        idempotency_key: format!("fulfill-{suffix}"),
-        template_uuid: paid.id.clone(),
-    };
-    let granted = store
-        .fulfill_paid_template_purchase(&fulfill_command)
-        .await
-        .expect("fulfill paid template purchase");
-    assert!(!granted.replayed);
-    let replayed = store
-        .fulfill_paid_template_purchase(&fulfill_command)
-        .await
-        .expect("replay paid fulfillment");
-    assert!(replayed.replayed);
-    assert_eq!(replayed.purchase_uuid, granted.purchase_uuid);
-
-    // 7. Buyer inventory sees both entitlements.
-    let purchases = DeployAppApi::list_template_purchases(
-        &*service,
-        &buyer_ctx,
-        &ListTemplatePurchasesQuery {
-            page: 1,
-            page_size: 20,
-            status: None,
-        },
-    )
-    .await
-    .expect("list purchases");
-    assert_eq!(purchases.items.len(), 2);
-
-    // 8. Revocation kills the entitlement and walks the install count back.
-    let revoked = service
-        .revoke_template_purchase(&operator(), &entitlement.id)
-        .await
-        .expect("revoke entitlement");
-    assert_eq!(revoked.status, "REVOKED");
-    let free_after_revoke = service
-        .retrieve_marketplace_template(&buyer_ctx, &free.id)
-        .await
-        .expect("reread after revoke");
-    assert_eq!(free_after_revoke.install_count, "0");
-
-    // 9. Tenant boundary: the same listing is invisible to another tenant's
-    //    marketplace browse and purchase attempt.
+    // 6. Tenant boundary: the same listing is invisible to another tenant's
+    //    marketplace browse and to a direct catalog read.
     let outsider = DeployAppRequestContext {
         tenant_id: 8,
         actor_id: Some(21),
@@ -342,19 +286,10 @@ async fn postgres_marketplace_entitlement_flow_is_idempotent_and_tenant_bounded(
     .await
     .expect("foreign browse");
     assert!(foreign_browse.items.is_empty());
-    let foreign_acquire = DeployAppApi::create_template_purchase(
-        &*service,
-        &outsider,
-        &free.id,
-        "foreign-key",
-        &CreateTemplatePurchaseRequest::default(),
-    )
-    .await;
+    let foreign_read =
+        DeployAppApi::retrieve_marketplace_template(&*service, &outsider, &free.id).await;
     assert!(
-        foreign_acquire.is_err(),
-        "cross-tenant acquire must be refused"
+        foreign_read.is_err(),
+        "cross-tenant catalog read must be refused"
     );
-
-    // Silence unused-import warnings for the page alias used above.
-    let _: AppTemplatePage = AppTemplatePage::default();
 }

@@ -50,22 +50,6 @@ class TemplateApi {
     })();
   }
 
-  /// Acquire a marketplace app template
-  Future<TemplatePurchasesCreateResponse201?> purchasesCreate(String templateUuid, CreateTemplatePurchaseRequest body, String idempotencyKey) async {
-    final requestHeaders = buildRequestHeaders(
-      <String, HeaderParameterSpec>{
-        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
-      },
-      <String, HeaderParameterSpec>{},
-    );
-    final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/marketplace/templates/${serializePathParameter(templateUuid, const PathParameterSpec('templateUuid', 'simple', false))}/purchase'), body: payload, headers: requestHeaders, contentType: 'application/json');
-    return (() {
-      final map = sdkworkResponseAsMap(response);
-      return map == null ? null : TemplatePurchasesCreateResponse201.fromJson(map);
-    })();
-  }
-
   /// List the caller's app templates
   Future<AppTemplatesListResponse?> appTemplatesList([int? page, int? pageSize, String? keyword, String? status]) async {
     final query = buildQueryString([
@@ -162,20 +146,6 @@ class TemplateApi {
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : AppTemplateVersionsCreateResponse201.fromJson(map);
-    })();
-  }
-
-  /// List the caller's template purchases
-  Future<TemplatePurchasesListResponse?> purchasesList([int? page, int? pageSize, String? status]) async {
-    final query = buildQueryString([
-      QueryParameterSpec('page', page, 'form', true, false, null),
-      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
-      QueryParameterSpec('status', status, 'form', true, false, null)
-    ]);
-    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/template_purchases'), query));
-    return (() {
-      final map = sdkworkResponseAsMap(response);
-      return map == null ? null : TemplatePurchasesListResponse.fromJson(map);
     })();
   }
 }

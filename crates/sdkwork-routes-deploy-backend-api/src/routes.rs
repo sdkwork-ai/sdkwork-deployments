@@ -8,10 +8,10 @@ use sdkwork_deploy_contract::{
     AuditLogQuery, ChallengeResultRequest, CreateAcmeAccountRequest, CreateNginxConfigRequest,
     CreateNodeClusterRequest, CreateServerRequest, CreateTemplateCategoryRequest, DeployBackendApi,
     DeployBackendRequestContext, FailCertificateOrderRequest, IngestUsageEventsRequest,
-    ListAppTemplatesAdminQuery, ListNginxConfigsQuery, ListTemplatePurchasesQuery,
-    RequestCertificateOrderRequest, RetentionRunRequest, StoreCertificateVersionRequest,
-    UpdateAppTemplateAdminRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
-    UpdateServerRequest, UpdateTemplateCategoryRequest, UsageReconciliationRequest,
+    ListAppTemplatesAdminQuery, ListNginxConfigsQuery, RequestCertificateOrderRequest,
+    RetentionRunRequest, StoreCertificateVersionRequest, UpdateAppTemplateAdminRequest,
+    UpdateNginxConfigRequest, UpdateNodeClusterRequest, UpdateServerRequest,
+    UpdateTemplateCategoryRequest, UsageReconciliationRequest,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -111,18 +111,6 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> R
         .route(
             paths::APP_TEMPLATE_VERSION,
             get(retrieve_app_template_version_admin),
-        )
-        .route(
-            paths::TEMPLATE_PURCHASES,
-            get(list_template_purchases_admin),
-        )
-        .route(
-            paths::TEMPLATE_PURCHASE,
-            get(retrieve_template_purchase_admin),
-        )
-        .route(
-            paths::TEMPLATE_PURCHASE_REVOKE,
-            post(revoke_template_purchase_admin),
         )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
@@ -1062,63 +1050,6 @@ async fn retrieve_app_template_version_admin(
             let item = state
                 .api
                 .retrieve_app_template_version(&context, &template_uuid, &version_uuid)
-                .await?;
-            ok_json(envelope::resource(item))
-        }
-        .await,
-    )
-}
-
-async fn list_template_purchases_admin(
-    ctx: WebRequestContext,
-    State(state): State<BackendState>,
-    context: Option<Extension<DeployBackendRequestContext>>,
-    Query(query): Query<ListTemplatePurchasesQuery>,
-) -> Response {
-    finish_api_json(
-        &ctx,
-        async {
-            let context = require_backend_context(context)?;
-            let page = state.api.list_template_purchases(&context, &query).await?;
-            ok_json(envelope::template_purchase_page(page))
-        }
-        .await,
-    )
-}
-
-async fn retrieve_template_purchase_admin(
-    ctx: WebRequestContext,
-    State(state): State<BackendState>,
-    context: Option<Extension<DeployBackendRequestContext>>,
-    Path(purchase_uuid): Path<String>,
-) -> Response {
-    finish_api_json(
-        &ctx,
-        async {
-            let context = require_backend_context(context)?;
-            let item = state
-                .api
-                .retrieve_template_purchase(&context, &purchase_uuid)
-                .await?;
-            ok_json(envelope::resource(item))
-        }
-        .await,
-    )
-}
-
-async fn revoke_template_purchase_admin(
-    ctx: WebRequestContext,
-    State(state): State<BackendState>,
-    context: Option<Extension<DeployBackendRequestContext>>,
-    Path(purchase_uuid): Path<String>,
-) -> Response {
-    finish_api_json(
-        &ctx,
-        async {
-            let context = require_backend_context(context)?;
-            let item = state
-                .api
-                .revoke_template_purchase(&context, &purchase_uuid)
                 .await?;
             ok_json(envelope::resource(item))
         }

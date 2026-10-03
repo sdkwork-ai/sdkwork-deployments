@@ -2991,10 +2991,11 @@ COMMENT ON COLUMN deploy_dns_zone_wechat_verification.user_id IS '文件归属�
 
 -- source: initialization state
 -- 应用模板市场（app template marketplace）。作者把一个 deploy_app 的源码
--- 形态发布为模板，其他用户按分类浏览并获取（免费直接生效，付费先进
--- PENDING 等待结算）。四张表都在租户内：市场浏览永远过滤 tenant_id，
--- 跨租户市场是未来需要显式契约变更的能力，不允许靠漏掉谓词"顺带"成立。
--- 依赖顺序：分类先于模板，模板先于版本与购买（同脚本内 FK 需要目标先建）。
+-- 形态发布为模板，其他用户按分类浏览与获取；目录由本模块持有，付费模板的
+-- 订单与支付由 sdkwork-order 订单中心 + sdkwork-payment 承担。三张表都在
+-- 租户内：市场浏览永远过滤 tenant_id，跨租户市场是未来需要显式契约变更的
+-- 能力，不允许靠漏掉谓词"顺带"成立。
+-- 依赖顺序：分类先于模板，模板先于版本（同脚本内 FK 需要目标先建）。
 
 CREATE TABLE IF NOT EXISTS deploy_app_template_category (
     id              BIGINT        NOT NULL,
@@ -3146,75 +3147,14 @@ CREATE INDEX IF NOT EXISTS idx_deploy_app_template_version_list
     ON deploy_app_template_version (tenant_id, template_id, status, created_at DESC, id)
     WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS deploy_app_template_purchase (
-    id              BIGINT        NOT NULL,
-    uuid            VARCHAR(36)   NOT NULL,
-    tenant_id       BIGINT        NOT NULL,
-    organization_id BIGINT        NOT NULL DEFAULT 0,
-    template_id     BIGINT        NOT NULL,
-    version_uuid    VARCHAR(36)   NOT NULL,
-    buyer_user_id   BIGINT        NOT NULL,
-    -- 成交时点的定价快照：模板后续改价不影响已成立的获取记录。
-    pricing_model   VARCHAR(16)   NOT NULL,
-    price_minor     BIGINT        NOT NULL DEFAULT 0,
-    currency        VARCHAR(8)    NOT NULL DEFAULT 'CNY',
-    -- commerce 订单引用（sdkwork-order，TEXT 主键体系）。付费购买的行由
-    -- 订单履约写入：支付成功（sdkwork-payment 回调 → order 履约端口）才
-    -- 产生 ACTIVE 行，本模块不落 PENDING、不做手工结算——待支付状态由
-    -- commerce_order 持有，避免两套待结算账。FREE 获取不经订单直接授权，
-    -- 订单引用为 NULL。
-    order_id        TEXT,
-    order_no        TEXT,
-    request_no      TEXT,
-    status          VARCHAR(16)   NOT NULL DEFAULT 'ACTIVE',
-    idempotency_key VARCHAR(128),
-    metadata        JSONB         NOT NULL DEFAULT '{}',
-    created_by      BIGINT,
-    updated_by      BIGINT,
-    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    version         BIGINT        NOT NULL DEFAULT 1,
-    deleted_at      TIMESTAMPTZ,
-    CONSTRAINT pk_deploy_app_template_purchase PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_app_template_purchase_uuid UNIQUE (uuid),
-    CONSTRAINT fk_deploy_app_template_purchase_template FOREIGN KEY (template_id) REFERENCES deploy_app_template(id),
-    CONSTRAINT chk_deploy_app_template_purchase_pricing CHECK (pricing_model IN ('FREE', 'PAID')),
-    CONSTRAINT chk_deploy_app_template_purchase_status CHECK (status IN ('ACTIVE', 'REVOKED')),
-    -- 付费行的权益只能来自订单履约：PAID 行必须携带 commerce 订单引用。
-    CONSTRAINT chk_deploy_app_template_purchase_order CHECK (
-        pricing_model = 'FREE' OR (order_id IS NOT NULL AND order_no IS NOT NULL)
-    )
-);
-
--- commerce 订单幂等：同一订单只产生一条权益（履约重放安全）。
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_purchase_order
-    ON deploy_app_template_purchase (order_id)
-    WHERE order_id IS NOT NULL AND deleted_at IS NULL;
-
--- 同一用户对同一模板只持有一条生效权益；REVOKED 后可重新获取。
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_purchase_entitlement
-    ON deploy_app_template_purchase (template_id, buyer_user_id)
-    WHERE status = 'ACTIVE' AND deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_purchase_idempotency
-    ON deploy_app_template_purchase (tenant_id, idempotency_key)
-    WHERE deleted_at IS NULL AND idempotency_key IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_deploy_app_template_purchase_buyer
-    ON deploy_app_template_purchase (tenant_id, buyer_user_id, status, created_at DESC, id)
-    WHERE deleted_at IS NULL;
-
 COMMENT ON TABLE deploy_app_template_category IS '应用模板市场分类；平台管理员维护，浏览树最多两层';
 COMMENT ON COLUMN deploy_app_template_category.category_key IS '租户内稳定的分类标识，模板引用与统计都以它为准';
 COMMENT ON TABLE deploy_app_template IS '应用模板：作者发布的可获取应用形态，含可见性、定价与审核状态';
 COMMENT ON COLUMN deploy_app_template.app_uuid IS '来源 deploy_app.uuid，引用不级联：模板独立于应用行存在';
 COMMENT ON COLUMN deploy_app_template.visibility IS 'PUBLIC 进市场浏览；PRIVATE 仅作者与自己租户可见';
-COMMENT ON COLUMN deploy_app_template.pricing_model IS 'FREE 零元直接获取；PAID 经 sdkwork-order 下单、sdkwork-payment 支付后由履约写入权益';
+COMMENT ON COLUMN deploy_app_template.pricing_model IS 'FREE 零元直接获取；PAID 模板经 sdkwork-order 下单、sdkwork-payment 支付，权益由订单中心持有';
 COMMENT ON COLUMN deploy_app_template.price_minor IS '标价，货币最小单位（分）；FREE 恒为 0';
 COMMENT ON COLUMN deploy_app_template.status IS 'DRAFT→PENDING_REVIEW→PUBLISHED；REJECTED 退回作者；DISABLED 平台下架';
 COMMENT ON TABLE deploy_app_template_version IS '应用模板版本：一次发布的不可变快照，含产物引用与校验和';
 COMMENT ON COLUMN deploy_app_template_version.artifact_uuid IS '打包产物 deploy_artifact.uuid；未打包为 NULL';
-COMMENT ON TABLE deploy_app_template_purchase IS '应用模板获取/购买记录；ACTIVE 行即安装权益';
-COMMENT ON COLUMN deploy_app_template_purchase.order_id IS 'commerce 订单（sdkwork-order）引用；PAID 行由订单履约产生，FREE 行为 NULL';
-COMMENT ON COLUMN deploy_app_template_purchase.status IS 'ACTIVE 安装权益；REVOKED 售后作废；待支付状态由 commerce_order 持有，本表不落 PENDING';
 

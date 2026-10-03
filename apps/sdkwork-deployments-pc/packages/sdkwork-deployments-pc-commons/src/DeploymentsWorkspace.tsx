@@ -186,9 +186,11 @@ function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
     // behind it, and the console already uses `Layers` for the same idea.
     sourceSpecs: Layers,
     // Template marketplace family: the taxonomy, the moderated listings, the
-    // entitlement ledger, the storefront, and the author workbench.
+    // per-listing version history, the entitlement ledger, the storefront, and
+    // the author workbench.
     templateCategories: ListTree,
     appTemplates: Shapes,
+    appTemplateVersions: Boxes,
     templatePurchases: ReceiptText,
     marketplace: Store,
     myTemplates: PackageOpen,

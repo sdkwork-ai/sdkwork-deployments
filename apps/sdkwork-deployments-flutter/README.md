@@ -34,6 +34,6 @@ flutter test
 flutter run            # add --dart-define=SDKWORK_DEPLOY_APP_API_BASE_URL=...
 ```
 
-Platform targets (android/, ios/) are added with `flutter create . --platforms
-android,ios` when a store build is cut; this root ships source, analysis, and
-widget tests first.
+The `android/` and `ios/` targets are checked in, so a store build runs from
+this root directly (`flutter build apk` / `flutter build ipa`); this README's
+`analyze` and `test` commands are the day-to-day ones.

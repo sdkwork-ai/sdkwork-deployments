@@ -1759,27 +1759,6 @@ impl DeployAppApi for DeployService {
             .await
     }
 
-    async fn create_template_purchase(
-        &self,
-        context: &DeployAppRequestContext,
-        template_uuid: &str,
-        idempotency_key: &str,
-        request: &sdkwork_deploy_contract::CreateTemplatePurchaseRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
-        let tenant_id = Self::require_tenant(context)?;
-        let buyer_user_id = Self::require_actor(context)?;
-        self.repository
-            .create_template_purchase(
-                tenant_id,
-                context.organization_id,
-                buyer_user_id,
-                template_uuid,
-                idempotency_key,
-                request,
-            )
-            .await
-    }
-
     async fn list_app_templates(
         &self,
         context: &DeployAppRequestContext,
@@ -1895,27 +1874,11 @@ impl DeployAppApi for DeployService {
             .create_app_template_version(tenant_id, author_user_id, template_uuid, request)
             .await
     }
-
-    async fn list_template_purchases(
-        &self,
-        context: &DeployAppRequestContext,
-        query: &sdkwork_deploy_contract::ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchasePage> {
-        let tenant_id = Self::require_tenant(context)?;
-        let buyer_user_id = Self::require_actor(context)?;
-        if let Some(status) = query.status.as_deref() {
-            validate_purchase_status(status)?;
-        }
-        self.repository
-            .list_template_purchases(tenant_id, Some(buyer_user_id), query)
-            .await
-    }
 }
 
-/// Author and buyer surfaces are user-private (`IAM_SPEC.md` 5.1): a caller
-/// without a user subject has no inventory of their own to list, so the answer
-/// is "forbidden" rather than an empty page that pretends the tenant inventory
-/// is theirs.
+/// Author surfaces are user-private (`IAM_SPEC.md` 5.1): a caller without a
+/// user subject has no listings of their own, so the answer is "forbidden"
+/// rather than an anonymous tenant-wide view.
 impl DeployService {
     pub(crate) fn require_actor(context: &DeployAppRequestContext) -> DeployServiceResult<i64> {
         context
@@ -1943,21 +1906,6 @@ fn validate_template_status(status: &str) -> DeployServiceResult<()> {
     } else {
         Err(sdkwork_deploy_contract::DeployServiceError::validation(
             "template status is invalid",
-        ))
-    }
-}
-
-fn validate_purchase_status(status: &str) -> DeployServiceResult<()> {
-    let valid = matches!(
-        status,
-        sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_ACTIVE
-            | sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_REVOKED
-    );
-    if valid {
-        Ok(())
-    } else {
-        Err(sdkwork_deploy_contract::DeployServiceError::validation(
-            "purchase status is invalid",
         ))
     }
 }

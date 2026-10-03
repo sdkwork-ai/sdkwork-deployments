@@ -49,11 +49,14 @@ function fakePort(routes: Record<string, Responder>): {
 
 test('browse projects blank facets and hits the marketplace path with snake_case query', async () => {
   const { port, calls } = fakePort({
-    'GET http://127.0.0.1:3900/app/v3/api/marketplace/templates': () => envelope({ items: [cannedSummary], pageInfo: {} }),
+    'GET http://127.0.0.1:3900/app/v3/api/marketplace/templates': () =>
+      envelope({ items: [cannedSummary], pageInfo: { hasMore: true, totalItems: '7' } }),
   });
-  const items = await port.browse({ page: 1, pageSize: 10, keyword: '   ', categoryUuid: '' });
-  assert.equal(items.length, 1);
-  assert.equal(items[0]?.displayName, 'Blog starter');
+  const page = await port.browse({ page: 1, pageSize: 10, keyword: '   ', categoryUuid: '' });
+  assert.equal(page.items.length, 1);
+  assert.equal(page.items[0]?.displayName, 'Blog starter');
+  assert.equal(page.hasMore, true);
+  assert.equal(page.total, 7);
   const first = calls[0];
   if (!first) throw new Error('the browse call was not recorded');
   const url = new URL(first.url);
@@ -61,6 +64,24 @@ test('browse projects blank facets and hits the marketplace path with snake_case
   assert.equal(url.searchParams.get('page_size'), '10');
   assert.equal(url.searchParams.has('keyword'), false);
   assert.equal(url.searchParams.has('category_uuid'), false);
+  assert.equal(url.searchParams.has('pricing_model'), false);
+  assert.equal(url.searchParams.has('sort'), false);
+});
+
+test('browse carries the pricing and sort facets and defaults missing paging facts', async () => {
+  const { port, calls } = fakePort({
+    'GET http://127.0.0.1:3900/app/v3/api/marketplace/templates': () =>
+      envelope({ items: [cannedSummary], pageInfo: {} }),
+  });
+  const page = await port.browse({ page: 2, pageSize: 10, pricingModel: 'PAID', sort: 'POPULAR' });
+  assert.equal(page.hasMore, false);
+  assert.equal(page.total, 0);
+  const first = calls[0];
+  if (!first) throw new Error('the browse call was not recorded');
+  const url = new URL(first.url);
+  assert.equal(url.searchParams.get('pricing_model'), 'PAID');
+  assert.equal(url.searchParams.get('sort'), 'POPULAR');
+  assert.equal(url.searchParams.get('page'), '2');
 });
 
 test('acquire sends the idempotency key header and reads the item envelope', async () => {

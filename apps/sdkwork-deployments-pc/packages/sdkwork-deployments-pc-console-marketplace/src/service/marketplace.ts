@@ -100,6 +100,7 @@ export interface CreateTemplateDraft {
   readonly visibility: "PUBLIC" | "PRIVATE";
   readonly pricingModel: "FREE" | "PAID";
   readonly priceMinor?: string | undefined;
+  readonly currency?: string | undefined;
   readonly initialVersion?: string | undefined;
 }
 
@@ -107,6 +108,26 @@ export interface CreateTemplateVersionDraft {
   readonly version: string;
   readonly changelog?: string | undefined;
   readonly artifactUuid?: string | undefined;
+  readonly sourceAppVersion?: string | undefined;
+  readonly platformTargets?: readonly string[] | undefined;
+  readonly packageSizeBytes?: string | undefined;
+  readonly checksumSha256?: string | undefined;
+}
+
+/**
+ * Editable listing fields. Every member is optional because the update command
+ * is a patch: an omitted field keeps its stored value server-side, so the
+ * dialog only sends what the author actually changed.
+ */
+export interface UpdateTemplateDraft {
+  readonly displayName?: string | undefined;
+  readonly summary?: string | undefined;
+  readonly description?: string | undefined;
+  readonly categoryUuid?: string | undefined;
+  readonly visibility?: "PUBLIC" | "PRIVATE" | undefined;
+  readonly pricingModel?: "FREE" | "PAID" | undefined;
+  readonly priceMinor?: string | undefined;
+  readonly currency?: string | undefined;
 }
 
 export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
@@ -140,6 +161,7 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
           ...(draft.pricingModel === "PAID" && draft.priceMinor !== undefined && draft.priceMinor.trim() !== ""
             ? { priceMinor: draft.priceMinor.trim() }
             : {}),
+          ...(draft.currency === undefined || draft.currency.trim() === "" ? {} : { currency: draft.currency.trim().toUpperCase() }),
           ...(draft.initialVersion === undefined || draft.initialVersion.trim() === ""
             ? {}
             : { initialVersion: { version: draft.initialVersion.trim() } }),
@@ -149,6 +171,26 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
     },
     remove(templateUuid: string): Promise<void> {
       return deployClient.template.appTemplates.delete(templateUuid);
+    },
+    retrieve(templateUuid: string): Promise<AppTemplateResponse> {
+      return deployClient.template.appTemplates.retrieve(templateUuid);
+    },
+    /** Patches a listing; the API keeps every omitted field at its stored value. */
+    update(templateUuid: string, draft: UpdateTemplateDraft): Promise<AppTemplateResponse> {
+      return deployClient.template.appTemplates.update(
+        templateUuid,
+        omitBlank({
+          ...(draft.displayName === undefined ? {} : { displayName: draft.displayName.trim() }),
+          ...(draft.summary === undefined ? {} : { summary: draft.summary.trim() }),
+          ...(draft.description === undefined ? {} : { description: draft.description }),
+          ...(draft.categoryUuid === undefined ? {} : { categoryUuid: draft.categoryUuid }),
+          ...(draft.visibility === undefined ? {} : { visibility: draft.visibility }),
+          ...(draft.pricingModel === undefined ? {} : { pricingModel: draft.pricingModel }),
+          ...(draft.priceMinor === undefined ? {} : { priceMinor: draft.priceMinor.trim() }),
+          ...(draft.currency === undefined ? {} : { currency: draft.currency.trim().toUpperCase() }),
+        }),
+        { idempotencyKey: uuid() },
+      );
     },
     submit(templateUuid: string): Promise<AppTemplateResponse> {
       return deployClient.template.appTemplates.submit(templateUuid);
@@ -164,6 +206,10 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
           version: draft.version.trim(),
           ...(draft.changelog === undefined || draft.changelog.trim() === "" ? {} : { changelog: draft.changelog }),
           ...(draft.artifactUuid === undefined || draft.artifactUuid.trim() === "" ? {} : { artifactUuid: draft.artifactUuid.trim() }),
+          ...(draft.sourceAppVersion === undefined || draft.sourceAppVersion.trim() === "" ? {} : { sourceAppVersion: draft.sourceAppVersion.trim() }),
+          ...(draft.platformTargets === undefined || draft.platformTargets.length === 0 ? {} : { platformTargets: [...draft.platformTargets] }),
+          ...(draft.packageSizeBytes === undefined || draft.packageSizeBytes.trim() === "" ? {} : { packageSizeBytes: draft.packageSizeBytes.trim() }),
+          ...(draft.checksumSha256 === undefined || draft.checksumSha256.trim() === "" ? {} : { checksumSha256: draft.checksumSha256.trim() }),
         },
         { idempotencyKey: uuid() },
       );

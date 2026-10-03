@@ -62,6 +62,8 @@ export const deploymentsWorkspaceEnUs = {
   "resource.templateCategories.description": "Marketplace taxonomy for app templates",
   "resource.appTemplates.label": "App templates",
   "resource.appTemplates.description": "Author-published app template listings and moderation",
+  "resource.appTemplateVersions.label": "Template versions",
+  "resource.appTemplateVersions.description": "Published version snapshots of one listing (scope carries the template UUID)",
   "resource.templatePurchases.label": "Template purchases",
   "resource.templatePurchases.description": "Acquisition entitlements and revocations",
   "resource.marketplace.label": "Marketplace",

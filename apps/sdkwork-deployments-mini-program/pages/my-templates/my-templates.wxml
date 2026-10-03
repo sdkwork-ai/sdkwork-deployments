@@ -11,5 +11,6 @@
   <view class="mp-actions">
     <button class="mp-button" size="mini" data-uuid="{{item.id}}" bindtap="onVersionsTap">版本列表</button>
     <button class="mp-button" size="mini" data-uuid="{{item.id}}" bindtap="onSubmitTap">提交审核</button>
+    <button class="mp-button" size="mini" data-uuid="{{item.id}}" bindtap="onWithdrawTap">下架模板</button>
   </view>
 </view>

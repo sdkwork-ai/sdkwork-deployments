@@ -8,6 +8,24 @@
   >{{item.label}}</view>
 </view>
 <view class="mp-chips">
+  <view
+    wx:for="{{pricingModels}}"
+    wx:key="key"
+    class="mp-chip {{activePricing === item.key ? 'mp-chip-active' : ''}}"
+    data-key="{{item.key}}"
+    bindtap="onPricingTap"
+  >{{item.label}}</view>
+</view>
+<view class="mp-chips">
+  <view
+    wx:for="{{sorts}}"
+    wx:key="key"
+    class="mp-chip {{activeSort === item.key ? 'mp-chip-active' : ''}}"
+    data-key="{{item.key}}"
+    bindtap="onSortTap"
+  >{{item.label}}</view>
+</view>
+<view class="mp-chips">
   <view class="mp-chip {{activeCategory === '' ? 'mp-chip-active' : ''}}" bindtap="onCategoryTap">全部</view>
   <view
     wx:for="{{categories}}"
@@ -36,6 +54,7 @@
   <view class="mp-meta">
     <text class="mp-price {{item.pricingModel === 'FREE' ? 'mp-price-free' : ''}}">{{item.pricingModel === 'PAID' ? '付费 ' + item.priceMinor + ' ' + item.currency : '免费'}}</text>
     <text>{{item.installCount}} 次安装</text>
-    <text wx:if="{{entitled[item.id]}}" class="mp-status mp-status-active">已获取</text>
+    <text wx:if="{{entitledMap[item.id]}}" class="mp-status mp-status-active">已获取</text>
   </view>
 </view>
+<view wx:if="{{hasMore}}" class="mp-more" bindtap="loadMore">{{loadingMore ? '加载中…' : '加载更多（共 ' + total + ' 个）'}}</view>

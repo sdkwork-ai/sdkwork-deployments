@@ -1,43 +1,8 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppTemplateResponse, AppTemplateVersionResponse, CreateTemplateCategoryRequest, PageInfo, TemplateCategoryResponse, TemplatePurchaseResponse, UpdateAppTemplateAdminRequest, UpdateTemplateCategoryRequest } from '../types';
+import type { AppTemplateResponse, AppTemplateVersionResponse, CreateTemplateCategoryRequest, PageInfo, TemplateCategoryResponse, UpdateAppTemplateAdminRequest, UpdateTemplateCategoryRequest } from '../types';
 
-
-export interface TemplateTemplatePurchasesListParams {
-  page?: number;
-  pageSize?: number;
-  status?: 'ACTIVE' | 'REVOKED';
-}
-
-export class TemplateTemplatePurchasesApi {
-  private client: HttpClient;
-
-  constructor(client: HttpClient) {
-    this.client = client;
-  }
-
-
-/** 获取模板获取/购买记录 */
-  async list(params?: TemplateTemplatePurchasesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: TemplatePurchaseResponse[]; pageInfo: PageInfo; }> {
-    const query = buildQueryString([
-      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
-      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
-    ]);
-    return this.client.request<{ items: TemplatePurchaseResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/template_purchases`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
-  }
-
-/** 获取模板购买详情 */
-  async retrieve(purchaseUuid: string, requestOptions?: ApiRequestOptions): Promise<TemplatePurchaseResponse> {
-    return this.client.request<TemplatePurchaseResponse>(backendApiPath(`/template_purchases/${serializePathParameter(purchaseUuid, { name: 'purchaseUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
-  }
-
-/** 作废模板购买记录 */
-  async revoke(purchaseUuid: string, requestOptions?: ApiRequestOptions): Promise<TemplatePurchaseResponse> {
-    return this.client.request<TemplatePurchaseResponse>(backendApiPath(`/template_purchases/${serializePathParameter(purchaseUuid, { name: 'purchaseUuid', style: 'simple', explode: false })}/revoke`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
-  }
-}
 
 export interface TemplateAppTemplateVersionsListParams {
   page?: number;
@@ -194,13 +159,11 @@ export class TemplateApi {
   public readonly templateCategories: TemplateTemplateCategoriesApi;
   public readonly appTemplates: TemplateAppTemplatesApi;
   public readonly appTemplateVersions: TemplateAppTemplateVersionsApi;
-  public readonly templatePurchases: TemplateTemplatePurchasesApi;
 
   constructor(client: HttpClient) {
     this.templateCategories = new TemplateTemplateCategoriesApi(client);
     this.appTemplates = new TemplateAppTemplatesApi(client);
     this.appTemplateVersions = new TemplateAppTemplateVersionsApi(client);
-    this.templatePurchases = new TemplateTemplatePurchasesApi(client);
   }
 
 }

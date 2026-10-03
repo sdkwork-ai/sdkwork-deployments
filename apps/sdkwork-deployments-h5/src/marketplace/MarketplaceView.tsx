@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AppTemplateResponse,
   AppTemplateSummaryResponse,
+  AppTemplateVersionResponse,
   TemplateCategoryResponse,
   TemplatePurchaseResponse,
 } from "@sdkwork/deployments-app-sdk";
@@ -33,6 +34,9 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
   const [categoryUuid, setCategoryUuid] = useState("");
   const [keyword, setKeyword] = useState("");
   const [templateType, setTemplateType] = useState<"" | "APP" | "PPT" | "VIDEO">("");
+  const [pricingModel, setPricingModel] = useState<"" | "FREE" | "PAID">("");
+  const [sort, setSort] = useState<"NEWEST" | "POPULAR">("NEWEST");
+  const [versions, setVersions] = useState<readonly AppTemplateVersionResponse[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -56,6 +60,8 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
           categoryUuid: categoryUuid === "" ? undefined : categoryUuid,
           keyword: keyword === "" ? undefined : keyword,
           templateType: templateType === "" ? undefined : templateType,
+          pricingModel: pricingModel === "" ? undefined : pricingModel,
+          sort,
         }),
         service.myPurchases(1, 100),
       ]);
@@ -68,24 +74,53 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
     } finally {
       setBusy(false);
     }
-  }, [service, page, categoryUuid, keyword, templateType, t]);
+  }, [service, page, categoryUuid, keyword, templateType, pricingModel, sort, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const openDetail = useCallback(
+    async (templateUuid: string): Promise<void> => {
+      setActionError(undefined);
+      // The sheet opens on the detail read; the version list is a follow-up
+      // because the app-api only exposes versions to the listing's author, so a
+      // buyer's request legitimately comes back empty or refused. A failed
+      // version read must not blank the sheet.
+      try {
+        setDetail(await service.retrieve(templateUuid));
+      } catch {
+        setActionError(t("marketplace.loadFailed"));
+        return;
+      }
+      try {
+        setVersions(await service.listVersions(templateUuid));
+      } catch {
+        setVersions([]);
+      }
+    },
+    [service, t],
+  );
+
+  const closeDetail = useCallback((): void => {
+    setDetail(undefined);
+    setVersions([]);
+  }, []);
 
   const acquire = useCallback(
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
       try {
         await service.acquire(templateUuid);
-        setDetail(undefined);
+        // Both the entitlement set and the install count move on acquire, so
+        // the sheet closes onto a reloaded list rather than a stale card.
+        closeDetail();
         await load();
       } catch {
         setActionError(t("marketplace.acquireFailed"));
       }
     },
-    [service, load, t],
+    [service, load, t, closeDetail],
   );
 
   return (
@@ -146,6 +181,36 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
           </button>
         ))}
       </div>
+      <div className="h5-chips" role="tablist" aria-label={t("marketplace.pricing.all")}>
+        {(["", "FREE", "PAID"] as const).map((pricing) => (
+          <button
+            className={pricingModel === pricing ? "h5-chip h5-chip-active" : "h5-chip"}
+            key={pricing || "all-pricing"}
+            type="button"
+            onClick={() => {
+              setPricingModel(pricing);
+              setPage(1);
+            }}
+          >
+            {pricing === "" ? t("marketplace.pricing.all") : t(pricing === "PAID" ? "marketplace.pricing.PAID" : "marketplace.pricing.FREE")}
+          </button>
+        ))}
+      </div>
+      <div className="h5-chips" role="tablist" aria-label={t("marketplace.sort.NEWEST")}>
+        {(["NEWEST", "POPULAR"] as const).map((option) => (
+          <button
+            className={sort === option ? "h5-chip h5-chip-active" : "h5-chip"}
+            key={option}
+            type="button"
+            onClick={() => {
+              setSort(option);
+              setPage(1);
+            }}
+          >
+            {t(option === "POPULAR" ? "marketplace.sort.POPULAR" : "marketplace.sort.NEWEST")}
+          </button>
+        ))}
+      </div>
       {error && (
         <div className="h5-error" role="alert">
           {error}
@@ -161,11 +226,7 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
             key={item.id}
             type="button"
             onClick={() => {
-              setActionError(undefined);
-              void service
-                .retrieve(item.id)
-                .then(setDetail)
-                .catch(() => setActionError(t("marketplace.loadFailed")));
+              void openDetail(item.id);
             }}
           >
             <span className="h5-card-title">
@@ -208,26 +269,43 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
           className="h5-sheet-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setDetail(undefined);
+            if (event.target === event.currentTarget) closeDetail();
           }}
         >
           <div className="h5-sheet" role="dialog" aria-modal="true" aria-label={t("marketplace.detail")}>
             <header>
               <h2>{detail.displayName}</h2>
-              <button className="h5-sheet-close" type="button" onClick={() => setDetail(undefined)}>
+              <button className="h5-sheet-close" type="button" onClick={closeDetail}>
                 ×
               </button>
             </header>
             <p className="h5-sheet-summary">{detail.summary}</p>
+            <p className="h5-sheet-meta">
+              {t("marketplace.installs", { count: detail.installCount })} · {t("marketplace.updatedAt", { value: detail.updatedAt })}
+            </p>
             {detail.description
               .split("\n")
               .filter((line) => line.trim() !== "")
               .map((line, index) => (
                 <p key={index}>{line}</p>
               ))}
+            <h3 className="h5-section">{t("marketplace.versions")}</h3>
+            {detail.latestVersionUuid === undefined && versions.length === 0 ? (
+              <div className="h5-empty">{t("marketplace.versions.empty")}</div>
+            ) : (
+              <ul className="h5-list">
+                {versions.map((version) => (
+                  <li key={version.id}>
+                    <span className={`h5-status h5-status-${version.status.toLowerCase()}`}>{version.status}</span>
+                    <span className="h5-list-main">{version.templateVersion}</span>
+                    <span>{version.publishedAt ?? version.createdAt}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {actionError && <div className="h5-error" role="alert">{actionError}</div>}
             <footer>
-              <button className="h5-secondary" type="button" onClick={() => setDetail(undefined)}>
+              <button className="h5-secondary" type="button" onClick={closeDetail}>
                 {t("common.close")}
               </button>
               <button

@@ -21,25 +21,24 @@ use sdkwork_deploy_contract::{
     CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
     CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
     CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
-    CreateTemplateCategoryRequest, CreateTemplatePurchaseRequest, DeployAppRequestContext,
-    DeployUploadSessionResponse, DeploymentStatus, DomainHostnamePage, DomainHostnameResponse,
-    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage,
-    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
-    HealthCheckResponse, ListAppTemplatesAdminQuery, ListAppTemplatesQuery, ListAppsQuery,
-    ListDomainZonesQuery, ListMarketplaceTemplatesQuery, ListNginxConfigsQuery,
-    ListTemplatePurchasesQuery, NginxConfigPage, NginxConfigResponse, NginxReloadResponse,
-    NginxStatusResponse, NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage,
-    PackageResponse, PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest,
-    PromoteEnvironmentRequest, ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
-    RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
-    ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
-    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
-    SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse, TemplatePurchasePage,
-    TemplatePurchaseResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
-    UpdateAppRequest, UpdateAppSourceSpecRequest, UpdateAppTemplateAdminRequest,
-    UpdateAppTemplateRequest, UpdateBuildStateRequest, UpdateDomainZoneRequest,
-    UpdateNginxConfigRequest, UpdateNodeClusterRequest, UpdateServerRequest,
-    UpdateTemplateCategoryRequest, UsageEventPage, UsageEventResponse, UsageReconciliationResponse,
+    CreateTemplateCategoryRequest, DeployAppRequestContext, DeployUploadSessionResponse,
+    DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
+    DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
+    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
+    ListAppTemplatesAdminQuery, ListAppTemplatesQuery, ListAppsQuery, ListDomainZonesQuery,
+    ListMarketplaceTemplatesQuery, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
+    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
+    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
+    PromoteChannelRequest, PromoteEnvironmentRequest, ProvisionAppDomainsResult,
+    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, ResolvedDeployServer,
+    RetentionRunResponse, RunnerHealthPage, ServerPage, ServerResponse, SigningIdentityHealthPage,
+    SigningIdentityPage, SigningIdentityResponse, SourceEventPage, SourceEventResponse,
+    SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
+    UpdateAppSourceSpecRequest, UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest,
+    UpdateBuildStateRequest, UpdateDomainZoneRequest, UpdateNginxConfigRequest,
+    UpdateNodeClusterRequest, UpdateServerRequest, UpdateTemplateCategoryRequest, UsageEventPage,
+    UsageEventResponse, UsageReconciliationResponse,
 };
 
 use crate::{CertificateOrderCaaSubject, DomainVerificationChallenge};
@@ -1506,40 +1505,4 @@ pub trait DeployRepositoryPort:
         template_uuid: &str,
         request: &UpdateAppTemplateAdminRequest,
     ) -> DeployServiceResult<AppTemplateResponse>;
-
-    async fn list_template_purchases(
-        &self,
-        tenant_id: i64,
-        buyer_user_id: Option<i64>,
-        query: &ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<TemplatePurchasePage>;
-
-    async fn list_template_purchases_admin(
-        &self,
-        tenant_id: Option<i64>,
-        query: &ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<TemplatePurchasePage>;
-
-    async fn retrieve_template_purchase(
-        &self,
-        tenant_id: Option<i64>,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<TemplatePurchaseResponse>;
-
-    async fn create_template_purchase(
-        &self,
-        tenant_id: i64,
-        organization_id: Option<i64>,
-        buyer_user_id: i64,
-        template_uuid: &str,
-        idempotency_key: &str,
-        request: &CreateTemplatePurchaseRequest,
-    ) -> DeployServiceResult<TemplatePurchaseResponse>;
-
-    async fn revoke_template_purchase(
-        &self,
-        tenant_id: Option<i64>,
-        operator_id: Option<i64>,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<TemplatePurchaseResponse>;
 }

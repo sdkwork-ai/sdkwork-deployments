@@ -809,39 +809,6 @@ impl DeployBackendApi for DeployService {
             .retrieve_app_template_version(tenant_id, None, template_uuid, version_uuid)
             .await
     }
-
-    async fn list_template_purchases(
-        &self,
-        context: &DeployBackendRequestContext,
-        query: &sdkwork_deploy_contract::ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchasePage> {
-        let tenant_id = Self::backend_tenant_scope(context)?;
-        self.repository
-            .list_template_purchases_admin(tenant_id, query)
-            .await
-    }
-
-    async fn retrieve_template_purchase(
-        &self,
-        context: &DeployBackendRequestContext,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
-        let tenant_id = Self::backend_tenant_scope(context)?;
-        self.repository
-            .retrieve_template_purchase(tenant_id, purchase_uuid)
-            .await
-    }
-
-    async fn revoke_template_purchase(
-        &self,
-        context: &DeployBackendRequestContext,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
-        let tenant_id = Self::backend_tenant_scope(context)?;
-        self.repository
-            .revoke_template_purchase(tenant_id, context.operator_id, purchase_uuid)
-            .await
-    }
 }
 
 /// Reads a retention window from platform configuration; absent or invalid

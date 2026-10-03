@@ -38,7 +38,3 @@ pub const APP_TEMPLATE: &str = "/backend/v3/api/app_templates/{templateUuid}";
 pub const APP_TEMPLATE_VERSIONS: &str = "/backend/v3/api/app_templates/{templateUuid}/versions";
 pub const APP_TEMPLATE_VERSION: &str =
     "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}";
-pub const TEMPLATE_PURCHASES: &str = "/backend/v3/api/template_purchases";
-pub const TEMPLATE_PURCHASE: &str = "/backend/v3/api/template_purchases/{purchaseUuid}";
-pub const TEMPLATE_PURCHASE_REVOKE: &str =
-    "/backend/v3/api/template_purchases/{purchaseUuid}/revoke";

@@ -98,6 +98,37 @@ the **entitlement/fulfillment projection** (who may install what, install
 counts, revocation), exactly the split membership uses — while order state and
 payment state are authoritative in sdkwork-order / sdkwork-payment.
 
+### 4b. Order-side wiring checklist (sdkwork-order repository)
+
+The deploy side ships the exported grant seam
+(`sdkwork_intelligence_deploy_repository_sqlx::PostgresCommerceTemplatePurchaseStore`).
+The order repository completes the loop following the membership precedent
+file-for-file:
+
+1. **Subject kind** — `OrderSubjectKind` (in
+   `crates/sdkwork-order-service/src/service/order_payment_settlement.rs`)
+   gains `DeployTemplatePurchase`, with classification + settlement-snapshot
+   extraction carrying the template uuid (from the order line's product
+   reference).
+2. **Fulfillment port** — `crates/sdkwork-order-service/src/ports/template_fulfillment.rs`
+   (mirror `ports/membership_fulfillment.rs`): `TemplatePurchaseFulfillmentPort`
+   with a request carrying tenant/organization/owner, `order_id`, `order_no`,
+   `request_no`, `idempotency_key`, and the `template_uuid`.
+3. **Notify handler** — a `PaymentNotifyHandler` for the new business type
+   (mirror `MembershipNotifyHandler` in `service/payment_notify.rs`),
+   degrading to `awaiting_subject_resolution` when the snapshot is missing.
+4. **Integration adapter** — new crate
+   `crates/sdkwork-order-integration-deploy` (mirror
+   `sdkwork-order-integration-membership`, including the workspace
+   `path = "../sdkwork-deployments/crates/sdkwork-intelligence-deploy-repository-sqlx"`
+   dependency) adapting the port onto the exported store.
+5. **Host wiring** — `sdkwork-order-service-host` builds the adapter from the
+   database pool and registers the notify handler in the registry (mirror the
+   membership wiring).
+6. **Order creation** — the module order router (mirror
+   `crates/sdkwork-routes-order-app-api/src/membership_router.rs`) exposing
+   template-order creation so a client checkout carries the deploy subject.
+
 ## 5. Surfaces
 
 | Surface | Operations | Audience |
@@ -113,18 +144,29 @@ manifest lists them in `backend.accessTokenPermissionScope`.
 The capability ships as contract + SDK first. `@sdkwork/deployments-app-sdk`
 gains the `marketplaceTemplates`/`appTemplates`/`appTemplateVersions`/
 `templatePurchases`/`templateCategories` clients, and
-`@sdkwork/deployments-backend-sdk` gains the admin families, so any client
-platform consumes the same generated surface:
+`@sdkwork/deployments-backend-sdk` gains the admin families, so every client
+platform consumes the same generated surface. This repository owns all four
+client roots; no other application re-implements them.
 
-- **PC** — implemented in this repository: console package
-  `sdkwork-deployments-pc-console-marketplace` (browse, detail, acquire, my
-  templates, publish) and admin package
-  `sdkwork-deployments-pc-admin-app-templates` (categories CRUD, moderation,
-  purchase settlement).
-- **H5 / Flutter / mini-program** — no such client roots exist in this workspace
-  today (`sdkwork-deployments` ships only `apps/sdkwork-deployments-pc`; the
-  workspace contains no Flutter app root and `sdkwork-miniapp-engine` has an
-  empty `apps/`). They are consumers of the same generated SDK family and need
-  their own application roots + `sdkwork.app.config.json` declarations before
-  any surface can be authored; that is a client-program decision, not part of
-  this capability.
+| Root | Surface | State |
+| --- | --- | --- |
+| `apps/sdkwork-deployments-pc` | `sdkwork-deployments-pc-console-marketplace` (browse, detail, acquire, my templates, publish, versions) and `sdkwork-deployments-pc-admin-app-templates` (categories CRUD, moderation, purchase revocation) | console pages and admin resource entries registered on the shared workspace |
+| `apps/sdkwork-deployments-h5` | `src/marketplace/*` tabs: marketplace + my templates | category/type/search facets, detail sheet, acquire, versions, submit/withdraw |
+| `apps/sdkwork-deployments-mini-program` | `pages/marketplace` + `pages/my-templates` | hand-written `wx.request` transport behind a typed port |
+| `apps/sdkwork-deployments-flutter` | `lib/marketplace_page.dart` + `lib/marketplace_service.dart` | bottom-nav shell over the generated Dart SDK behind a `MarketplacePort` |
+
+There is no HarmonyOS client root in this repository; a HarmonyOS surface needs
+its own application root and `sdkwork.app.config.json` declaration before any
+page can be authored.
+
+### 6b. Bootstrap: the first category
+
+Categories are tenant-scoped and platform-admin maintained, so a freshly
+provisioned tenant has an empty taxonomy, and `appTemplates.create` requires a
+`categoryUuid`. Until the tenant's first category exists, publishing is
+impossible. The only path that creates one is the backend surface
+(`POST /backend/v3/api/template_categories`, permission
+`deploy.templateCategories.write`), driven from the PC admin console's
+`templateCategories` resource; the app-api exposes `templateCategories.list`
+only. Provision the taxonomy once per tenant before opening the marketplace to
+authors.

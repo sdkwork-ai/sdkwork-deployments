@@ -1,29 +1,27 @@
-//! App template marketplace storage.
+//! App template marketplace catalog storage.
 //!
-//! Four tables (`deploy_app_template_category`, `deploy_app_template`,
-//! `deploy_app_template_version`, `deploy_app_template_purchase`) behind the
-//! marketplace port. Two invariants live here rather than in the service
-//! because only SQL can make them race-proof:
+//! Three tables (`deploy_app_template_category`, `deploy_app_template`,
+//! `deploy_app_template_version`) behind the marketplace port. One invariant
+//! lives here rather than in the service because only SQL can make it
+//! race-proof:
 //!
-//! 1. **Tenancy.** Every statement filters `tenant_id`, with the admin surface
-//!    passing `Option<i64>` where `NULL` is the explicit cross-tenant scope
-//!    (`COALESCE($n, tenant) = tenant` keeps one predicate for both shapes).
-//!    The marketplace browse surface is the only ownerless read, and it is
-//!    still fenced to one tenant plus `PUBLIC` + `PUBLISHED`.
-//! 2. **Entitlement grants.** A purchase row is only ever `ACTIVE` or
-//!    `REVOKED`. The FREE grant inserts its `ACTIVE` row and moves the install
-//!    counter inside one transaction; the PAID grant arrives from commerce
-//!    fulfillment (`commerce_fulfillment.rs`) and is fenced by the
-//!    `order_id` unique index, so a replayed payment webhook cannot
-//!    double-grant and counts cannot drift from entitlements.
+//! **Tenancy.** Every statement filters `tenant_id`, with the admin surface
+//! passing `Option<i64>` where `NULL` is the explicit cross-tenant scope
+//! (`COALESCE($n, tenant) = tenant` keeps one predicate for both shapes).
+//! The marketplace browse surface is the only ownerless read, and it is
+//! still fenced to one tenant plus `PUBLIC` + `PUBLISHED`.
+//!
+//! Acquisition, payment and entitlement are owned by the sdkwork-order order
+//! center and sdkwork-payment: `deploy_app_template.install_count` is a
+//! commerce-fed counter maintained by the order center, and this store only
+//! reads it for marketplace ranking and response mapping.
 
 use sdkwork_deploy_contract::{
     AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage, AppTemplateSummaryResponse,
     AppTemplateVersionPage, AppTemplateVersionResponse, CreateAppTemplateRequest,
-    CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest, CreateTemplatePurchaseRequest,
-    DeployServiceError, DeployServiceResult, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
-    ListMarketplaceTemplatesQuery, ListTemplatePurchasesQuery, TemplateCategoryPage,
-    TemplateCategoryResponse, TemplatePurchasePage, TemplatePurchaseResponse,
+    CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest, DeployServiceError,
+    DeployServiceResult, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
+    ListMarketplaceTemplatesQuery, TemplateCategoryPage, TemplateCategoryResponse,
     UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest, UpdateTemplateCategoryRequest,
     MARKETPLACE_SORT_NEWEST, MARKETPLACE_SORT_POPULAR, TEMPLATE_CATEGORY_STATUS_ACTIVE,
     TEMPLATE_PRICING_FREE, TEMPLATE_PRICING_PAID, TEMPLATE_STATUS_DISABLED,
@@ -57,10 +55,6 @@ const TEMPLATE_SUMMARY_SELECT: &str =
 const VERSION_SELECT: &str = "v.uuid, t.uuid AS template_uuid, v.template_version, v.changelog,
     v.artifact_uuid, v.source_app_version, v.platform_targets_json, v.package_size_bytes,
     v.checksum_sha256, v.status, v.published_at, v.created_at, v.updated_at, v.version";
-
-const PURCHASE_SELECT: &str = "p.uuid, t.uuid AS template_uuid, p.version_uuid, p.buyer_user_id,
-    p.pricing_model, p.price_minor, p.currency, p.order_id, p.order_no, p.status, p.created_at,
-    p.updated_at, p.version";
 
 /// `($n = 0 OR x.tenant_id = $n)` scoped to one bound parameter: the admin
 /// surface binds `0` for the cross-tenant scope, app-side callers never use
@@ -151,24 +145,6 @@ fn map_version_row(row: &PgRow) -> Result<AppTemplateVersionResponse, sqlx::Erro
         checksum_sha256: row.try_get::<Option<String>, _>("checksum_sha256")?,
         status: row.try_get("status")?,
         published_at: optional_datetime_from_row(row, "published_at")?,
-        created_at: datetime_from_row(row, "created_at")?,
-        updated_at: datetime_from_row(row, "updated_at")?,
-        version: row.try_get::<i64, _>("version")?.to_string(),
-    })
-}
-
-fn map_purchase_row(row: &PgRow) -> Result<TemplatePurchaseResponse, sqlx::Error> {
-    Ok(TemplatePurchaseResponse {
-        id: row.try_get("uuid")?,
-        template_uuid: row.try_get("template_uuid")?,
-        version_uuid: row.try_get("version_uuid")?,
-        buyer_user_id: row.try_get::<i64, _>("buyer_user_id")?.to_string(),
-        pricing_model: row.try_get("pricing_model")?,
-        price_minor: row.try_get::<i64, _>("price_minor")?.to_string(),
-        currency: row.try_get("currency")?,
-        order_id: row.try_get::<Option<String>, _>("order_id")?,
-        order_no: row.try_get::<Option<String>, _>("order_no")?,
-        status: row.try_get("status")?,
         created_at: datetime_from_row(row, "created_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,
         version: row.try_get::<i64, _>("version")?.to_string(),
@@ -1400,352 +1376,6 @@ impl DeployRepository {
             .await
             .map_err(|error| store_error("commit review deploy_app_template", error))?;
         self.retrieve_app_template_repo(tenant_id, None, template_uuid)
-            .await
-    }
-
-    // -- purchases -----------------------------------------------------------------
-
-    pub(super) async fn list_template_purchases_repo(
-        &self,
-        tenant_id: i64,
-        buyer_user_id: Option<i64>,
-        query: &ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<TemplatePurchasePage> {
-        let (page, page_size, offset) = pagination(query.page, query.page_size);
-        let status = query.status.as_deref().unwrap_or("");
-        let predicate = format!(
-            "p.tenant_id = $1 AND p.deleted_at IS NULL
-            AND ($2 <= 0 OR p.buyer_user_id = $2)
-            AND ($3 = '' OR p.status = $3)"
-        );
-        let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template_purchase p WHERE {predicate}"
-        )))
-        .bind(tenant_id)
-        .bind(buyer_user_id.unwrap_or(0))
-        .bind(status)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|error| store_error("count deploy_app_template_purchase", error))?;
-        let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {PURCHASE_SELECT} FROM deploy_app_template_purchase p
-             JOIN deploy_app_template t ON t.id = p.template_id
-             WHERE {predicate}
-             ORDER BY p.created_at DESC, p.id DESC LIMIT $4 OFFSET $5"
-        )))
-        .bind(tenant_id)
-        .bind(buyer_user_id.unwrap_or(0))
-        .bind(status)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| store_error("list deploy_app_template_purchase", error))?;
-        let items = rows
-            .iter()
-            .map(map_purchase_row)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| DeployServiceError::Internal(format!("map purchase: {error}")))?;
-        Ok(TemplatePurchasePage {
-            items,
-            total,
-            page,
-            page_size,
-        })
-    }
-
-    pub(super) async fn list_template_purchases_admin_repo(
-        &self,
-        tenant_id: Option<i64>,
-        query: &ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<TemplatePurchasePage> {
-        let (page, page_size, offset) = pagination(query.page, query.page_size);
-        let status = query.status.as_deref().unwrap_or("");
-        let predicate = format!(
-            "{} AND p.deleted_at IS NULL AND ($2 = '' OR p.status = $2)",
-            optional_tenant_predicate("p.tenant_id", 1)
-        );
-        let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template_purchase p WHERE {predicate}"
-        )))
-        .bind(tenant_id.unwrap_or(0))
-        .bind(status)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|error| store_error("count admin purchases", error))?;
-        let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {PURCHASE_SELECT} FROM deploy_app_template_purchase p
-             JOIN deploy_app_template t ON t.id = p.template_id
-             WHERE {predicate}
-             ORDER BY p.created_at DESC, p.id DESC LIMIT $3 OFFSET $4"
-        )))
-        .bind(tenant_id.unwrap_or(0))
-        .bind(status)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| store_error("list admin purchases", error))?;
-        let items = rows
-            .iter()
-            .map(map_purchase_row)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| DeployServiceError::Internal(format!("map purchase: {error}")))?;
-        Ok(TemplatePurchasePage {
-            items,
-            total,
-            page,
-            page_size,
-        })
-    }
-
-    pub(super) async fn retrieve_template_purchase_repo(
-        &self,
-        tenant_id: Option<i64>,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<TemplatePurchaseResponse> {
-        let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {PURCHASE_SELECT} FROM deploy_app_template_purchase p
-             JOIN deploy_app_template t ON t.id = p.template_id
-             WHERE p.uuid = $1 AND p.deleted_at IS NULL AND (p.tenant_id = $2 OR $2 = 0)"
-        )))
-        .bind(purchase_uuid)
-        .bind(tenant_id.unwrap_or(0))
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| store_error("retrieve deploy_app_template_purchase", error))?;
-        row.as_ref()
-            .map(map_purchase_row)
-            .transpose()
-            .map_err(|error| DeployServiceError::Internal(format!("map purchase: {error}")))?
-            .ok_or_else(|| DeployServiceError::not_found("template purchase not found"))
-    }
-
-    pub(super) async fn create_template_purchase_repo(
-        &self,
-        tenant_id: i64,
-        organization_id: Option<i64>,
-        buyer_user_id: i64,
-        template_uuid: &str,
-        idempotency_key: &str,
-        request: &CreateTemplatePurchaseRequest,
-    ) -> DeployServiceResult<TemplatePurchaseResponse> {
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| store_error("begin create deploy_app_template_purchase", error))?;
-        // Idempotent replay first: the same Idempotency-Key returns the row the
-        // first attempt wrote, whatever route that attempt took.
-        let replay: Option<String> = sqlx::query_scalar(
-            "SELECT uuid FROM deploy_app_template_purchase
-             WHERE tenant_id = $1 AND idempotency_key = $2 AND deleted_at IS NULL",
-        )
-        .bind(tenant_id)
-        .bind(idempotency_key)
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|error| store_error("replay deploy_app_template_purchase", error))?;
-        if let Some(purchase_uuid) = replay {
-            transaction
-                .rollback()
-                .await
-                .map_err(|error| store_error("rollback replay purchase", error))?;
-            return self
-                .retrieve_template_purchase_repo(Some(tenant_id), &purchase_uuid)
-                .await;
-        }
-        let row = sqlx::query(
-            "SELECT id, pricing_model, price_minor, currency FROM deploy_app_template
-             WHERE tenant_id = $1 AND uuid = $2 AND visibility = 'PUBLIC'
-             AND status = 'PUBLISHED' AND deleted_at IS NULL
-             FOR UPDATE",
-        )
-        .bind(tenant_id)
-        .bind(template_uuid)
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|error| store_error("lock deploy_app_template", error))?;
-        let row = row.ok_or_else(|| DeployServiceError::not_found("template not found"))?;
-        let template_id: i64 = row
-            .try_get("id")
-            .map_err(|error| DeployServiceError::Internal(format!("read id: {error}")))?;
-        let pricing_model: String = row
-            .try_get("pricing_model")
-            .map_err(|error| DeployServiceError::Internal(format!("read pricing: {error}")))?;
-        let price_minor: i64 = row
-            .try_get("price_minor")
-            .map_err(|error| DeployServiceError::Internal(format!("read price: {error}")))?;
-        let currency: String = row
-            .try_get("currency")
-            .map_err(|error| DeployServiceError::Internal(format!("read currency: {error}")))?;
-        // An existing live entitlement is the acquire result: acquiring twice
-        // returns the entitlement instead of failing with a raw unique error.
-        let existing: Option<String> = sqlx::query_scalar(
-            "SELECT uuid FROM deploy_app_template_purchase
-             WHERE template_id = $1 AND buyer_user_id = $2 AND status = 'ACTIVE'
-             AND deleted_at IS NULL",
-        )
-        .bind(template_id)
-        .bind(buyer_user_id)
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|error| store_error("find existing entitlement", error))?;
-        if let Some(purchase_uuid) = existing {
-            transaction
-                .rollback()
-                .await
-                .map_err(|error| store_error("rollback entitlement replay", error))?;
-            return self
-                .retrieve_template_purchase_repo(Some(tenant_id), &purchase_uuid)
-                .await;
-        }
-        let version_uuid = match request.version_uuid.as_deref() {
-            Some(explicit) => {
-                let pinned: Option<String> = sqlx::query_scalar(
-                    "SELECT uuid FROM deploy_app_template_version
-                     WHERE template_id = $1 AND uuid = $2 AND status = $3 AND deleted_at IS NULL",
-                )
-                .bind(template_id)
-                .bind(explicit)
-                .bind(TEMPLATE_VERSION_STATUS_PUBLISHED)
-                .fetch_optional(&mut *transaction)
-                .await
-                .map_err(|error| store_error("pin template version", error))?;
-                pinned.ok_or_else(|| {
-                    DeployServiceError::validation(
-                        "versionUuid is not a published version of this template",
-                    )
-                })?
-            }
-            None => sqlx::query_scalar(
-                "SELECT uuid FROM deploy_app_template_version
-                 WHERE template_id = $1 AND status = $2 AND deleted_at IS NULL
-                 ORDER BY created_at DESC, id DESC LIMIT 1",
-            )
-            .bind(template_id)
-            .bind(TEMPLATE_VERSION_STATUS_PUBLISHED)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| store_error("resolve latest template version", error))?
-            .ok_or_else(|| {
-                DeployServiceError::conflict("template has no published version to acquire")
-            })?,
-        };
-        // Acquire is the FREE grant path only. A PAID template's pre-payment
-        // state lives on the commerce_order (sdkwork-order) and the ACTIVE
-        // entitlement is written by order fulfillment — this API must not
-        // mint a PAID row, or it would bypass the payment system entirely.
-        if pricing_model != TEMPLATE_PRICING_FREE {
-            return Err(DeployServiceError::validation(
-                "paid templates are purchased through the commerce checkout; acquire grants free templates only",
-            ));
-        }
-        let purchase_status = "ACTIVE";
-        let purchase_id = next_id(self.id_generator())?;
-        let purchase_uuid = new_uuid();
-        sqlx::query(
-            "INSERT INTO deploy_app_template_purchase (
-                id, uuid, tenant_id, organization_id, template_id, version_uuid, buyer_user_id,
-                pricing_model, price_minor, currency, status, idempotency_key, created_by, updated_by
-            ) VALUES ($1, $2, $3, COALESCE($4, 0), $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)",
-        )
-        .bind(purchase_id)
-        .bind(&purchase_uuid)
-        .bind(tenant_id)
-        .bind(organization_id)
-        .bind(template_id)
-        .bind(&version_uuid)
-        .bind(buyer_user_id)
-        .bind(&pricing_model)
-        .bind(price_minor)
-        .bind(&currency)
-        .bind(purchase_status)
-        .bind(idempotency_key)
-        .bind(buyer_user_id)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| store_error("insert deploy_app_template_purchase", error))?;
-        sqlx::query(
-            "UPDATE deploy_app_template SET install_count = install_count + 1 WHERE id = $1",
-        )
-        .bind(template_id)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| store_error("count install", error))?;
-        transaction
-            .commit()
-            .await
-            .map_err(|error| store_error("commit create deploy_app_template_purchase", error))?;
-        self.retrieve_template_purchase_repo(Some(tenant_id), &purchase_uuid)
-            .await
-    }
-
-    pub(super) async fn revoke_template_purchase_repo(
-        &self,
-        tenant_id: Option<i64>,
-        operator_id: Option<i64>,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<TemplatePurchaseResponse> {
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| store_error("begin revoke deploy_app_template_purchase", error))?;
-        let row = sqlx::query(
-            "SELECT p.id, p.template_id, p.status FROM deploy_app_template_purchase p
-             WHERE p.uuid = $1 AND p.deleted_at IS NULL AND (p.tenant_id = $2 OR $2 = 0)
-             FOR UPDATE",
-        )
-        .bind(purchase_uuid)
-        .bind(tenant_id.unwrap_or(0))
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|error| store_error("lock deploy_app_template_purchase", error))?;
-        let row =
-            row.ok_or_else(|| DeployServiceError::not_found("template purchase not found"))?;
-        let purchase_id: i64 = row
-            .try_get("id")
-            .map_err(|error| DeployServiceError::Internal(format!("read id: {error}")))?;
-        let template_id: i64 = row
-            .try_get("template_id")
-            .map_err(|error| DeployServiceError::Internal(format!("read template: {error}")))?;
-        let status: String = row
-            .try_get("status")
-            .map_err(|error| DeployServiceError::Internal(format!("read status: {error}")))?;
-        if status == "REVOKED" {
-            return Err(DeployServiceError::conflict(
-                "the purchase is already revoked",
-            ));
-        }
-        sqlx::query(
-            "UPDATE deploy_app_template_purchase SET status = 'REVOKED',
-                updated_by = COALESCE($2, updated_by), updated_at = NOW(), version = version + 1
-             WHERE id = $1",
-        )
-        .bind(purchase_id)
-        .bind(operator_id)
-        .execute(&mut *transaction)
-        .await
-        .map_err(|error| store_error("revoke deploy_app_template_purchase", error))?;
-        if status == "ACTIVE" {
-            // The entitlement dies with the revocation, so the install count
-            // follows it back down; the floor keeps a hand-corrected counter
-            // from going negative.
-            sqlx::query(
-                "UPDATE deploy_app_template SET install_count = GREATEST(install_count - 1, 0)
-                 WHERE id = $1",
-            )
-            .bind(template_id)
-            .execute(&mut *transaction)
-            .await
-            .map_err(|error| store_error("uncount install", error))?;
-        }
-        transaction
-            .commit()
-            .await
-            .map_err(|error| store_error("commit revoke deploy_app_template_purchase", error))?;
-        self.retrieve_template_purchase_repo(tenant_id, purchase_uuid)
             .await
     }
 }

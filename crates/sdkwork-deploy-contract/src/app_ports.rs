@@ -1223,18 +1223,6 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
-    async fn create_template_purchase(
-        &self,
-        _context: &DeployAppRequestContext,
-        _template_uuid: &str,
-        _idempotency_key: &str,
-        _request: &crate::template_market::CreateTemplatePurchaseRequest,
-    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse> {
-        Err(crate::DeployServiceError::Internal(
-            "create_template_purchase API is not implemented".to_owned(),
-        ))
-    }
-
     async fn list_app_templates(
         &self,
         _context: &DeployAppRequestContext,
@@ -1318,16 +1306,6 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse> {
         Err(crate::DeployServiceError::Internal(
             "create_app_template_version API is not implemented".to_owned(),
-        ))
-    }
-
-    async fn list_template_purchases(
-        &self,
-        _context: &DeployAppRequestContext,
-        _query: &crate::template_market::ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<crate::template_market::TemplatePurchasePage> {
-        Err(crate::DeployServiceError::Internal(
-            "list_template_purchases API is not implemented".to_owned(),
         ))
     }
 }
@@ -1628,22 +1606,4 @@ pub trait DeployBackendApi: Send + Sync {
         template_uuid: &str,
         version_uuid: &str,
     ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse>;
-
-    async fn list_template_purchases(
-        &self,
-        context: &DeployBackendRequestContext,
-        query: &crate::template_market::ListTemplatePurchasesQuery,
-    ) -> DeployServiceResult<crate::template_market::TemplatePurchasePage>;
-
-    async fn retrieve_template_purchase(
-        &self,
-        context: &DeployBackendRequestContext,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
-
-    async fn revoke_template_purchase(
-        &self,
-        context: &DeployBackendRequestContext,
-        purchase_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
 }

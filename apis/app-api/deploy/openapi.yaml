@@ -4436,62 +4436,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
-  /app/v3/api/marketplace/templates/{templateUuid}/purchase:
-    parameters:
-    - name: templateUuid
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-    post:
-      operationId: templatePurchases.create
-      summary: Acquire a marketplace app template
-      tags:
-      - template
-      security:
-      - AuthToken: []
-        AccessToken: []
-      x-sdkwork-idempotent: true
-      parameters:
-      - $ref: '#/components/parameters/IdempotencyKeyParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateTemplatePurchaseRequest'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                allOf:
-                - $ref: '#/components/schemas/SdkWorkApiResponse'
-                - type: object
-                  required:
-                  - data
-                  properties:
-                    data:
-                      type: object
-                      required:
-                      - item
-                      properties:
-                        item:
-                          $ref: '#/components/schemas/TemplatePurchaseResponse'
-        '409':
-          description: 资源冲突
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-        '422':
-          description: 校验错误
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/app_templates:
     get:
       operationId: appTemplates.list
@@ -4841,56 +4785,6 @@ paths:
                           $ref: '#/components/schemas/AppTemplateVersionResponse'
         '422':
           description: 校验错误
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/template_purchases:
-    get:
-      operationId: templatePurchases.list
-      summary: List the caller's template purchases
-      tags:
-      - template
-      security:
-      - AuthToken: []
-        AccessToken: []
-      parameters:
-      - $ref: '#/components/parameters/PageParam'
-      - $ref: '#/components/parameters/PageSizeParam'
-      - name: status
-        in: query
-        schema:
-          type: string
-          enum:
-          - ACTIVE
-          - REVOKED
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                allOf:
-                - $ref: '#/components/schemas/SdkWorkApiResponse'
-                - type: object
-                  required:
-                  - data
-                  properties:
-                    data:
-                      type: object
-                      additionalProperties: false
-                      required:
-                      - items
-                      - pageInfo
-                      properties:
-                        items:
-                          type: array
-                          items:
-                            $ref: '#/components/schemas/TemplatePurchaseResponse'
-                        pageInfo:
-                          $ref: '#/components/schemas/PageInfo'
-        '401':
-          description: 未认证
           content:
             application/problem+json:
               schema:
@@ -5307,68 +5201,6 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    TemplatePurchaseResponse:
-      type: object
-      additionalProperties: false
-      required:
-      - id
-      - templateUuid
-      - versionUuid
-      - buyerUserId
-      - pricingModel
-      - priceMinor
-      - currency
-      - status
-      - createdAt
-      - updatedAt
-      - version
-      properties:
-        id:
-          type: string
-          format: uuid
-        templateUuid:
-          type: string
-          format: uuid
-        versionUuid:
-          type: string
-          format: uuid
-        buyerUserId:
-          type: string
-          format: int64
-          minimum: 0
-          x-sdkwork-int64-string: true
-        pricingModel:
-          type: string
-          enum:
-          - FREE
-          - PAID
-        priceMinor:
-          type: string
-          format: int64
-          minimum: 0
-          x-sdkwork-int64-string: true
-          x-sdkwork-money-unit: minor
-        currency:
-          type: string
-          maxLength: 8
-        orderId:
-          type: string
-        orderNo:
-          type: string
-        status:
-          type: string
-          enum:
-          - ACTIVE
-          - REVOKED
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        version:
-          type: string
-          pattern: ^[0-9]+$
     CreateAppTemplateRequest:
       type: object
       additionalProperties: false
@@ -5507,13 +5339,6 @@ components:
         checksumSha256:
           type: string
           maxLength: 128
-    CreateTemplatePurchaseRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        versionUuid:
-          type: string
-          format: uuid
     ProblemDetail:
       type: object
       additionalProperties: true

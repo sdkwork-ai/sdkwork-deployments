@@ -82,6 +82,42 @@ class _MyTemplatesPageState extends State<MyTemplatesPage> {
     }
   }
 
+  /// Withdrawing deletes the listing, so it is behind a confirmation: the row
+  /// disappears on the reload that follows and there is no undo.
+  Future<void> _withdraw(AppTemplateResponse item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('下架模板'),
+        content: const Text('下架后该模板将不再出现在模板市场，且无法撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认下架'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.port.withdraw(item.id);
+      await _reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已下架。')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('下架未完成，请稍后重试。')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -117,9 +153,11 @@ class _MyTemplatesPageState extends State<MyTemplatesPage> {
               trailing: PopupMenuButton<String>(
                 onSelected: (action) {
                   if (action == 'submit') _submit(item);
+                  if (action == 'withdraw') _withdraw(item);
                 },
                 itemBuilder: (context) => const [
                   PopupMenuItem(value: 'submit', child: Text('提交审核')),
+                  PopupMenuItem(value: 'withdraw', child: Text('下架模板')),
                 ],
               ),
             ),

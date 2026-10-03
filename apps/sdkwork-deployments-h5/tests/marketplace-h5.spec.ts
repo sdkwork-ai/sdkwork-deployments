@@ -12,6 +12,8 @@ describe("h5 marketplace i18n", () => {
       "tab.myTemplates",
       "marketplace.acquire",
       "marketplace.acquireCommerce",
+      "marketplace.versions",
+      "marketplace.versions.empty",
       "myTemplates.submit",
       "common.retry",
     ];
@@ -83,5 +85,75 @@ describe("h5 marketplace service", () => {
     const { service, browseArgs } = clientWithSpy();
     await service.browse({ page: 2, pageSize: 10, keyword: " blog ", categoryUuid: "cat-1", sort: "POPULAR" });
     expect(browseArgs()).toEqual({ page: 2, pageSize: 10, keyword: "blog", categoryUuid: "cat-1", sort: "POPULAR" });
+  });
+
+  it("carries the pricing and type facets the storefront offers", async () => {
+    const { service, browseArgs } = clientWithSpy();
+    await service.browse({ page: 1, pageSize: 10, pricingModel: "PAID", templateType: "PPT" });
+    expect(browseArgs()).toEqual({ page: 1, pageSize: 10, pricingModel: "PAID", templateType: "PPT" });
+  });
+});
+
+describe("h5 marketplace version and acquisition reads", () => {
+  function clientWithSpy() {
+    let acquireArgs: unknown[] | undefined;
+    let versionArgs: unknown[] | undefined;
+    const deploy = {
+      template: {
+        appTemplateVersions: {
+          list: async (...args: unknown[]) => {
+            versionArgs = args;
+            return {
+              items: [
+                {
+                  id: "v-2",
+                  templateUuid: "tmpl-1",
+                  templateVersion: "1.2.0",
+                  changelog: "",
+                  platformTargets: [],
+                  packageSizeBytes: "0",
+                  status: "PUBLISHED",
+                  publishedAt: "2026-10-01T00:00:00Z",
+                  createdAt: "2026-10-01T00:00:00Z",
+                  updatedAt: "2026-10-01T00:00:00Z",
+                  version: "1",
+                },
+              ],
+              pageInfo: { totalItems: "1", hasMore: false },
+            };
+          },
+        },
+        templatePurchases: {
+          create: async (...args: unknown[]) => {
+            acquireArgs = args;
+            return { id: "purchase-1", status: "ACTIVE" };
+          },
+        },
+      },
+    } as unknown as SdkworkDeployAppClient;
+    return {
+      service: createH5MarketplaceService(deploy),
+      acquireArgs: () => acquireArgs,
+      versionArgs: () => versionArgs,
+    };
+  }
+
+  it("acquires with an empty body and a fresh idempotency key", async () => {
+    const { service, acquireArgs } = clientWithSpy();
+    await service.acquire("tmpl-1");
+    const args = acquireArgs();
+    expect(args?.[0]).toBe("tmpl-1");
+    expect(args?.[1]).toEqual({});
+    const params = args?.[2] as { idempotencyKey?: string } | undefined;
+    expect(params?.idempotencyKey).toMatch(/\S/);
+  });
+
+  it("scopes the version read to the listing and returns its rows", async () => {
+    const { service, versionArgs } = clientWithSpy();
+    const versions = await service.listVersions("tmpl-1");
+    expect(versionArgs()?.[0]).toBe("tmpl-1");
+    expect(versionArgs()?.[1]).toEqual({ page: 1, pageSize: 50 });
+    expect(versions).toHaveLength(1);
+    expect(versions[0].templateVersion).toBe("1.2.0");
   });
 });

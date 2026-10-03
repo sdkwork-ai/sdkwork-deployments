@@ -91,6 +91,11 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
             cleanBody(context.body) as unknown as Parameters<typeof client.template.templateCategories.update>[1],
             idempotencyParams(),
           ), { selection: true }),
+        // Soft delete: the baseline frees the `category_key` for a same-key
+        // rebuild, so the taxonomy can be corrected without losing listings
+        // that still reference a disabled parent.
+        action("delete", "Delete category", {}, (context) =>
+          client.template.templateCategories.delete(selected(context, "id")), { dangerous: true, selection: true }),
       ],
       ["displayName", "categoryKey"],
     ),
@@ -118,6 +123,15 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
       ],
       ["displayName", "templateKey", "status"],
     ),
+    // Versions are a nested collection (`/app_templates/{uuid}/versions`), so
+    // this resource is scoped: the shell's scope field carries the listing's
+    // template uuid and the table loads nothing until it is present.
+    appTemplateVersions: source(
+      (query) => client.template.appTemplateVersions.list(query.scopeId ?? "", { page: query.page, pageSize: query.pageSize }),
+      [],
+      ["templateVersion", "status"],
+      { requiresScope: true },
+    ),
     templatePurchases: source(
       (query) => client.template.templatePurchases.list({ page: query.page, pageSize: query.pageSize }),
       [
@@ -135,9 +149,11 @@ function source(
   load: (query: Parameters<DeploymentsDataSource["load"]>[0]) => Promise<unknown>,
   actions: readonly DeploymentsAction[],
   searchFields: readonly string[] = [],
+  options: { requiresScope?: boolean } = {},
 ): DeploymentsDataSource {
   return {
     actions,
+    requiresScope: options.requiresScope,
     async load(query) {
       const page = normalizeDeploymentsPage(await load(query));
       const needle = query.search?.trim().toLowerCase();

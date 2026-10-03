@@ -111,9 +111,26 @@ export class MarketplaceError extends Error {
 
 // -- port ----------------------------------------------------------------------
 
+export interface MarketplaceBrowseParams {
+  page: number;
+  pageSize: number;
+  keyword?: string;
+  categoryUuid?: string;
+  templateType?: string;
+  pricingModel?: string;
+  sort?: string;
+}
+
+/** One browse page plus the paging facts the list needs to offer "load more". */
+export interface MarketplaceBrowsePage {
+  items: TemplateSummary[];
+  hasMore: boolean;
+  total: number;
+}
+
 export interface MarketplacePort {
   categories(): Promise<TemplateCategory[]>;
-  browse(params: { page: number; pageSize: number; keyword?: string; categoryUuid?: string; templateType?: string }): Promise<TemplateSummary[]>;
+  browse(params: MarketplaceBrowseParams): Promise<MarketplaceBrowsePage>;
   retrieve(templateUuid: string): Promise<TemplateDetail>;
   acquire(templateUuid: string): Promise<TemplatePurchase>;
   myPurchases(): Promise<TemplatePurchase[]>;
@@ -176,23 +193,45 @@ export class SdkworkMiniMarketplacePort implements MarketplacePort {
     return data.item as T;
   }
 
+  private static pageInfo(payload: unknown): { hasMore?: unknown; totalItems?: unknown } {
+    const data = payload as { pageInfo?: unknown } | null;
+    const pageInfo = data?.pageInfo;
+    return pageInfo && typeof pageInfo === 'object' ? (pageInfo as { hasMore?: unknown; totalItems?: unknown }) : {};
+  }
+
+  private static hasMore(payload: unknown): boolean {
+    // `hasMore` is the only paging fact the list can trust: a page shorter than
+    // pageSize is not proof of the end when the server filters after paging.
+    return SdkworkMiniMarketplacePort.pageInfo(payload).hasMore === true;
+  }
+
+  private static total(payload: unknown): number {
+    const raw = SdkworkMiniMarketplacePort.pageInfo(payload).totalItems;
+    const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : NaN;
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
   categories() {
     return this.call<unknown>('GET', '/template_categories?include_disabled=false').then((payload) =>
       SdkworkMiniMarketplacePort.items<TemplateCategory>(payload),
     );
   }
 
-  browse(params: { page: number; pageSize: number; keyword?: string; categoryUuid?: string; templateType?: string }) {
+  browse(params: MarketplaceBrowseParams): Promise<MarketplaceBrowsePage> {
     const query = buildQuery([
       ['page', String(params.page)],
       ['page_size', String(params.pageSize)],
       ...(params.keyword && params.keyword.trim() !== '' ? [['keyword', params.keyword.trim()] as const] : []),
       ...(params.categoryUuid ? [['category_uuid', params.categoryUuid] as const] : []),
       ...(params.templateType ? [['template_type', params.templateType] as const] : []),
+      ...(params.pricingModel ? [['pricing_model', params.pricingModel] as const] : []),
+      ...(params.sort ? [['sort', params.sort] as const] : []),
     ]);
-    return this.call<unknown>('GET', `/marketplace/templates${query}`).then((payload) =>
-      SdkworkMiniMarketplacePort.items<TemplateSummary>(payload),
-    );
+    return this.call<unknown>('GET', `/marketplace/templates${query}`).then((payload) => ({
+      items: SdkworkMiniMarketplacePort.items<TemplateSummary>(payload),
+      hasMore: SdkworkMiniMarketplacePort.hasMore(payload),
+      total: SdkworkMiniMarketplacePort.total(payload),
+    }));
   }
 
   retrieve(templateUuid: string) {

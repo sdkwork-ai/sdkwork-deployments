@@ -308,27 +308,6 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "appTemplateVersions.retrieve",
     )
     .with_required_permission("deploy.appTemplateVersions.read"),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/backend/v3/api/template_purchases",
-        "template",
-        "templatePurchases.list",
-    )
-    .with_required_permission("deploy.templatePurchases.read"),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/backend/v3/api/template_purchases/{purchaseUuid}",
-        "template",
-        "templatePurchases.retrieve",
-    )
-    .with_required_permission("deploy.templatePurchases.read"),
-    HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/backend/v3/api/template_purchases/{purchaseUuid}/revoke",
-        "template",
-        "templatePurchases.revoke",
-    )
-    .with_required_permission("deploy.templatePurchases.write"),
 ];
 
 pub fn backend_route_manifest() -> HttpRouteManifest {

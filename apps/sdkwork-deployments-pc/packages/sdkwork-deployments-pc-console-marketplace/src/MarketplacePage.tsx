@@ -273,6 +273,22 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
               </button>
             </header>
             {detail.isFeatured && <div className="warning">{t("marketplace.featured")}</div>}
+            <dl className="fact-grid">
+              <dt>{t("marketplace.type")}</dt>
+              <dd>{templateTypeLabel(detail.templateType, t)}</dd>
+              <dt>{t("marketplace.pricing")}</dt>
+              <dd>{formatPricing(detail, t)}</dd>
+              <dt>{t("common.visibility")}</dt>
+              <dd>{detail.visibility}</dd>
+              <dt>{t("marketplace.latestVersion")}</dt>
+              <dd>{detail.latestVersionUuid ?? t("marketplace.noVersion")}</dd>
+              <dt>{t("marketplace.sort.POPULAR")}</dt>
+              <dd>{t("marketplace.installCount", { count: detail.installCount })}</dd>
+              <dt>{t("marketplace.views")}</dt>
+              <dd>{t("marketplace.viewCount", { count: detail.viewCount })}</dd>
+              <dt>{t("common.updatedAt")}</dt>
+              <dd>{detail.updatedAt}</dd>
+            </dl>
             <p>{detail.summary}</p>
             {detail.description
               .split("\n")
@@ -350,6 +366,21 @@ function PurchaseTable({
 
 function pricingLabel(pricingModel: "FREE" | "PAID", t: (key: MarketplaceMessageKey, values?: Record<string, string | number>) => string): string {
   return pricingModel === "PAID" ? t("marketplace.pricing.PAID") : t("marketplace.pricing.FREE");
+}
+
+/** Localized facet label for a listing's artifact kind. */
+function templateTypeLabel(
+  templateType: AppTemplateSummaryResponse["templateType"],
+  t: (key: MarketplaceMessageKey, values?: Record<string, string | number>) => string,
+): string {
+  switch (templateType) {
+    case "PPT":
+      return t("marketplace.type.PPT");
+    case "VIDEO":
+      return t("marketplace.type.VIDEO");
+    default:
+      return t("marketplace.type.APP");
+  }
 }
 
 function formatPricing(

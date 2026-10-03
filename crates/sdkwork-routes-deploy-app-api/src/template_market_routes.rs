@@ -1,6 +1,5 @@
-//! App template marketplace route handlers: category listing, marketplace
-//! browse/acquire, author template CRUD + submission + versions, and the
-//! buyer's purchase inventory.
+//! App template marketplace catalog route handlers: category listing,
+//! marketplace browse, and author template CRUD + submission + versions.
 
 use axum::{
     extract::{Path, Query, State},
@@ -10,9 +9,8 @@ use axum::{
     Extension, Json, Router,
 };
 use sdkwork_deploy_contract::{
-    CreateAppTemplateRequest, CreateAppTemplateVersionRequest, CreateTemplatePurchaseRequest,
-    DeployAppRequestContext, ListAppTemplatesQuery, ListMarketplaceTemplatesQuery,
-    ListTemplatePurchasesQuery, UpdateAppTemplateRequest,
+    CreateAppTemplateRequest, CreateAppTemplateVersionRequest, DeployAppRequestContext,
+    ListAppTemplatesQuery, ListMarketplaceTemplatesQuery, UpdateAppTemplateRequest,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -51,10 +49,6 @@ pub fn build_template_market_router() -> Router<AppState> {
             get(retrieve_marketplace_template),
         )
         .route(
-            paths::MARKETPLACE_TEMPLATE_PURCHASE,
-            post(create_template_purchase),
-        )
-        .route(
             paths::APP_TEMPLATES,
             get(list_app_templates).post(create_app_template),
         )
@@ -69,7 +63,6 @@ pub fn build_template_market_router() -> Router<AppState> {
             paths::APP_TEMPLATE_VERSIONS,
             get(list_app_template_versions).post(create_app_template_version),
         )
-        .route(paths::TEMPLATE_PURCHASES, get(list_template_purchases))
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
         ))
@@ -128,32 +121,6 @@ async fn retrieve_marketplace_template(
             let item = state
                 .api
                 .retrieve_marketplace_template(&context, &template_uuid)
-                .await?;
-            ok_json(envelope::resource(item))
-        }
-        .await,
-    )
-}
-
-async fn create_template_purchase(
-    ctx: WebRequestContext,
-    State(state): State<AppState>,
-    context: Option<Extension<DeployAppRequestContext>>,
-    Path(template_uuid): Path<String>,
-    headers: HeaderMap,
-    Json(request): Json<CreateTemplatePurchaseRequest>,
-) -> Response {
-    finish_created_api_json(
-        &ctx,
-        async {
-            let context = require_app_context(context)?;
-            // `templatePurchases.create` is declared `x-sdkwork-idempotent`;
-            // the key is forwarded so a retry replays the acquisition the
-            // first attempt wrote instead of colliding on the entitlement.
-            let idempotency_key = required_header(&headers, "idempotency-key")?;
-            let item = state
-                .api
-                .create_template_purchase(&context, &template_uuid, &idempotency_key, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -326,23 +293,6 @@ async fn create_app_template_version(
                 .create_app_template_version(&context, &template_uuid, &idempotency_key, &request)
                 .await?;
             ok_json(envelope::resource(item))
-        }
-        .await,
-    )
-}
-
-async fn list_template_purchases(
-    ctx: WebRequestContext,
-    State(state): State<AppState>,
-    context: Option<Extension<DeployAppRequestContext>>,
-    Query(query): Query<ListTemplatePurchasesQuery>,
-) -> Response {
-    finish_api_json(
-        &ctx,
-        async {
-            let context = require_app_context(context)?;
-            let page = state.api.list_template_purchases(&context, &query).await?;
-            ok_json(envelope::template_purchase_page(page))
         }
         .await,
     )

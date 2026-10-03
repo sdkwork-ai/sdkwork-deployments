@@ -671,14 +671,6 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_required_permission("deploy.marketplaceTemplates.read"),
     HttpRoute::dual_token(
-        HttpMethod::Post,
-        "/app/v3/api/marketplace/templates/{templateUuid}/purchase",
-        "template",
-        "templatePurchases.create",
-    )
-    .with_required_permission("deploy.templatePurchases.write")
-    .with_idempotent(true),
-    HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/app_templates",
         "template",
@@ -737,13 +729,6 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_required_permission("deploy.appTemplateVersions.write")
     .with_idempotent(true),
-    HttpRoute::dual_token(
-        HttpMethod::Get,
-        "/app/v3/api/template_purchases",
-        "template",
-        "templatePurchases.list",
-    )
-    .with_required_permission("deploy.templatePurchases.read"),
 ];
 
 pub fn app_route_manifest() -> HttpRouteManifest {

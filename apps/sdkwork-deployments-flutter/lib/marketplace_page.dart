@@ -19,13 +19,21 @@ class MarketplacePage extends StatefulWidget {
 }
 
 class _MarketplacePageState extends State<MarketplacePage> {
+  static const int _pageSize = 20;
+
   final TextEditingController _keyword = TextEditingController();
   List<TemplateCategoryResponse> _categories = [];
   List<AppTemplateSummaryResponse> _items = [];
+  List<TemplatePurchaseResponse> _purchases = [];
   Set<String> _entitled = <String>{};
   String? _categoryUuid;
   String? _templateType;
+  String? _pricingModel;
+  String _sort = 'NEWEST';
+  int _page = 1;
+  bool _hasMore = false;
   bool _loading = true;
+  bool _loadingMore = false;
   String? _error;
 
   @override
@@ -44,6 +52,16 @@ class _MarketplacePageState extends State<MarketplacePage> {
     'APP': '应用',
     'PPT': 'PPT',
     'VIDEO': '视频',
+  };
+
+  static const _pricingModels = <String, String>{
+    'FREE': '免费',
+    'PAID': '付费',
+  };
+
+  static const _sorts = <String, String>{
+    'NEWEST': '最新',
+    'POPULAR': '热门',
   };
 
   Iterable<Widget> _typeChips() sync* {
@@ -73,23 +91,75 @@ class _MarketplacePageState extends State<MarketplacePage> {
     }
   }
 
+  Iterable<Widget> _pricingChips() sync* {
+    yield Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: const Text('免费与付费'),
+        selected: _pricingModel == null,
+        onSelected: (_) {
+          setState(() => _pricingModel = null);
+          _reload();
+        },
+      ),
+    );
+    for (final entry in _pricingModels.entries) {
+      yield Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(entry.value),
+          selected: _pricingModel == entry.key,
+          onSelected: (_) {
+            setState(() => _pricingModel = entry.key);
+            _reload();
+          },
+        ),
+      );
+    }
+  }
+
+  Iterable<Widget> _sortChips() sync* {
+    for (final entry in _sorts.entries) {
+      yield Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(entry.value),
+          selected: _sort == entry.key,
+          onSelected: (_) {
+            setState(() => _sort = entry.key);
+            _reload();
+          },
+        ),
+      );
+    }
+  }
+
+  /// Loads page 1 for the current facets, replacing the list.
   Future<void> _reload() async {
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
+      _page = 1;
     });
     try {
       final categories = await widget.port.categories();
       final listings = await widget.port.browse(
+        page: 1,
+        pageSize: _pageSize,
         keyword: _keyword.text,
         categoryUuid: _categoryUuid,
         templateType: _templateType,
+        pricingModel: _pricingModel,
+        sort: _sort,
       );
       final purchases = await widget.port.myPurchases();
       if (!mounted) return;
       setState(() {
         _categories = categories;
-        _items = listings;
+        _items = listings.items;
+        _purchases = purchases;
+        _hasMore = listings.hasMore;
         _entitled = purchases
             .where((purchase) => purchase.status == 'ACTIVE')
             .map((purchase) => purchase.templateUuid)
@@ -102,6 +172,37 @@ class _MarketplacePageState extends State<MarketplacePage> {
         _error = '模板市场加载失败，请重试。';
         _loading = false;
       });
+    }
+  }
+
+  /// Appends the next page; the facet state and the loaded rows are kept.
+  Future<void> _loadMore() async {
+    if (!_hasMore || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    final next = _page + 1;
+    try {
+      final listings = await widget.port.browse(
+        page: next,
+        pageSize: _pageSize,
+        keyword: _keyword.text,
+        categoryUuid: _categoryUuid,
+        templateType: _templateType,
+        pricingModel: _pricingModel,
+        sort: _sort,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = <AppTemplateSummaryResponse>[..._items, ...listings.items];
+        _hasMore = listings.hasMore;
+        _page = next;
+        _loadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('加载失败，请重试。')),
+      );
     }
   }
 
@@ -153,40 +254,52 @@ class _MarketplacePageState extends State<MarketplacePage> {
             ),
           ),
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: 44,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  // 模板类型是一级 facet：APP / PPT / VIDEO（对话式项目创作形态）。
-                  ..._typeChips(),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: const Text('全部'),
-                      selected: _categoryUuid == null,
-                      onSelected: (_) {
-                        setState(() => _categoryUuid = null);
-                        _reload();
-                      },
-                    ),
-                  ),
-                  ..._categories.map(
-                    (category) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(category.displayName),
-                        selected: _categoryUuid == category.id,
-                        onSelected: (_) {
-                          setState(() => _categoryUuid = category.id);
-                          _reload();
-                        },
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      // 模板类型是一级 facet：APP / PPT / VIDEO（对话式项目创作形态）。
+                      ..._typeChips(),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: const Text('全部'),
+                          selected: _categoryUuid == null,
+                          onSelected: (_) {
+                            setState(() => _categoryUuid = null);
+                            _reload();
+                          },
+                        ),
                       ),
-                    ),
+                      ..._categories.map(
+                        (category) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(category.displayName),
+                            selected: _categoryUuid == category.id,
+                            onSelected: (_) {
+                              setState(() => _categoryUuid = category.id);
+                              _reload();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [..._pricingChips(), ..._sortChips()],
+                  ),
+                ),
+              ],
             ),
           ),
           if (_error != null)
@@ -221,6 +334,59 @@ class _MarketplacePageState extends State<MarketplacePage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     onTap: () => _openDetail(item),
+                    trailing: _entitled.contains(item.id)
+                        ? const Chip(
+                            label: Text('已获取', style: TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact,
+                          )
+                        : null,
+                  ),
+                );
+              },
+            ),
+          if (_hasMore)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Center(
+                  child: _loadingMore
+                      ? const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : TextButton(onPressed: _loadMore, child: const Text('加载更多')),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text('我的获取记录', style: Theme.of(context).textTheme.titleMedium),
+            ),
+          ),
+          if (_purchases.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('还没有获取过模板。'),
+              ),
+            )
+          else
+            SliverList.builder(
+              itemCount: _purchases.length,
+              itemBuilder: (context, index) {
+                final purchase = _purchases[index];
+                return ListTile(
+                  dense: true,
+                  title: Text(purchase.templateUuid),
+                  subtitle: Text(purchase.pricingModel == 'PAID' ? '付费' : '免费'),
+                  trailing: Chip(
+                    label: Text(purchase.status, style: const TextStyle(fontSize: 11)),
+                    visualDensity: VisualDensity.compact,
                   ),
                 );
               },

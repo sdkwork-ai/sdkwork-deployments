@@ -2224,30 +2224,6 @@
       "idempotent": false
     },
     {
-      "method": "POST",
-      "path": "/app/v3/api/marketplace/templates/{templateUuid}/purchase",
-      "operationId": "templatePurchases.create",
-      "tags": [
-        "template"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.templatePurchases.write",
-      "idempotent": true
-    },
-    {
       "method": "GET",
       "path": "/app/v3/api/app_templates",
       "operationId": "appTemplates.list",
@@ -2438,30 +2414,6 @@
       "apiSurface": "app-api",
       "permission": "deploy.appTemplateVersions.write",
       "idempotent": true
-    },
-    {
-      "method": "GET",
-      "path": "/app/v3/api/template_purchases",
-      "operationId": "templatePurchases.list",
-      "tags": [
-        "template"
-      ],
-      "auth": {
-        "mode": "dual-token",
-        "required": true
-      },
-      "handler": {
-        "module": "crate::routes",
-        "name": null
-      },
-      "ownership": {
-        "owner": "sdkwork-deploy",
-        "apiAuthority": "sdkwork-deploy-app-api"
-      },
-      "requestContext": "WebRequestContext",
-      "apiSurface": "app-api",
-      "permission": "deploy.templatePurchases.read",
-      "idempotent": false
     }
   ]
 }

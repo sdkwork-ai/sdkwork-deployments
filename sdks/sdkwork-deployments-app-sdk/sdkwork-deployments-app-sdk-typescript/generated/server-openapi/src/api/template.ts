@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppTemplateResponse, AppTemplateSummaryResponse, AppTemplateVersionResponse, CreateAppTemplateRequest, CreateAppTemplateVersionRequest, CreateTemplatePurchaseRequest, PageInfo, TemplateCategoryResponse, TemplatePurchaseResponse, UpdateAppTemplateRequest } from '../types';
+import type { AppTemplateResponse, AppTemplateSummaryResponse, AppTemplateVersionResponse, CreateAppTemplateRequest, CreateAppTemplateVersionRequest, PageInfo, TemplateCategoryResponse, UpdateAppTemplateRequest } from '../types';
 
 
 export interface TemplateAppTemplateVersionsListParams {
@@ -114,46 +114,6 @@ export class TemplateAppTemplatesApi {
   }
 }
 
-export interface TemplateTemplatePurchasesCreateParams {
-  idempotencyKey: string;
-}
-
-export interface TemplateTemplatePurchasesListParams {
-  page?: number;
-  pageSize?: number;
-  status?: 'ACTIVE' | 'REVOKED';
-}
-
-export class TemplateTemplatePurchasesApi {
-  private client: HttpClient;
-
-  constructor(client: HttpClient) {
-    this.client = client;
-  }
-
-
-/** Acquire a marketplace app template */
-  async create(templateUuid: string, body: CreateTemplatePurchaseRequest, params: TemplateTemplatePurchasesCreateParams, requestOptions?: ApiRequestOptions): Promise<TemplatePurchaseResponse> {
-    const requestHeaders = buildRequestHeaders(
-      {
-        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
-      },
-      {}
-    );
-    return this.client.request<TemplatePurchaseResponse>(appApiPath(`/marketplace/templates/${serializePathParameter(templateUuid, { name: 'templateUuid', style: 'simple', explode: false })}/purchase`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
-  }
-
-/** List the caller's template purchases */
-  async list(params?: TemplateTemplatePurchasesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: TemplatePurchaseResponse[]; pageInfo: PageInfo; }> {
-    const query = buildQueryString([
-      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
-      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
-    ]);
-    return this.client.request<{ items: TemplatePurchaseResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/template_purchases`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
-  }
-}
-
 export interface TemplateMarketplaceTemplatesListParams {
   page?: number;
   pageSize?: number;
@@ -216,14 +176,12 @@ export class TemplateTemplateCategoriesApi {
 export class TemplateApi {
   public readonly templateCategories: TemplateTemplateCategoriesApi;
   public readonly marketplaceTemplates: TemplateMarketplaceTemplatesApi;
-  public readonly templatePurchases: TemplateTemplatePurchasesApi;
   public readonly appTemplates: TemplateAppTemplatesApi;
   public readonly appTemplateVersions: TemplateAppTemplateVersionsApi;
 
   constructor(client: HttpClient) {
     this.templateCategories = new TemplateTemplateCategoriesApi(client);
     this.marketplaceTemplates = new TemplateMarketplaceTemplatesApi(client);
-    this.templatePurchases = new TemplateTemplatePurchasesApi(client);
     this.appTemplates = new TemplateAppTemplatesApi(client);
     this.appTemplateVersions = new TemplateAppTemplateVersionsApi(client);
   }

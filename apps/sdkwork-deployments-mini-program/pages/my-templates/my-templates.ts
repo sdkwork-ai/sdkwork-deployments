@@ -48,4 +48,30 @@ Page({
       });
     });
   },
+
+  /**
+   * Withdrawing deletes the listing (`appTemplates.delete`), so it is behind a
+   * confirmation: the mini-program has no undo and the row disappears on the
+   * reload that follows.
+   */
+  onWithdrawTap(event: WechatMiniprogram.TouchEvent) {
+    const uuid = event.currentTarget.dataset.uuid as string;
+    const globals = getApp<{ globalData: MarketplaceGlobals }>().globalData;
+    void wx.showModal({
+      title: '下架模板',
+      content: '下架后该模板将不再出现在模板市场，且无法撤销。',
+      confirmText: '确认下架',
+      cancelText: '取消',
+      success: (result) => {
+        if (!result.confirm) return;
+        globals.marketplace
+          .withdraw(uuid)
+          .then(() => {
+            wx.showToast({ title: '已下架' });
+            this.reload();
+          })
+          .catch(() => wx.showToast({ title: '下架未完成，请稍后重试', icon: 'none' }));
+      },
+    });
+  },
 });

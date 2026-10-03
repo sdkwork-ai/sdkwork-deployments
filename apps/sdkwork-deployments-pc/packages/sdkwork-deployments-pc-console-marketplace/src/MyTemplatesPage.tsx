@@ -39,6 +39,7 @@ export function MyTemplatesPage({ deployClient, locale }: MyTemplatesPageProps) 
   const [categories, setCategories] = useState<readonly TemplateCategoryResponse[]>([]);
   const [expanded, setExpanded] = useState<string>();
   const [versions, setVersions] = useState<readonly AppTemplateVersionResponse[]>([]);
+  const [editTarget, setEditTarget] = useState<AppTemplateResponse>();
   const [dialog, setDialog] = useState<"create" | "version">();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -87,6 +88,21 @@ export function MyTemplatesPage({ deployClient, locale }: MyTemplatesPageProps) 
       setExpanded(templateUuid);
       try {
         setVersions(await service.listVersions(templateUuid));
+      } catch {
+        setActionError(t("myTemplates.loadFailed"));
+      }
+    },
+    [service, t],
+  );
+
+  const openEdit = useCallback(
+    async (templateUuid: string): Promise<void> => {
+      setActionError(undefined);
+      try {
+        // Read the listing back before editing: the row in the ledger may be a
+        // page-old snapshot, and the dialog must show the stored values it is
+        // about to patch.
+        setEditTarget(await service.retrieve(templateUuid));
       } catch {
         setActionError(t("myTemplates.loadFailed"));
       }
@@ -200,6 +216,9 @@ export function MyTemplatesPage({ deployClient, locale }: MyTemplatesPageProps) 
               <Plus size={15} />
               {t("myTemplates.addVersion")}
             </button>
+            <button className="secondary-button" type="button" onClick={() => void openEdit(expanded)}>
+              {t("myTemplates.edit")}
+            </button>
             <button
               className="command-button"
               type="button"
@@ -244,6 +263,19 @@ export function MyTemplatesPage({ deployClient, locale }: MyTemplatesPageProps) 
           }}
           service={service}
           templateUuid={expanded}
+        />
+      )}
+      {editTarget && (
+        <EditTemplateDialog
+          categories={categories}
+          locale={locale}
+          template={editTarget}
+          close={() => setEditTarget(undefined)}
+          done={() => {
+            setEditTarget(undefined);
+            void load();
+          }}
+          service={service}
         />
       )}
     </section>
@@ -428,7 +460,15 @@ function CreateVersionDialog({
   templateUuid: string;
 }) {
   const t = marketplaceTranslator(locale);
-  const [form, setForm] = useState({ version: "", changelog: "", artifactUuid: "" });
+  const [form, setForm] = useState({
+    version: "",
+    changelog: "",
+    artifactUuid: "",
+    sourceAppVersion: "",
+    packageSizeBytes: "",
+    checksumSha256: "",
+    platformTargets: "",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   async function submit(event: FormEvent): Promise<void> {
@@ -437,10 +477,21 @@ function CreateVersionDialog({
     setBusy(true);
     setError(undefined);
     try {
+      // Platform targets are a comma-separated list on one input: the contract
+      // takes an array, and a free-text field keeps the dialog honest about
+      // accepting any target string the build produced.
+      const platformTargets = form.platformTargets
+        .split(",")
+        .map((target) => target.trim())
+        .filter((target) => target !== "");
       await service.createVersion(templateUuid, {
         version: form.version,
         changelog: form.changelog === "" ? undefined : form.changelog,
         artifactUuid: form.artifactUuid === "" ? undefined : form.artifactUuid,
+        sourceAppVersion: form.sourceAppVersion === "" ? undefined : form.sourceAppVersion,
+        packageSizeBytes: form.packageSizeBytes === "" ? undefined : form.packageSizeBytes,
+        checksumSha256: form.checksumSha256 === "" ? undefined : form.checksumSha256,
+        platformTargets,
       });
       done();
     } catch {
@@ -479,6 +530,166 @@ function CreateVersionDialog({
           <label>
             <span>{t("myTemplates.artifactUuid")}</span>
             <input maxLength={36} value={form.artifactUuid} onChange={(event) => setForm((current) => ({ ...current, artifactUuid: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.sourceAppVersion")}</span>
+            <input maxLength={64} value={form.sourceAppVersion} onChange={(event) => setForm((current) => ({ ...current, sourceAppVersion: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.packageSizeBytes")}</span>
+            <input inputMode="numeric" pattern="[0-9]*" value={form.packageSizeBytes} onChange={(event) => setForm((current) => ({ ...current, packageSizeBytes: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.checksumSha256")}</span>
+            <input maxLength={128} value={form.checksumSha256} onChange={(event) => setForm((current) => ({ ...current, checksumSha256: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.platformTargets")}</span>
+            <input
+              placeholder={t("myTemplates.platformTargets.hint")}
+              value={form.platformTargets}
+              onChange={(event) => setForm((current) => ({ ...current, platformTargets: event.target.value }))}
+            />
+          </label>
+        </div>
+        {error && <div className="error-banner" role="alert">{error}</div>}
+        <footer>
+          <button className="secondary-button" type="button" onClick={close}>
+            {t("common.cancel")}
+          </button>
+          <button className="command-button" disabled={busy} type="submit">
+            {busy ? t("common.working") : t("common.confirm")}
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Listing editor for one of the caller's own templates. It is a patch dialog:
+ * every field is seeded from the stored listing and sent back unchanged unless
+ * the author edits it, which keeps a display-name fix from silently rewriting
+ * pricing or visibility.
+ */
+function EditTemplateDialog({
+  categories,
+  close,
+  done,
+  locale,
+  service,
+  template,
+}: {
+  categories: readonly TemplateCategoryResponse[];
+  close(): void;
+  done(): void;
+  locale: DeploymentsLocale;
+  service: ReturnType<typeof createMyTemplatesService>;
+  template: AppTemplateResponse;
+}) {
+  const t = marketplaceTranslator(locale);
+  const [form, setForm] = useState({
+    displayName: template.displayName,
+    summary: template.summary,
+    description: template.description,
+    categoryUuid: template.categoryUuid,
+    visibility: template.visibility as "PUBLIC" | "PRIVATE",
+    pricingModel: template.pricingModel as "FREE" | "PAID",
+    priceMinor: template.pricingModel === "PAID" ? template.priceMinor : "",
+    currency: template.currency,
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  async function submit(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!form.displayName.trim() || !form.summary.trim() || !form.categoryUuid) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await service.update(template.id, {
+        displayName: form.displayName,
+        summary: form.summary,
+        description: form.description,
+        categoryUuid: form.categoryUuid,
+        visibility: form.visibility,
+        pricingModel: form.pricingModel,
+        // A FREE listing must carry no price: the DDL CHECK rejects
+        // "free but priced", so the field collapses to 0 on that branch.
+        priceMinor: form.pricingModel === "PAID" ? form.priceMinor : "0",
+        currency: form.currency,
+      });
+      done();
+    } catch {
+      setError(t("myTemplates.updateFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="edit-template-title" onSubmit={(event) => void submit(event)}>
+        <header>
+          <div>
+            <span className="eyebrow">{t("myTemplates.title")}</span>
+            <h2 id="edit-template-title">{t("myTemplates.edit")}</h2>
+          </div>
+          <button className="icon-button" title={t("common.close")} type="button" onClick={close}>
+            <X size={18} />
+          </button>
+        </header>
+        <div className="form-grid">
+          <label>
+            <span>{t("myTemplates.create.displayName")}</span>
+            <input required maxLength={200} value={form.displayName} onChange={(event) => setForm((current) => ({ ...current, displayName: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.create.summary")}</span>
+            <input required maxLength={512} value={form.summary} onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.create.description")}</span>
+            <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
+          </label>
+          <label>
+            <span>{t("myTemplates.create.categoryUuid")}</span>
+            <select required value={form.categoryUuid} onChange={(event) => setForm((current) => ({ ...current, categoryUuid: event.target.value }))}>
+              <option value="">{t("myTemplates.pickCategory")}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t("myTemplates.create.visibility")}</span>
+            <select value={form.visibility} onChange={(event) => setForm((current) => ({ ...current, visibility: event.target.value as "PUBLIC" | "PRIVATE" }))}>
+              <option value="PRIVATE">PRIVATE</option>
+              <option value="PUBLIC">PUBLIC</option>
+            </select>
+          </label>
+          <label>
+            <span>{t("myTemplates.create.pricingModel")}</span>
+            <select value={form.pricingModel} onChange={(event) => setForm((current) => ({ ...current, pricingModel: event.target.value as "FREE" | "PAID" }))}>
+              <option value="FREE">FREE</option>
+              <option value="PAID">PAID</option>
+            </select>
+          </label>
+          {form.pricingModel === "PAID" && (
+            <label>
+              <span>{t("myTemplates.create.priceMinor")}</span>
+              <input inputMode="numeric" pattern="[0-9]+" required value={form.priceMinor} onChange={(event) => setForm((current) => ({ ...current, priceMinor: event.target.value }))} />
+            </label>
+          )}
+          <label>
+            <span>{t("myTemplates.create.currency")}</span>
+            <input maxLength={8} value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))} />
           </label>
         </div>
         {error && <div className="error-banner" role="alert">{error}</div>}

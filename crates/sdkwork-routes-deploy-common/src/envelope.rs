@@ -21,8 +21,7 @@ use sdkwork_deploy_contract::{
     RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
     SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
     SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage,
-    TemplateCategoryResponse, TemplatePurchasePage, TemplatePurchaseResponse, UsageEventPage,
-    UsageEventResponse,
+    TemplateCategoryResponse, UsageEventPage, UsageEventResponse,
 };
 use sdkwork_deploy_core::normalize_pagination;
 use sdkwork_utils_rust::{PageInfo, PageMode, SdkWorkPageData, SdkWorkResourceData};
@@ -330,11 +329,5 @@ pub fn app_template_page(page: AppTemplatePage) -> SdkWorkPageData<AppTemplateRe
 pub fn app_template_version_page(
     page: AppTemplateVersionPage,
 ) -> SdkWorkPageData<AppTemplateVersionResponse> {
-    offset_page(page.items, page.page, page.page_size, page.total)
-}
-
-pub fn template_purchase_page(
-    page: TemplatePurchasePage,
-) -> SdkWorkPageData<TemplatePurchaseResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }

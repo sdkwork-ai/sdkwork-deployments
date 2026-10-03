@@ -2,17 +2,32 @@ import 'package:sdkwork_deployments_app_sdk/sdkwork_deployments_app_sdk.dart';
 
 import 'runtime_config.dart';
 
+/// One browse page plus the paging facts the list needs to offer "load more".
+class MarketplaceBrowsePage {
+  final List<AppTemplateSummaryResponse> items;
+  final bool hasMore;
+  final int total;
+
+  const MarketplaceBrowsePage({
+    required this.items,
+    required this.hasMore,
+    required this.total,
+  });
+}
+
 /// The marketplace port the UI consumes. Keeping the port explicit lets the
 /// widget tree and tests run against a fake while production delegates every
 /// call to the generated SDK client (never raw HTTP).
 abstract class MarketplacePort {
   Future<List<TemplateCategoryResponse>> categories();
-  Future<List<AppTemplateSummaryResponse>> browse({
+  Future<MarketplaceBrowsePage> browse({
     int page,
     int pageSize,
     String? keyword,
     String? categoryUuid,
     String? templateType,
+    String? pricingModel,
+    String? sort,
   });
   Future<AppTemplateResponse> retrieve(String templateUuid);
   Future<TemplatePurchaseResponse> acquire(String templateUuid);
@@ -69,6 +84,23 @@ class SdkworkMarketplacePort implements MarketplacePort {
         .toList(growable: false);
   }
 
+  /// `hasMore` is the only paging fact the list can trust: a short page is not
+  /// proof of the end when the server filters after paging.
+  static bool _hasMore(dynamic payload) {
+    final data = _dataMap(payload, 'page info');
+    final pageInfo = data['pageInfo'];
+    return pageInfo is Map<String, dynamic> && pageInfo['hasMore'] == true;
+  }
+
+  static int _total(dynamic payload) {
+    final data = _dataMap(payload, 'page info');
+    final pageInfo = data['pageInfo'];
+    if (pageInfo is! Map<String, dynamic>) return 0;
+    final raw = pageInfo['totalItems'];
+    if (raw is int) return raw;
+    return raw is String ? (int.tryParse(raw) ?? 0) : 0;
+  }
+
   @override
   Future<List<TemplateCategoryResponse>> categories() async {
     final response = await _client.template.categoriesList(false);
@@ -77,24 +109,30 @@ class SdkworkMarketplacePort implements MarketplacePort {
   }
 
   @override
-  Future<List<AppTemplateSummaryResponse>> browse({
+  Future<MarketplaceBrowsePage> browse({
     int page = 1,
     int pageSize = 10,
     String? keyword,
     String? categoryUuid,
     String? templateType,
+    String? pricingModel,
+    String? sort,
   }) async {
     final response = await _client.template.marketplaceTemplatesList(
       page,
       pageSize,
       (keyword == null || keyword.trim().isEmpty) ? null : keyword.trim(),
       (categoryUuid == null || categoryUuid.isEmpty) ? null : categoryUuid,
-      null,
+      (pricingModel == null || pricingModel.isEmpty) ? null : pricingModel,
       (templateType == null || templateType.isEmpty) ? null : templateType,
-      null,
+      (sort == null || sort.isEmpty) ? null : sort,
     );
     if (response == null) throw const MarketplaceException('marketplace unavailable');
-    return _items(response.data, 'marketplace', AppTemplateSummaryResponse.fromJson);
+    return MarketplaceBrowsePage(
+      items: _items(response.data, 'marketplace', AppTemplateSummaryResponse.fromJson),
+      hasMore: _hasMore(response.data),
+      total: _total(response.data),
+    );
   }
 
   @override

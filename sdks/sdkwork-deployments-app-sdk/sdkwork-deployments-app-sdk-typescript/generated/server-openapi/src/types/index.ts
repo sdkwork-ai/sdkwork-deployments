@@ -3,11 +3,9 @@ export type { TemplateCategoryResponse } from './template-category-response';
 export type { AppTemplateSummaryResponse } from './app-template-summary-response';
 export type { AppTemplateResponse } from './app-template-response';
 export type { AppTemplateVersionResponse } from './app-template-version-response';
-export type { TemplatePurchaseResponse } from './template-purchase-response';
 export type { CreateAppTemplateRequest } from './create-app-template-request';
 export type { UpdateAppTemplateRequest } from './update-app-template-request';
 export type { CreateAppTemplateVersionRequest } from './create-app-template-version-request';
-export type { CreateTemplatePurchaseRequest } from './create-template-purchase-request';
 export type { ProblemDetail } from './problem-detail';
 export type { UpdateAppCompositionRequest } from './update-app-composition-request';
 export type { AppPublishEnvironment } from './app-publish-environment';
@@ -227,7 +225,6 @@ export type { AppEnvironmentsCreatePostResponse201 } from './app-environments-cr
 export type { TemplateCategoriesListResponse } from './template-categories-list-response';
 export type { MarketplaceTemplatesListResponse } from './marketplace-templates-list-response';
 export type { MarketplaceTemplatesRetrieveResponse } from './marketplace-templates-retrieve-response';
-export type { TemplatePurchasesCreateResponse201 } from './template-purchases-create-response201';
 export type { AppTemplatesListResponse } from './app-templates-list-response';
 export type { AppTemplatesCreateResponse201 } from './app-templates-create-response201';
 export type { AppTemplatesRetrieveResponse } from './app-templates-retrieve-response';
@@ -235,4 +232,3 @@ export type { AppTemplatesUpdateResponse } from './app-templates-update-response
 export type { AppTemplatesSubmitResponse } from './app-templates-submit-response';
 export type { AppTemplateVersionsListResponse } from './app-template-versions-list-response';
 export type { AppTemplateVersionsCreateResponse201 } from './app-template-versions-create-response201';
-export type { TemplatePurchasesListResponse } from './template-purchases-list-response';
