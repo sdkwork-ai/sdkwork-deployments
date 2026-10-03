@@ -1,0 +1,28 @@
+{
+  "pages": [
+    "pages/marketplace/marketplace",
+    "pages/my-templates/my-templates"
+  ],
+  "window": {
+    "navigationBarTitleText": "SDKWork Deployments",
+    "navigationBarBackgroundColor": "#e0ad31",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f6f7"
+  },
+  "tabBar": {
+    "color": "#657178",
+    "selectedColor": "#24200f",
+    "list": [
+      {
+        "pagePath": "pages/marketplace/marketplace",
+        "text": "模板市场"
+      },
+      {
+        "pagePath": "pages/my-templates/my-templates",
+        "text": "我的模板"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

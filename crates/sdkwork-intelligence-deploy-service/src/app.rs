@@ -1695,6 +1695,272 @@ impl DeployAppApi for DeployService {
         self.bind_app_source_spec_source(context, app_id, spec_id, request)
             .await
     }
+
+    // -- app template marketplace ---------------------------------------------
+
+    async fn list_template_categories(
+        &self,
+        context: &DeployAppRequestContext,
+        include_disabled: bool,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryPage> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.repository
+            .list_template_categories(Some(tenant_id), include_disabled, 1, 200)
+            .await
+    }
+
+    async fn list_marketplace_templates(
+        &self,
+        context: &DeployAppRequestContext,
+        query: &sdkwork_deploy_contract::ListMarketplaceTemplatesQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateSummaryPage> {
+        let tenant_id = Self::require_tenant(context)?;
+        if let Some(pricing) = query.pricing_model.as_deref() {
+            if pricing != sdkwork_deploy_contract::TEMPLATE_PRICING_FREE
+                && pricing != sdkwork_deploy_contract::TEMPLATE_PRICING_PAID
+            {
+                return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                    "pricingModel is invalid",
+                ));
+            }
+        }
+        if let Some(template_type) = query.template_type.as_deref() {
+            if template_type != sdkwork_deploy_contract::TEMPLATE_TYPE_APP
+                && template_type != sdkwork_deploy_contract::TEMPLATE_TYPE_PPT
+                && template_type != sdkwork_deploy_contract::TEMPLATE_TYPE_VIDEO
+            {
+                return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                    "templateType is invalid",
+                ));
+            }
+        }
+        if let Some(sort) = query.sort.as_deref() {
+            if sort != sdkwork_deploy_contract::MARKETPLACE_SORT_NEWEST
+                && sort != sdkwork_deploy_contract::MARKETPLACE_SORT_POPULAR
+            {
+                return Err(sdkwork_deploy_contract::DeployServiceError::validation(
+                    "sort is invalid",
+                ));
+            }
+        }
+        self.repository
+            .list_marketplace_templates(tenant_id, query)
+            .await
+    }
+
+    async fn retrieve_marketplace_template(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.repository
+            .retrieve_marketplace_template(tenant_id, template_uuid)
+            .await
+    }
+
+    async fn create_template_purchase(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+        idempotency_key: &str,
+        request: &sdkwork_deploy_contract::CreateTemplatePurchaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let buyer_user_id = Self::require_actor(context)?;
+        self.repository
+            .create_template_purchase(
+                tenant_id,
+                context.organization_id,
+                buyer_user_id,
+                template_uuid,
+                idempotency_key,
+                request,
+            )
+            .await
+    }
+
+    async fn list_app_templates(
+        &self,
+        context: &DeployAppRequestContext,
+        query: &sdkwork_deploy_contract::ListAppTemplatesQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        if let Some(status) = query.status.as_deref() {
+            validate_template_status(status)?;
+        }
+        self.repository
+            .list_app_templates(tenant_id, Some(author_user_id), query)
+            .await
+    }
+
+    async fn create_app_template(
+        &self,
+        context: &DeployAppRequestContext,
+        _idempotency_key: &str,
+        request: &sdkwork_deploy_contract::CreateAppTemplateRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .create_app_template(
+                tenant_id,
+                context.organization_id,
+                Some(author_user_id),
+                request,
+            )
+            .await
+    }
+
+    async fn retrieve_app_template(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .retrieve_app_template(Some(tenant_id), Some(author_user_id), template_uuid)
+            .await
+    }
+
+    async fn update_app_template(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateAppTemplateRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .update_app_template(tenant_id, author_user_id, template_uuid, request)
+            .await
+    }
+
+    async fn delete_app_template(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .delete_app_template(Some(tenant_id), Some(author_user_id), template_uuid)
+            .await
+    }
+
+    async fn submit_app_template(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .submit_app_template(tenant_id, author_user_id, template_uuid)
+            .await
+    }
+
+    async fn list_app_template_versions(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .list_app_template_versions(
+                Some(tenant_id),
+                Some(author_user_id),
+                template_uuid,
+                page,
+                page_size,
+            )
+            .await
+    }
+
+    async fn create_app_template_version(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+        _idempotency_key: &str,
+        request: &sdkwork_deploy_contract::CreateAppTemplateVersionRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let author_user_id = Self::require_actor(context)?;
+        self.repository
+            .create_app_template_version(tenant_id, author_user_id, template_uuid, request)
+            .await
+    }
+
+    async fn list_template_purchases(
+        &self,
+        context: &DeployAppRequestContext,
+        query: &sdkwork_deploy_contract::ListTemplatePurchasesQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchasePage> {
+        let tenant_id = Self::require_tenant(context)?;
+        let buyer_user_id = Self::require_actor(context)?;
+        if let Some(status) = query.status.as_deref() {
+            validate_purchase_status(status)?;
+        }
+        self.repository
+            .list_template_purchases(tenant_id, Some(buyer_user_id), query)
+            .await
+    }
+}
+
+/// Author and buyer surfaces are user-private (`IAM_SPEC.md` 5.1): a caller
+/// without a user subject has no inventory of their own to list, so the answer
+/// is "forbidden" rather than an empty page that pretends the tenant inventory
+/// is theirs.
+impl DeployService {
+    pub(crate) fn require_actor(context: &DeployAppRequestContext) -> DeployServiceResult<i64> {
+        context
+            .actor_id
+            .filter(|actor_id| *actor_id > 0)
+            .ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::forbidden(
+                    "a user subject is required for template marketplace operations",
+                )
+            })
+    }
+}
+
+fn validate_template_status(status: &str) -> DeployServiceResult<()> {
+    let valid = matches!(
+        status,
+        sdkwork_deploy_contract::TEMPLATE_STATUS_DRAFT
+            | sdkwork_deploy_contract::TEMPLATE_STATUS_PENDING_REVIEW
+            | sdkwork_deploy_contract::TEMPLATE_STATUS_PUBLISHED
+            | sdkwork_deploy_contract::TEMPLATE_STATUS_REJECTED
+            | sdkwork_deploy_contract::TEMPLATE_STATUS_DISABLED
+    );
+    if valid {
+        Ok(())
+    } else {
+        Err(sdkwork_deploy_contract::DeployServiceError::validation(
+            "template status is invalid",
+        ))
+    }
+}
+
+fn validate_purchase_status(status: &str) -> DeployServiceResult<()> {
+    let valid = matches!(
+        status,
+        sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_PENDING
+            | sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_ACTIVE
+            | sdkwork_deploy_contract::TEMPLATE_PURCHASE_STATUS_REVOKED
+    );
+    if valid {
+        Ok(())
+    } else {
+        Err(sdkwork_deploy_contract::DeployServiceError::validation(
+            "purchase status is invalid",
+        ))
+    }
 }
 
 #[cfg(test)]

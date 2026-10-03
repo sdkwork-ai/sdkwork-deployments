@@ -6,6 +6,7 @@ pub mod domain_certificate_manifest;
 pub mod http_route_manifest;
 pub mod paths;
 pub mod routes;
+pub mod template_market_routes;
 pub mod web_bootstrap;
 
 pub use domain_certificate_manifest::domain_certificate_route_manifest;
@@ -16,6 +17,7 @@ pub use routes::{
     AppState,
 };
 pub use sdkwork_deploy_contract::{DeployAppApi, DeployAppRequestContext};
+pub use template_market_routes::build_template_market_router;
 pub use web_bootstrap::{
     deploy_app_api_domain_context_injectors, deploy_app_api_prefixes,
     deploy_app_api_public_path_prefixes, wrap_router_with_web_framework_from_env,

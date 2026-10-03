@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-deployments-h5",
+    "displayName": "SDKWork Deployments H5",
+    "version": "0.1.0",
+    "type": "h5-app-root",
+    "root": "sdkwork-deployments/apps/sdkwork-deployments-h5",
+    "domain": "deployment",
+    "declaredDomain": "deployment",
+    "capability": "template-marketplace",
+    "status": "active",
+    "surface": "app",
+    "languages": [
+      "typescript",
+      "react"
+    ],
+    "generated": false,
+    "private": true,
+    "manifests": [
+      "package.json",
+      "sdkwork.app.config.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy, route identity, and dependency direction.",
+      "path": "../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md"
+    },
+    {
+      "file": "APP_H5_ARCHITECTURE_SPEC.md",
+      "purpose": "Client root architecture standard.",
+      "path": "../../../../sdkwork-specs/APP_H5_ARCHITECTURE_SPEC.md"
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Generated SDK integration, TokenManager wiring, and dependency composition rules.",
+      "path": "../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md"
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "purpose": "Verification."
+    }
+  ],
+  "contracts": {
+    "publicExports": [],
+    "runtimeEntrypoints": ["src/main.tsx"],
+    "sdkClients": [],
+    "events": [],
+    "configKeys": [],
+    "routeManifest": null,
+    "routeRegistry": "src/App.tsx",
+    "layerRole": "runtime-composition",
+    "providedPorts": [],
+    "requiredPorts": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Consume sibling packages through public exports only.",
+    "sdkPolicy": "Generated SDK clients are constructed once in src/bootstrap and injected into views; views never build clients or raw HTTP."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-deployments-h5 typecheck",
+      "pnpm --dir apps/sdkwork-deployments-h5 test"
+    ]
+  },
+  "metadata": {
+    "managedBy": "apps/sdkwork-deployments-h5",
+    "standardVersion": "2026-07-24"
+  }
+}

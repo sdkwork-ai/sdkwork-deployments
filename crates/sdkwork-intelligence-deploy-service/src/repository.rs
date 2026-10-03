@@ -7,32 +7,39 @@ use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage,
-    BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse,
-    CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
-    CertificateRenewalPage, CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
-    ChannelRolloutResponse, CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest,
-    CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
-    CreateAppReleaseRequest, CreateAppRequest, CreateArtifactRequest, CreateBuildRequest,
-    CreateBuildTemplateRequest, CreateCertificateRequest, CreateDeployUploadSessionRequest,
-    CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, CreateNginxConfigRequest, CreateNodeClusterRequest,
-    CreatePlatformTargetRequest, CreateServerRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployAppRequestContext, DeployUploadSessionResponse,
-    DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
-    DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    ListAppsQuery, ListDomainZonesQuery, ListNginxConfigsQuery, NginxConfigPage,
-    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
-    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
-    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
-    ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
+    AppReleaseResponse, AppResponse, AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage,
+    AppTemplateVersionPage, AppTemplateVersionResponse, ArtifactPage, ArtifactResponse,
+    AuditLogPage, BuildPage, BuildQueuePage, BuildResponse, BuildTemplatePage,
+    BuildTemplateResponse, CertificateChallengePage, CertificateOrderPage,
+    CertificateOrderResponse, CertificatePage, CertificateRenewalPage, CertificateResponse,
+    ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
+    CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest,
+    CreateAppDeploymentRequest, CreateAppEnvironmentRequest, CreateAppReleaseRequest,
+    CreateAppRequest, CreateAppTemplateRequest, CreateAppTemplateVersionRequest,
+    CreateArtifactRequest, CreateBuildRequest, CreateBuildTemplateRequest,
+    CreateCertificateRequest, CreateDeployUploadSessionRequest, CreateDomainHostnameRequest,
+    CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
+    CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
+    CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
+    CreateTemplateCategoryRequest, CreateTemplatePurchaseRequest, DeployAppRequestContext,
+    DeployUploadSessionResponse, DeploymentStatus, DomainHostnamePage, DomainHostnameResponse,
+    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage,
+    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
+    HealthCheckResponse, ListAppTemplatesAdminQuery, ListAppTemplatesQuery, ListAppsQuery,
+    ListDomainZonesQuery, ListMarketplaceTemplatesQuery, ListNginxConfigsQuery,
+    ListTemplatePurchasesQuery, NginxConfigPage, NginxConfigResponse, NginxReloadResponse,
+    NginxStatusResponse, NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage,
+    PackageResponse, PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest,
+    PromoteEnvironmentRequest, ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
     RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
-    ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
-    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
-    SourceRepositoryResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
-    UpdateAppRequest, UpdateBuildStateRequest, UpdateDomainZoneRequest, UpdateNginxConfigRequest,
-    UpdateNodeClusterRequest, UpdateServerRequest, UsageEventPage, UsageEventResponse,
+    ServerPage, ServerResponse, SettleTemplatePurchaseRequest, SigningIdentityHealthPage,
+    SigningIdentityPage, SigningIdentityResponse, SourceEventPage, SourceEventResponse,
+    SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse,
+    TemplatePurchasePage, TemplatePurchaseResponse, UpdateAppDatabaseProfileRequest,
+    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateAppSourceSpecRequest,
+    UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest, UpdateBuildStateRequest,
+    UpdateDomainZoneRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
+    UpdateServerRequest, UpdateTemplateCategoryRequest, UsageEventPage, UsageEventResponse,
     UsageReconciliationResponse,
 };
 
@@ -1349,4 +1356,199 @@ pub trait DeployRepositoryPort:
         hostname: &str,
         environment: &str,
     ) -> DeployServiceResult<Option<ResolvedDeployServer>>;
+
+    // -- app template marketplace ---------------------------------------------
+    //
+    // Tenant scoping follows the module-wide rule: app-side callers pass a hard
+    // `tenant_id`, admin callers pass `Option<i64>` where `None` is the
+    // cross-tenant scope the backend console already uses elsewhere. Optional
+    // `author_user_id` / `buyer_user_id` gates are the user-private ownership
+    // filters (`IAM_SPEC.md` 5.1); `None` means "no ownership gate", which only
+    // the marketplace browse surface and the admin surface may use.
+
+    async fn list_template_categories(
+        &self,
+        tenant_id: Option<i64>,
+        include_disabled: bool,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<TemplateCategoryPage>;
+
+    async fn create_template_category(
+        &self,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        actor_id: Option<i64>,
+        request: &CreateTemplateCategoryRequest,
+    ) -> DeployServiceResult<TemplateCategoryResponse>;
+
+    async fn retrieve_template_category(
+        &self,
+        tenant_id: Option<i64>,
+        category_uuid: &str,
+    ) -> DeployServiceResult<TemplateCategoryResponse>;
+
+    async fn update_template_category(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        category_uuid: &str,
+        request: &UpdateTemplateCategoryRequest,
+    ) -> DeployServiceResult<TemplateCategoryResponse>;
+
+    async fn delete_template_category(
+        &self,
+        tenant_id: i64,
+        category_uuid: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// The tenant marketplace: `PUBLIC` + `PUBLISHED` listings only. This is
+    /// the one surface allowed to read without an ownership gate, and it is
+    /// still fenced to one tenant.
+    async fn list_marketplace_templates(
+        &self,
+        tenant_id: i64,
+        query: &ListMarketplaceTemplatesQuery,
+    ) -> DeployServiceResult<AppTemplateSummaryPage>;
+
+    /// The public read of a marketplace listing; refuses non-`PUBLIC` /
+    /// non-`PUBLISHED` rows as not found so a private listing is not
+    /// distinguishable from a missing one.
+    async fn retrieve_marketplace_template(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<AppTemplateResponse>;
+
+    async fn list_app_templates(
+        &self,
+        tenant_id: i64,
+        author_user_id: Option<i64>,
+        query: &ListAppTemplatesQuery,
+    ) -> DeployServiceResult<AppTemplatePage>;
+
+    async fn list_app_templates_admin(
+        &self,
+        tenant_id: Option<i64>,
+        query: &ListAppTemplatesAdminQuery,
+    ) -> DeployServiceResult<AppTemplatePage>;
+
+    /// `author_user_id = Some` scopes the read to that author's own listing;
+    /// `None` is the admin/marketplace shape (tenant-scoped, no owner gate).
+    async fn retrieve_app_template(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+    ) -> DeployServiceResult<AppTemplateResponse>;
+
+    async fn create_app_template(
+        &self,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        actor_id: Option<i64>,
+        request: &CreateAppTemplateRequest,
+    ) -> DeployServiceResult<AppTemplateResponse>;
+
+    async fn update_app_template(
+        &self,
+        tenant_id: i64,
+        author_user_id: i64,
+        template_uuid: &str,
+        request: &UpdateAppTemplateRequest,
+    ) -> DeployServiceResult<AppTemplateResponse>;
+
+    async fn delete_app_template(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+    ) -> DeployServiceResult<()>;
+
+    async fn submit_app_template(
+        &self,
+        tenant_id: i64,
+        author_user_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<AppTemplateResponse>;
+
+    async fn list_app_template_versions(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<AppTemplateVersionPage>;
+
+    async fn retrieve_app_template_version(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+        version_uuid: &str,
+    ) -> DeployServiceResult<AppTemplateVersionResponse>;
+
+    async fn create_app_template_version(
+        &self,
+        tenant_id: i64,
+        author_user_id: i64,
+        template_uuid: &str,
+        request: &CreateAppTemplateVersionRequest,
+    ) -> DeployServiceResult<AppTemplateVersionResponse>;
+
+    /// Backend moderation: moves `status` / `review_note` / `is_featured`. An
+    /// approval publishes the newest draft version; see the service layer for
+    /// the transition rules.
+    async fn review_app_template(
+        &self,
+        tenant_id: Option<i64>,
+        operator_id: Option<i64>,
+        template_uuid: &str,
+        request: &UpdateAppTemplateAdminRequest,
+    ) -> DeployServiceResult<AppTemplateResponse>;
+
+    async fn list_template_purchases(
+        &self,
+        tenant_id: i64,
+        buyer_user_id: Option<i64>,
+        query: &ListTemplatePurchasesQuery,
+    ) -> DeployServiceResult<TemplatePurchasePage>;
+
+    async fn list_template_purchases_admin(
+        &self,
+        tenant_id: Option<i64>,
+        query: &ListTemplatePurchasesQuery,
+    ) -> DeployServiceResult<TemplatePurchasePage>;
+
+    async fn retrieve_template_purchase(
+        &self,
+        tenant_id: Option<i64>,
+        purchase_uuid: &str,
+    ) -> DeployServiceResult<TemplatePurchaseResponse>;
+
+    async fn create_template_purchase(
+        &self,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        buyer_user_id: i64,
+        template_uuid: &str,
+        idempotency_key: &str,
+        request: &CreateTemplatePurchaseRequest,
+    ) -> DeployServiceResult<TemplatePurchaseResponse>;
+
+    async fn settle_template_purchase(
+        &self,
+        tenant_id: Option<i64>,
+        operator_id: Option<i64>,
+        purchase_uuid: &str,
+        request: &SettleTemplatePurchaseRequest,
+    ) -> DeployServiceResult<TemplatePurchaseResponse>;
+
+    async fn revoke_template_purchase(
+        &self,
+        tenant_id: Option<i64>,
+        operator_id: Option<i64>,
+        purchase_uuid: &str,
+    ) -> DeployServiceResult<TemplatePurchaseResponse>;
 }

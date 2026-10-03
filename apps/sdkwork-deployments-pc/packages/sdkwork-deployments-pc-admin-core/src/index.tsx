@@ -77,6 +77,62 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
       ["name", "region", "description"],
     ),
     audit: source((query) => client.audit.auditLogs.list({ page: query.page, pageSize: query.pageSize }), [], ["action", "resource"]),
+    templateCategories: source(
+      (query) => client.template.templateCategories.list({ page: query.page, pageSize: query.pageSize, includeDisabled: true }),
+      [
+        action("create", "Create category", { parentId: "", categoryKey: "", displayName: "", description: "", sortOrder: 0 }, (context) =>
+          client.template.templateCategories.create(
+            cleanBody(context.body) as unknown as Parameters<typeof client.template.templateCategories.create>[0],
+            idempotencyParams(),
+          )),
+        action("update", "Update category", { displayName: "", description: "", sortOrder: 0, status: "ACTIVE" }, (context) =>
+          client.template.templateCategories.update(
+            selected(context, "id"),
+            cleanBody(context.body) as unknown as Parameters<typeof client.template.templateCategories.update>[1],
+            idempotencyParams(),
+          ), { selection: true }),
+      ],
+      ["displayName", "categoryKey"],
+    ),
+    appTemplates: source(
+      (query) => client.template.appTemplates.list({ page: query.page, pageSize: query.pageSize }),
+      [
+        // Moderation moves status only; the author owns the listing copy. An
+        // approval publishes the newest draft versions server-side.
+        action("publish", "Approve listing", { status: "PUBLISHED" }, (context) =>
+          client.template.appTemplates.update(selected(context, "id"), { status: "PUBLISHED" }, idempotencyParams()), { selection: true }),
+        action("reject", "Reject listing", { status: "REJECTED", reviewNote: "" }, (context) =>
+          client.template.appTemplates.update(
+            selected(context, "id"),
+            cleanBody(context.body) as unknown as Parameters<typeof client.template.appTemplates.update>[1],
+            idempotencyParams(),
+          ), { selection: true }),
+        action("disable", "Disable listing", { status: "DISABLED" }, (context) =>
+          client.template.appTemplates.update(selected(context, "id"), { status: "DISABLED" }, idempotencyParams()), { dangerous: true, selection: true }),
+        action("feature", "Feature listing", { isFeatured: true }, (context) =>
+          client.template.appTemplates.update(selected(context, "id"), { isFeatured: true }, idempotencyParams()), { selection: true }),
+        action("unfeature", "Unfeature listing", { isFeatured: false }, (context) =>
+          client.template.appTemplates.update(selected(context, "id"), { isFeatured: false }, idempotencyParams()), { selection: true }),
+        action("delete", "Delete listing", {}, (context) =>
+          client.template.appTemplates.delete(selected(context, "id")), { dangerous: true, selection: true }),
+      ],
+      ["displayName", "templateKey", "status"],
+    ),
+    templatePurchases: source(
+      (query) => client.template.templatePurchases.list({ page: query.page, pageSize: query.pageSize }),
+      [
+        // PAID acquisitions park in PENDING until settlement records the
+        // external payment reference; FREE acquisitions are ACTIVE on arrival.
+        action("settle", "Settle payment", { paymentRef: "" }, (context) =>
+          client.template.templatePurchases.settle(
+            selected(context, "id"),
+            cleanBody(context.body) as unknown as Parameters<typeof client.template.templatePurchases.settle>[1],
+          ), { selection: true }),
+        action("revoke", "Revoke entitlement", {}, (context) =>
+          client.template.templatePurchases.revoke(selected(context, "id")), { dangerous: true, selection: true }),
+      ],
+      ["templateUuid", "buyerUserId", "status"],
+    ),
   };
 }
 
@@ -121,6 +177,18 @@ function selected(context: DeploymentsActionContext, field: string): string {
   const value = context.selectedItem?.[field] ?? context.selectedItem?.configId;
   if (typeof value !== "string" && typeof value !== "number") throw new Error(`${field} is unavailable`);
   return String(value);
+}
+
+/**
+ * Drops blank string fields from a generic dialog body: the marketplace write
+ * contracts treat an absent optional as "leave unchanged / not provided",
+ * while `""` for a uuid- or enum-typed field is a validation error. Numbers
+ * and booleans are real values and always pass through.
+ */
+function cleanBody(body: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(body).filter(([, value]) => !(typeof value === "string" && value.trim() === "")),
+  );
 }
 
 function idempotencyParams(): { idempotencyKey: string } {

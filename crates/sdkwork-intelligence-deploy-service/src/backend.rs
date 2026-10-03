@@ -679,6 +679,181 @@ impl DeployBackendApi for DeployService {
             .list_source_events(context.tenant_id, page, page_size)
             .await
     }
+
+    // -- app template marketplace (admin) ---------------------------------------
+
+    async fn list_template_categories(
+        &self,
+        context: &DeployBackendRequestContext,
+        include_disabled: bool,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryPage> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .list_template_categories(tenant_id, include_disabled, page, page_size)
+            .await
+    }
+
+    async fn create_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        request: &sdkwork_deploy_contract::CreateTemplateCategoryRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryResponse> {
+        let tenant_id = Self::backend_write_tenant(context)?;
+        self.repository
+            .create_template_category(tenant_id, context.tenant_id, context.operator_id, request)
+            .await
+    }
+
+    async fn retrieve_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .retrieve_template_category(tenant_id, category_uuid)
+            .await
+    }
+
+    async fn update_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateTemplateCategoryRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryResponse> {
+        let tenant_id = Self::backend_write_tenant(context)?;
+        self.repository
+            .update_template_category(tenant_id, context.operator_id, category_uuid, request)
+            .await
+    }
+
+    async fn delete_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        let tenant_id = Self::backend_write_tenant(context)?;
+        self.repository
+            .delete_template_category(tenant_id, category_uuid)
+            .await
+    }
+
+    async fn list_app_templates(
+        &self,
+        context: &DeployBackendRequestContext,
+        query: &sdkwork_deploy_contract::ListAppTemplatesAdminQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .list_app_templates_admin(tenant_id, query)
+            .await
+    }
+
+    async fn retrieve_app_template(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .retrieve_app_template(tenant_id, None, template_uuid)
+            .await
+    }
+
+    async fn update_app_template(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateAppTemplateAdminRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .review_app_template(tenant_id, context.operator_id, template_uuid, request)
+            .await
+    }
+
+    async fn delete_app_template(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .delete_app_template(tenant_id, None, template_uuid)
+            .await
+    }
+
+    async fn list_app_template_versions(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .list_app_template_versions(tenant_id, None, template_uuid, page, page_size)
+            .await
+    }
+
+    async fn retrieve_app_template_version(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+        version_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .retrieve_app_template_version(tenant_id, None, template_uuid, version_uuid)
+            .await
+    }
+
+    async fn list_template_purchases(
+        &self,
+        context: &DeployBackendRequestContext,
+        query: &sdkwork_deploy_contract::ListTemplatePurchasesQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchasePage> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .list_template_purchases_admin(tenant_id, query)
+            .await
+    }
+
+    async fn retrieve_template_purchase(
+        &self,
+        context: &DeployBackendRequestContext,
+        purchase_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .retrieve_template_purchase(tenant_id, purchase_uuid)
+            .await
+    }
+
+    async fn settle_template_purchase(
+        &self,
+        context: &DeployBackendRequestContext,
+        purchase_uuid: &str,
+        request: &sdkwork_deploy_contract::SettleTemplatePurchaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .settle_template_purchase(tenant_id, context.operator_id, purchase_uuid, request)
+            .await
+    }
+
+    async fn revoke_template_purchase(
+        &self,
+        context: &DeployBackendRequestContext,
+        purchase_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplatePurchaseResponse> {
+        let tenant_id = Self::backend_tenant_scope(context)?;
+        self.repository
+            .revoke_template_purchase(tenant_id, context.operator_id, purchase_uuid)
+            .await
+    }
 }
 
 /// Reads a retention window from platform configuration; absent or invalid

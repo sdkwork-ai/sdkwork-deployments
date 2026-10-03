@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 3,
+  "kind": "sdkwork.app",
+  "app": {
+    "key": "sdkwork-deployments-mini-program",
+    "name": "SDKWork Deployments Mini Program",
+    "displayName": "SDKWork Deployments",
+    "description": "WeChat mini-program surface of the deployments template marketplace: browse categories, acquire published app templates, and manage your own listings.",
+    "vendor": "SDKWork",
+    "officialWebsiteUrl": "https://sdkwork.com/apps/sdkwork-deployments-mini-program",
+    "supportUrl": "https://sdkwork.com/support",
+    "privacyPolicyUrl": "https://sdkwork.com/privacy",
+    "termsOfServiceUrl": "https://sdkwork.com/terms",
+    "appType": "APP_REACT",
+    "versionSource": "package.json",
+    "identifiers": {
+      "packageName": null,
+      "bundleId": null,
+      "desktopAppId": null,
+      "containerImage": null
+    }
+  },
+  "backend": {
+    "profileKey": "backend-root-admin",
+    "ownerMode": "tenant",
+    "grantMode": "current",
+    "platform": "MP_WEIXIN",
+    "appId": "sdkwork-deployments-mini-program",
+    "tenantId": "100001",
+    "organizationId": "0",
+    "accessTokenPermissionScope": [
+      "deploy.marketplaceTemplates.read",
+      "deploy.templateCategories.read",
+      "deploy.appTemplates.read",
+      "deploy.appTemplates.write",
+      "deploy.appTemplateVersions.read",
+      "deploy.appTemplateVersions.write",
+      "deploy.templatePurchases.read",
+      "deploy.templatePurchases.write"
+    ]
+  },
+  "runtime": {
+    "family": "mini-program",
+    "framework": "mp-weixin",
+    "runtimes": [
+      "MP_WEIXIN"
+    ],
+    "deliveryModes": [
+      "WEB_URL"
+    ],
+    "defaultPlatform": "MP_WEIXIN",
+    "defaultArchitecture": "mini-program",
+    "targetPlatforms": [
+      "mini-program"
+    ],
+    "clientArchitectures": [
+      "mini-program"
+    ],
+    "supportedDeploymentProfiles": [
+      "cloud"
+    ],
+    "defaultDeploymentProfile": "cloud"
+  },
+  "media": {
+    "icons": {
+      "primary": {
+        "id": "sdkwork-deployments-mini-program-primary-icon",
+        "type": "ICON",
+        "purpose": "PRIMARY",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-deployments-mini-program/assets/icon-1024.png",
+        "platform": "APP",
+        "locale": "en-US",
+        "width": 1024,
+        "height": 1024,
+        "format": "PNG",
+        "fileSizeBytes": 524288,
+        "alphaChannel": false,
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true
+        }
+      },
+      "platform": [],
+      "metadata": {
+        "generatedPlaceholder": true
+      }
+    },
+    "screenshots": [],
+    "previews": [
+      {
+        "id": "sdkwork-deployments-pc-catalog-preview",
+        "type": "PREVIEW_IMAGE",
+        "purpose": "CATALOG_PREVIEW",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-deployments-pc/media/preview-cover.png",
+        "platform": "WEB",
+        "locale": "en-US",
+        "width": 1600,
+        "height": 900,
+        "format": "PNG",
+        "fileSizeBytes": 786432,
+        "alphaChannel": false,
+        "caption": "SDKWork Deployments preview.",
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true,
+          "altText": "SDKWork Deployments preview cover."
+        }
+      }
+    ],
+    "metadata": {
+      "assetVersion": "0.1.0",
+      "defaultLocale": "en-US"
+    }
+  },
+  "publish": {
+    "status": "DRAFT",
+    "platforms": [
+      "MP_WEIXIN"
+    ],
+    "installPlatforms": [
+      "MP_WEIXIN"
+    ],
+    "config": {
+      "workspaceRoot": "apps/sdkwork-deployments-mini-program",
+      "framework": "mp-weixin",
+      "managedBy": "sdkwork-deployments"
+    }
+  },
+  "artifacts": {
+    "installConfig": {
+      "packages": [],
+      "metadata": {
+        "workspaceRoot": "apps/sdkwork-deployments-mini-program",
+        "framework": "mp-weixin",
+        "packageManager": "pnpm",
+        "releaseBuildDeferred": true,
+        "releaseBuildDeferredReason": "No release lane is configured for this mini-program root yet; the root ships source and contract verification only."
+      }
+    }
+  },
+  "release": {
+    "currentVersion": "0.1.0",
+    "defaultChannel": "DEV",
+    "latest": {
+      "DEV": "0.1.0"
+    },
+    "notes": [
+      {
+        "version": "0.1.0",
+        "releaseChannel": "DEV",
+        "title": "SDKWork Deployments Mini Program 0.1.0",
+        "summary": "SDKWork Deployments mini-program initialized.",
+        "content": "Initial manifest for the deployments WeChat mini-program client root.",
+        "highlights": [
+          "Template marketplace mini-program surface"
+        ],
+        "packageIds": [],
+        "publishedAt": "2026-10-03T00:00:00Z",
+        "current": true,
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0",
+        "metadata": {}
+      }
+    ]
+  },
+  "security": {
+    "checksumRequired": true,
+    "signatureRequired": true,
+    "sbomRequired": true
+  },
+  "metadata": {
+    "standardOwner": "sdkwork-platform",
+    "component": "sdkwork-deployments-mini-program",
+    "surface": "mini-program",
+    "deploymentConfig": "etc/sdkwork.deployment.config.json"
+  }
+}

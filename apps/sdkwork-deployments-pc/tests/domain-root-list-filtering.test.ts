@@ -48,3 +48,69 @@ describe("root-domain list filtering", () => {
     expect(listing).toContain("totalItems:");
   });
 });
+
+/**
+ * The cloud-account facet on the same listing.
+ *
+ * Three states reach the wire differently, and the one that is easiest to get
+ * wrong is the unfiltered one: `ALL` is the page's own control value and has no
+ * wire spelling, so it has to be an omission rather than a sentinel account id
+ * nobody holds. `UNASSIGNED` is the opposite case — a real restriction that only
+ * exists as the contract's reserved literal, so it has to be sent verbatim.
+ *
+ * The facet is asserted off the source rather than through a render because the
+ * page is a hook-heavy container whose test harness lives in the hosting
+ * application; what this pins is the request shape, which is what the hosting
+ * application's own suite cannot see.
+ */
+describe("root-domain cloud-account facet", () => {
+  const moduleSource = (): string =>
+    readFileSync(
+      resolve(import.meta.dirname, "../packages/sdkwork-deployments-pc-console-delivery/src/DeliveryManagement.tsx"),
+      "utf8",
+    );
+  const listing = (): string => {
+    const source = moduleSource();
+    const start = source.indexOf("function DomainZoneList");
+    return source.slice(start, source.indexOf("function DomainHostnameList", start));
+  };
+
+  it("omits the member for the unfiltered state and sends the reserved literal for unassigned", () => {
+    const source = listing();
+    expect(source).toContain('providerAccountId: cloudAccount === ALL_CLOUD_ACCOUNTS ? undefined : cloudAccount');
+    // The two control values are module constants, not locals of the page.
+    expect(moduleSource()).toContain('const ALL_CLOUD_ACCOUNTS = "ALL"');
+    expect(moduleSource()).toContain('const UNASSIGNED_CLOUD_ACCOUNT = "UNASSIGNED"');
+    // The literal is offered as its own option, so "the domains that resolve their
+    // account per operation" is a question the operator can actually ask.
+    expect(source).toContain('<option value={UNASSIGNED_CLOUD_ACCOUNT}>');
+    expect(source).toContain('<option value={ALL_CLOUD_ACCOUNTS}>');
+  });
+
+  it("re-issues the listing when the facet changes", () => {
+    // A control that renders but is not in the effect's dependency list filters
+    // nothing: the read would keep answering the previous selection.
+    expect(listing()).toContain(
+      "}, [cloudAccount, keyword, page, pageSize, refreshVersion, service, status]);",
+    );
+  });
+
+  it("offers the caller's own accounts rather than every account in the tenant", () => {
+    const source = listing();
+    // `mine` is the console's own reach: the tenant console is a personal surface,
+    // so a platform-scope account — the deployment's infrastructure credential
+    // rather than one this operator bound — must not appear as one of "my cloud
+    // accounts". The operations surface is where the whole-tenant inventory belongs.
+    expect(source).toContain("service.listCloudAccounts({ pageSize: 200, mine: true })");
+  });
+
+  it("keeps a pin the account center did not return selectable", () => {
+    const source = listing();
+    // Both the loaded rows and the current selection are folded into the options:
+    // a `<select>` whose value matches no option silently shows its first entry,
+    // and the row would then read a name the filter is not actually using.
+    expect(source).toContain('zones.map((zone) => zone.providerAccountId ?? "")');
+    expect(source).toContain("const bindings = [");
+    expect(source).toContain("if (!byId.has(accountId)) byId.set(accountId,");
+  });
+});

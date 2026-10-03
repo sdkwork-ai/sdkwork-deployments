@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-deployments-mini-program",
+    "displayName": "SDKWork Deployments Mini Program",
+    "version": "0.1.0",
+    "type": "mini-program-app-root",
+    "root": "sdkwork-deployments/apps/sdkwork-deployments-mini-program",
+    "domain": "deployment",
+    "declaredDomain": "deployment",
+    "capability": "template-marketplace",
+    "status": "active",
+    "surface": "app",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "private": true,
+    "manifests": [
+      "package.json",
+      "sdkwork.app.config.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md",
+      "purpose": "Cross-client package taxonomy, route identity, and dependency direction.",
+      "path": "../../../../sdkwork-specs/APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC.md"
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "Generated SDK integration and dependency composition rules.",
+      "path": "../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md"
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "purpose": "Verification."
+    }
+  ],
+  "contracts": {
+    "publicExports": [],
+    "runtimeEntrypoints": ["app.ts"],
+    "sdkClients": [],
+    "events": [],
+    "configKeys": [],
+    "routeManifest": null,
+    "routeRegistry": "app.json",
+    "layerRole": "runtime-composition",
+    "providedPorts": [],
+    "requiredPorts": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Consume sibling packages through public exports only.",
+    "sdkPolicy": "The WeChat runtime has no fetch transport, so services/marketplace.ts is the single hand-written wx.request port; tests inject a fake requester."
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-deployments-mini-program typecheck",
+      "pnpm --dir apps/sdkwork-deployments-mini-program test"
+    ]
+  },
+  "metadata": {
+    "managedBy": "apps/sdkwork-deployments-mini-program",
+    "standardVersion": "2026-07-24"
+  }
+}

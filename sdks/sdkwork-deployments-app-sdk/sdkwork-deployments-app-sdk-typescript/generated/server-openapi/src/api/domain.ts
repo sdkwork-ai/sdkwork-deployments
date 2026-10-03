@@ -148,6 +148,7 @@ export interface DomainDomainZonesListParams {
   status?: 'ACTIVE' | 'PAUSED';
   keyword?: string;
   scope?: 'USER' | 'PLATFORM';
+  providerAccountId?: string;
 }
 
 export interface DomainDomainZonesCreateParams {
@@ -174,6 +175,7 @@ export class DomainDomainZonesApi {
       { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
       { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
       { name: 'scope', value: params?.scope, style: 'form', explode: true, allowReserved: false },
+      { name: 'provider_account_id', value: params?.providerAccountId, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: DomainZoneResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/domain_zones`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }

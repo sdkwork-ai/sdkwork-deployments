@@ -69,6 +69,19 @@ export interface DeploymentsDeliveryService {
      * are reached by opening the root domain, never by listing them here.
      */
     scope?: ("USER" | "PLATFORM") | undefined
+    /**
+     * Restrict the list to the zones pinned to one cloud account.
+     *
+     * Three states, because "no pin" is a filter an operator asks for rather than
+     * an absence of one: `undefined` filters nothing, `"UNASSIGNED"` returns the
+     * zones whose account resolves per operation, and an account id returns that
+     * account's zones. The reserved literal is the wire's own and is sent as-is;
+     * no account id can be spelled that way, because the id shape refuses
+     * whitespace and admits only ASCII alphanumerics and `_.:-`.
+     *
+     * A facet, not a grant: it narrows the zones the caller may already reach.
+     */
+    providerAccountId?: string | undefined
   }): Promise<{ items: DomainZoneResponse[]; pageInfo: PageInfo }>;
   createDomainZone(body: CreateDomainZoneRequest): Promise<DomainZoneResponse>;
   retrieveDomainZone(zoneId: string): Promise<DomainZoneResponse>;
@@ -163,6 +176,7 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
           ...(params.status === undefined ? {} : { status: params.status }),
           ...(params.keyword === undefined ? {} : { keyword: params.keyword }),
           ...(params.scope === undefined ? {} : { scope: params.scope }),
+          ...(params.providerAccountId === undefined ? {} : { providerAccountId: params.providerAccountId }),
         },
       ),
     createDomainZone: (body) => zones.create(body, idempotencyParams()),

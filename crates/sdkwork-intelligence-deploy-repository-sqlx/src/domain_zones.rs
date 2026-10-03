@@ -1,7 +1,8 @@
 use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployServiceError, DeployServiceResult,
     DomainHostnamePage, DomainHostnameResponse, DomainZonePage, DomainZoneResponse,
-    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
+    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
+    ZoneProviderAccountFilter, ZoneScope,
 };
 use sdkwork_intelligence_deploy_service::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, DomainVerificationChallenge,
@@ -64,6 +65,18 @@ impl DeployRepository {
         // levels" — that keeps every caller that never sends `scope` on the
         // answer it had before the parameter existed.
         let scope = query.scope.map(ZoneScope::as_str).unwrap_or("");
+        // The pinned cloud account, resolved through the shared three-state
+        // reading so this statement and the contract cannot disagree about what
+        // the reserved literal means. `Unassigned` is a *restriction* rather than
+        // an omission, so it binds as `NULL` against a column that is `NULL` for
+        // every unpinned zone; `Any` is the omission, and an empty-string
+        // parameter keeps it that way.
+        let (provider_account_scoped, provider_account) = match query.provider_account_filter() {
+            ZoneProviderAccountFilter::Any => ("", None),
+            ZoneProviderAccountFilter::Unassigned => ("1", None),
+            ZoneProviderAccountFilter::Assigned(account_id) => ("1", Some(account_id)),
+        };
+        let provider_account = provider_account.as_deref().unwrap_or("");
         let keyword = query
             .keyword
             .as_deref()
@@ -73,17 +86,23 @@ impl DeployRepository {
             .unwrap_or_default();
         // Conjunctive with the owner gate, not a replacement for it: the gate
         // decides *which rows the caller may reach*, the scope narrows that set
-        // to one ownership level. A caller asking for PLATFORM sees only the
-        // tenant-level zones it could already reach; asking for USER sees only
-        // its own, which is what the root-domain list wants. The platform
-        // inventory is `app.<suffix>`, so it is never a root domain and never
-        // belongs on that list.
+        // to one ownership level, and the account narrows it to one pin. A caller
+        // asking for PLATFORM sees only the tenant-level zones it could already
+        // reach; asking for USER sees only its own, which is what the root-domain
+        // list wants. The platform inventory is `app.<suffix>`, so it is never a
+        // root domain and never belongs on that list.
+        //
+        // `IS NOT DISTINCT FROM` rather than `=` on the account: it is the form
+        // that reads the same for `NULL` (the unassigned arm) as for a value, so
+        // the two arms share one predicate instead of an `=` that would silently
+        // match nothing when the parameter is `NULL`.
         let predicate = format!(
             "z.tenant_id = $1 AND {} AND z.deleted_at IS NULL
             AND ($3 = '' OR z.status = $3)
             AND ($4 = '' OR LOWER(z.apex_hostname) LIKE $4 OR LOWER(COALESCE(z.display_name, '')) LIKE $4)
             AND ($5 = '' OR ($5 = 'USER' AND z.user_id IS NOT NULL)
-                        OR ($5 = 'PLATFORM' AND z.user_id IS NULL))",
+                        OR ($5 = 'PLATFORM' AND z.user_id IS NULL))
+            AND ($6 = '' OR (z.provider_account_id IS NOT DISTINCT FROM NULLIF($7, '')))",
             zone_owner_gate(2)
         );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
@@ -94,18 +113,22 @@ impl DeployRepository {
         .bind(status)
         .bind(&keyword)
         .bind(scope)
+        .bind(provider_account_scoped)
+        .bind(provider_account)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_dns_zone", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
             "SELECT {ZONE_SELECT} FROM deploy_dns_zone z WHERE {predicate}
-             ORDER BY (z.user_id IS NULL) ASC, z.updated_at DESC, z.id DESC LIMIT $6 OFFSET $7"
+             ORDER BY (z.user_id IS NULL) ASC, z.updated_at DESC, z.id DESC LIMIT $8 OFFSET $9"
         )))
         .bind(tenant_id)
         .bind(owner_user_id)
         .bind(status)
         .bind(keyword)
         .bind(scope)
+        .bind(provider_account_scoped)
+        .bind(provider_account)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)

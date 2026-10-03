@@ -14,6 +14,7 @@ import { RetentionApi, createRetentionApi } from './api/retention';
 import { UsageApi, createUsageApi } from './api/usage';
 import { SigningHealthApi, createSigningHealthApi } from './api/signing-health';
 import { SourceEventsApi, createSourceEventsApi } from './api/source-events';
+import { TemplateApi, createTemplateApi } from './api/template';
 
 export class SdkworkDeployBackendClient {
   private httpClient: HttpClient;
@@ -30,6 +31,7 @@ export class SdkworkDeployBackendClient {
   public readonly usage: UsageApi;
   public readonly signingHealth: SigningHealthApi;
   public readonly sourceEvents: SourceEventsApi;
+  public readonly template: TemplateApi;
 
   constructor(config: SdkworkBackendConfig) {
     this.httpClient = createHttpClient(config);
@@ -56,6 +58,8 @@ export class SdkworkDeployBackendClient {
     this.signingHealth = createSigningHealthApi(this.httpClient);
 
     this.sourceEvents = createSourceEventsApi(this.httpClient);
+
+    this.template = createTemplateApi(this.httpClient);
   }
   setAuthToken(token: string): this {
     this.httpClient.setAuthToken(token);

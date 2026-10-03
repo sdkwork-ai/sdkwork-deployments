@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 3,
+  "kind": "sdkwork.app",
+  "app": {
+    "key": "sdkwork-deployments-h5",
+    "name": "SDKWork Deployments H5",
+    "displayName": "SDKWork Deployments",
+    "description": "Mobile web (H5) surface of the deployments template marketplace: browse categories, acquire published app templates, and manage your own listings.",
+    "vendor": "SDKWork",
+    "officialWebsiteUrl": "https://sdkwork.com/apps/sdkwork-deployments-h5",
+    "supportUrl": "https://sdkwork.com/support",
+    "privacyPolicyUrl": "https://sdkwork.com/privacy",
+    "termsOfServiceUrl": "https://sdkwork.com/terms",
+    "appType": "APP_REACT",
+    "versionSource": "package.json",
+    "identifiers": {
+      "packageName": null,
+      "bundleId": null,
+      "desktopAppId": null,
+      "containerImage": null
+    }
+  },
+  "backend": {
+    "profileKey": "backend-root-admin",
+    "ownerMode": "tenant",
+    "grantMode": "current",
+    "platform": "H5",
+    "appId": "sdkwork-deployments-h5",
+    "tenantId": "100001",
+    "organizationId": "0",
+    "accessTokenPermissionScope": [
+      "deploy.marketplaceTemplates.read",
+      "deploy.templateCategories.read",
+      "deploy.appTemplates.read",
+      "deploy.appTemplates.write",
+      "deploy.appTemplateVersions.read",
+      "deploy.appTemplateVersions.write",
+      "deploy.templatePurchases.read",
+      "deploy.templatePurchases.write"
+    ]
+  },
+  "runtime": {
+    "family": "mobile",
+    "framework": "react-h5",
+    "runtimes": [
+      "H5",
+      "BROWSER"
+    ],
+    "deliveryModes": [
+      "WEB_URL"
+    ],
+    "defaultPlatform": "H5",
+    "defaultArchitecture": "h5",
+    "targetPlatforms": [
+      "h5"
+    ],
+    "clientArchitectures": [
+      "h5"
+    ],
+    "supportedDeploymentProfiles": [
+      "cloud"
+    ],
+    "defaultDeploymentProfile": "cloud"
+  },
+  "media": {
+    "icons": {
+      "primary": {
+        "id": "sdkwork-deployments-h5-primary-icon",
+        "type": "ICON",
+        "purpose": "PRIMARY",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-deployments-h5/assets/icon-1024.png",
+        "platform": "APP",
+        "locale": "en-US",
+        "width": 1024,
+        "height": 1024,
+        "format": "PNG",
+        "fileSizeBytes": 524288,
+        "alphaChannel": false,
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true
+        }
+      },
+      "platform": [],
+      "metadata": {
+        "generatedPlaceholder": true
+      }
+    },
+    "screenshots": [],
+    "previews": [
+      {
+        "id": "sdkwork-deployments-pc-catalog-preview",
+        "type": "PREVIEW_IMAGE",
+        "purpose": "CATALOG_PREVIEW",
+        "url": "https://cdn.sdkwork.com/apps/sdkwork-deployments-pc/media/preview-cover.png",
+        "platform": "WEB",
+        "locale": "en-US",
+        "width": 1600,
+        "height": 900,
+        "format": "PNG",
+        "fileSizeBytes": 786432,
+        "alphaChannel": false,
+        "caption": "SDKWork Deployments preview.",
+        "sortOrder": 0,
+        "enabled": true,
+        "metadata": {
+          "generatedPlaceholder": true,
+          "altText": "SDKWork Deployments preview cover."
+        }
+      }
+    ],
+    "metadata": {
+      "assetVersion": "0.1.0",
+      "defaultLocale": "en-US"
+    }
+  },
+  "publish": {
+    "status": "DRAFT",
+    "platforms": [
+      "H5",
+      "WEB"
+    ],
+    "installPlatforms": [
+      "H5",
+      "WEB"
+    ],
+    "config": {
+      "workspaceRoot": "apps/sdkwork-deployments-h5",
+      "framework": "react-h5",
+      "managedBy": "sdkwork-deployments"
+    }
+  },
+  "artifacts": {
+    "installConfig": {
+      "packages": [],
+      "metadata": {
+        "workspaceRoot": "apps/sdkwork-deployments-h5",
+        "framework": "react-h5",
+        "packageManager": "pnpm",
+        "releaseBuildDeferred": true,
+        "releaseBuildDeferredReason": "No release lane is configured for this H5 client root yet; the root ships source and contract verification only."
+      }
+    }
+  },
+  "release": {
+    "currentVersion": "0.1.0",
+    "defaultChannel": "DEV",
+    "latest": {
+      "DEV": "0.1.0"
+    },
+    "notes": [
+      {
+        "version": "0.1.0",
+        "releaseChannel": "DEV",
+        "title": "SDKWork Deployments H5 0.1.0",
+        "summary": "SDKWork Deployments H5 initialized.",
+        "content": "Initial manifest for the deployments H5 client root.",
+        "highlights": [
+          "Template marketplace H5 surface"
+        ],
+        "packageIds": [],
+        "publishedAt": "2026-10-03T00:00:00Z",
+        "current": true,
+        "forceUpdate": false,
+        "minSupportedVersion": "0.1.0",
+        "metadata": {}
+      }
+    ]
+  },
+  "security": {
+    "checksumRequired": true,
+    "signatureRequired": true,
+    "sbomRequired": true
+  },
+  "metadata": {
+    "standardOwner": "sdkwork-platform",
+    "component": "sdkwork-deployments-h5",
+    "surface": "h5",
+    "deploymentConfig": "etc/sdkwork.deployment.config.json"
+  }
+}

@@ -27,12 +27,17 @@ export type {
   AppSourceSpecRoute,
   AppSourceSpecStatus,
   AppStatus,
+  AppTemplateResponse,
+  AppTemplateSummaryResponse,
+  AppTemplateVersionResponse,
   ArtifactResponse,
   BindAppSourceSpecSourceRequest,
   CreateAppDeploymentRequest,
   CreateAppReleaseRequest,
   CreateAppRequest,
   CreateAppSourceSpecRequest,
+  CreateAppTemplateRequest,
+  CreateAppTemplateVersionRequest,
   CreateArtifactRequest,
   CreatePlatformTargetRequest,
   CreateSourceRepositoryRequest,
@@ -68,7 +73,10 @@ export type {
   SdkworkRuntimeTarget,
   SourceRepositoryResponse,
   TechStack,
+  TemplateCategoryResponse,
+  TemplatePurchaseResponse,
   UpdateAppSourceSpecRequest,
+  UpdateAppTemplateRequest,
 } from "@sdkwork/deployments-app-sdk";
 
 export type {

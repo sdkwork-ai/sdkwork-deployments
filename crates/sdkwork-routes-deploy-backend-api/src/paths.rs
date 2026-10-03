@@ -28,3 +28,19 @@ pub const USAGE_INGEST: &str = "/backend/v3/api/usage/ingest";
 pub const USAGE_RECONCILE: &str = "/backend/v3/api/usage/reconcile";
 pub const SIGNING_IDENTITY_HEALTH: &str = "/backend/v3/api/signing_identity_health";
 pub const SOURCE_EVENTS: &str = "/backend/v3/api/source_events";
+
+// -- app template marketplace (admin) ------------------------------------------
+
+pub const TEMPLATE_CATEGORIES: &str = "/backend/v3/api/template_categories";
+pub const TEMPLATE_CATEGORY: &str = "/backend/v3/api/template_categories/{categoryUuid}";
+pub const APP_TEMPLATES: &str = "/backend/v3/api/app_templates";
+pub const APP_TEMPLATE: &str = "/backend/v3/api/app_templates/{templateUuid}";
+pub const APP_TEMPLATE_VERSIONS: &str = "/backend/v3/api/app_templates/{templateUuid}/versions";
+pub const APP_TEMPLATE_VERSION: &str =
+    "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}";
+pub const TEMPLATE_PURCHASES: &str = "/backend/v3/api/template_purchases";
+pub const TEMPLATE_PURCHASE: &str = "/backend/v3/api/template_purchases/{purchaseUuid}";
+pub const TEMPLATE_PURCHASE_SETTLE: &str =
+    "/backend/v3/api/template_purchases/{purchaseUuid}/settle";
+pub const TEMPLATE_PURCHASE_REVOKE: &str =
+    "/backend/v3/api/template_purchases/{purchaseUuid}/revoke";

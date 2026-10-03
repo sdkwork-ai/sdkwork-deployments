@@ -163,11 +163,30 @@ function sdkManifest(profile, openapi) {
         consumerPackageName: profile.consumerPackageName,
         transportPackageName: profile.transportPackageName,
       },
+      // Only the app family ships the Flutter/Dart target today: the backend
+      // control plane has no mobile consumer.
+      ...(profile.sdkTarget === "app"
+        ? [
+            {
+              language: "flutter",
+              workspace: `${profile.sdkFamily}-flutter`,
+              generationState: "materialized",
+              releaseState: "not_published",
+              packagePath: `${profile.sdkFamily}-flutter/generated/server-openapi`,
+              manifestPath: `${profile.sdkFamily}-flutter/generated/server-openapi/pubspec.yaml`,
+              version: "0.1.0",
+              description: `Generator-owned Flutter/Dart transport SDK for ${openapi.info?.title ?? profile.apiAuthority}.`,
+              generatedPath: `${profile.sdkFamily}-flutter/generated/server-openapi`,
+              consumerPackageName: `sdkwork_deployments_app_sdk`,
+              transportPackageName: `sdkwork_deployments_app_sdk`,
+            },
+          ]
+        : []),
     ],
     metadata: {
       managedBy: "tools/materialize_deploy_phase1_contracts.mjs",
       standardProfile: "sdkwork-v3",
-      supportedLanguageSubset: ["typescript"],
+      supportedLanguageSubset: profile.sdkTarget === "app" ? ["typescript", "flutter"] : ["typescript"],
     },
     openApiPath: familyOpenApiPath,
     surface: profile.surface,

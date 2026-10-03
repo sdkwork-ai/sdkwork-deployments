@@ -478,6 +478,7 @@ async fn postgres_composition_is_atomic_and_idempotent() {
 /// request targeted, so any composition update silently made
 /// `<appId>.app.<suffix>` stop resolving.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn composition_replace_preserves_other_environments_and_default_domains() {
     let (repository, pool) = test_repository().await;
     // A Web Node target is required for every environment that publishes.

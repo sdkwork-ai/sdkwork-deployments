@@ -5,21 +5,23 @@ use sdkwork_deploy_contract::{
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppDomainResponse, AppEnvironmentPage, AppEnvironmentResponse, AppPage,
     AppReleasePage, AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
-    ArtifactPage, ArtifactResponse, AuditLogPage, AuditLogResponse, BuildPage,
-    BuildQueueItemResponse, BuildQueuePage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, CertificateChallengePage, CertificateChallengeResponse,
-    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
-    CertificateRenewalResponse, CertificateResponse, ChannelPage, ChannelResponse,
-    ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage, CloudAccountResponse,
-    DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse, DomainZonePage,
-    DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage,
-    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
-    HealthCheckResponse, NginxConfigPage, NginxConfigResponse, NginxReloadResponse,
-    NginxStatusResponse, NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage,
-    PackageResponse, PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage,
-    RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
+    AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage, AppTemplateSummaryResponse,
+    AppTemplateVersionPage, AppTemplateVersionResponse, ArtifactPage, ArtifactResponse,
+    AuditLogPage, AuditLogResponse, BuildPage, BuildQueueItemResponse, BuildQueuePage,
+    BuildResponse, BuildTemplatePage, BuildTemplateResponse, CertificateChallengePage,
+    CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
+    CertificateRenewalPage, CertificateRenewalResponse, CertificateResponse, ChannelPage,
+    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage,
+    CloudAccountResponse, DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse,
+    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse,
+    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
+    HealthCheckPage, HealthCheckResponse, NginxConfigPage, NginxConfigResponse,
+    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
+    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
+    RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
     SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
-    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, UsageEventPage,
+    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage,
+    TemplateCategoryResponse, TemplatePurchasePage, TemplatePurchaseResponse, UsageEventPage,
     UsageEventResponse,
 };
 use sdkwork_deploy_core::normalize_pagination;
@@ -305,4 +307,34 @@ fn offset_page<T>(items: Vec<T>, page: i32, page_size: i32, total: i64) -> SdkWo
             has_more: Some(total > (page as i64) * page_size as i64),
         },
     }
+}
+
+// -- app template marketplace --------------------------------------------------
+
+pub fn template_category_page(
+    page: TemplateCategoryPage,
+) -> SdkWorkPageData<TemplateCategoryResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+pub fn app_template_summary_page(
+    page: AppTemplateSummaryPage,
+) -> SdkWorkPageData<AppTemplateSummaryResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+pub fn app_template_page(page: AppTemplatePage) -> SdkWorkPageData<AppTemplateResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+pub fn app_template_version_page(
+    page: AppTemplateVersionPage,
+) -> SdkWorkPageData<AppTemplateVersionResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+pub fn template_purchase_page(
+    page: TemplatePurchasePage,
+) -> SdkWorkPageData<TemplatePurchaseResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
 }

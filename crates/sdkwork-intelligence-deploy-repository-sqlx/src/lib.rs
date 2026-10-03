@@ -29,6 +29,7 @@ mod servers;
 
 mod source_events;
 mod support;
+mod template_market;
 mod tls_control;
 mod upload_sessions;
 mod usage;

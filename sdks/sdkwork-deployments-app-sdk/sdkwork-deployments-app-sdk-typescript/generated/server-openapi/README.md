@@ -75,6 +75,7 @@ const client = new SdkworkDeployAppClient({
 - `client.usage` - usage API
 - `client.appDatabase` - app_database API
 - `client.appEnvironment` - app_environment API
+- `client.template` - template API
 
 ## Usage Examples
 
@@ -88,6 +89,7 @@ const params = {
   status: 'ACTIVE',
   keyword: 'keyword',
   scope: 'USER',
+  provider_account_id: 'provider_account_id',
 };
 const result = await client.domain.domainZones.list(params);
 ```
@@ -241,6 +243,16 @@ const params = {
   page_size: 2,
 };
 const result = await client.appEnvironment.list(appId, params);
+```
+
+### template
+
+```typescript
+// List template categories
+const params = {
+  include_disabled: true,
+};
+const result = await client.template.templateCategories.list(params);
 ```
 
 ## Error Handling

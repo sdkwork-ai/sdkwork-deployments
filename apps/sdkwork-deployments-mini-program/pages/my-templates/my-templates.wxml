@@ -1,0 +1,15 @@
+<view wx:if="{{error}}" class="mp-empty">{{error}}</view>
+<view wx:elif="{{loading}}" class="mp-empty">加载中…</view>
+<view wx:elif="{{items.length === 0}}" class="mp-empty">还没有发布过模板。</view>
+<view wx:for="{{items}}" wx:key="id" class="mp-card">
+  <view class="mp-title">{{item.displayName}}</view>
+  <view class="mp-meta">
+    <text>{{item.templateKey}}</text>
+    <text class="mp-status">{{item.status}}</text>
+    <text>{{item.visibility}}</text>
+  </view>
+  <view class="mp-actions">
+    <button class="mp-button" size="mini" data-uuid="{{item.id}}" bindtap="onVersionsTap">版本列表</button>
+    <button class="mp-button" size="mini" data-uuid="{{item.id}}" bindtap="onSubmitTap">提交审核</button>
+  </view>
+</view>

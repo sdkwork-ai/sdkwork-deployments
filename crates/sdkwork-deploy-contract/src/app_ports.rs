@@ -111,6 +111,77 @@ pub struct ListDomainZonesQuery {
     /// A zone's scope is derived from its `user_id` (`None` ⇒ `Platform`), so
     /// [`crate::dto::ZoneScope::for_owner`] is the one place that mapping lives.
     pub scope: Option<crate::dto::ZoneScope>,
+    /// Restrict the inventory to the zones pinned to one cloud account.
+    ///
+    /// Three states, which is why this is one optional string rather than an id
+    /// plus a flag: an absent member filters nothing, the literal
+    /// [`ZONE_PROVIDER_ACCOUNT_UNASSIGNED`] returns the zones pinned to no account
+    /// at all — the ones whose account resolves per operation — and anything else
+    /// names the account to match.
+    ///
+    /// This is a **facet, not a grant**, exactly like `scope`: it can only narrow
+    /// the set the owner gate already allows, so a caller cannot use it to learn
+    /// that another user's zone is pinned to an account. An account id that no
+    /// reachable zone carries simply answers empty.
+    ///
+    /// The literal cannot collide with a real account id: the column's own shape
+    /// rule (`chk_deploy_dns_zone_provider_account`) admits only ASCII
+    /// alphanumerics and `_.:-` after a leading alphanumeric, so a value containing
+    /// whitespace is unreachable as an id.
+    pub provider_account_id: Option<String>,
+}
+
+/// The wire value that asks for zones bound to no cloud account.
+///
+/// See [`ZoneProviderAccountFilter::from_query`] for why this is a reserved
+/// literal rather than a second boolean parameter.
+pub const ZONE_PROVIDER_ACCOUNT_UNASSIGNED: &str = "UNASSIGNED";
+
+/// The cloud-account pin a zone listing is restricted to.
+///
+/// The three states are mutually exclusive by construction rather than by
+/// convention, which is what keeps "no filter", "pinned to no account" and
+/// "pinned to this account" from being expressible as contradictory pairs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ZoneProviderAccountFilter {
+    /// Return every zone the caller may reach, whatever it is pinned to.
+    Any,
+    /// Return only the zones pinned to no account.
+    Unassigned,
+    /// Return only the zones pinned to this account.
+    Assigned(String),
+}
+
+impl ZoneProviderAccountFilter {
+    /// Reads the filter off the raw query value.
+    ///
+    /// A blank value is an omission, matching every other optional query string on
+    /// this surface: `?provider_account_id=` is what a cleared form field submits,
+    /// and reading it as "the account whose id is the empty string" would turn a
+    /// cleared filter into an empty list.
+    ///
+    /// The reserved literal is matched case-sensitively on purpose. Account ids are
+    /// case-sensitive, so folding case here would make `unassigned` mean something
+    /// the caller's own account id `unassigned` does not.
+    pub fn from_query(value: Option<&str>) -> Self {
+        match value.map(str::trim) {
+            None | Some("") => Self::Any,
+            Some(ZONE_PROVIDER_ACCOUNT_UNASSIGNED) => Self::Unassigned,
+            Some(account_id) => Self::Assigned(account_id.to_owned()),
+        }
+    }
+}
+
+impl ListDomainZonesQuery {
+    /// Resolves the query's pin member into the filter the store reads.
+    ///
+    /// A method rather than a field on the query so the wire shape stays a plain
+    /// optional string — the three states exist for the store's benefit, and putting
+    /// them on the deserialized struct would mean the query could hold a state the
+    /// wire cannot express.
+    pub fn provider_account_filter(&self) -> ZoneProviderAccountFilter {
+        ZoneProviderAccountFilter::from_query(self.provider_account_id.as_deref())
+    }
 }
 
 #[async_trait]
@@ -1119,6 +1190,146 @@ pub trait DeployAppApi: Send + Sync {
             "bind_app_source_spec_source API is not implemented".to_owned(),
         ))
     }
+
+    // -- app template marketplace ---------------------------------------------
+
+    async fn list_template_categories(
+        &self,
+        _context: &DeployAppRequestContext,
+        _include_disabled: bool,
+    ) -> DeployServiceResult<crate::template_market::TemplateCategoryPage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_template_categories API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn list_marketplace_templates(
+        &self,
+        _context: &DeployAppRequestContext,
+        _query: &crate::template_market::ListMarketplaceTemplatesQuery,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateSummaryPage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_marketplace_templates API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn retrieve_marketplace_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "retrieve_marketplace_template API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn create_template_purchase(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+        _idempotency_key: &str,
+        _request: &crate::template_market::CreateTemplatePurchaseRequest,
+    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "create_template_purchase API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn list_app_templates(
+        &self,
+        _context: &DeployAppRequestContext,
+        _query: &crate::template_market::ListAppTemplatesQuery,
+    ) -> DeployServiceResult<crate::template_market::AppTemplatePage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_app_templates API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn create_app_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _idempotency_key: &str,
+        _request: &crate::template_market::CreateAppTemplateRequest,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "create_app_template API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn retrieve_app_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "retrieve_app_template API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn update_app_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+        _request: &crate::template_market::UpdateAppTemplateRequest,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "update_app_template API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn delete_app_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        Err(crate::DeployServiceError::Internal(
+            "delete_app_template API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn submit_app_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "submit_app_template API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn list_app_template_versions(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+        _page: i32,
+        _page_size: i32,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionPage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_app_template_versions API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn create_app_template_version(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+        _idempotency_key: &str,
+        _request: &crate::template_market::CreateAppTemplateVersionRequest,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "create_app_template_version API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn list_template_purchases(
+        &self,
+        _context: &DeployAppRequestContext,
+        _query: &crate::template_market::ListTemplatePurchasesQuery,
+    ) -> DeployServiceResult<crate::template_market::TemplatePurchasePage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_template_purchases API is not implemented".to_owned(),
+        ))
+    }
 }
 
 #[async_trait]
@@ -1342,4 +1553,104 @@ pub trait DeployBackendApi: Send + Sync {
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<SourceEventPage>;
+
+    // -- app template marketplace (admin) --------------------------------------
+
+    async fn list_template_categories(
+        &self,
+        context: &DeployBackendRequestContext,
+        include_disabled: bool,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<crate::template_market::TemplateCategoryPage>;
+
+    async fn create_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        request: &crate::template_market::CreateTemplateCategoryRequest,
+    ) -> DeployServiceResult<crate::template_market::TemplateCategoryResponse>;
+
+    async fn retrieve_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::TemplateCategoryResponse>;
+
+    async fn update_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+        request: &crate::template_market::UpdateTemplateCategoryRequest,
+    ) -> DeployServiceResult<crate::template_market::TemplateCategoryResponse>;
+
+    async fn delete_template_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+    ) -> DeployServiceResult<()>;
+
+    async fn list_app_templates(
+        &self,
+        context: &DeployBackendRequestContext,
+        query: &crate::template_market::ListAppTemplatesAdminQuery,
+    ) -> DeployServiceResult<crate::template_market::AppTemplatePage>;
+
+    async fn retrieve_app_template(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse>;
+
+    async fn update_app_template(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+        request: &crate::template_market::UpdateAppTemplateAdminRequest,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse>;
+
+    async fn delete_app_template(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+    ) -> DeployServiceResult<()>;
+
+    async fn list_app_template_versions(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionPage>;
+
+    async fn retrieve_app_template_version(
+        &self,
+        context: &DeployBackendRequestContext,
+        template_uuid: &str,
+        version_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse>;
+
+    async fn list_template_purchases(
+        &self,
+        context: &DeployBackendRequestContext,
+        query: &crate::template_market::ListTemplatePurchasesQuery,
+    ) -> DeployServiceResult<crate::template_market::TemplatePurchasePage>;
+
+    async fn retrieve_template_purchase(
+        &self,
+        context: &DeployBackendRequestContext,
+        purchase_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
+
+    async fn settle_template_purchase(
+        &self,
+        context: &DeployBackendRequestContext,
+        purchase_uuid: &str,
+        request: &crate::template_market::SettleTemplatePurchaseRequest,
+    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
+
+    async fn revoke_template_purchase(
+        &self,
+        context: &DeployBackendRequestContext,
+        purchase_uuid: &str,
+    ) -> DeployServiceResult<crate::template_market::TemplatePurchaseResponse>;
 }

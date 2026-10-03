@@ -1564,8 +1564,303 @@ impl DeployRepositoryPort for DeployRepository {
         self.resolve_active_app_by_hostname_repo(hostname, environment)
             .await
     }
-}
 
+    // -- app template marketplace ----------------------------------------------
+
+    async fn list_template_categories(
+        &self,
+        tenant_id: Option<i64>,
+        include_disabled: bool,
+        page: i32,
+        page_size: i32,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryPage>
+    {
+        self.list_template_categories_repo(tenant_id, include_disabled, page, page_size)
+            .await
+    }
+
+    async fn create_template_category(
+        &self,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        actor_id: Option<i64>,
+        request: &sdkwork_deploy_contract::CreateTemplateCategoryRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplateCategoryResponse,
+    > {
+        self.create_template_category_repo(tenant_id, organization_id, actor_id, request)
+            .await
+    }
+
+    async fn retrieve_template_category(
+        &self,
+        tenant_id: Option<i64>,
+        category_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplateCategoryResponse,
+    > {
+        self.retrieve_template_category_repo(tenant_id, category_uuid)
+            .await
+    }
+
+    async fn update_template_category(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        category_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateTemplateCategoryRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplateCategoryResponse,
+    > {
+        self.update_template_category_repo(tenant_id, actor_id, category_uuid, request)
+            .await
+    }
+
+    async fn delete_template_category(
+        &self,
+        tenant_id: i64,
+        category_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
+        self.delete_template_category_repo(tenant_id, category_uuid)
+            .await
+    }
+
+    async fn list_marketplace_templates(
+        &self,
+        tenant_id: i64,
+        query: &sdkwork_deploy_contract::ListMarketplaceTemplatesQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateSummaryPage>
+    {
+        self.list_marketplace_templates_repo(tenant_id, query).await
+    }
+
+    async fn retrieve_marketplace_template(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
+    {
+        self.retrieve_marketplace_template_repo(tenant_id, template_uuid)
+            .await
+    }
+
+    async fn list_app_templates(
+        &self,
+        tenant_id: i64,
+        author_user_id: Option<i64>,
+        query: &sdkwork_deploy_contract::ListAppTemplatesQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage>
+    {
+        self.list_app_templates_repo(tenant_id, author_user_id, query)
+            .await
+    }
+
+    async fn list_app_templates_admin(
+        &self,
+        tenant_id: Option<i64>,
+        query: &sdkwork_deploy_contract::ListAppTemplatesAdminQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage>
+    {
+        self.list_app_templates_admin_repo(tenant_id, query).await
+    }
+
+    async fn retrieve_app_template(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
+    {
+        self.retrieve_app_template_repo(tenant_id, author_user_id, template_uuid)
+            .await
+    }
+
+    async fn create_app_template(
+        &self,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        actor_id: Option<i64>,
+        request: &sdkwork_deploy_contract::CreateAppTemplateRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
+    {
+        self.create_app_template_repo(tenant_id, organization_id, actor_id, request)
+            .await
+    }
+
+    async fn update_app_template(
+        &self,
+        tenant_id: i64,
+        author_user_id: i64,
+        template_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateAppTemplateRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
+    {
+        self.update_app_template_repo(tenant_id, author_user_id, template_uuid, request)
+            .await
+    }
+
+    async fn delete_app_template(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
+        self.delete_app_template_repo(tenant_id, author_user_id, template_uuid)
+            .await
+    }
+
+    async fn submit_app_template(
+        &self,
+        tenant_id: i64,
+        author_user_id: i64,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
+    {
+        self.submit_app_template_repo(tenant_id, author_user_id, template_uuid)
+            .await
+    }
+
+    async fn list_app_template_versions(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage>
+    {
+        self.list_app_template_versions_repo(
+            tenant_id,
+            author_user_id,
+            template_uuid,
+            page,
+            page_size,
+        )
+        .await
+    }
+
+    async fn retrieve_app_template_version(
+        &self,
+        tenant_id: Option<i64>,
+        author_user_id: Option<i64>,
+        template_uuid: &str,
+        version_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::AppTemplateVersionResponse,
+    > {
+        self.retrieve_app_template_version_repo(
+            tenant_id,
+            author_user_id,
+            template_uuid,
+            version_uuid,
+        )
+        .await
+    }
+
+    async fn create_app_template_version(
+        &self,
+        tenant_id: i64,
+        author_user_id: i64,
+        template_uuid: &str,
+        request: &sdkwork_deploy_contract::CreateAppTemplateVersionRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::AppTemplateVersionResponse,
+    > {
+        self.create_app_template_version_repo(tenant_id, author_user_id, template_uuid, request)
+            .await
+    }
+
+    async fn review_app_template(
+        &self,
+        tenant_id: Option<i64>,
+        operator_id: Option<i64>,
+        template_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateAppTemplateAdminRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
+    {
+        self.review_app_template_repo(tenant_id, operator_id, template_uuid, request)
+            .await
+    }
+
+    async fn list_template_purchases(
+        &self,
+        tenant_id: i64,
+        buyer_user_id: Option<i64>,
+        query: &sdkwork_deploy_contract::ListTemplatePurchasesQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::TemplatePurchasePage>
+    {
+        self.list_template_purchases_repo(tenant_id, buyer_user_id, query)
+            .await
+    }
+
+    async fn list_template_purchases_admin(
+        &self,
+        tenant_id: Option<i64>,
+        query: &sdkwork_deploy_contract::ListTemplatePurchasesQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::TemplatePurchasePage>
+    {
+        self.list_template_purchases_admin_repo(tenant_id, query)
+            .await
+    }
+
+    async fn retrieve_template_purchase(
+        &self,
+        tenant_id: Option<i64>,
+        purchase_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplatePurchaseResponse,
+    > {
+        self.retrieve_template_purchase_repo(tenant_id, purchase_uuid)
+            .await
+    }
+
+    async fn create_template_purchase(
+        &self,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        buyer_user_id: i64,
+        template_uuid: &str,
+        idempotency_key: &str,
+        request: &sdkwork_deploy_contract::CreateTemplatePurchaseRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplatePurchaseResponse,
+    > {
+        self.create_template_purchase_repo(
+            tenant_id,
+            organization_id,
+            buyer_user_id,
+            template_uuid,
+            idempotency_key,
+            request,
+        )
+        .await
+    }
+
+    async fn settle_template_purchase(
+        &self,
+        tenant_id: Option<i64>,
+        operator_id: Option<i64>,
+        purchase_uuid: &str,
+        request: &sdkwork_deploy_contract::SettleTemplatePurchaseRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplatePurchaseResponse,
+    > {
+        self.settle_template_purchase_repo(tenant_id, operator_id, purchase_uuid, request)
+            .await
+    }
+
+    async fn revoke_template_purchase(
+        &self,
+        tenant_id: Option<i64>,
+        operator_id: Option<i64>,
+        purchase_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::TemplatePurchaseResponse,
+    > {
+        self.revoke_template_purchase_repo(tenant_id, operator_id, purchase_uuid)
+            .await
+    }
+}
 #[async_trait]
 impl DeployRuntimeAssignmentRepositoryPort for DeployRepository {
     async fn latest_runtime_assignment(

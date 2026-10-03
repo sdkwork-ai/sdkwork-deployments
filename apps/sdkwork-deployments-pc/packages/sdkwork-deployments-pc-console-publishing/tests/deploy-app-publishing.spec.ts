@@ -658,7 +658,9 @@ describe("acceptance: real sdkwork-im layout", () => {
  */
 describe("listApps ownership facet", () => {
   function serviceWithSpy() {
-    const list = vi.fn(async () => ({
+    // Parameters mirror the real app.list signature, otherwise the zero-arg
+    // tuple leaves mock.calls[0] with no element 0 to assert on.
+    const list = vi.fn(async (_params?: unknown, _options?: unknown) => ({
       items: [],
       pageInfo: { mode: "offset" as const, page: 1, pageSize: 50, hasMore: false },
     }));

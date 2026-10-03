@@ -45,6 +45,7 @@ async fn test_repository() -> (DeployRepository, PgPool) {
 /// tenant the lookup answered "free" and the INSERT died on the constraint,
 /// surfacing as a masked 500 with no hint about whose zone was in the way.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn platform_zone_provisioning_reports_foreign_tenant_apex_as_conflict() {
     let (repository, pool) = test_repository().await;
     sqlx::query(
@@ -83,6 +84,7 @@ async fn platform_zone_provisioning_reports_foreign_tenant_apex_as_conflict() {
 /// suffix collides must not abort the suffixes that are still free, or a single
 /// operator domain would block app publishing platform-wide.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn platform_zone_provisioning_refuses_to_nest_under_a_user_zone() {
     let (repository, pool) = test_repository().await;
     sqlx::query(
@@ -131,6 +133,7 @@ async fn platform_zone_provisioning_refuses_to_nest_under_a_user_zone() {
 /// when the caller asks twice. Guards against the overlap check above rejecting
 /// the provisioner's own zone.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn platform_zone_provisioning_stays_idempotent_for_its_own_tenant() {
     let (repository, pool) = test_repository().await;
     let created = repository
@@ -162,6 +165,7 @@ async fn platform_zone_provisioning_stays_idempotent_for_its_own_tenant() {
 /// operator-controlled hostname while the platform reported the domain as
 /// provisioned, and the operator's zone silently became undeletable.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn provisioning_refuses_to_adopt_an_operator_owned_hostname() {
     let (repository, pool) = test_repository().await;
     // Pin the app to a single suffix so the assertion is about the collision

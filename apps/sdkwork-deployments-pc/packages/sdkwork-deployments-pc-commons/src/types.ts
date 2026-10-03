@@ -14,9 +14,11 @@ export type DeploymentsSurface = "app-console" | "backend-admin";
  *
  * `sourceSpecs` is the operation-plane counterpart of the console's per-app
  * "source specs" drawer: same rows, read across applications instead of within
- * one.
+ * one. The template-marketplace ids split the capability across both surfaces:
+ * the admin moderates `templateCategories` / `appTemplates` / `templatePurchases`,
+ * the console browses `marketplace` and manages `myTemplates`.
  */
-export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs";
+export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs" | "templateCategories" | "appTemplates" | "templatePurchases" | "marketplace" | "myTemplates";
 export interface DeploymentsModuleEntry { description: string; label: string; order: number; permission?: string | undefined; resource: DeploymentsResourceKey; }
 export interface DeploymentsPcModuleDefinition { entries: readonly DeploymentsModuleEntry[]; id: string; label: string; surface: DeploymentsSurface; }
 export interface DeploymentsQuery { page: number; pageSize: number; scopeId?: string | undefined; search?: string | undefined; }

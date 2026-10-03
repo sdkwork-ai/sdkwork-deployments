@@ -131,6 +131,7 @@ pub fn build_router_with_shared_app_api(api: Arc<dyn DeployAppApi>) -> Router {
         .merge(build_certificate_management_router())
         .merge(build_cloud_account_router())
         .merge(crate::app_delivery_routes::build_app_delivery_router())
+        .merge(crate::template_market_routes::build_template_market_router())
         .route(paths::UPLOAD_SESSIONS, post(create_upload_session))
         .route(paths::UPLOAD_SESSION, get(retrieve_upload_session))
         .route(

@@ -51,6 +51,11 @@ const en = {
   cloudAccountFamilyUnrecognized: "This build cannot drive {value}, so accounts are not filtered. Use {options}; use manual when records are published by hand.",
   cloudAccountOnlyCandidate: "The only {family} account is {name}.",
   cloudAccountNotRequired: "The provider is declared manual, so the TXT record is published by hand and no cloud account takes part.",
+  // The root-domain list's cloud-account facet. It offers the caller's own
+  // accounts only: the console reads the zones it owns, so an account it cannot
+  // bind is not a filter it can act on.
+  cloudAccountFilterAll: "All cloud accounts",
+  cloudAccountFilterUnassigned: "No cloud account",
   cloudAccountIdentifierAliyun: "AccessKey ID",
   cloudAccountIdentifierDnspod: "Login ID",
   cloudAccountSecretAliyun: "AccessKey Secret",
@@ -305,6 +310,10 @@ const zh: Record<keyof typeof en, string> = {
   cloudAccountScopePlatform: "平台",
   cloudAccountScopeTenant: "租户全局",
   cloudAccountScopeUser: "个人",
+  // 根域名列表的云账号筛选。只列出调用者自己的账号：控制台读的是自己拥有的
+  // Zone，无法绑定的账号不是它能使用的筛选条件。
+  cloudAccountFilterAll: "全部云账号",
+  cloudAccountFilterUnassigned: "未绑定云账号",
   cloudAccountSecret: "鉴权密钥",
   cloudAccountSecretHint: "由账号中心加密存储，保存后不再回显。",
   cloudAccountUnconfigured: "当前部署未接入云账号中心，仅能使用部署级 DNS 凭据。",

@@ -1,0 +1,29 @@
+name: sdkwork_deployments_flutter
+description: SDKWork Deployments Flutter client — app template marketplace.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Generated transport (`pnpm sdk:generate:app`, flutter target). Never call
+  # raw HTTP from this app — every request goes through the generated client.
+  sdkwork_deployments_app_sdk:
+    path: ../../sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-flutter/generated/server-openapi
+
+dependency_overrides:
+  # The generated package's commons dependency is workspace-local, same as the
+  # iam flutter family (see its generated pubspec_overrides.yaml).
+  sdkwork_common_flutter:
+    path: ../../../sdkwork-sdk-commons/sdkwork-sdk-common-flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

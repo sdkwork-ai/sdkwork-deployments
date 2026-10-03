@@ -21,7 +21,7 @@
   },
   "sdkOwner": "sdkwork-deploy",
   "apiAuthority": "sdkwork-deploy-app-api",
-  "ownerOnlyOperationCount": 89,
+  "ownerOnlyOperationCount": 102,
   "standardProfile": "sdkwork-v3",
   "discoverySurface": {
     "sdkTarget": "app",
@@ -75,13 +75,27 @@
       "generatedPath": "sdkwork-deployments-app-sdk-typescript/generated/server-openapi",
       "consumerPackageName": "@sdkwork/deployments-app-sdk",
       "transportPackageName": "sdkwork-deployments-app-sdk-generated-typescript"
+    },
+    {
+      "language": "flutter",
+      "workspace": "sdkwork-deployments-app-sdk-flutter",
+      "generationState": "materialized",
+      "releaseState": "not_published",
+      "packagePath": "sdkwork-deployments-app-sdk-flutter/generated/server-openapi",
+      "manifestPath": "sdkwork-deployments-app-sdk-flutter/generated/server-openapi/pubspec.yaml",
+      "version": "0.1.0",
+      "description": "Generator-owned Flutter/Dart transport SDK for SDKWork Deploy App API.",
+      "generatedPath": "sdkwork-deployments-app-sdk-flutter/generated/server-openapi",
+      "consumerPackageName": "sdkwork_deployments_app_sdk",
+      "transportPackageName": "sdkwork_deployments_app_sdk"
     }
   ],
   "metadata": {
     "managedBy": "tools/materialize_deploy_phase1_contracts.mjs",
     "standardProfile": "sdkwork-v3",
     "supportedLanguageSubset": [
-      "typescript"
+      "typescript",
+      "flutter"
     ]
   },
   "openApiPath": "openapi/deploy-app-api.openapi.json",

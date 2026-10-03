@@ -15,6 +15,9 @@ The repository root `sdkwork.app.config.json` governs the primary application ma
 | Directory | Surface role | Runnable | Purpose | Entry |
 | --- | --- | --- | --- | --- |
 | sdkwork-deployments-pc | pc | yes | SDKWork Deployments Console and backend-admin publishing control plane | [README](sdkwork-deployments-pc/README.md) |
+| sdkwork-deployments-h5 | h5 | yes | Mobile web surface of the app template marketplace (browse, acquire, my templates) | [README](sdkwork-deployments-h5/README.md) |
+| sdkwork-deployments-flutter | flutter | yes | Flutter surface of the app template marketplace over the generated Dart SDK | [README](sdkwork-deployments-flutter/README.md) |
+| sdkwork-deployments-mini-program | mini-program | yes | WeChat mini-program surface of the app template marketplace | [README](sdkwork-deployments-mini-program/README.md) |
 
 ## Allowed Content
 

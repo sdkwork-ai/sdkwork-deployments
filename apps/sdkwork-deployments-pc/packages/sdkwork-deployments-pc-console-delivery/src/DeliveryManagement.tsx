@@ -52,6 +52,19 @@ import { type RootDomainIssue, isRootDomainApex, validateRootDomain } from "./ro
 import { SideDrawer } from "./SideDrawer.tsx";
 
 type Translator = (key: DeliveryMessageKey, values?: Record<string, string | number>) => string;
+
+/**
+ * The root-domain list's cloud-account facet, in the three states the wire has.
+ *
+ * `ALL` is the page's own "no filter" and is never sent — an absent query member is
+ * what the contract reads as "every zone", exactly as the status segment omits
+ * `status` for ALL. `UNASSIGNED` *is* sent, because "pinned to no account" is a real
+ * restriction; it is the reserved literal the contract defines for exactly this,
+ * chosen so it cannot collide with an account id.
+ */
+const ALL_CLOUD_ACCOUNTS = "ALL";
+const UNASSIGNED_CLOUD_ACCOUNT = "UNASSIGNED";
+
 type ZoneDialog =
   | { kind: "create" }
   | { kind: "edit"; zone: DomainZoneResponse }
@@ -76,10 +89,48 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
   const [searchDraft, setSearchDraft] = useState("");
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState<"ALL" | "ACTIVE" | "PAUSED">("ALL");
+  /**
+   * The cloud-account facet, in the same three states the wire has.
+   *
+   * The reserved `UNASSIGNED` literal is this control's second option and is sent
+   * verbatim: "show me the domains whose DNS resolves per operation" is a question
+   * an operator asks, and spelling it as an omission would make it unaskable.
+   */
+  const [cloudAccount, setCloudAccount] = useState<string>(ALL_CLOUD_ACCOUNTS);
+  /**
+   * The accounts this facet may offer: the caller's own, and nothing wider.
+   *
+   * `mine` is what keeps the console to the accounts that are *its*. The tenant
+   * console is a personal surface, so a platform-scope account — the deployment's
+   * own infrastructure credential rather than one an operator bound — has no
+   * business appearing as one of "my cloud accounts". The operations surface
+   * (`/admin/domains`) is where every account is offered, because the whole-tenant
+   * inventory belongs there.
+   *
+   * A row can still carry a pin this list does not return, and it stays nameable:
+   * the options below fold in whatever the loaded rows say.
+   */
+  const [cloudAccounts, setCloudAccounts] = useState<CloudAccountResponse[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [dialog, setDialog] = useState<ZoneDialog>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    // A failed read is an empty list rather than an error banner: the facet is an
+    // *offer*, and "All" and "No cloud account" are the page's own states and need
+    // no inventory. A caller without the account-center read loses suggestions, not
+    // the ability to filter.
+    void service.listCloudAccounts({ pageSize: 200, mine: true })
+      .then((result) => {
+        if (active) setCloudAccounts(result.items);
+      })
+      .catch(() => {
+        if (active) setCloudAccounts([]);
+      });
+    return () => { active = false; };
+  }, [service]);
 
   useEffect(() => {
     let active = true;
@@ -98,6 +149,10 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       keyword: keyword || undefined,
       status: status === "ALL" ? undefined : status,
       scope: "USER",
+      // `ALL` is the page's own "no filter" and is omitted, exactly as the status
+      // segment omits its own ALL: the wire has no wildcard value for it, and a
+      // sentinel would be an account nobody has.
+      providerAccountId: cloudAccount === ALL_CLOUD_ACCOUNTS ? undefined : cloudAccount,
     }).then((result) => {
       if (!active) return;
       // This table is the root-domain list, so every row it shows has to be a
@@ -132,7 +187,31 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       if (active) setBusy(false);
     });
     return () => { active = false; };
-  }, [keyword, page, pageSize, refreshVersion, service, status]);
+  }, [cloudAccount, keyword, page, pageSize, refreshVersion, service, status]);
+
+  /**
+   * The accounts the facet offers, keyed by id so an account that is both bound to
+   * a row and returned by the account center is listed once.
+   *
+   * A row's pin can name an account the center did not return — deleted there, or
+   * invisible to this caller — and that account is still what the row says and still
+   * what the operator would filter on to find its siblings. A `<select>` whose value
+   * matches no option silently renders its first entry instead, so the current
+   * selection is folded in as well.
+   */
+  const cloudAccountOptions = useMemo(() => {
+    const byId = new Map(cloudAccounts.map((account) => [account.id, account]));
+    const bindings = [
+      cloudAccount,
+      ...zones.map((zone) => zone.providerAccountId ?? ""),
+    ].filter((accountId) => accountId !== "" && accountId !== ALL_CLOUD_ACCOUNTS && accountId !== UNASSIGNED_CLOUD_ACCOUNT);
+    for (const accountId of bindings) {
+      if (!byId.has(accountId)) byId.set(accountId, { displayName: accountId, id: accountId } as CloudAccountResponse);
+    }
+    return [...byId.values()].sort((left, right) =>
+      (left.displayName || left.accountCode || left.id).localeCompare(right.displayName || right.accountCode || right.id, locale),
+    );
+  }, [cloudAccount, cloudAccounts, locale, zones]);
 
   const reload = () => setRefreshVersion((value) => value + 1);
   const closeAndReload = () => { setDialog(undefined); reload(); };
@@ -160,6 +239,20 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
     },
     { id: "status", header: t("status"), cell: (zone) => <StatusBadge value={zone.status} t={t} />, width: 110 },
     {
+      id: "providerAccountId",
+      header: t("cloudAccount"),
+      // The pin the facet selects on, shown from the same option list so the row
+      // and the filter read identically. An unpinned zone says so rather than
+      // rendering a blank cell, because "resolves per operation" is the answer to
+      // the question the column asks, not the absence of one.
+      cell: (zone) => zone.providerAccountId === undefined
+        ? <small className="cell-subtitle">{t("cloudAccountFilterUnassigned")}</small>
+        : (cloudAccountOptions.find((account) => account.id === zone.providerAccountId)?.displayName
+          || cloudAccountOptions.find((account) => account.id === zone.providerAccountId)?.accountCode
+          || zone.providerAccountId),
+      width: 180,
+    },
+    {
       id: "hostnameCount",
       header: t("hostnames"),
       cell: (zone) => <><strong>{zone.hostnameCount}</strong><small className="cell-subtitle">{t("verifiedSummary", { verified: zone.verifiedHostnameCount, total: zone.hostnameCount })}</small></>,
@@ -168,7 +261,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
     { id: "certificateCount", header: t("certificates"), cell: (zone) => zone.certificateCount, width: 110 },
     { id: "bindingCount", header: t("appBindings"), cell: (zone) => zone.bindingCount, width: 110 },
     { id: "updatedAt", header: t("updated"), cell: (zone) => formatDate(zone.updatedAt, locale), width: 180 },
-  ], [locale, t]);
+  ], [cloudAccountOptions, locale, t]);
 
   return <section className="resource-page domain-page">
     <div className="resource-commandbar">
@@ -180,6 +273,24 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
         <div className="segmented-control" aria-label={t("status")}>
           {(["ALL", "ACTIVE", "PAUSED"] as const).map((value) => <button key={value} type="button" aria-pressed={status === value} onClick={() => { setPage(1); setStatus(value); }}>{value === "ALL" ? t("all") : value === "ACTIVE" ? t("active") : t("paused")}</button>)}
         </div>
+        {/* A single-choice list rather than a second segmented control: the accounts
+            are tenant data, so the number of choices is not fixed and a segment row
+            would grow without bound, while the status row's three values are the
+            column's own vocabulary. "All" and "No cloud account" are always
+            offered — they are the page's own states and need no inventory. */}
+        <label className="cloud-account-filter">
+          <span>{t("cloudAccount")}</span>
+          <select
+            value={cloudAccount}
+            onChange={(event) => { setPage(1); setCloudAccount(event.target.value); }}
+          >
+            <option value={ALL_CLOUD_ACCOUNTS}>{t("cloudAccountFilterAll")}</option>
+            <option value={UNASSIGNED_CLOUD_ACCOUNT}>{t("cloudAccountFilterUnassigned")}</option>
+            {cloudAccountOptions.map((account) => (
+              <option key={account.id} value={account.id}>{account.displayName || account.accountCode || account.id}</option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="actions">
         <button className="icon-button" type="button" disabled={busy} title={t("refresh")} onClick={reload}><RefreshCw size={17} /></button>

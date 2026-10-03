@@ -91,6 +91,7 @@ fn descriptor(app_uuid: &str, marker: &str) -> serde_json::Value {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn provisions_default_domains_and_bindings_idempotently() {
     let (repository, pool) = test_repository().await;
     let zones = repository
@@ -147,6 +148,7 @@ async fn provisions_default_domains_and_bindings_idempotently() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn every_environment_gets_its_own_publishable_hostname() {
     let (repository, _) = test_repository().await;
     for environment in ["development", "test", "staging", "demo", "production"] {
@@ -179,6 +181,7 @@ async fn every_environment_gets_its_own_publishable_hostname() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn custom_app_domain_label_replaces_the_app_id_prefix() {
     let (repository, _) = test_repository().await;
     sqlx::query("UPDATE deploy_app SET app_domain_label = $1 WHERE id = 10")
@@ -225,6 +228,7 @@ async fn custom_app_domain_label_replaces_the_app_id_prefix() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn per_app_suffix_override_replaces_the_platform_catalog() {
     let (repository, _) = test_repository().await;
     sqlx::query("UPDATE deploy_app SET app_domain_suffixes = $1 WHERE id = 10")
@@ -270,6 +274,7 @@ async fn per_app_suffix_override_replaces_the_platform_catalog() {
 /// carrying `appDomainSuffixes`. This drives both writes through the real port
 /// and asserts the value round-trips out of the JSONB column.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
     use sdkwork_deploy_contract::{CreateAppRequest, DeployAppRequestContext, UpdateAppRequest};
     use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
@@ -408,6 +413,7 @@ async fn app_domain_suffix_overrides_round_trip_through_the_write_port() {
 /// catches a typo here — every other test in this file exercises provisioning
 /// and hostname resolution instead.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn lists_app_domains_with_the_zone_apex_projected() {
     let (repository, _pool) = test_repository().await;
     repository
@@ -466,6 +472,7 @@ async fn lists_app_domains_with_the_zone_apex_projected() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn resolves_the_newest_valid_revision_of_the_matching_environment() {
     let (repository, pool) = test_repository().await;
     for environment in ["production", "development"] {
@@ -536,6 +543,7 @@ async fn resolves_the_newest_valid_revision_of_the_matching_environment() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn paused_and_archived_apps_stop_resolving() {
     let (repository, pool) = test_repository().await;
     repository
@@ -563,6 +571,7 @@ async fn paused_and_archived_apps_stop_resolving() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn app_nginx_conf_and_environment_override_are_resolved() {
     let (repository, pool) = test_repository().await;
     repository
@@ -641,6 +650,7 @@ async fn app_nginx_conf_and_environment_override_are_resolved() {
 }
 
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn resolves_custom_domains_and_respects_environment() {
     let (repository, pool) = test_repository().await;
     repository
@@ -708,6 +718,7 @@ async fn resolves_custom_domains_and_respects_environment() {
 /// The site file is redirected to a temp path so the test exercises the real
 /// read + publish path without touching an nginx installation.
 #[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn deploy_nginx_config_projects_the_primary_hostname_from_the_binding() {
     let (repository, pool) = test_repository().await;
     repository

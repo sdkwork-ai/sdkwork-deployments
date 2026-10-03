@@ -1,6 +1,8 @@
 packages:
   - "apps/sdkwork-deployments-pc"
   - "apps/sdkwork-deployments-pc/packages/*"
+  - "apps/sdkwork-deployments-h5"
+  - "apps/sdkwork-deployments-mini-program"
   - "sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-typescript"
   - "sdks/sdkwork-deployments-backend-sdk/sdkwork-deployments-backend-sdk-typescript"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-contracts"
@@ -9,6 +11,7 @@ packages:
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-sdk-adapter"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-service"
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-application-bootstrap"
+  - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-desktop-auth"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-pc-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-auth-runtime-pc-react"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-iam-react"

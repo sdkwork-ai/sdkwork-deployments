@@ -50,6 +50,19 @@ paths:
           enum:
           - USER
           - PLATFORM
+      - name: provider_account_id
+        in: query
+        description: >-
+          Restrict the inventory to the zones pinned to one cloud account.
+          Omitted filters nothing. The literal `UNASSIGNED` selects the zones
+          pinned to no account — the ones whose account resolves per operation.
+          The literal cannot collide with a real account id, because the id shape
+          admits only ASCII alphanumerics and `_.:-` after a leading alphanumeric.
+          A facet, not a grant: it can only narrow the zones the owner gate
+          already allows the caller to reach.
+        schema:
+          type: string
+          maxLength: 128
       responses:
         '200':
           description: Success
@@ -4259,6 +4272,630 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
+  /app/v3/api/template_categories:
+    get:
+      operationId: templateCategories.list
+      summary: List template categories
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - name: include_disabled
+        in: query
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/TemplateCategoryResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/marketplace/templates:
+    get:
+      operationId: marketplaceTemplates.list
+      summary: Browse the tenant app template marketplace
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      - name: keyword
+        in: query
+        schema:
+          type: string
+          maxLength: 128
+      - name: category_uuid
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: pricing_model
+        in: query
+        schema:
+          type: string
+          enum:
+          - FREE
+          - PAID
+      - name: template_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - APP
+          - PPT
+          - VIDEO
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+          - NEWEST
+          - POPULAR
+          default: NEWEST
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/AppTemplateSummaryResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/marketplace/templates/{templateUuid}:
+    parameters:
+    - name: templateUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: marketplaceTemplates.retrieve
+      summary: Retrieve a marketplace app template
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
+  /app/v3/api/marketplace/templates/{templateUuid}/purchase:
+    parameters:
+    - name: templateUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: templatePurchases.create
+      summary: Acquire a marketplace app template
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplatePurchaseRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/TemplatePurchaseResponse'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/app_templates:
+    get:
+      operationId: appTemplates.list
+      summary: List the caller's app templates
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      - name: keyword
+        in: query
+        schema:
+          type: string
+          maxLength: 128
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - PENDING_REVIEW
+          - PUBLISHED
+          - REJECTED
+          - DISABLED
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/AppTemplateResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    post:
+      operationId: appTemplates.create
+      summary: Publish an app as a template listing
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppTemplateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateResponse'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/app_templates/{templateUuid}:
+    parameters:
+    - name: templateUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: appTemplates.retrieve
+      summary: Retrieve the caller's app template
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
+    patch:
+      operationId: appTemplates.update
+      summary: Update the caller's app template listing
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppTemplateRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateResponse'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    delete:
+      operationId: appTemplates.delete
+      summary: Withdraw the caller's app template
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
+  /app/v3/api/app_templates/{templateUuid}/submit:
+    parameters:
+    - name: templateUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: appTemplates.submit
+      summary: Submit an app template for review
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateResponse'
+        '409':
+          description: 资源冲突
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/app_templates/{templateUuid}/versions:
+    parameters:
+    - name: templateUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: appTemplateVersions.list
+      summary: List versions of the caller's app template
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/AppTemplateVersionResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    post:
+      operationId: appTemplateVersions.create
+      summary: Add a version to the caller's app template
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppTemplateVersionRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateVersionResponse'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/template_purchases:
+    get:
+      operationId: templatePurchases.list
+      summary: List the caller's template purchases
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - $ref: '#/components/parameters/PageParam'
+      - $ref: '#/components/parameters/PageSizeParam'
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - ACTIVE
+          - REVOKED
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      additionalProperties: false
+                      required:
+                      - items
+                      - pageInfo
+                      properties:
+                        items:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/TemplatePurchaseResponse'
+                        pageInfo:
+                          $ref: '#/components/schemas/PageInfo'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 components:
   securitySchemes:
     AuthToken:
@@ -4352,6 +4989,532 @@ components:
         type: string
         format: uuid
   schemas:
+    TemplateCategoryResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - categoryKey
+      - displayName
+      - sortOrder
+      - status
+      - createdAt
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        categoryKey:
+          type: string
+          maxLength: 64
+        parentId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 512
+        sortOrder:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - DISABLED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          pattern: ^[0-9]+$
+    AppTemplateSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - templateType
+      - templateKey
+      - displayName
+      - summary
+      - categoryUuid
+      - visibility
+      - pricingModel
+      - priceMinor
+      - currency
+      - status
+      - isFeatured
+      - installCount
+      - viewCount
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateType:
+          type: string
+          enum:
+          - APP
+          - PPT
+          - VIDEO
+        templateKey:
+          type: string
+          maxLength: 64
+        displayName:
+          type: string
+          maxLength: 200
+        summary:
+          type: string
+          maxLength: 512
+        categoryUuid:
+          type: string
+          format: uuid
+        iconMediaRef:
+          type: string
+          maxLength: 512
+        coverMediaRef:
+          type: string
+          maxLength: 512
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - PRIVATE
+        pricingModel:
+          type: string
+          enum:
+          - FREE
+          - PAID
+        priceMinor:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+          x-sdkwork-money-unit: minor
+        currency:
+          type: string
+          maxLength: 8
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PENDING_REVIEW
+          - PUBLISHED
+          - REJECTED
+          - DISABLED
+        isFeatured:
+          type: boolean
+        installCount:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        viewCount:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        latestVersionUuid:
+          type: string
+          format: uuid
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          pattern: ^[0-9]+$
+    AppTemplateResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - templateType
+      - templateKey
+      - displayName
+      - summary
+      - description
+      - appUuid
+      - categoryUuid
+      - authorUserId
+      - visibility
+      - pricingModel
+      - priceMinor
+      - currency
+      - status
+      - isFeatured
+      - installCount
+      - viewCount
+      - createdAt
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateKey:
+          type: string
+          maxLength: 64
+        displayName:
+          type: string
+          maxLength: 200
+        summary:
+          type: string
+          maxLength: 512
+        description:
+          type: string
+        appUuid:
+          type: string
+          format: uuid
+        templateType:
+          type: string
+          enum:
+          - APP
+          - PPT
+          - VIDEO
+        categoryUuid:
+          type: string
+          format: uuid
+        authorUserId:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        iconMediaRef:
+          type: string
+          maxLength: 512
+        coverMediaRef:
+          type: string
+          maxLength: 512
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - PRIVATE
+        pricingModel:
+          type: string
+          enum:
+          - FREE
+          - PAID
+        priceMinor:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+          x-sdkwork-money-unit: minor
+        currency:
+          type: string
+          maxLength: 8
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PENDING_REVIEW
+          - PUBLISHED
+          - REJECTED
+          - DISABLED
+        reviewNote:
+          type: string
+          maxLength: 512
+        isFeatured:
+          type: boolean
+        installCount:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        viewCount:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        latestVersionUuid:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          pattern: ^[0-9]+$
+    AppTemplateVersionResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - templateUuid
+      - templateVersion
+      - changelog
+      - platformTargets
+      - packageSizeBytes
+      - status
+      - createdAt
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateUuid:
+          type: string
+          format: uuid
+        templateVersion:
+          type: string
+          maxLength: 64
+        changelog:
+          type: string
+        artifactUuid:
+          type: string
+          format: uuid
+        sourceAppVersion:
+          type: string
+          maxLength: 64
+        platformTargets:
+          type: array
+          items:
+            type: string
+        packageSizeBytes:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        checksumSha256:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - WITHDRAWN
+        publishedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          pattern: ^[0-9]+$
+    TemplatePurchaseResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - templateUuid
+      - versionUuid
+      - buyerUserId
+      - pricingModel
+      - priceMinor
+      - currency
+      - status
+      - createdAt
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateUuid:
+          type: string
+          format: uuid
+        versionUuid:
+          type: string
+          format: uuid
+        buyerUserId:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        pricingModel:
+          type: string
+          enum:
+          - FREE
+          - PAID
+        priceMinor:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+          x-sdkwork-money-unit: minor
+        currency:
+          type: string
+          maxLength: 8
+        paymentRef:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ACTIVE
+          - REVOKED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          pattern: ^[0-9]+$
+    CreateAppTemplateRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - appUuid
+      - categoryUuid
+      - templateKey
+      - displayName
+      - summary
+      properties:
+        appUuid:
+          type: string
+          format: uuid
+        templateType:
+          type: string
+          enum:
+          - APP
+          - PPT
+          - VIDEO
+          default: APP
+        categoryUuid:
+          type: string
+          format: uuid
+        templateKey:
+          type: string
+          minLength: 1
+          maxLength: 64
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 512
+        description:
+          type: string
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - PRIVATE
+          default: PRIVATE
+        pricingModel:
+          type: string
+          enum:
+          - FREE
+          - PAID
+          default: FREE
+        priceMinor:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+          x-sdkwork-money-unit: minor
+        currency:
+          type: string
+          maxLength: 8
+        iconMediaRef:
+          type: string
+          maxLength: 512
+        coverMediaRef:
+          type: string
+          maxLength: 512
+        initialVersion:
+          $ref: '#/components/schemas/CreateAppTemplateVersionRequest'
+    UpdateAppTemplateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 200
+        summary:
+          type: string
+          minLength: 1
+          maxLength: 512
+        description:
+          type: string
+        categoryUuid:
+          type: string
+          format: uuid
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - PRIVATE
+        pricingModel:
+          type: string
+          enum:
+          - FREE
+          - PAID
+        priceMinor:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+          x-sdkwork-money-unit: minor
+        currency:
+          type: string
+          maxLength: 8
+        iconMediaRef:
+          type: string
+          maxLength: 512
+        coverMediaRef:
+          type: string
+          maxLength: 512
+    CreateAppTemplateVersionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - version
+      properties:
+        version:
+          type: string
+          minLength: 1
+          maxLength: 64
+        changelog:
+          type: string
+        artifactUuid:
+          type: string
+          format: uuid
+        sourceAppVersion:
+          type: string
+          maxLength: 64
+        platformTargets:
+          type: array
+          items:
+            type: string
+        packageSizeBytes:
+          type: string
+          format: int64
+          minimum: 0
+          x-sdkwork-int64-string: true
+        checksumSha256:
+          type: string
+          maxLength: 128
+    CreateTemplatePurchaseRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        versionUuid:
+          type: string
+          format: uuid
     ProblemDetail:
       type: object
       additionalProperties: true

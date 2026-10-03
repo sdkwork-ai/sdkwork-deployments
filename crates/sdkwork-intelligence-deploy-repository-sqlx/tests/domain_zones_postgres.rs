@@ -55,6 +55,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
                 status: Some("ACTIVE".to_owned()),
                 keyword: Some("Production".to_owned()),
                 scope: None,
+                provider_account_id: None,
             },
         )
         .await
@@ -274,6 +275,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         status: None,
         keyword: None,
         scope: None,
+        provider_account_id: None,
     };
 
     // User 11 owns one zone, user 12 owns another in the same tenant, and the
@@ -504,6 +506,7 @@ async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
         status: None,
         keyword: None,
         scope: None,
+        provider_account_id: None,
     };
 
     let alice = service
@@ -637,6 +640,7 @@ async fn domain_zone_listing_puts_operator_zones_first_and_labels_their_scope() 
         status: None,
         keyword: None,
         scope: None,
+        provider_account_id: None,
     };
 
     // The operator's own root domain, created first.
@@ -744,6 +748,7 @@ async fn domain_zone_listing_filters_by_scope() {
         status: None,
         keyword: None,
         scope,
+        provider_account_id: None,
     };
 
     let operator_apex = format!("scoped{suffix}.dev");

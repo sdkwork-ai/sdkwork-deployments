@@ -1,3 +1,4 @@
+import { deploymentsModule as adminAppTemplates } from "@sdkwork/deployments-pc-admin-app-templates";
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { sourceSpecsModule, SourceSpecsAdminPage } from "@sdkwork/deployments-pc-admin-core";
 import { deploymentsModule as adminAudit } from "@sdkwork/deployments-pc-admin-audit";
@@ -10,6 +11,7 @@ import { deploymentsModule as adminNodes } from "@sdkwork/deployments-pc-admin-n
 import type { DeploymentsLocale, DeploymentsPcModuleDefinition } from "@sdkwork/deployments-pc-commons";
 import { createDeploymentsConsoleRegistry, DeploymentsConsoleProvider, useDeploymentsConsoleClients } from "@sdkwork/deployments-pc-console-core";
 import { deploymentsModule as delivery } from "@sdkwork/deployments-pc-console-delivery";
+import { deploymentsModule as marketplace, MarketplacePage, MyTemplatesPage } from "@sdkwork/deployments-pc-console-marketplace";
 import { deploymentsModule as monitoring } from "@sdkwork/deployments-pc-console-monitoring";
 import { deploymentsModule as publishing, PublishingAppsPage } from "@sdkwork/deployments-pc-console-publishing";
 import { DeploymentsConsoleShell } from "@sdkwork/deployments-pc-console-shell";
@@ -21,7 +23,7 @@ import { DeploymentsAuthGate } from "./auth/DeploymentsAuthGate.tsx";
 import type { BootstrappedDeploymentsRuntime } from "./bootstrap/runtime.ts";
 import { createSourceSpecsAdminPort } from "./ports/source-specs-admin-port.ts";
 
-const consoleModules = [publishing, delivery, monitoring] satisfies readonly DeploymentsPcModuleDefinition[];
+const consoleModules = [publishing, marketplace, delivery, monitoring] satisfies readonly DeploymentsPcModuleDefinition[];
 const LazyDomainManagementPage = lazy(() => import("@sdkwork/deployments-pc-console-delivery/management").then((module) => ({ default: module.DomainManagementPage })));
 const LazyCertificateManagementPage = lazy(() => import("@sdkwork/deployments-pc-console-delivery/management").then((module) => ({ default: module.CertificateManagementPage })));
 
@@ -29,14 +31,26 @@ const LazyCertificateManagementPage = lazy(() => import("@sdkwork/deployments-pc
  * Console bridge for the reusable publishing page: the publishing package stays
  * host-agnostic (clients arrive as props), and this app-level adapter pulls the
  * console clients from the provider so the page can mount in the workspace.
+ * The marketplace pages share the same contract, so they mount through the
+ * same shape of bridge.
  */
 function PublishingAppsBridge({ locale }: { locale: DeploymentsLocale }) {
   const { deploy, drive } = useDeploymentsConsoleClients();
   return <PublishingAppsPage deployClient={deploy} driveClient={drive} locale={locale} />;
 }
 
-const consoleResourcePages = { apps: PublishingAppsBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
-const adminModules = [localProjects, infrastructure, adminNodes, adminAudit, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
+function MarketplaceBridge({ locale }: { locale: DeploymentsLocale }) {
+  const { deploy } = useDeploymentsConsoleClients();
+  return <MarketplacePage deployClient={deploy} locale={locale} />;
+}
+
+function MyTemplatesBridge({ locale }: { locale: DeploymentsLocale }) {
+  const { deploy } = useDeploymentsConsoleClients();
+  return <MyTemplatesPage deployClient={deploy} locale={locale} />;
+}
+
+const consoleResourcePages = { apps: PublishingAppsBridge, marketplace: MarketplaceBridge, myTemplates: MyTemplatesBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
+const adminModules = [localProjects, infrastructure, adminNodes, adminAppTemplates, adminAudit, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
 /**
  * The source-specs ledger mounts straight from the capability that owns the
  * vocabulary: unlike `PublishingAppsBridge`, it needs no clients injected —

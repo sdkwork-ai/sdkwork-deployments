@@ -1,0 +1,19 @@
+{
+  "name": "sdkwork-deployments-mini-program",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test tests/marketplace.service.test.ts",
+    "check": "pnpm typecheck && pnpm test",
+    "verify": "pnpm check",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "miniprogram-api-typings": "^4.1.0",
+    "typescript": "catalog:"
+  }
+}

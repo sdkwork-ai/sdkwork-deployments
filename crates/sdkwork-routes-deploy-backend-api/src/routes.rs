@@ -6,13 +6,17 @@ use axum::{
 };
 use sdkwork_deploy_contract::{
     AuditLogQuery, ChallengeResultRequest, CreateAcmeAccountRequest, CreateNginxConfigRequest,
-    CreateNodeClusterRequest, CreateServerRequest, DeployBackendApi, DeployBackendRequestContext,
-    FailCertificateOrderRequest, IngestUsageEventsRequest, ListNginxConfigsQuery,
-    RequestCertificateOrderRequest, RetentionRunRequest, StoreCertificateVersionRequest,
-    UpdateNginxConfigRequest, UpdateNodeClusterRequest, UpdateServerRequest,
+    CreateNodeClusterRequest, CreateServerRequest, CreateTemplateCategoryRequest, DeployBackendApi,
+    DeployBackendRequestContext, FailCertificateOrderRequest, IngestUsageEventsRequest,
+    ListAppTemplatesAdminQuery, ListNginxConfigsQuery, ListTemplatePurchasesQuery,
+    RequestCertificateOrderRequest, RetentionRunRequest, SettleTemplatePurchaseRequest,
+    StoreCertificateVersionRequest, UpdateAppTemplateAdminRequest, UpdateNginxConfigRequest,
+    UpdateNodeClusterRequest, UpdateServerRequest, UpdateTemplateCategoryRequest,
     UsageReconciliationRequest,
 };
-use sdkwork_routes_deploy_common::{envelope, finish_api_json, finish_created_api_json, ok_json};
+use sdkwork_routes_deploy_common::{
+    envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
+};
 use sdkwork_web_core::WebRequestContext;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -84,10 +88,69 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> R
             paths::SOURCE_EVENTS,
             get(list_source_events).post(ingest_source_event),
         )
+        .route(
+            paths::TEMPLATE_CATEGORIES,
+            get(list_template_categories).post(create_template_category),
+        )
+        .route(
+            paths::TEMPLATE_CATEGORY,
+            get(retrieve_template_category)
+                .patch(update_template_category)
+                .delete(delete_template_category),
+        )
+        .route(paths::APP_TEMPLATES, get(list_app_templates_admin))
+        .route(
+            paths::APP_TEMPLATE,
+            get(retrieve_app_template_admin)
+                .patch(update_app_template_admin)
+                .delete(delete_app_template_admin),
+        )
+        .route(
+            paths::APP_TEMPLATE_VERSIONS,
+            get(list_app_template_versions_admin),
+        )
+        .route(
+            paths::APP_TEMPLATE_VERSION,
+            get(retrieve_app_template_version_admin),
+        )
+        .route(
+            paths::TEMPLATE_PURCHASES,
+            get(list_template_purchases_admin),
+        )
+        .route(
+            paths::TEMPLATE_PURCHASE,
+            get(retrieve_template_purchase_admin),
+        )
+        .route(
+            paths::TEMPLATE_PURCHASE_SETTLE,
+            post(settle_template_purchase_admin),
+        )
+        .route(
+            paths::TEMPLATE_PURCHASE_REVOKE,
+            post(revoke_template_purchase_admin),
+        )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
         ))
         .with_state(BackendState { api })
+}
+
+#[derive(Debug, Deserialize)]
+struct CategoryAdminListQuery {
+    #[serde(default)]
+    include_disabled: Option<bool>,
+    #[serde(default = "default_page")]
+    page: i32,
+    #[serde(default = "default_page_size")]
+    page_size: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct VersionsAdminPageQuery {
+    #[serde(default = "default_page")]
+    page: i32,
+    #[serde(default = "default_page_size")]
+    page_size: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -777,6 +840,313 @@ async fn list_source_events(
                 .list_source_events(&context, query.page, query.page_size)
                 .await?;
             ok_json(envelope::source_event_page(page))
+        }
+        .await,
+    )
+}
+
+// -- app template marketplace (admin) -------------------------------------------
+
+async fn list_template_categories(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Query(query): Query<CategoryAdminListQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let page = state
+                .api
+                .list_template_categories(
+                    &context,
+                    query.include_disabled.unwrap_or(false),
+                    query.page,
+                    query.page_size,
+                )
+                .await?;
+            ok_json(envelope::template_category_page(page))
+        }
+        .await,
+    )
+}
+
+async fn create_template_category(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Json(request): Json<CreateTemplateCategoryRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .create_template_category(&context, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn retrieve_template_category(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(category_uuid): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .retrieve_template_category(&context, &category_uuid)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn update_template_category(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(category_uuid): Path<String>,
+    Json(request): Json<UpdateTemplateCategoryRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .update_template_category(&context, &category_uuid, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn delete_template_category(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(category_uuid): Path<String>,
+) -> Response {
+    finish_no_content(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            service_result(
+                state
+                    .api
+                    .delete_template_category(&context, &category_uuid)
+                    .await,
+            )
+        }
+        .await,
+    )
+}
+
+async fn list_app_templates_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Query(query): Query<ListAppTemplatesAdminQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let page = state.api.list_app_templates(&context, &query).await?;
+            ok_json(envelope::app_template_page(page))
+        }
+        .await,
+    )
+}
+
+async fn retrieve_app_template_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(template_uuid): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .retrieve_app_template(&context, &template_uuid)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn update_app_template_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(template_uuid): Path<String>,
+    Json(request): Json<UpdateAppTemplateAdminRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .update_app_template(&context, &template_uuid, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn delete_app_template_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(template_uuid): Path<String>,
+) -> Response {
+    finish_no_content(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            service_result(
+                state
+                    .api
+                    .delete_app_template(&context, &template_uuid)
+                    .await,
+            )
+        }
+        .await,
+    )
+}
+
+async fn list_app_template_versions_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(template_uuid): Path<String>,
+    Query(query): Query<VersionsAdminPageQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let page = state
+                .api
+                .list_app_template_versions(&context, &template_uuid, query.page, query.page_size)
+                .await?;
+            ok_json(envelope::app_template_version_page(page))
+        }
+        .await,
+    )
+}
+
+async fn retrieve_app_template_version_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path((template_uuid, version_uuid)): Path<(String, String)>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .retrieve_app_template_version(&context, &template_uuid, &version_uuid)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn list_template_purchases_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Query(query): Query<ListTemplatePurchasesQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let page = state.api.list_template_purchases(&context, &query).await?;
+            ok_json(envelope::template_purchase_page(page))
+        }
+        .await,
+    )
+}
+
+async fn retrieve_template_purchase_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(purchase_uuid): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .retrieve_template_purchase(&context, &purchase_uuid)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn settle_template_purchase_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(purchase_uuid): Path<String>,
+    Json(request): Json<SettleTemplatePurchaseRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .settle_template_purchase(&context, &purchase_uuid, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn revoke_template_purchase_admin(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(purchase_uuid): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .revoke_template_purchase(&context, &purchase_uuid)
+                .await?;
+            ok_json(envelope::resource(item))
         }
         .await,
     )

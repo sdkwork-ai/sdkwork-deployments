@@ -1,0 +1,16 @@
+page { background: #f4f6f7; color: #1d2428; font-size: 28rpx; }
+.mp-card { background: #fff; border-radius: 16rpx; padding: 24rpx; margin: 16rpx; border: 1rpx solid #dfe4e7; }
+.mp-title { font-weight: 700; font-size: 30rpx; }
+.mp-summary { color: #657178; font-size: 26rpx; margin-top: 8rpx; }
+.mp-meta { display: flex; align-items: center; gap: 16rpx; margin-top: 12rpx; font-size: 24rpx; color: #657178; }
+.mp-price { color: #24200f; font-weight: 700; }
+.mp-price-free { color: #23613a; }
+.mp-chips { display: flex; flex-wrap: wrap; gap: 12rpx; padding: 16rpx; }
+.mp-chip { padding: 8rpx 24rpx; border-radius: 999rpx; background: #fff; border: 1rpx solid #dfe4e7; color: #657178; }
+.mp-chip-active { background: #e0ad31; border-color: #e0ad31; color: #24200f; font-weight: 700; }
+.mp-empty { padding: 60rpx 0; text-align: center; color: #657178; }
+.mp-status { font-size: 22rpx; padding: 2rpx 14rpx; border-radius: 999rpx; background: #e7ecef; color: #46545b; }
+.mp-status-active, .mp-status-published { background: #dff3e5; color: #23613a; }
+.mp-status-pending, .mp-status-pending_review { background: #fff0c7; color: #755407; }
+.mp-status-revoked, .mp-status-rejected, .mp-status-disabled { background: #f9dfdc; color: #8b2f29; }
+.mp-button { background: #e0ad31; color: #24200f; border-radius: 12rpx; font-weight: 700; }
