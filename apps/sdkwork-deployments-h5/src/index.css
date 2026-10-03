@@ -60,6 +60,11 @@ input, select, textarea { font: inherit; }
 .h5-status-revoked, .h5-status-rejected, .h5-status-disabled { background: #f9dfdc; color: #8b2f29; }
 
 .h5-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #fff2f0; color: #842a24; border: 1px solid #e1b3ad; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+/* Unpaid-order notice: not a failure, so it borrows the badge palette rather
+   than the error surface, and keeps the cashier link beside the copy. */
+.h5-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: #fff0c7; color: #755407; border: 1px solid #e6cf8a; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.h5-notice p { margin: 0; }
+.h5-notice a { color: inherit; }
 
 .h5-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .h5-primary, .h5-secondary, .h5-danger { min-height: 40px; padding: 0 16px; border-radius: 10px; font-weight: 650; }

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
+  AppTemplateOrderCreateResult,
+  AppTemplateOrderSummary,
+} from "@sdkwork/order-app-sdk";
+import type {
   AppTemplateResponse,
   AppTemplateSummaryResponse,
   AppTemplateVersionResponse,
   TemplateCategoryResponse,
-  TemplatePurchaseResponse,
 } from "@sdkwork/deployments-app-sdk";
 
 import { translateH5, type DeploymentsH5MessageKey } from "./i18n.ts";
@@ -19,17 +22,31 @@ function translator(locale: string) {
 }
 
 /**
+ * An order the buyer still has to pay, held in view state so the sheet can show
+ * what to do next. A free listing is owned the moment the order comes back
+ * `paid`; a paid one leaves the buyer on a cashier page or with a provider
+ * payload to scan.
+ */
+interface PendingPayment {
+  readonly kind: "cashier" | "qr";
+  readonly orderNo: string;
+  readonly value: string;
+}
+
+/**
  * H5 storefront: category chips over the `PUBLIC` + `PUBLISHED` listings,
- * card list, detail sheet, and the idempotent acquire command. Acquire grants
- * FREE listings; a `PAID` listing disables the button and points at the
- * commerce checkout rather than implying the entitlement is live.
+ * card list, detail sheet, and the acquire command. Acquire asks the platform
+ * order center for an app-template order — the deploy module owns the catalog
+ * only — so a FREE listing is owned in one tap and a PAID listing hands the
+ * buyer to the cashier the order center returned.
  */
 export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) {
   const t = translator(runtime.locale);
-  const service = useMemo(() => createH5MarketplaceService(runtime.deploy), [runtime.deploy]);
+  const service = useMemo(() => createH5MarketplaceService(runtime.deploy, runtime.order), [runtime.deploy, runtime.order]);
   const [categories, setCategories] = useState<readonly TemplateCategoryResponse[]>([]);
   const [items, setItems] = useState<readonly AppTemplateSummaryResponse[]>([]);
-  const [purchases, setPurchases] = useState<readonly TemplatePurchaseResponse[]>([]);
+  const [orders, setOrders] = useState<readonly AppTemplateOrderSummary[]>([]);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment>();
   const [detail, setDetail] = useState<AppTemplateResponse>();
   const [categoryUuid, setCategoryUuid] = useState("");
   const [keyword, setKeyword] = useState("");
@@ -43,9 +60,11 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
   const [error, setError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
 
+  // Ownership is the order center's verdict: a `paid` order for a listing is
+  // that listing's install entitlement, keyed by the template it was bought for.
   const entitled = useMemo(
-    () => new Set(purchases.filter((purchase) => purchase.status === "ACTIVE").map((purchase) => purchase.templateUuid)),
-    [purchases],
+    () => new Set(orders.filter((order) => order.status === "paid").map((order) => order.templateUuid)),
+    [orders],
   );
 
   const load = useCallback(async (): Promise<void> => {
@@ -68,7 +87,7 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
       setCategories(categoryList);
       setItems(listings.items);
       setHasMore(listings.hasMore);
-      setPurchases(ownership.items);
+      setOrders(ownership.items);
     } catch {
       setError(t("marketplace.loadFailed"));
     } finally {
@@ -83,6 +102,7 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
   const openDetail = useCallback(
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
+      setPendingPayment(undefined);
       // The sheet opens on the detail read; the version list is a follow-up
       // because the app-api only exposes versions to the listing's author, so a
       // buyer's request legitimately comes back empty or refused. A failed
@@ -105,17 +125,25 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
   const closeDetail = useCallback((): void => {
     setDetail(undefined);
     setVersions([]);
+    setPendingPayment(undefined);
   }, []);
 
   const acquire = useCallback(
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
+      setPendingPayment(undefined);
       try {
-        await service.acquire(templateUuid);
-        // Both the entitlement set and the install count move on acquire, so
-        // the sheet closes onto a reloaded list rather than a stale card.
-        closeDetail();
-        await load();
+        const order = await service.acquire(templateUuid);
+        if (order.status === "paid") {
+          // The ownership set and the install count both move on acquire, so the
+          // sheet closes onto a reloaded list rather than a stale card.
+          closeDetail();
+          await load();
+          return;
+        }
+        // The order center owns the payment page: hand the buyer to it rather
+        // than reporting success for an order that is still unpaid.
+        setPendingPayment(pendingPaymentOf(order));
       } catch {
         setActionError(t("marketplace.acquireFailed"));
       }
@@ -251,15 +279,15 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
         </button>
       )}
       <h2 className="h5-section">{t("marketplace.purchases")}</h2>
-      {purchases.length === 0 ? (
+      {orders.length === 0 ? (
         <div className="h5-empty">{t("marketplace.purchases.empty")}</div>
       ) : (
         <ul className="h5-list">
-          {purchases.map((purchase) => (
-            <li key={purchase.id}>
-              <span className={`h5-status h5-status-${purchase.status.toLowerCase()}`}>{purchase.status}</span>
-              <span className="h5-list-main">{purchase.templateUuid}</span>
-              <span>{purchase.pricingModel === "PAID" ? t("marketplace.pricing.PAID") : t("marketplace.pricing.FREE")}</span>
+          {orders.map((order) => (
+            <li key={order.orderId}>
+              <span className={`h5-status h5-status-${order.status.toLowerCase()}`}>{order.status}</span>
+              <span className="h5-list-main">{order.templateName}</span>
+              <span>{`${order.amount} ${order.currencyCode}`}</span>
             </li>
           ))}
         </ul>
@@ -304,20 +332,34 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
               </ul>
             )}
             {actionError && <div className="h5-error" role="alert">{actionError}</div>}
+            {pendingPayment && (
+              <div className="h5-notice" role="status">
+                <p>
+                  {pendingPayment.kind === "cashier"
+                    ? t("marketplace.paymentPending", { orderNo: pendingPayment.orderNo })
+                    : t("marketplace.paymentQr", { orderNo: pendingPayment.orderNo, qrCode: pendingPayment.value })}
+                </p>
+                {pendingPayment.kind === "cashier" && (
+                  <a className="h5-secondary" href={pendingPayment.value} target="_blank" rel="noreferrer">
+                    {t("marketplace.openCashier")}
+                  </a>
+                )}
+              </div>
+            )}
             <footer>
               <button className="h5-secondary" type="button" onClick={closeDetail}>
                 {t("common.close")}
               </button>
               <button
                 className="h5-primary"
-                disabled={entitled.has(detail.id) || busy || detail.pricingModel === "PAID"}
+                disabled={entitled.has(detail.id) || busy}
                 type="button"
                 onClick={() => void acquire(detail.id)}
               >
                 {entitled.has(detail.id)
                   ? t("marketplace.acquired")
                   : detail.pricingModel === "PAID"
-                    ? t("marketplace.acquireCommerce")
+                    ? t("marketplace.acquirePaid")
                     : t("marketplace.acquire")}
               </button>
             </footer>
@@ -326,4 +368,18 @@ export function MarketplaceView({ runtime }: { runtime: DeploymentsH5Runtime }) 
       )}
     </section>
   );
+}
+
+/**
+ * Projects a created order onto what the buyer still has to do. A `cashier_url`
+ * order is paid on the order center's page, so it opens in a new tab and the
+ * sheet keeps a link in case the browser blocked the popup; a provider-native
+ * order has no page to open, so the payload itself is surfaced for scanning.
+ */
+function pendingPaymentOf(order: AppTemplateOrderCreateResult): PendingPayment {
+  if (order.qrCodeType === "cashier_url") {
+    window.open(order.cashierUrl, "_blank", "noopener,noreferrer");
+    return { kind: "cashier", orderNo: order.orderNo, value: order.cashierUrl };
+  }
+  return { kind: "qr", orderNo: order.orderNo, value: order.qrCode };
 }

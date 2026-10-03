@@ -1,16 +1,22 @@
 import type { DeploymentsH5Runtime } from "../bootstrap/runtime.ts";
 import type {
+  AppTemplateOrderCreateResult,
+  AppTemplateOrderSummary,
+} from "@sdkwork/order-app-sdk";
+import type {
   AppTemplateResponse,
   AppTemplateSummaryResponse,
+  AppTemplateVersionResponse,
   TemplateCategoryResponse,
-  TemplatePurchaseResponse,
 } from "@sdkwork/deployments-app-sdk";
 import { uuid } from "@sdkwork/utils/id";
 
 /**
- * H5 marketplace service over the injected app-SDK client. Construction stays
- * in bootstrap; this module is pure transport shaping (idempotency keys,
- * optional-parameter projection) so views stay declarative.
+ * H5 marketplace service over the injected app-SDK clients. The deploy client
+ * reads the module-owned catalog; the order client drives app-template trade,
+ * which the platform order center owns. Construction stays in bootstrap; this
+ * module is pure transport shaping (idempotency keys, optional-parameter
+ * projection) so views stay declarative.
  */
 export type TemplateType = "APP" | "PPT" | "VIDEO";
 
@@ -44,7 +50,7 @@ function pageOf<T>(result: { items: T[]; pageInfo: { totalItems?: string; hasMor
   };
 }
 
-export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["deploy"]) {
+export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["deploy"], orderClient: DeploymentsH5Runtime["order"]) {
   return {
     async listCategories(): Promise<readonly TemplateCategoryResponse[]> {
       const page = await deployClient.template.templateCategories.list({ includeDisabled: false });
@@ -67,11 +73,24 @@ export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["d
     async retrieve(templateUuid: string): Promise<AppTemplateResponse> {
       return deployClient.template.marketplaceTemplates.retrieve(templateUuid);
     },
-    async acquire(templateUuid: string): Promise<TemplatePurchaseResponse> {
-      return deployClient.template.templatePurchases.create(templateUuid, {}, { idempotencyKey: uuid() });
+    /**
+     * Starts (or reuses) the order-center purchase of one listing.
+     *
+     * The order command carries no version — the server snapshots whichever
+     * version the listing publishes — so the service does not offer one either.
+     * A FREE listing comes back `status: "paid"` with nothing left to do; a PAID
+     * listing comes back `pending_payment` with the cashier URL (or provider
+     * payload) the view must surface.
+     */
+    async acquire(templateUuid: string): Promise<AppTemplateOrderCreateResult> {
+      return orderClient.orderAppTemplates.appTemplateOrders.create(
+        { templateUuid },
+        { idempotencyKey: uuid() },
+      );
     },
-    async myPurchases(page: number, pageSize: number): Promise<MarketplacePage<TemplatePurchaseResponse>> {
-      return pageOf(await deployClient.template.templatePurchases.list({ page, pageSize }));
+    /** The caller's app-template orders; the order center's `paid` is the install entitlement. */
+    async myPurchases(page: number, pageSize: number): Promise<MarketplacePage<AppTemplateOrderSummary>> {
+      return pageOf(await orderClient.orderAppTemplates.appTemplateOrders.list({ page, pageSize }));
     },
     async myTemplates(page: number, pageSize: number): Promise<MarketplacePage<AppTemplateResponse>> {
       return pageOf(await deployClient.template.appTemplates.list({ page, pageSize }));
@@ -82,7 +101,7 @@ export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["d
     remove(templateUuid: string): Promise<void> {
       return deployClient.template.appTemplates.delete(templateUuid);
     },
-    async listVersions(templateUuid: string): Promise<readonly import("@sdkwork/deployments-app-sdk").AppTemplateVersionResponse[]> {
+    async listVersions(templateUuid: string): Promise<readonly AppTemplateVersionResponse[]> {
       const page = await deployClient.template.appTemplateVersions.list(templateUuid, { page: 1, pageSize: 50 });
       return page.items;
     },

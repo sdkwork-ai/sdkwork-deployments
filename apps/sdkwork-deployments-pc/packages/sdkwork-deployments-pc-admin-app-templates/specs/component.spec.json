@@ -3,7 +3,7 @@
   "kind": "sdkwork.component.spec",
   "component": {
     "name": "@sdkwork/deployments-pc-admin-app-templates",
-    "displayName": "SDKWork Deployments PC app templates admin",
+    "displayName": "SDKWork Deployments PC app-templates",
     "version": "0.1.0",
     "type": "node-package",
     "root": "sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-app-templates",
@@ -36,6 +36,11 @@
       "file": "APP_SDK_INTEGRATION_SPEC.md",
       "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
       "purpose": "SDK integration."
+    },
+    {
+      "file": "DRIVE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/DRIVE_SPEC.md",
+      "purpose": "Drive upload ownership."
     },
     {
       "file": "TEST_SPEC.md",
@@ -71,9 +76,7 @@
       "deploy.templateCategories.read",
       "deploy.templateCategories.write",
       "deploy.appTemplates.read",
-      "deploy.appTemplates.write",
-      "deploy.templatePurchases.read",
-      "deploy.templatePurchases.write"
+      "deploy.appTemplates.write"
     ]
   },
   "integration": {

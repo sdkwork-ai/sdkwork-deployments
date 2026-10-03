@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Boxes, FileKey2, FolderTree, Globe2, Layers, ListTree, LogOut, Network, Package, PackageOpen, ReceiptText, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shapes, Shield, Store, Tags, Upload, X } from "lucide-react";
+import { Activity, AppWindow, Boxes, FileKey2, FolderTree, Globe2, Layers, ListTree, LogOut, Network, Package, PackageOpen, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shapes, Shield, Store, Tags, Upload, X } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
@@ -35,12 +35,30 @@ export function DeploymentsWorkspace({ locale, modules, onSignOut, permissionSco
     <aside className="sidebar"><div className="brand"><span className="brand-mark"><Boxes size={19} /></span><div><strong>{t("brand.name")}</strong><small>{t(`surface.${surface}`)}</small></div></div><nav aria-label={t("nav.primary")}>{entries.map((entry) => <NavLink key={entry.resource} to={`${base}/${entry.resource}`} title={resourceText(t, entry.resource, "label")}><span className="nav-icon">{resourceIcon(entry.resource)}</span><span className="nav-label">{resourceText(t, entry.resource, "label")}</span></NavLink>)}</nav><div className="sidebar-footer"><span title={userLabel}>{userLabel ?? t("auth.user")}</span>{onSignOut && <button className="icon-button" type="button" title={t("auth.signOut")} onClick={onSignOut}><LogOut size={17} /></button>}</div></aside>
     <main className="workspace"><Routes>{entries.map((entry) => {
       const ResourcePage = resourcePages?.[entry.resource];
-      return <Route key={entry.resource} path={`${entry.resource}/*`} element={ResourcePage ? <Suspense fallback={<div className="resource-loading" aria-busy="true"><RefreshCw size={20} /></div>}><ResourcePage locale={locale} /></Suspense> : <Page entry={entry} locale={locale} source={registry[entry.resource]} />} />;
+      return <Route key={entry.resource} path={`${entry.resource}/*`} element={ResourcePage ? <Suspense fallback={<div className="resource-loading" aria-busy="true"><RefreshCw size={20} /></div>}><ResourcePage locale={locale} /></Suspense> : <DeploymentsResourceTable entry={entry} locale={locale} source={registry[entry.resource]} />} />;
     })}<Route path="*" element={<Navigate to={`${base}/${firstEntry.resource}`} replace />} /></Routes></main>
   </div>;
 }
 
-function Page({ entry, locale, source }: { entry: DeploymentsModuleEntry; locale: DeploymentsLocale; source?: DeploymentsDataSource | undefined }) {
+export interface DeploymentsResourceTableProps {
+  entry: DeploymentsModuleEntry;
+  locale: DeploymentsLocale;
+  source?: DeploymentsDataSource | undefined;
+}
+
+/**
+ * The registry-driven resource table behind every module entry without a
+ * custom page: server-paged columns derived from the loaded rows, free-text
+ * search, the scoped-resource scope field, and the entry's declared actions
+ * with their body-template dialogs.
+ *
+ * Exported so a host application that bridges deployments modules (the Web
+ * Server console/backend-admin) can render the *same* table over a registry
+ * it composes, instead of re-implementing the generic table and drifting from
+ * this one. It is the exact component {@linkcode DeploymentsWorkspace} falls
+ * back to, only reachable from the outside.
+ */
+export function DeploymentsResourceTable({ entry, locale, source }: DeploymentsResourceTableProps) {
   const t = translator(locale);
   const [items, setItems] = useState<readonly Record<string, unknown>[]>([]);
   const [page, setPage] = useState(1);
@@ -185,13 +203,11 @@ function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
     // resource is *not* the application ledger, it is the stack of sources
     // behind it, and the console already uses `Layers` for the same idea.
     sourceSpecs: Layers,
-    // Template marketplace family: the taxonomy, the moderated listings, the
-    // per-listing version history, the entitlement ledger, the storefront, and
-    // the author workbench.
+    // Template catalog family: the taxonomy, the moderated listings, the
+    // per-listing version history, the storefront, and the author workbench.
     templateCategories: ListTree,
     appTemplates: Shapes,
     appTemplateVersions: Boxes,
-    templatePurchases: ReceiptText,
     marketplace: Store,
     myTemplates: PackageOpen,
   } satisfies Record<DeploymentsResourceKey, typeof AppWindow>;

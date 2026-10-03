@@ -52,8 +52,6 @@
       "deploy.appTemplates.write",
       "deploy.appTemplateVersions.read",
       "deploy.appTemplateVersions.write",
-      "deploy.templatePurchases.read",
-      "deploy.templatePurchases.write",
       "drive.uploads.write"
     ]
   },

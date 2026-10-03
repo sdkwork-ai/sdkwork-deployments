@@ -9,8 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # Generated transport (`pnpm sdk:generate:app`, flutter target). Never call
-  # raw HTTP from this app — every request goes through the generated client.
+  # Generated transport (`pnpm sdk:generate:app`, flutter target) for the
+  # deployments catalog. The order center owns the template trade and has no
+  # Dart client, so that pair of calls lives in `lib/order_center_client.dart`
+  # (dart:io, no extra dependency) instead of here.
   sdkwork_deployments_app_sdk:
     path: ../../sdks/sdkwork-deployments-app-sdk/sdkwork-deployments-app-sdk-flutter/generated/server-openapi
 

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:sdkwork_deployments_app_sdk/sdkwork_deployments_app_sdk.dart';
 
 import 'marketplace_service.dart';
+import 'order_center_client.dart';
 
 /// H5/PC-parity storefront: category chips and keyword search over `PUBLIC` +
-/// `PUBLISHED` listings, a detail bottom sheet, and the idempotent acquire
-/// command. FREE listings grant their entitlement through this surface; PAID
-/// listings disable acquire and route the buyer to the commerce checkout, so
-/// the button never implies the entitlement was minted here.
+/// `PUBLISHED` listings and a detail bottom sheet. Acquiring a template is an
+/// order-center trade: a FREE listing comes back settled and the entitlement is
+/// live, a PAID listing comes back with the cashier URL / provider payment
+/// payload the buyer still has to settle, which the sheet surfaces instead of
+/// refusing the purchase. Ownership is read from the order center's
+/// `status == 'paid'`, never from a local purchase record.
 class MarketplacePage extends StatefulWidget {
   final MarketplacePort port;
 
@@ -24,7 +28,7 @@ class _MarketplacePageState extends State<MarketplacePage> {
   final TextEditingController _keyword = TextEditingController();
   List<TemplateCategoryResponse> _categories = [];
   List<AppTemplateSummaryResponse> _items = [];
-  List<TemplatePurchaseResponse> _purchases = [];
+  List<TemplateOrderSummary> _orders = [];
   Set<String> _entitled = <String>{};
   String? _categoryUuid;
   String? _templateType;
@@ -153,16 +157,18 @@ class _MarketplacePageState extends State<MarketplacePage> {
         pricingModel: _pricingModel,
         sort: _sort,
       );
-      final purchases = await widget.port.myPurchases();
+      final orders = await widget.port.myPurchases();
       if (!mounted) return;
       setState(() {
         _categories = categories;
         _items = listings.items;
-        _purchases = purchases;
+        _orders = orders;
         _hasMore = listings.hasMore;
-        _entitled = purchases
-            .where((purchase) => purchase.status == 'ACTIVE')
-            .map((purchase) => purchase.templateUuid)
+        // Only a settled order is the install entitlement; a started but
+        // unpaid order is not.
+        _entitled = orders
+            .where((order) => order.isEntitlement)
+            .map((order) => order.templateUuid)
             .toSet();
         _loading = false;
       });
@@ -365,27 +371,27 @@ class _MarketplacePageState extends State<MarketplacePage> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text('我的获取记录', style: Theme.of(context).textTheme.titleMedium),
+              child: Text('我的模板订单', style: Theme.of(context).textTheme.titleMedium),
             ),
           ),
-          if (_purchases.isEmpty)
+          if (_orders.isEmpty)
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text('还没有获取过模板。'),
+                child: Text('还没有模板订单。'),
               ),
             )
           else
             SliverList.builder(
-              itemCount: _purchases.length,
+              itemCount: _orders.length,
               itemBuilder: (context, index) {
-                final purchase = _purchases[index];
+                final order = _orders[index];
                 return ListTile(
                   dense: true,
-                  title: Text(purchase.templateUuid),
-                  subtitle: Text(purchase.pricingModel == 'PAID' ? '付费' : '免费'),
+                  title: Text(order.templateName.isEmpty ? order.templateUuid : order.templateName),
+                  subtitle: Text('${order.orderNo} · ${order.amount} ${order.currencyCode} · ${order.fulfillmentStatus}'),
                   trailing: Chip(
-                    label: Text(purchase.status, style: const TextStyle(fontSize: 11)),
+                    label: Text(order.status, style: const TextStyle(fontSize: 11)),
                     visualDensity: VisualDensity.compact,
                   ),
                 );
@@ -412,15 +418,64 @@ class _DetailSheet extends StatelessWidget {
 
   Future<void> _acquire(BuildContext context) async {
     try {
-      await port.acquire(detail.id);
+      final order = await port.acquire(detail.id);
+      if (!context.mounted) return;
+      if (!order.isPaid) {
+        await _showPaymentRequirement(context, order);
+      }
       await onAcquired();
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('获取模板失败，请重试。')),
+          const SnackBar(content: Text('下单失败，请重试。')),
         );
       }
     }
+  }
+
+  /// A PAID listing answers `pending_payment`: the order exists and the buyer
+  /// still has to settle it, so the requirement the order center returned is
+  /// shown here (and can be copied) instead of the purchase being refused.
+  Future<void> _showPaymentRequirement(BuildContext context, TemplateOrder order) async {
+    final requirement = order.paymentRequirement;
+    final isNativePayload = order.qrCodeType == TemplateOrder.qrCodeTypeProviderNative;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('订单已创建，请完成支付'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('订单号：${order.orderNo}'),
+            const SizedBox(height: 4),
+            Text('应付金额：${order.amount} ${order.currencyCode}'),
+            const SizedBox(height: 8),
+            if (requirement == null)
+              const Text('请到订单中心完成支付。')
+            else
+              SelectableText(
+                (isNativePayload ? '支付凭证：' : '支付链接：') + requirement,
+              ),
+          ],
+        ),
+        actions: [
+          if (requirement != null)
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: requirement));
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+              },
+              child: Text(isNativePayload ? '复制凭证' : '复制链接'),
+            ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(requirement == null ? '知道了' : '稍后支付'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -454,10 +509,10 @@ class _DetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  // PAID 模板的购买走 commerce checkout（订单履约回写权益），
-                  // 这里的直接获取只授予 FREE 模板。
-                  onPressed: entitled || detail.pricingModel == 'PAID' ? null : () => _acquire(context),
-                  child: Text(entitled ? '已获取' : (detail.pricingModel == 'PAID' ? '通过订单流程购买' : '获取模板')),
+                  // 免费模板下单即结算；付费模板下单后回执收银台链接/支付凭证，
+                  // 由买家在订单中心完成支付，权益以订单 `paid` 为准。
+                  onPressed: entitled ? null : () => _acquire(context),
+                  child: Text(entitled ? '已获取' : (detail.pricingModel == 'PAID' ? '购买模板' : '获取模板')),
                 ),
               ],
             ),

@@ -15,7 +15,7 @@ export async function bootstrapDeploymentsRuntime() {
     baseUrls: { appbaseAppApiBaseUrl: config.appbaseAppApiBaseUrl },
     createAppbaseAppClient: (clientConfig) => createIamClient({ ...clientConfig, timeout: config.environment === "production" || config.environment === "staging" ? 10_000 : 5_000 }),
     localeProvider: () => locale,
-    sdkClients: [clients.deploy, clients.drive],
+    sdkClients: [clients.deploy, clients.drive, clients.order],
     sessionAuth: true,
     tokenManager,
   });

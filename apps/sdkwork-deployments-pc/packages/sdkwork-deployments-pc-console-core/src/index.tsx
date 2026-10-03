@@ -19,6 +19,7 @@ import {
   type UpdateDomainZoneRequest,
 } from "@sdkwork/deployments-app-sdk";
 import { createDriveAppClient, type SdkworkDriveAppClient } from "@sdkwork/drive-app-sdk";
+import { createClient as createOrderAppClient, type SdkworkAppClient as SdkworkOrderAppClient } from "@sdkwork/order-app-sdk";
 import {
   DEPLOY_ARTIFACT_UPLOAD,
   normalizeDeploymentsPage,
@@ -53,6 +54,12 @@ export type {
 export interface DeploymentsConsoleClients {
   deploy: SdkworkDeployAppClient;
   drive: SdkworkDriveAppClient;
+  /**
+   * Platform order center. App-template trade does not live in this module's
+   * app API — the deployments surface is catalog-only — so the marketplace's
+   * acquire command is an `app_template_orders` call on this client.
+   */
+  order: SdkworkOrderAppClient;
 }
 
 export interface DeploymentsDeliveryService {
@@ -152,6 +159,11 @@ export function createDeploymentsConsoleClients(config: {
   return {
     deploy: createDeployClient({ ...common, baseUrl: config.deployBaseUrl }),
     drive: createDriveAppClient({ ...common, baseUrl: config.driveBaseUrl }),
+    // The order center's app API is served on the same origin as the deploy app
+    // API, so the order client reuses `deployBaseUrl` verbatim: one origin, two
+    // app APIs, one base URL. `common` carries the shared token manager, which
+    // is what gives both clients the same auth token and access token.
+    order: createOrderAppClient({ ...common, baseUrl: config.deployBaseUrl }),
   };
 }
 

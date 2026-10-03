@@ -64,7 +64,21 @@
       "moduleCatalogRefs": [],
       "consumerPolicy": {
         "forbidLocalPermissionCatalogForDependencyDomains": true,
-        "allowExplicitOverridesOnly": true
+        "allowExplicitOverridesOnly": true,
+        "allowFrontendHintsWithoutServerDuplication": true
+      },
+      "applicationModule": {
+        "manifestRef": "../../../../specs/iam.module.manifest.json"
+      },
+      "bootstrapAccessTokenScope": {
+        "inheritFrom": "sdkwork.app.config.json#backend.accessTokenPermissionScope",
+        "supplement": [],
+        "overrideReplace": false
+      },
+      "routePermissionHints": {
+        "inheritFromOpenApi": true,
+        "inheritFromModuleManifests": true,
+        "overrides": []
       }
     },
     "events": [],

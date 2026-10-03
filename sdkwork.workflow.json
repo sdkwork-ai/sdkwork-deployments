@@ -66,6 +66,12 @@
       "tokenSecret": "SDKWORK_RELEASE_TOKEN"
     },
     {
+      "id": "sdkwork-order",
+      "repository": "sdkwork-ai/sdkwork-order",
+      "refInput": "SDKWORK_ORDER_REF",
+      "tokenSecret": "SDKWORK_RELEASE_TOKEN"
+    },
+    {
       "id": "sdkwork-sdk-commons",
       "repository": "sdkwork-ai/sdkwork-sdk-commons",
       "refInput": "SDKWORK_SDK_COMMONS_REF",

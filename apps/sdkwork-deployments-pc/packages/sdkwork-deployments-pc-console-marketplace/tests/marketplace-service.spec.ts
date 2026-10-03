@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
+import type { SdkworkDeployAppClient, SdkworkOrderAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 
 import { createMarketplaceService, createMyTemplatesService } from "../src/service/marketplace.ts";
 
 interface Recorded {
   readonly browse: ReturnType<typeof vi.fn>;
   readonly categoryList: ReturnType<typeof vi.fn>;
-  readonly purchaseCreate: ReturnType<typeof vi.fn>;
+  readonly orderCreate: ReturnType<typeof vi.fn>;
+  readonly orderList: ReturnType<typeof vi.fn>;
   readonly templateCreate: ReturnType<typeof vi.fn>;
   readonly templateRetrieve: ReturnType<typeof vi.fn>;
   readonly templateUpdate: ReturnType<typeof vi.fn>;
@@ -15,20 +16,22 @@ interface Recorded {
 }
 
 /**
- * Structural client stub: the services only reach the template families, so
- * the fake carries exactly those and nothing else. `as unknown as` mirrors the
+ * Structural client stubs: the storefront service reaches the deploy client for
+ * the catalog and the order app client for app-template trade, so the fakes
+ * carry exactly those families and nothing else. `as unknown as` mirrors the
  * repository's existing SDK stubs (see `deploy-app-row-operations.spec.ts`).
  */
-function stubClient(recorded: Partial<Recorded> = {}) {
+function stubClients(recorded: Partial<Recorded> = {}) {
   const fn = <T>(value: T): ReturnType<typeof vi.fn> => vi.fn().mockResolvedValue(value);
   const browse = recorded.browse ?? fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } });
   const categoryList = recorded.categoryList ?? fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } });
-  const purchaseCreate = recorded.purchaseCreate ?? fn({ id: "purchase-1" });
+  const orderCreate = recorded.orderCreate ?? fn({ orderId: "order-1", status: "pending_payment" });
+  const orderList = recorded.orderList ?? fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } });
   const templateCreate = recorded.templateCreate ?? fn({ id: "template-1" });
   const templateRetrieve = recorded.templateRetrieve ?? fn({ id: "template-1" });
   const templateUpdate = recorded.templateUpdate ?? fn({ id: "template-1" });
   const versionCreate = recorded.versionCreate ?? fn({ id: "version-1" });
-  const client = {
+  const deploy = {
     app: { list: fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } }) },
     template: {
       appTemplateVersions: { create: versionCreate, list: fn({ items: [], pageInfo: {} }) },
@@ -42,12 +45,13 @@ function stubClient(recorded: Partial<Recorded> = {}) {
       },
       marketplaceTemplates: { list: browse, retrieve: fn({ id: "template-1" }) },
       templateCategories: { list: categoryList },
-      templatePurchases: { create: purchaseCreate, list: fn({ items: [], pageInfo: {} }) },
     },
   };
+  const order = { orderAppTemplates: { appTemplateOrders: { create: orderCreate, list: orderList } } };
   return {
-    client: client as unknown as SdkworkDeployAppClient,
-    recorded: { browse, categoryList, purchaseCreate, templateCreate, templateRetrieve, templateUpdate, versionCreate },
+    deployClient: deploy as unknown as SdkworkDeployAppClient,
+    orderClient: order as unknown as SdkworkOrderAppClient,
+    recorded: { browse, categoryList, orderCreate, orderList, templateCreate, templateRetrieve, templateUpdate, versionCreate },
   };
 }
 
@@ -68,8 +72,8 @@ function paramsOf(fn: ReturnType<typeof vi.fn>, index: number): { idempotencyKey
 
 describe("marketplace storefront service", () => {
   it("drops blank filters from the browse query", async () => {
-    const { client, recorded } = stubClient();
-    await createMarketplaceService(client).browse({
+    const { deployClient, orderClient, recorded } = stubClients();
+    await createMarketplaceService(deployClient, orderClient).browse({
       page: 2,
       pageSize: 20,
       categoryUuid: undefined,
@@ -87,30 +91,37 @@ describe("marketplace storefront service", () => {
   });
 
   it("trims a keyword that carries surrounding whitespace", async () => {
-    const { client, recorded } = stubClient();
-    await createMarketplaceService(client).browse({ page: 1, pageSize: 20, keyword: "  rag  " });
+    const { deployClient, orderClient, recorded } = stubClients();
+    await createMarketplaceService(deployClient, orderClient).browse({ page: 1, pageSize: 20, keyword: "  rag  " });
     expect(bodyOf(recorded.browse, 0).keyword).toBe("rag");
   });
 
-  it("acquires with an empty body and an idempotency key when no version is pinned", async () => {
-    const { client, recorded } = stubClient();
-    await createMarketplaceService(client).acquire("template-1");
-    expect(firstCall(recorded.purchaseCreate)[0]).toBe("template-1");
-    expect(bodyOf(recorded.purchaseCreate, 1)).toEqual({});
-    expect(paramsOf(recorded.purchaseCreate, 2).idempotencyKey).toMatch(/\S/);
+  it("orders the template through the order center with a fresh idempotency key", async () => {
+    const { deployClient, orderClient, recorded } = stubClients();
+    await createMarketplaceService(deployClient, orderClient).acquire("template-1");
+    expect(recorded.orderCreate).toHaveBeenCalledTimes(1);
+    expect(bodyOf(recorded.orderCreate, 0)).toEqual({ templateUuid: "template-1" });
+    expect(paramsOf(recorded.orderCreate, 1).idempotencyKey).toMatch(/\S/);
   });
 
-  it("pins the requested version when the caller supplies one", async () => {
-    const { client, recorded } = stubClient();
-    await createMarketplaceService(client).acquire("template-1", "version-9");
-    expect(bodyOf(recorded.purchaseCreate, 1)).toEqual({ versionUuid: "version-9" });
+  it("maps the order page onto the shared page shape", async () => {
+    const orderList = vi.fn().mockResolvedValue({
+      items: [{ orderId: "order-1", orderNo: "T-1", templateUuid: "template-1", templateName: "Starter", amount: "0", currencyCode: "CNY", status: "paid", fulfillmentStatus: "FULFILLED", createdAt: "2026-10-03T00:00:00Z" }],
+      pageInfo: { totalItems: "3", hasMore: true },
+    });
+    const { deployClient, orderClient } = stubClients({ orderList });
+    const page = await createMarketplaceService(deployClient, orderClient).myPurchases(2, 20);
+    expect(orderList).toHaveBeenCalledWith({ page: 2, pageSize: 20 });
+    expect(page.total).toBe(3);
+    expect(page.hasMore).toBe(true);
+    expect(page.items[0]?.status).toBe("paid");
   });
 });
 
 describe("my-templates author service", () => {
   it("keeps a FREE draft priceless even when a price is supplied", async () => {
-    const { client, recorded } = stubClient();
-    await createMyTemplatesService(client).create({
+    const { deployClient, recorded } = stubClients();
+    await createMyTemplatesService(deployClient).create({
       appUuid: "app-1",
       templateType: "APP",
       categoryUuid: "category-1",
@@ -128,8 +139,8 @@ describe("my-templates author service", () => {
   });
 
   it("sends only the patched fields on update and normalizes their casing", async () => {
-    const { client, recorded } = stubClient();
-    await createMyTemplatesService(client).update("template-1", {
+    const { deployClient, recorded } = stubClients();
+    await createMyTemplatesService(deployClient).update("template-1", {
       displayName: "  Renamed  ",
       currency: "cny",
     });
@@ -139,14 +150,14 @@ describe("my-templates author service", () => {
   });
 
   it("reads a listing back before editing it", async () => {
-    const { client, recorded } = stubClient();
-    await createMyTemplatesService(client).retrieve("template-7");
+    const { deployClient, recorded } = stubClients();
+    await createMyTemplatesService(deployClient).retrieve("template-7");
     expect(recorded.templateRetrieve).toHaveBeenCalledWith("template-7");
   });
 
   it("maps every optional version field and drops the blank ones", async () => {
-    const { client, recorded } = stubClient();
-    await createMyTemplatesService(client).createVersion("template-1", {
+    const { deployClient, recorded } = stubClients();
+    await createMyTemplatesService(deployClient).createVersion("template-1", {
       version: " 1.2.0 ",
       changelog: "",
       artifactUuid: " artifact-1 ",

@@ -40,8 +40,8 @@ function PublishingAppsBridge({ locale }: { locale: DeploymentsLocale }) {
 }
 
 function MarketplaceBridge({ locale }: { locale: DeploymentsLocale }) {
-  const { deploy } = useDeploymentsConsoleClients();
-  return <MarketplacePage deployClient={deploy} locale={locale} />;
+  const { deploy, order } = useDeploymentsConsoleClients();
+  return <MarketplacePage deployClient={deploy} orderClient={order} locale={locale} />;
 }
 
 function MyTemplatesBridge({ locale }: { locale: DeploymentsLocale }) {

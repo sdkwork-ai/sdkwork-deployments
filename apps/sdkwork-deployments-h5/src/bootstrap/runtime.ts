@@ -2,6 +2,7 @@ import { createSdkworkIamRuntimeAuthController, type SdkworkIamRuntimeAuthRuntim
 import { createSdkworkAppbasePcAuthRuntime } from "@sdkwork/auth-runtime-pc-react";
 import { createClient as createDeployClient, type SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import { createClient as createIamClient } from "@sdkwork/iam-app-sdk";
+import { createClient as createOrderAppClient, type SdkworkAppClient as SdkworkOrderAppClient } from "@sdkwork/order-app-sdk";
 import { createTokenManager, type AuthTokenManager } from "@sdkwork/sdk-common";
 
 /**
@@ -23,6 +24,13 @@ export interface DeploymentsH5Runtime {
   readonly locale: string;
   readonly tokenManager: AuthTokenManager;
   readonly deploy: SdkworkDeployAppClient;
+  /**
+   * Platform order center, on the same origin and the same token manager as the
+   * deploy client. App-template trade is not part of the deploy app API — that
+   * surface is catalog-only — so acquiring a listing is an `app_template_orders`
+   * call here.
+   */
+  readonly order: SdkworkOrderAppClient;
   readonly authController: ReturnType<typeof createSdkworkIamRuntimeAuthController>;
 }
 
@@ -57,6 +65,16 @@ export async function bootstrapDeploymentsH5Runtime(): Promise<DeploymentsH5Runt
     platform: "h5",
     tokenManager,
   });
+  // The order center's app API answers on the same origin as the deploy app API,
+  // so the order client reuses `appApiBaseUrl` verbatim instead of inventing a
+  // second base URL; the shared token manager is what gives both clients the
+  // same auth token and access token.
+  const order = createOrderAppClient({
+    baseUrl: config.appApiBaseUrl,
+    authMode: "dual-token",
+    platform: "h5",
+    tokenManager,
+  });
   const auth = createSdkworkAppbasePcAuthRuntime({
     app: {
       appId: "sdkwork-deployments-h5",
@@ -71,7 +89,7 @@ export async function bootstrapDeploymentsH5Runtime(): Promise<DeploymentsH5Runt
         timeout: config.environment === "production" || config.environment === "staging" ? 10_000 : 5_000,
       }),
     localeProvider: () => locale,
-    sdkClients: [deploy],
+    sdkClients: [deploy, order],
     sessionAuth: true,
     tokenManager,
   });
@@ -81,6 +99,7 @@ export async function bootstrapDeploymentsH5Runtime(): Promise<DeploymentsH5Runt
     locale,
     tokenManager,
     deploy,
+    order,
     authController: createSdkworkIamRuntimeAuthController({ getRuntime: getAuthRuntime }),
   } as const;
 }

@@ -247,6 +247,8 @@ async fn postgres_marketplace_catalog_flow_publishes_and_stays_tenant_bounded() 
         &*service,
         &viewer_ctx,
         &ListMarketplaceTemplatesQuery {
+            page: 1,
+            page_size: 20,
             sort: Some("POPULAR".to_owned()),
             ..ListMarketplaceTemplatesQuery::default()
         },
@@ -262,6 +264,8 @@ async fn postgres_marketplace_catalog_flow_publishes_and_stays_tenant_bounded() 
         &*service,
         &viewer_ctx,
         &ListMarketplaceTemplatesQuery {
+            page: 1,
+            page_size: 20,
             template_type: Some("VIDEO".to_owned()),
             ..ListMarketplaceTemplatesQuery::default()
         },

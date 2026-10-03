@@ -21,7 +21,7 @@ function translator(locale: string) {
  */
 export function MyTemplatesView({ runtime }: { runtime: DeploymentsH5Runtime }) {
   const t = translator(runtime.locale);
-  const service = useMemo(() => createH5MarketplaceService(runtime.deploy), [runtime.deploy]);
+  const service = useMemo(() => createH5MarketplaceService(runtime.deploy, runtime.order), [runtime.deploy, runtime.order]);
   const [items, setItems] = useState<readonly AppTemplateResponse[]>([]);
   const [expanded, setExpanded] = useState<string>();
   const [versions, setVersions] = useState<readonly AppTemplateVersionResponse[]>([]);

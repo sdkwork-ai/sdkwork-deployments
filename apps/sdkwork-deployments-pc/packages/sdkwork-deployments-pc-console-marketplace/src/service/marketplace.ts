@@ -1,20 +1,24 @@
 /**
  * Console service layer for the app template marketplace.
  *
- * The injected app-SDK client arrives from the host (clients-as-props, same
- * contract as the publishing package); this module is the only place the
- * pages touch transport shape, so the acquire idempotency key and the
+ * Two injected clients arrive from the host (clients-as-props, same contract as
+ * the publishing package): the deploy app client reads the module-owned catalog
+ * (categories, listings, versions) and the order app client drives app-template
+ * trade, which the platform order center owns. This module is the only place
+ * the pages touch transport shape, so the acquire idempotency key and the
  * optional-parameter projection live here rather than in the components.
  */
 import { uuid } from "@sdkwork/utils/id";
 
 import type {
+  AppTemplateOrderCreateResult,
+  AppTemplateOrderSummary,
   AppTemplateResponse,
   AppTemplateSummaryResponse,
   AppTemplateVersionResponse,
   SdkworkDeployAppClient,
+  SdkworkOrderAppClient,
   TemplateCategoryResponse,
-  TemplatePurchaseResponse,
 } from "@sdkwork/deployments-pc-console-core/sdk";
 
 export type TemplateType = "APP" | "PPT" | "VIDEO";
@@ -41,7 +45,7 @@ function omitBlank<T extends object>(value: T): T {
   ) as T;
 }
 
-export function createMarketplaceService(deployClient: SdkworkDeployAppClient) {
+export function createMarketplaceService(deployClient: SdkworkDeployAppClient, orderClient: SdkworkOrderAppClient) {
   return {
     async listCategories(): Promise<readonly TemplateCategoryResponse[]> {
       const page = await deployClient.template.templateCategories.list({ includeDisabled: false });
@@ -68,16 +72,25 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient) {
     async retrieve(templateUuid: string): Promise<AppTemplateResponse> {
       return deployClient.template.marketplaceTemplates.retrieve(templateUuid);
     },
-    /** Acquires the template; FREE grants the entitlement, PAID is rejected by the API. */
-    async acquire(templateUuid: string, versionUuid?: string | undefined): Promise<TemplatePurchaseResponse> {
-      return deployClient.template.templatePurchases.create(
-        templateUuid,
-        versionUuid === undefined ? {} : { versionUuid },
+    /**
+     * Starts (or reuses) the order-center purchase of one listing.
+     *
+     * `AppTemplateOrderCreateCommand` carries no version: the order snapshots
+     * whichever version the listing publishes at that moment, so a caller cannot
+     * pin one and the service does not offer the parameter. A FREE listing comes
+     * back `status: "paid"` with nothing left to do; a PAID listing comes back
+     * `pending_payment` with the cashier URL or provider payload the caller must
+     * surface.
+     */
+    async acquire(templateUuid: string): Promise<AppTemplateOrderCreateResult> {
+      return orderClient.orderAppTemplates.appTemplateOrders.create(
+        { templateUuid },
         { idempotencyKey: uuid() },
       );
     },
-    async myPurchases(page: number, pageSize: number): Promise<MarketplacePage<TemplatePurchaseResponse>> {
-      const result = await deployClient.template.templatePurchases.list({ page, pageSize });
+    /** The caller's app-template orders; the order center's `paid` is the install entitlement. */
+    async myPurchases(page: number, pageSize: number): Promise<MarketplacePage<AppTemplateOrderSummary>> {
+      const result = await orderClient.orderAppTemplates.appTemplateOrders.list({ page, pageSize });
       return {
         items: result.items,
         total: Number(result.pageInfo.totalItems ?? "0"),

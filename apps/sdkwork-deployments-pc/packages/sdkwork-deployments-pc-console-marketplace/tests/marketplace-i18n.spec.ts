@@ -7,7 +7,9 @@ describe("marketplace i18n", () => {
     const samples: MarketplaceMessageKey[] = [
       "marketplace.title",
       "marketplace.acquire",
-      "marketplace.acquireCommerce",
+      "marketplace.acquirePaid",
+      "marketplace.acquired",
+      "marketplace.openCashier",
       "myTemplates.create",
       "myTemplates.submit",
       "common.confirm",
@@ -25,6 +27,22 @@ describe("marketplace i18n", () => {
   it("interpolates values into both locales", () => {
     expect(translateMarketplace("en-US", "marketplace.installCount", { count: 12 })).toContain("12");
     expect(translateMarketplace("zh-CN", "marketplace.installCount", { count: 12 })).toContain("12");
+  });
+
+  it("names the order in the payment-pending notice of both locales", () => {
+    const en = translateMarketplace("en-US", "marketplace.paymentPending", { orderNo: "T-77" });
+    const zh = translateMarketplace("zh-CN", "marketplace.paymentPending", { orderNo: "T-77" });
+    expect(en).toContain("T-77");
+    expect(zh).toContain("T-77");
+    expect(en).not.toMatch(/\{[a-zA-Z]+\}/);
+    expect(zh).not.toMatch(/\{[a-zA-Z]+\}/);
+  });
+
+  it("surfaces the provider payload in the QR notice of both locales", () => {
+    const en = translateMarketplace("en-US", "marketplace.paymentQr", { orderNo: "T-77", qrCode: "weixin://pay/1" });
+    const zh = translateMarketplace("zh-CN", "marketplace.paymentQr", { orderNo: "T-77", qrCode: "weixin://pay/1" });
+    expect(en).toContain("weixin://pay/1");
+    expect(zh).toContain("weixin://pay/1");
   });
 
   it("labels FREE and PAID pricing distinctly per locale", () => {

@@ -74,10 +74,23 @@ export type {
   SourceRepositoryResponse,
   TechStack,
   TemplateCategoryResponse,
-  TemplatePurchaseResponse,
   UpdateAppSourceSpecRequest,
   UpdateAppTemplateRequest,
 } from "@sdkwork/deployments-app-sdk";
+
+/**
+ * App-template trade belongs to the platform order center, not to this module:
+ * the deployments app API is catalog-only, and `sdkwork-order` owns the order
+ * and its payment. The console funnels the order app SDK's surface the same way
+ * it funnels the deploy one — feature packages import it from here instead of
+ * reaching for the generated package — and aliases the client so a reader can
+ * tell which app API it talks to.
+ */
+export type {
+  AppTemplateOrderCreateResult,
+  AppTemplateOrderSummary,
+  SdkworkAppClient as SdkworkOrderAppClient,
+} from "@sdkwork/order-app-sdk";
 
 export type {
   ApplicationPublishProgress,

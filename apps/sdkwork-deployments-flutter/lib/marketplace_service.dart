@@ -1,5 +1,6 @@
 import 'package:sdkwork_deployments_app_sdk/sdkwork_deployments_app_sdk.dart';
 
+import 'order_center_client.dart';
 import 'runtime_config.dart';
 
 /// One browse page plus the paging facts the list needs to offer "load more".
@@ -16,8 +17,9 @@ class MarketplaceBrowsePage {
 }
 
 /// The marketplace port the UI consumes. Keeping the port explicit lets the
-/// widget tree and tests run against a fake while production delegates every
-/// call to the generated SDK client (never raw HTTP).
+/// widget tree and tests run against a fake while production delegates the
+/// catalog calls to the generated SDK client and the trade to
+/// [OrderCenterClient] (never raw HTTP from a widget).
 abstract class MarketplacePort {
   Future<List<TemplateCategoryResponse>> categories();
   Future<MarketplaceBrowsePage> browse({
@@ -30,23 +32,30 @@ abstract class MarketplacePort {
     String? sort,
   });
   Future<AppTemplateResponse> retrieve(String templateUuid);
-  Future<TemplatePurchaseResponse> acquire(String templateUuid);
-  Future<List<TemplatePurchaseResponse>> myPurchases();
+
+  /// Starts the order-center trade for one listing; the answer carries what
+  /// the buyer owns (`paid`) or still has to pay (cashier URL / QR payload).
+  Future<TemplateOrder> acquire(String templateUuid);
+
+  /// The buyer's template orders; `isEntitlement` rows are the install rights.
+  Future<List<TemplateOrderSummary>> myPurchases();
   Future<List<AppTemplateResponse>> myTemplates();
   Future<List<AppTemplateVersionResponse>> versions(String templateUuid);
   Future<AppTemplateResponse> submit(String templateUuid);
   Future<void> withdraw(String templateUuid);
 }
 
-/// Production port over the generated Flutter/Dart transport.
+/// Production port: the generated Flutter/Dart transport for the catalog and
+/// [OrderCenterClient] for the order center's app-template trade.
 ///
 /// The generated envelope responses carry `data` as the decoded JSON object,
 /// so this port is also where the `item` / `items` projection happens — one
 /// place, typed at the boundary, instead of maps leaking into widgets.
 class SdkworkMarketplacePort implements MarketplacePort {
   final SdkworkAppClient _client;
+  final OrderCenterClient _orders;
 
-  SdkworkMarketplacePort(this._client);
+  SdkworkMarketplacePort(this._client, this._orders);
 
   factory SdkworkMarketplacePort.fromConfig(DeploymentsRuntimeConfig config) {
     return SdkworkMarketplacePort(
@@ -55,6 +64,7 @@ class SdkworkMarketplacePort implements MarketplacePort {
         authToken: config.authToken.isEmpty ? null : config.authToken,
         accessToken: config.accessToken.isEmpty ? null : config.accessToken,
       ),
+      OrderCenterClient.fromConfig(config),
     );
   }
 
@@ -143,21 +153,13 @@ class SdkworkMarketplacePort implements MarketplacePort {
   }
 
   @override
-  Future<TemplatePurchaseResponse> acquire(String templateUuid) async {
-    final response = await _client.template.purchasesCreate(
-      templateUuid,
-      CreateTemplatePurchaseRequest(),
-      DateTime.now().microsecondsSinceEpoch.toRadixString(36),
-    );
-    if (response == null) throw const MarketplaceException('acquire unavailable');
-    return _item(response.data, 'acquire', TemplatePurchaseResponse.fromJson);
+  Future<TemplateOrder> acquire(String templateUuid) {
+    return _orders.createTemplateOrder(templateUuid);
   }
 
   @override
-  Future<List<TemplatePurchaseResponse>> myPurchases() async {
-    final response = await _client.template.purchasesList(1, 100, null);
-    if (response == null) throw const MarketplaceException('purchases unavailable');
-    return _items(response.data, 'purchases', TemplatePurchaseResponse.fromJson);
+  Future<List<TemplateOrderSummary>> myPurchases() {
+    return _orders.listTemplateOrders(page: 1, pageSize: 100);
   }
 
   @override

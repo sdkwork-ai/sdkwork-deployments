@@ -60,7 +60,7 @@
       {
         "workspace": "sdkwork-deployments-app-sdk",
         "surface": "app-api",
-        "credentialMode": "user-session"
+        "credentialMode": "authenticated-app-api"
       }
     ],
     "providedPorts": [],
@@ -84,8 +84,6 @@
       "deploy.appTemplates.write",
       "deploy.appTemplateVersions.read",
       "deploy.appTemplateVersions.write",
-      "deploy.templatePurchases.read",
-      "deploy.templatePurchases.write",
       "deploy.templateCategories.read",
       "deploy.apps.read"
     ]
@@ -93,7 +91,7 @@
   "integration": {
     "authority": "Root SDKWork specs remain authoritative.",
     "dependencyPolicy": "Consume sibling packages through public exports only.",
-    "sdkPolicy": "App SDK access is isolated behind console-core."
+    "sdkPolicy": "App and Drive SDK access is isolated behind console-core."
   },
   "verification": {
     "commands": [

@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 
 import type {
+  AppTemplateOrderCreateResult,
+  AppTemplateOrderSummary,
   AppTemplateResponse,
   AppTemplateSummaryResponse,
   SdkworkDeployAppClient,
+  SdkworkOrderAppClient,
   TemplateCategoryResponse,
-  TemplatePurchaseResponse,
 } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 
@@ -17,21 +19,34 @@ import { createMarketplaceService, type TemplateType } from "./service/marketpla
 
 export interface MarketplacePageProps {
   readonly deployClient: SdkworkDeployAppClient;
+  readonly orderClient: SdkworkOrderAppClient;
   readonly locale: DeploymentsLocale;
 }
 
 const PAGE_SIZE = 20;
 
 /**
+ * An order the buyer still has to pay, held in component state so the dialog can
+ * show what to do next. The listings are free or paid: a free one is owned the
+ * moment the order comes back `paid`, and a paid one leaves the buyer on a
+ * cashier page or with a provider payload to scan.
+ */
+interface PendingPayment {
+  readonly kind: "cashier" | "qr";
+  readonly orderNo: string;
+  readonly value: string;
+}
+
+/**
  * Storefront for the tenant marketplace: category/pricing facets over the
  * `PUBLIC` + `PUBLISHED` listings, a detail dialog, and the acquire action.
- * Acquire grants FREE listings only — a PAID listing routes the buyer to the
- * commerce checkout, so the button says so instead of implying this surface
- * can mint the entitlement.
+ * Acquire asks the platform order center for an app-template order: the deploy
+ * module owns the catalog only, so a FREE listing comes back owned in one click
+ * and a PAID listing hands the buyer to the cashier the order center returned.
  */
-export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) {
+export function MarketplacePage({ deployClient, orderClient, locale }: MarketplacePageProps) {
   const t = marketplaceTranslator(locale);
-  const service = useMemo(() => createMarketplaceService(deployClient), [deployClient]);
+  const service = useMemo(() => createMarketplaceService(deployClient, orderClient), [deployClient, orderClient]);
   const [categories, setCategories] = useState<readonly TemplateCategoryResponse[]>([]);
   const [items, setItems] = useState<readonly AppTemplateSummaryResponse[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,14 +58,18 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
   const [templateType, setTemplateType] = useState<"" | TemplateType>("");
   const [sort, setSort] = useState<"NEWEST" | "POPULAR">("NEWEST");
   const [detail, setDetail] = useState<AppTemplateResponse>();
-  const [purchases, setPurchases] = useState<readonly TemplatePurchaseResponse[]>([]);
+  const [orders, setOrders] = useState<readonly AppTemplateOrderSummary[]>([]);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment>();
   const [busy, setBusy] = useState(false);
+  const [acquiring, setAcquiring] = useState(false);
   const [error, setError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
 
-  const activeEntitlements = useMemo(
-    () => new Set(purchases.filter((purchase) => purchase.status === "ACTIVE").map((purchase) => purchase.templateUuid)),
-    [purchases],
+  // Ownership is the order center's verdict: a `paid` order for a listing is
+  // that listing's install entitlement, keyed by the template it was bought for.
+  const ownedTemplates = useMemo(
+    () => new Set(orders.filter((order) => order.status === "paid").map((order) => order.templateUuid)),
+    [orders],
   );
 
   const load = useCallback(async (): Promise<void> => {
@@ -74,7 +93,7 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
       setItems(listings.items);
       setTotal(listings.total);
       setHasMore(listings.hasMore);
-      setPurchases(ownership.items);
+      setOrders(ownership.items);
     } catch {
       setError(t("marketplace.loadFailed"));
     } finally {
@@ -89,6 +108,7 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
   const openDetail = useCallback(
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
+      setPendingPayment(undefined);
       try {
         setDetail(await service.retrieve(templateUuid));
       } catch {
@@ -101,12 +121,22 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
   const acquire = useCallback(
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
+      setPendingPayment(undefined);
+      setAcquiring(true);
       try {
-        await service.acquire(templateUuid);
-        setDetail(undefined);
-        await load();
+        const order = await service.acquire(templateUuid);
+        if (order.status === "paid") {
+          setDetail(undefined);
+          await load();
+          return;
+        }
+        // The order center owns the payment page: hand the buyer to it rather
+        // than reporting success for an order that is still unpaid.
+        setPendingPayment(pendingPaymentOf(order));
       } catch {
         setActionError(t("marketplace.acquireFailed"));
+      } finally {
+        setAcquiring(false);
       }
     },
     [service, load, t],
@@ -253,7 +283,7 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
         stickyHeader
       />
       <h2 className="section-title">{t("marketplace.purchases")}</h2>
-      <PurchaseTable emptyLabel={t("marketplace.purchases.empty")} locale={locale} purchases={purchases} />
+      <TemplateOrdersTable emptyLabel={t("marketplace.purchases.empty")} locale={locale} orders={orders} />
       {detail && (
         <div
           className="dialog-backdrop"
@@ -297,20 +327,34 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
                 <p key={index}>{line}</p>
               ))}
             {actionError && <div className="error-banner" role="alert">{actionError}</div>}
+            {pendingPayment && (
+              <div className="warning" role="status">
+                <span>
+                  {pendingPayment.kind === "cashier"
+                    ? t("marketplace.paymentPending", { orderNo: pendingPayment.orderNo })
+                    : t("marketplace.paymentQr", { orderNo: pendingPayment.orderNo, qrCode: pendingPayment.value })}
+                </span>
+                {pendingPayment.kind === "cashier" && (
+                  <a className="link-button" href={pendingPayment.value} target="_blank" rel="noreferrer">
+                    {t("marketplace.openCashier")}
+                  </a>
+                )}
+              </div>
+            )}
             <footer>
               <button className="secondary-button" type="button" onClick={() => setDetail(undefined)}>
                 {t("common.close")}
               </button>
               <button
                 className="command-button"
-                disabled={activeEntitlements.has(detail.id) || detail.pricingModel === "PAID"}
+                disabled={ownedTemplates.has(detail.id) || acquiring}
                 type="button"
                 onClick={() => void acquire(detail.id)}
               >
-                {activeEntitlements.has(detail.id)
+                {ownedTemplates.has(detail.id)
                   ? t("marketplace.acquired")
                   : detail.pricingModel === "PAID"
-                    ? t("marketplace.acquireCommerce")
+                    ? t("marketplace.acquirePaid")
                     : t("marketplace.acquire")}
               </button>
             </footer>
@@ -321,34 +365,36 @@ export function MarketplacePage({ deployClient, locale }: MarketplacePageProps) 
   );
 }
 
-function PurchaseTable({
+function TemplateOrdersTable({
   emptyLabel,
   locale,
-  purchases,
+  orders,
 }: {
   emptyLabel: string;
   locale: DeploymentsLocale;
-  purchases: readonly TemplatePurchaseResponse[];
+  orders: readonly AppTemplateOrderSummary[];
 }) {
   const t = marketplaceTranslator(locale);
-  const columns = useMemo<DataTableColumn<TemplatePurchaseResponse>[]>(
+  const columns = useMemo<DataTableColumn<AppTemplateOrderSummary>[]>(
     () => [
-      { id: "templateUuid", header: "Template", cell: (item) => item.templateUuid },
-      { id: "pricingModel", header: t("common.pricing"), cell: (item) => pricingLabel(item.pricingModel, t) },
+      { id: "templateName", header: t("common.template"), cell: (item) => item.templateName },
+      { id: "orderNo", header: t("marketplace.orderNo"), cell: (item) => item.orderNo },
+      { id: "amount", header: t("marketplace.orderAmount"), cell: (item) => `${item.amount} ${item.currencyCode}` },
       {
         id: "status",
         header: t("common.status"),
         cell: (item) => <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>,
       },
+      { id: "createdAt", header: t("marketplace.orderCreatedAt"), cell: (item) => item.createdAt },
     ],
     [t],
   );
   return (
-    <DataTable<TemplatePurchaseResponse>
+    <DataTable<AppTemplateOrderSummary>
       columns={columns}
       density="compact"
       emptyState={<span>{emptyLabel}</span>}
-      getRowId={(item) => item.id}
+      getRowId={(item) => item.orderId}
       pagination={{
         hasMore: false,
         mode: "server",
@@ -358,10 +404,24 @@ function PurchaseTable({
         pageSize: 100,
         pageSizeOptions: [100],
       }}
-      rows={purchases as TemplatePurchaseResponse[]}
+      rows={orders as AppTemplateOrderSummary[]}
       stickyHeader
     />
   );
+}
+
+/**
+ * Projects a created order onto what the buyer still has to do. A `cashier_url`
+ * order is paid on the order center's page, so it opens in a new tab and the
+ * dialog keeps a link in case the browser blocked the popup; a provider-native
+ * order has no page to open, so the payload itself is surfaced for scanning.
+ */
+function pendingPaymentOf(order: AppTemplateOrderCreateResult): PendingPayment {
+  if (order.qrCodeType === "cashier_url") {
+    window.open(order.cashierUrl, "_blank", "noopener,noreferrer");
+    return { kind: "cashier", orderNo: order.orderNo, value: order.cashierUrl };
+  }
+  return { kind: "qr", orderNo: order.orderNo, value: order.qrCode };
 }
 
 function pricingLabel(pricingModel: "FREE" | "PAID", t: (key: MarketplaceMessageKey, values?: Record<string, string | number>) => string): string {

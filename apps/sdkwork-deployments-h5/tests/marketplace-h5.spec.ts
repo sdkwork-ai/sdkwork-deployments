@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 import { translateH5, type DeploymentsH5MessageKey } from "../src/marketplace/i18n.ts";
 import { createH5MarketplaceService } from "../src/marketplace/service.ts";
 import type { SdkworkDeployAppClient } from "@sdkwork/deployments-app-sdk";
+import type { SdkworkAppClient as SdkworkOrderAppClient } from "@sdkwork/order-app-sdk";
+
+/**
+ * Order-center stub. The browse path never reaches it, but the service takes
+ * both injected clients, so every construction site needs one.
+ */
+function orderClientStub() {
+  const appTemplateOrders = {
+    create: async (body: unknown) => ({ orderId: "order-1", templateUuid: (body as { templateUuid: string }).templateUuid, status: "pending_payment" }),
+    list: async () => ({ items: [], pageInfo: { totalItems: "0", hasMore: false } }),
+  };
+  return { orderAppTemplates: { appTemplateOrders } } as unknown as SdkworkOrderAppClient;
+}
 
 describe("h5 marketplace i18n", () => {
   it("renders zh-CN and en-US for every key without leaking placeholders", () => {
@@ -11,7 +24,9 @@ describe("h5 marketplace i18n", () => {
       "tab.marketplace",
       "tab.myTemplates",
       "marketplace.acquire",
-      "marketplace.acquireCommerce",
+      "marketplace.acquirePaid",
+      "marketplace.acquired",
+      "marketplace.openCashier",
       "marketplace.versions",
       "marketplace.versions.empty",
       "myTemplates.submit",
@@ -29,6 +44,13 @@ describe("h5 marketplace i18n", () => {
 
   it("interpolates install counts", () => {
     expect(translateH5("zh-CN", "marketplace.installs", { count: 7 })).toContain("7");
+  });
+
+  it("names the order in the payment-pending notice of both locales", () => {
+    const zh = translateH5("zh-CN", "marketplace.paymentPending", { orderNo: "T-9" });
+    const en = translateH5("en-US", "marketplace.paymentPending", { orderNo: "T-9" });
+    expect(zh).toContain("T-9");
+    expect(en).toContain("T-9");
   });
 });
 
@@ -70,7 +92,7 @@ describe("h5 marketplace service", () => {
         },
       },
     } as unknown as SdkworkDeployAppClient;
-    return { service: createH5MarketplaceService(deploy), browseArgs: () => browseArgs };
+    return { service: createH5MarketplaceService(deploy, orderClientStub()), browseArgs: () => browseArgs };
   }
 
   it("projects blank optional facets as absent query parameters", async () => {
@@ -123,29 +145,34 @@ describe("h5 marketplace version and acquisition reads", () => {
             };
           },
         },
-        templatePurchases: {
+      },
+    } as unknown as SdkworkDeployAppClient;
+    const order = {
+      orderAppTemplates: {
+        appTemplateOrders: {
           create: async (...args: unknown[]) => {
             acquireArgs = args;
-            return { id: "purchase-1", status: "ACTIVE" };
+            return { orderId: "order-1", orderNo: "T-1", status: "pending_payment", qrCodeType: "cashier_url", cashierUrl: "https://cashier.example/T-1" };
           },
         },
       },
-    } as unknown as SdkworkDeployAppClient;
+    } as unknown as SdkworkOrderAppClient;
     return {
-      service: createH5MarketplaceService(deploy),
+      service: createH5MarketplaceService(deploy, order),
       acquireArgs: () => acquireArgs,
       versionArgs: () => versionArgs,
     };
   }
 
-  it("acquires with an empty body and a fresh idempotency key", async () => {
+  it("orders the template through the order center with a fresh idempotency key", async () => {
     const { service, acquireArgs } = clientWithSpy();
-    await service.acquire("tmpl-1");
+    const result = await service.acquire("tmpl-1");
     const args = acquireArgs();
-    expect(args?.[0]).toBe("tmpl-1");
-    expect(args?.[1]).toEqual({});
-    const params = args?.[2] as { idempotencyKey?: string } | undefined;
+    expect(args?.[0]).toEqual({ templateUuid: "tmpl-1" });
+    const params = args?.[1] as { idempotencyKey?: string } | undefined;
     expect(params?.idempotencyKey).toMatch(/\S/);
+    expect(result.status).toBe("pending_payment");
+    expect(result.cashierUrl).toBe("https://cashier.example/T-1");
   });
 
   it("scopes the version read to the listing and returns its rows", async () => {
@@ -154,6 +181,6 @@ describe("h5 marketplace version and acquisition reads", () => {
     expect(versionArgs()?.[0]).toBe("tmpl-1");
     expect(versionArgs()?.[1]).toEqual({ page: 1, pageSize: 50 });
     expect(versions).toHaveLength(1);
-    expect(versions[0].templateVersion).toBe("1.2.0");
+    expect(versions[0]?.templateVersion).toBe("1.2.0");
   });
 });

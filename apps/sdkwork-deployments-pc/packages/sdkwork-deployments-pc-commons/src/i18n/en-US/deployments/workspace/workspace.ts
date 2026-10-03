@@ -64,10 +64,8 @@ export const deploymentsWorkspaceEnUs = {
   "resource.appTemplates.description": "Author-published app template listings and moderation",
   "resource.appTemplateVersions.label": "Template versions",
   "resource.appTemplateVersions.description": "Published version snapshots of one listing (scope carries the template UUID)",
-  "resource.templatePurchases.label": "Template purchases",
-  "resource.templatePurchases.description": "Acquisition entitlements and revocations",
   "resource.marketplace.label": "Marketplace",
-  "resource.marketplace.description": "Browse and acquire published app templates",
+  "resource.marketplace.description": "Browse published app templates; paid ones are ordered on the platform order center",
   "resource.myTemplates.label": "My templates",
   "resource.myTemplates.description": "Publish your apps as templates and manage versions",
   "action.apps.create": "Create application",
@@ -106,5 +104,4 @@ export const deploymentsWorkspaceEnUs = {
   "action.appTemplates.feature": "Feature",
   "action.appTemplates.unfeature": "Unfeature",
   "action.appTemplates.delete": "Delete listing",
-  "action.templatePurchases.revoke": "Revoke entitlement",
 } as const;

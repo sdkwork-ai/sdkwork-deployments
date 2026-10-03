@@ -132,16 +132,9 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
       ["templateVersion", "status"],
       { requiresScope: true },
     ),
-    templatePurchases: source(
-      (query) => client.template.templatePurchases.list({ page: query.page, pageSize: query.pageSize }),
-      [
-        // 付费购买由 sdkwork-order/sdkwork-payment 的订单履约直接产生 ACTIVE
-        // 权益（支付回调驱动），这里只保留售后作废。
-        action("revoke", "Revoke entitlement", {}, (context) =>
-          client.template.templatePurchases.revoke(selected(context, "id")), { dangerous: true, selection: true }),
-      ],
-      ["templateUuid", "buyerUserId", "status"],
-    ),
+    // No purchase resource: app-template trade is the platform order center's
+    // (`sdkwork-order`) and the deployments app API is catalog-only, so this
+    // registry has no ledger to read and no entitlement to revoke.
   };
 }
 

@@ -5,6 +5,13 @@
 /// call still flows through this single typed port, and tests inject a fake
 /// requester so the envelope decoding and command shaping stay unit-tested
 /// without WeChat DevTools.
+///
+/// The port spans two app APIs on the same origin: the deployments catalog
+/// (`template_categories` / `marketplace/templates` / `app_templates`) and the
+/// order center's app-template trade (`app_template_orders`). The deployments
+/// module is catalog-only — it owns no purchase, order or entitlement row, so
+/// `acquire`/`myPurchases` speak the order center's payloads and nothing here
+/// records or settles a payment.
 
 export interface WxRequestOptions {
   readonly url: string;
@@ -74,11 +81,53 @@ export interface TemplateDetail {
   readonly status: string;
 }
 
-export interface TemplatePurchase {
-  readonly id: string;
+/// Order-center order states (`app_template_orders`). `paid` is the settled
+/// state; a FREE listing is created settled, a PAID listing starts
+/// `pending_payment` until the buyer's payment lands.
+export type TemplateOrderStatus = 'paid' | 'pending_payment' | 'closed';
+
+/// How `qrCode` has to be presented: a cashier URL the buyer opens, or a
+/// provider-native payment payload.
+export type TemplateOrderQrCodeType = 'cashier_url' | 'provider_native';
+
+/// One trade: `POST /app/v3/api/app_template_orders` (`appTemplateOrders.create`).
+export interface TemplateOrder {
+  readonly orderId: string;
+  readonly orderNo: string;
+  readonly outTradeNo: string;
   readonly templateUuid: string;
-  readonly status: string;
-  readonly pricingModel: string;
+  readonly templateName: string;
+  readonly versionUuid?: string;
+  readonly amount: string;
+  readonly currencyCode: string;
+  readonly expiresAt?: string;
+  readonly paymentMethod?: string;
+  readonly paymentProduct: string;
+  readonly qrCode?: string;
+  readonly qrCodeType?: TemplateOrderQrCodeType;
+  readonly paymentId?: string;
+  readonly paymentParams?: Readonly<Record<string, unknown>>;
+  readonly status: TemplateOrderStatus;
+  /// True when the order center answered with an order this buyer already had
+  /// instead of creating another one.
+  readonly reused: boolean;
+  readonly cashierUrl?: string;
+}
+
+/// One buyer order row: `GET /app/v3/api/app_template_orders`
+/// (`appTemplateOrders.list`). `status === 'paid'` is the install entitlement.
+export interface TemplateOrderSummary {
+  readonly orderId: string;
+  readonly orderNo: string;
+  readonly templateUuid: string;
+  readonly templateName: string;
+  readonly versionUuid?: string;
+  readonly amount: string;
+  readonly currencyCode: string;
+  readonly status: TemplateOrderStatus;
+  readonly fulfillmentStatus: string;
+  readonly paidAt?: string;
+  readonly createdAt: string;
 }
 
 export interface MyTemplate {
@@ -100,6 +149,17 @@ export interface TemplateVersion {
 function buildQuery(entries: readonly (readonly [string, string])[]): string {
   const encoded = entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
   return encoded.length === 0 ? '' : `?${encoded.join('&')}`;
+}
+
+/**
+ * What the buyer has to act on: the provider-native payload when the order
+ * center marks the QR as such, else the cashier URL. Empty when the order
+ * carries no payment requirement at all (a settled order).
+ */
+export function paymentRequirement(order: TemplateOrder): string {
+  const qrCode = order.qrCode ?? '';
+  if (order.qrCodeType === 'provider_native' && qrCode !== '') return qrCode;
+  return order.cashierUrl ?? qrCode;
 }
 
 export class MarketplaceError extends Error {
@@ -132,8 +192,10 @@ export interface MarketplacePort {
   categories(): Promise<TemplateCategory[]>;
   browse(params: MarketplaceBrowseParams): Promise<MarketplaceBrowsePage>;
   retrieve(templateUuid: string): Promise<TemplateDetail>;
-  acquire(templateUuid: string): Promise<TemplatePurchase>;
-  myPurchases(): Promise<TemplatePurchase[]>;
+  /** Order-center trade for a listing; the response carries the payment requirement. */
+  acquire(templateUuid: string): Promise<TemplateOrder>;
+  /** The buyer's template orders; rows with `status === 'paid'` are entitlements. */
+  myPurchases(): Promise<TemplateOrderSummary[]>;
   myTemplates(): Promise<MyTemplate[]>;
   versions(templateUuid: string): Promise<TemplateVersion[]>;
   submit(templateUuid: string): Promise<void>;
@@ -240,15 +302,21 @@ export class SdkworkMiniMarketplacePort implements MarketplacePort {
     );
   }
 
+  /**
+   * Starts the order-center trade with the template uuid in the body (the
+   * `Idempotency-Key` header comes from `call`). A FREE listing answers
+   * `paid`; a PAID listing answers `pending_payment` plus the cashier URL or
+   * provider QR code the buyer still has to settle.
+   */
   acquire(templateUuid: string) {
-    return this.call<unknown>('POST', `/marketplace/templates/${encodeURIComponent(templateUuid)}/purchase`, {}).then(
-      (payload) => SdkworkMiniMarketplacePort.item<TemplatePurchase>(payload),
+    return this.call<unknown>('POST', '/app_template_orders', { templateUuid }).then((payload) =>
+      SdkworkMiniMarketplacePort.item<TemplateOrder>(payload),
     );
   }
 
   myPurchases() {
-    return this.call<unknown>('GET', '/template_purchases?page=1&page_size=100').then((payload) =>
-      SdkworkMiniMarketplacePort.items<TemplatePurchase>(payload),
+    return this.call<unknown>('GET', '/app_template_orders?page=1&page_size=100').then((payload) =>
+      SdkworkMiniMarketplacePort.items<TemplateOrderSummary>(payload),
     );
   }
 

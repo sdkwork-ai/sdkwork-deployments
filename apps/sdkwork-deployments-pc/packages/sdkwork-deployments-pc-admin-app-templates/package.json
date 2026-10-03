@@ -14,9 +14,6 @@
   "dependencies": {
     "@sdkwork/deployments-pc-commons": "workspace:*"
   },
-  "devDependencies": {
-    "@types/react": "catalog:"
-  },
   "sdkwork": {
     "applicationCode": "deployments",
     "architecture": "pc-react",

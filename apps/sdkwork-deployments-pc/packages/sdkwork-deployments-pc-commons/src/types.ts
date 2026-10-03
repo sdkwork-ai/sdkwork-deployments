@@ -14,14 +14,14 @@ export type DeploymentsSurface = "app-console" | "backend-admin";
  *
  * `sourceSpecs` is the operation-plane counterpart of the console's per-app
  * "source specs" drawer: same rows, read across applications instead of within
- * one. The template-marketplace ids split the capability across both surfaces:
- * the admin moderates `templateCategories` / `appTemplates` /
- * `appTemplateVersions` / `templatePurchases`, the console browses `marketplace`
- * and manages `myTemplates`. `appTemplateVersions` is a scoped resource: its
- * rows belong to one listing, so the shell requires the scope field to carry
- * that listing's template uuid before it loads anything.
+ * one. The template-catalog ids split the capability across both surfaces: the
+ * admin moderates `templateCategories` / `appTemplates` /
+ * `appTemplateVersions`, the console browses `marketplace` and manages
+ * `myTemplates`. `appTemplateVersions` is a scoped resource: its rows belong to
+ * one listing, so the shell requires the scope field to carry that listing's
+ * template uuid before it loads anything.
  */
-export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs" | "templateCategories" | "appTemplates" | "appTemplateVersions" | "templatePurchases" | "marketplace" | "myTemplates";
+export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs" | "templateCategories" | "appTemplates" | "appTemplateVersions" | "marketplace" | "myTemplates";
 export interface DeploymentsModuleEntry { description: string; label: string; order: number; permission?: string | undefined; resource: DeploymentsResourceKey; }
 export interface DeploymentsPcModuleDefinition { entries: readonly DeploymentsModuleEntry[]; id: string; label: string; surface: DeploymentsSurface; }
 export interface DeploymentsQuery { page: number; pageSize: number; scopeId?: string | undefined; search?: string | undefined; }

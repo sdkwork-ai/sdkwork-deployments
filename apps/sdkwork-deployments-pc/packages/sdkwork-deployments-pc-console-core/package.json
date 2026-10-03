@@ -40,6 +40,7 @@
     "@sdkwork/deployments-app-sdk": "workspace:*",
     "@sdkwork/drive-app-sdk": "workspace:*",
     "@sdkwork/deployments-pc-commons": "workspace:*",
+    "@sdkwork/order-app-sdk": "workspace:*",
     "@sdkwork/sdk-common": "workspace:*",
     "@sdkwork/utils": "workspace:*",
     "react": "catalog:"

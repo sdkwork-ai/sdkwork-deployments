@@ -34,9 +34,7 @@
       "deploy.appTemplates.read",
       "deploy.appTemplates.write",
       "deploy.appTemplateVersions.read",
-      "deploy.appTemplateVersions.write",
-      "deploy.templatePurchases.read",
-      "deploy.templatePurchases.write"
+      "deploy.appTemplateVersions.write"
     ]
   },
   "runtime": {
