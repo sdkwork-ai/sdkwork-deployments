@@ -198,48 +198,74 @@ export function MyTemplatesPage({ deployClient, locale }: MyTemplatesPageProps) 
         rows={items as AppTemplateResponse[]}
         stickyHeader
       />
-      {expanded && (
-        <div className="version-panel">
-          <h2 className="section-title">{t("myTemplates.versions")}</h2>
-          {versions.length === 0 ? (
-            <div className="empty-state">{t("myTemplates.versions.empty")}</div>
-          ) : (
-            <ul className="version-list">
-              {versions.map((version) => (
-                <li key={version.id}>
-                  <span className={`status-badge status-${version.status.toLowerCase()}`}>{version.status}</span>
-                  <strong>{version.templateVersion}</strong>
-                  <span>{version.changelog}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="actions">
-            <button className="command-button" type="button" onClick={() => setDialog("version")}>
-              <Plus size={15} />
-              {t("myTemplates.addVersion")}
-            </button>
-            <button className="secondary-button" type="button" onClick={() => void openEdit(expanded)}>
-              {t("myTemplates.edit")}
-            </button>
-            <button
-              className="command-button"
-              type="button"
-              onClick={() => void runTemplateAction((templateUuid) => service.submit(templateUuid), expanded)}
-            >
-              {t("myTemplates.submit")}
-            </button>
-            <button
-              className="danger-button"
-              type="button"
-              onClick={() => {
-                const templateUuid = expanded;
-                setExpanded(undefined);
-                void runTemplateAction((uuid) => service.remove(uuid), templateUuid);
-              }}
-            >
-              {t("myTemplates.delete")}
-            </button>
+      {/* The version ledger opens as a dialog over the page, not an inline
+          panel below it: the row click fetches the template's versions and the
+          dialog carries the per-template actions. A command dialog or the edit
+          dialog takes over the backdrop while open and returns here on close. */}
+      {expanded && dialog === undefined && !editTarget && (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setExpanded(undefined);
+          }}
+        >
+          <div className="dialog" role="dialog" aria-modal="true" aria-labelledby="versions-dialog-title">
+            <header>
+              <div>
+                <span className="eyebrow">{items.find((item) => item.id === expanded)?.displayName ?? expanded}</span>
+                <h2 id="versions-dialog-title">{t("myTemplates.versions")}</h2>
+              </div>
+              <button className="icon-button" title={t("common.close")} type="button" onClick={() => setExpanded(undefined)}>
+                <X size={18} />
+              </button>
+            </header>
+            {actionError && <div className="error-banner" role="alert">{actionError}</div>}
+            {versions.length === 0 ? (
+              <div className="empty-state">{t("myTemplates.versions.empty")}</div>
+            ) : (
+              <ul className="version-list">
+                {versions.map((version) => (
+                  <li key={version.id}>
+                    <span className={`status-badge status-${version.status.toLowerCase()}`}>{version.status}</span>
+                    <strong>{version.templateVersion}</strong>
+                    <span>{version.changelog}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="actions">
+              <button className="command-button" type="button" onClick={() => setDialog("version")}>
+                <Plus size={15} />
+                {t("myTemplates.addVersion")}
+              </button>
+              <button className="secondary-button" type="button" onClick={() => void openEdit(expanded)}>
+                {t("myTemplates.edit")}
+              </button>
+              <button
+                className="command-button"
+                type="button"
+                onClick={() => void runTemplateAction((templateUuid) => service.submit(templateUuid), expanded)}
+              >
+                {t("myTemplates.submit")}
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                onClick={() => {
+                  const templateUuid = expanded;
+                  setExpanded(undefined);
+                  void runTemplateAction((uuid) => service.remove(uuid), templateUuid);
+                }}
+              >
+                {t("myTemplates.delete")}
+              </button>
+            </div>
+            <footer>
+              <button className="secondary-button" type="button" onClick={() => setExpanded(undefined)}>
+                {t("common.close")}
+              </button>
+            </footer>
           </div>
         </div>
       )}

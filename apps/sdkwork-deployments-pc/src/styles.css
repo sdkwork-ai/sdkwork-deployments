@@ -455,7 +455,7 @@
 .link-button:hover{color:#8a6206}
 .scope-input select{border:0;outline:none;background:transparent;width:100%;min-width:0}
 .section-title{margin:26px 0 10px;font-size:16px;line-height:1.3;letter-spacing:0}
-.version-panel{border:1px solid #d5dbde;border-radius:7px;background:#fff;padding:14px 16px;margin:16px 0}
+
 .version-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .version-list li{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:8px 10px;border:1px solid #e1e5e7;border-radius:5px}
 .version-list li span:last-child{color:#657178}
