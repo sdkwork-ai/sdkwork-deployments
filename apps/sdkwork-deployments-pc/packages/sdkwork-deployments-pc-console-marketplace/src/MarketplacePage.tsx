@@ -179,8 +179,14 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
 
   async function submitSearch(event: FormEvent): Promise<void> {
     event.preventDefault();
-    setPage(1);
-    await load();
+    // Resetting the page re-runs the load effect through its new closure; when
+    // the page is already 1 no state changes, so the submit loads directly.
+    // Doing both would race a page>1 fetch against the page-1 refetch.
+    if (page === 1) {
+      await load();
+    } else {
+      setPage(1);
+    }
   }
 
   return (
