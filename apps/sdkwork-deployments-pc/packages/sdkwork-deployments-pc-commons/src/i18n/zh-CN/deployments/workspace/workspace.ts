@@ -30,6 +30,7 @@ export const deploymentsWorkspaceZhCn = {
   "dialog.submitting": "提交中...",
   "dialog.close": "关闭",
   "error.operation": "操作未完成，请核对输入后重试。",
+  "error.load": "资源加载失败，请重试。",
   "resource.configuration.label": "应用配置",
   "resource.configuration.description": "管理环境变量与健康检查",
   "resource.domains.label": "域名",

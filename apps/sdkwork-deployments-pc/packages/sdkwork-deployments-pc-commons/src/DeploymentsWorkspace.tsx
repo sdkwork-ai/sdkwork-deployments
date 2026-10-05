@@ -77,7 +77,7 @@ export function DeploymentsResourceTable({ entry, locale, source }: DeploymentsR
     try {
       const result = await source.load({ page, pageSize, scopeId: scopeId.trim() || undefined, search: search.trim() || undefined });
       setItems(result.items); setPageInfo({ ...result.pageInfo, total: result.pageInfo.total });
-    } catch { setError(t("error.operation")); } finally { setBusy(false); }
+    } catch { setError(t("error.load")); } finally { setBusy(false); }
   }
 
   useEffect(() => { void load(); }, [entry.resource, page, pageSize, scopeId]);

@@ -29,7 +29,10 @@ const PAGE_SIZE = 20;
  * banner instead of optimistic row edits.
  */
 export function MyTemplatesPage({ deployClient, locale }: MyTemplatesPageProps) {
-  const t = marketplaceTranslator(locale);
+  // The translator must be reference-stable per locale: `load` names `t` in its
+  // dependency list, and a fresh closure every render would re-create `load`
+  // every render, re-fire the load effect, and refetch the page in a loop.
+  const t = useMemo(() => marketplaceTranslator(locale), [locale]);
   const service = useMemo(() => createMyTemplatesService(deployClient), [deployClient]);
   const [items, setItems] = useState<readonly AppTemplateResponse[]>([]);
   const [total, setTotal] = useState(0);

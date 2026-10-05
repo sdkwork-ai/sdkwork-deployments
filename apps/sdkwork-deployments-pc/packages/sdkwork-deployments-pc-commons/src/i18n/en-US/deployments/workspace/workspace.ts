@@ -30,6 +30,7 @@ export const deploymentsWorkspaceEnUs = {
   "dialog.submitting": "Submitting...",
   "dialog.close": "Close",
   "error.operation": "The operation could not be completed. Review the inputs and try again.",
+  "error.load": "This resource could not be loaded. Try again.",
   "resource.configuration.label": "Configuration",
   "resource.configuration.description": "Environment variables and health checks",
   "resource.domains.label": "Domains",

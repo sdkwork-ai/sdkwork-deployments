@@ -15,7 +15,7 @@ import type {
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 
 import { marketplaceTranslator, type MarketplaceMessageKey } from "./i18n.ts";
-import { createMarketplaceService, type TemplateType } from "./service/marketplace.ts";
+import { createMarketplaceService, type MarketplacePage as MarketplaceLedger, type TemplateType } from "./service/marketplace.ts";
 
 export interface MarketplacePageProps {
   readonly deployClient: SdkworkDeployAppClient;
@@ -24,6 +24,9 @@ export interface MarketplacePageProps {
 }
 
 const PAGE_SIZE = 20;
+
+/** The degraded ledger for a host without the order center (see `load`). */
+const EMPTY_ORDERS: MarketplaceLedger<AppTemplateOrderSummary> = { items: [], total: 0, hasMore: false };
 
 /**
  * An order the buyer still has to pay, held in component state so the dialog can
@@ -45,7 +48,10 @@ interface PendingPayment {
  * and a PAID listing hands the buyer to the cashier the order center returned.
  */
 export function MarketplacePage({ deployClient, orderClient, locale }: MarketplacePageProps) {
-  const t = marketplaceTranslator(locale);
+  // The translator must be reference-stable per locale: `load` names `t` in its
+  // dependency list, and a fresh closure every render would re-create `load`
+  // every render, re-fire the load effect, and refetch the whole page in a loop.
+  const t = useMemo(() => marketplaceTranslator(locale), [locale]);
   const service = useMemo(() => createMarketplaceService(deployClient, orderClient), [deployClient, orderClient]);
   const [categories, setCategories] = useState<readonly TemplateCategoryResponse[]>([]);
   const [items, setItems] = useState<readonly AppTemplateSummaryResponse[]>([]);
@@ -76,6 +82,11 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     setBusy(true);
     setError(undefined);
     try {
+      // The order ledger is an optional plane: a host that does not mount the
+      // platform order center answers 404 for `app_template_orders`, and that
+      // gap must not take the storefront down with it. The catalog calls stay
+      // page-fatal; the ledger degrades to its empty state, and an acquire
+      // attempt still reports its own failure through `actionError`.
       const [categoryList, listings, ownership] = await Promise.all([
         service.listCategories(),
         service.browse({
@@ -87,7 +98,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
           templateType: templateType === "" ? undefined : templateType,
           sort,
         }),
-        service.myPurchases(1, 100),
+        service.myPurchases(1, 100).catch(() => EMPTY_ORDERS),
       ]);
       setCategories(categoryList);
       setItems(listings.items);
@@ -374,7 +385,7 @@ function TemplateOrdersTable({
   locale: DeploymentsLocale;
   orders: readonly AppTemplateOrderSummary[];
 }) {
-  const t = marketplaceTranslator(locale);
+  const t = useMemo(() => marketplaceTranslator(locale), [locale]);
   const columns = useMemo<DataTableColumn<AppTemplateOrderSummary>[]>(
     () => [
       { id: "templateName", header: t("common.template"), cell: (item) => item.templateName },
