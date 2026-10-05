@@ -66,6 +66,10 @@ export function DeploymentsResourceTable({ entry, locale, source }: DeploymentsR
   const [pageInfo, setPageInfo] = useState<{ page: number; pageSize: number; hasMore: boolean; total: number | undefined }>({ page: 1, pageSize: RESOURCE_PAGE_SIZES[0], hasMore: false, total: undefined });
   const [scopeId, setScopeId] = useState(() => sessionStorage.getItem("sdkwork.deployments.siteId") ?? "");
   const [search, setSearch] = useState("");
+  // `search` is the input's draft; only `appliedSearch` reaches `load`. The
+  // effect keys on the applied term, so typing stays off the network and a
+  // page/pageSize change cannot filter by a term the operator never submitted.
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [selected, setSelected] = useState<Record<string, unknown>>();
   const [action, setAction] = useState<DeploymentsAction>();
   const [busy, setBusy] = useState(false);
@@ -75,12 +79,12 @@ export function DeploymentsResourceTable({ entry, locale, source }: DeploymentsR
     if (!source || (source.requiresScope && !scopeId.trim())) { setItems([]); return; }
     setBusy(true); setError(undefined);
     try {
-      const result = await source.load({ page, pageSize, scopeId: scopeId.trim() || undefined, search: search.trim() || undefined });
+      const result = await source.load({ page, pageSize, scopeId: scopeId.trim() || undefined, search: appliedSearch.trim() || undefined });
       setItems(result.items); setPageInfo({ ...result.pageInfo, total: result.pageInfo.total });
     } catch { setError(t("error.load")); } finally { setBusy(false); }
   }
 
-  useEffect(() => { void load(); }, [entry.resource, page, pageSize, scopeId]);
+  useEffect(() => { void load(); }, [entry.resource, page, pageSize, scopeId, appliedSearch]);
   useEffect(() => { setPage(1); setSelected(undefined); }, [entry.resource]);
   const columns = useMemo(() => Array.from(new Set(items.flatMap(Object.keys))).slice(0, 7), [items]);
   const showsScope = source?.requiresScope || source?.actions.some((candidate) => candidate.requiresScope);
@@ -128,7 +132,7 @@ export function DeploymentsResourceTable({ entry, locale, source }: DeploymentsR
 
   return <section className="resource-page">
     <header className="page-header"><div><span className="eyebrow">{entry.resource}</span><h1>{resourceText(t, entry.resource, "label")}</h1><p>{resourceText(t, entry.resource, "description")}</p></div><button className="icon-button" type="button" disabled={busy} title={t("toolbar.refresh")} onClick={() => void load()}><RefreshCw size={18} /></button></header>
-    <div className="toolbar"><form className="search-box" onSubmit={(event) => { event.preventDefault(); /* Same one-fetch rule as the marketplace page: page reset fires the effect, an already-reset page loads directly. */ if (page === 1) { void load(); } else { setPage(1); } }}><Search size={16} /><input aria-label={t("toolbar.search")} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("toolbar.search")} /></form>{showsScope && <label className="scope-input"><Settings2 size={16} /><input aria-label={t("toolbar.siteId")} value={scopeId} onChange={(event) => updateScope(event.target.value)} placeholder={t("toolbar.siteId")} /></label>}<div className="actions">{source?.actions.map((candidate) => <button key={candidate.id} className={candidate.dangerous ? "danger-button" : "command-button"} disabled={busy || (candidate.requiresSelection && !selected) || (candidate.requiresScope && !scopeId.trim())} onClick={() => setAction(candidate)} type="button">{candidate.requiresFile && <Upload size={15} />}{actionText(t, entry.resource, candidate)}</button>)}</div></div>
+    <div className="toolbar"><form className="search-box" onSubmit={(event) => { event.preventDefault(); const term = search.trim(); if (term === appliedSearch) { /* Same committed term: an already-reset page changes nothing the effect sees, so reload directly. */ if (page === 1) { void load(); } else { setPage(1); } return; } setAppliedSearch(term); if (page > 1) setPage(1); }}><Search size={16} /><input aria-label={t("toolbar.search")} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("toolbar.search")} /></form>{showsScope && <label className="scope-input"><Settings2 size={16} /><input aria-label={t("toolbar.siteId")} value={scopeId} onChange={(event) => updateScope(event.target.value)} placeholder={t("toolbar.siteId")} /></label>}<div className="actions">{source?.actions.map((candidate) => <button key={candidate.id} className={candidate.dangerous ? "danger-button" : "command-button"} disabled={busy || (candidate.requiresSelection && !selected) || (candidate.requiresScope && !scopeId.trim())} onClick={() => setAction(candidate)} type="button">{candidate.requiresFile && <Upload size={15} />}{actionText(t, entry.resource, candidate)}</button>)}</div></div>
     {error && <div className="error-banner" role="alert">{error}<button className="icon-button" type="button" title={t("toolbar.dismiss")} onClick={() => setError(undefined)}><X size={16} /></button></div>}
     {source?.requiresScope && !scopeId.trim()
       ? <div className="empty-state">{t("scope.empty")}</div>

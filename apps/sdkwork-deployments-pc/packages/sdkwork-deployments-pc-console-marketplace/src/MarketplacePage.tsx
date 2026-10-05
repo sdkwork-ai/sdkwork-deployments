@@ -1,5 +1,5 @@
 import { RefreshCw, Search, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 
@@ -58,12 +58,12 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
+  // `keyword` is the input's draft and never reaches the load path; the effect
+  // only sees `appliedKeyword`, which the search submit commits. That keeps
+  // typing off the network and stops a category/sort change from filtering by
+  // a term the visitor never submitted.
   const [keyword, setKeyword] = useState("");
-  // The draft keyword lives in a ref so typing stays off the load path: `load`
-  // reads the ref at call time, and because `keyword` is not in its dependency
-  // list the load effect does not fire per keystroke. Only the search submit
-  // (or a page reset from it) commits the term.
-  const keywordRef = useRef("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
   const [categoryUuid, setCategoryUuid] = useState("");
   const [pricingModel, setPricingModel] = useState<"" | "FREE" | "PAID">("");
   const [templateType, setTemplateType] = useState<"" | TemplateType>("");
@@ -99,7 +99,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
           page,
           pageSize: PAGE_SIZE,
           categoryUuid: categoryUuid === "" ? undefined : categoryUuid,
-          keyword: keywordRef.current.trim() === "" ? undefined : keywordRef.current.trim(),
+          keyword: appliedKeyword === "" ? undefined : appliedKeyword,
           pricingModel: pricingModel === "" ? undefined : pricingModel,
           templateType: templateType === "" ? undefined : templateType,
           sort,
@@ -116,7 +116,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     } finally {
       setBusy(false);
     }
-  }, [service, page, categoryUuid, pricingModel, templateType, sort, t]);
+  }, [service, page, categoryUuid, appliedKeyword, pricingModel, templateType, sort, t]);
 
   useEffect(() => {
     void load();
@@ -184,19 +184,18 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
 
   async function submitSearch(event: FormEvent): Promise<void> {
     event.preventDefault();
-    // Resetting the page re-runs the load effect through its new closure; when
-    // the page is already 1 no state changes, so the submit loads directly.
-    // Doing both would race a page>1 fetch against the page-1 refetch.
-    if (page === 1) {
-      await load();
-    } else {
-      setPage(1);
+    const term = keyword.trim();
+    if (term === appliedKeyword) {
+      // Same committed term: an already-reset page changes no state the effect
+      // would see, so reload directly instead of racing the page>1 refetch.
+      if (page === 1) await load();
+      else setPage(1);
+      return;
     }
-  }
-
-  function updateKeyword(value: string): void {
-    keywordRef.current = value;
-    setKeyword(value);
+    // A new term re-runs the load effect; reset the page in the same batch so
+    // the two changes commit as one fetch rather than two.
+    setAppliedKeyword(term);
+    if (page > 1) setPage(1);
   }
 
   return (
@@ -218,7 +217,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
             aria-label={t("marketplace.search")}
             value={keyword}
             placeholder={t("marketplace.search")}
-            onChange={(event) => updateKeyword(event.target.value)}
+            onChange={(event) => setKeyword(event.target.value)}
           />
         </form>
         <label className="scope-input">
