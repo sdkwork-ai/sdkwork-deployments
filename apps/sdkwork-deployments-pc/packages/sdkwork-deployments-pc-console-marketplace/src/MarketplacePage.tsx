@@ -82,11 +82,12 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     setBusy(true);
     setError(undefined);
     try {
-      // The order ledger is an optional plane: a host that does not mount the
+      // The order read is an optional plane: a host that does not mount the
       // platform order center answers 404 for `app_template_orders`, and that
       // gap must not take the storefront down with it. The catalog calls stay
-      // page-fatal; the ledger degrades to its empty state, and an acquire
-      // attempt still reports its own failure through `actionError`.
+      // page-fatal; the ledger degrades to an empty set, which only clears the
+      // "owned" acquire state — an acquire attempt still reports its own
+      // failure through `actionError`.
       const [categoryList, listings, ownership] = await Promise.all([
         service.listCategories(),
         service.browse({
@@ -293,8 +294,6 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
         rows={items as AppTemplateSummaryResponse[]}
         stickyHeader
       />
-      <h2 className="section-title">{t("marketplace.purchases")}</h2>
-      <TemplateOrdersTable emptyLabel={t("marketplace.purchases.empty")} locale={locale} orders={orders} />
       {detail && (
         <div
           className="dialog-backdrop"
@@ -373,51 +372,6 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
         </div>
       )}
     </section>
-  );
-}
-
-function TemplateOrdersTable({
-  emptyLabel,
-  locale,
-  orders,
-}: {
-  emptyLabel: string;
-  locale: DeploymentsLocale;
-  orders: readonly AppTemplateOrderSummary[];
-}) {
-  const t = useMemo(() => marketplaceTranslator(locale), [locale]);
-  const columns = useMemo<DataTableColumn<AppTemplateOrderSummary>[]>(
-    () => [
-      { id: "templateName", header: t("common.template"), cell: (item) => item.templateName },
-      { id: "orderNo", header: t("marketplace.orderNo"), cell: (item) => item.orderNo },
-      { id: "amount", header: t("marketplace.orderAmount"), cell: (item) => `${item.amount} ${item.currencyCode}` },
-      {
-        id: "status",
-        header: t("common.status"),
-        cell: (item) => <span className={`status-badge status-${item.status.toLowerCase()}`}>{item.status}</span>,
-      },
-      { id: "createdAt", header: t("marketplace.orderCreatedAt"), cell: (item) => item.createdAt },
-    ],
-    [t],
-  );
-  return (
-    <DataTable<AppTemplateOrderSummary>
-      columns={columns}
-      density="compact"
-      emptyState={<span>{emptyLabel}</span>}
-      getRowId={(item) => item.orderId}
-      pagination={{
-        hasMore: false,
-        mode: "server",
-        onPageChange: () => undefined,
-        onPageSizeChange: () => undefined,
-        page: 1,
-        pageSize: 100,
-        pageSizeOptions: [100],
-      }}
-      rows={orders as AppTemplateOrderSummary[]}
-      stickyHeader
-    />
   );
 }
 
