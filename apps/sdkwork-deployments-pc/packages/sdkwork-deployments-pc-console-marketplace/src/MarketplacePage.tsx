@@ -1,5 +1,5 @@
 import { RefreshCw, Search, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 
@@ -59,6 +59,11 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
+  // The draft keyword lives in a ref so typing stays off the load path: `load`
+  // reads the ref at call time, and because `keyword` is not in its dependency
+  // list the load effect does not fire per keystroke. Only the search submit
+  // (or a page reset from it) commits the term.
+  const keywordRef = useRef("");
   const [categoryUuid, setCategoryUuid] = useState("");
   const [pricingModel, setPricingModel] = useState<"" | "FREE" | "PAID">("");
   const [templateType, setTemplateType] = useState<"" | TemplateType>("");
@@ -94,7 +99,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
           page,
           pageSize: PAGE_SIZE,
           categoryUuid: categoryUuid === "" ? undefined : categoryUuid,
-          keyword: keyword === "" ? undefined : keyword,
+          keyword: keywordRef.current.trim() === "" ? undefined : keywordRef.current.trim(),
           pricingModel: pricingModel === "" ? undefined : pricingModel,
           templateType: templateType === "" ? undefined : templateType,
           sort,
@@ -111,7 +116,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     } finally {
       setBusy(false);
     }
-  }, [service, page, categoryUuid, keyword, pricingModel, templateType, sort, t]);
+  }, [service, page, categoryUuid, pricingModel, templateType, sort, t]);
 
   useEffect(() => {
     void load();
@@ -189,6 +194,11 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     }
   }
 
+  function updateKeyword(value: string): void {
+    keywordRef.current = value;
+    setKeyword(value);
+  }
+
   return (
     <section className="resource-page">
       <header className="page-header">
@@ -208,7 +218,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
             aria-label={t("marketplace.search")}
             value={keyword}
             placeholder={t("marketplace.search")}
-            onChange={(event) => setKeyword(event.target.value)}
+            onChange={(event) => updateKeyword(event.target.value)}
           />
         </form>
         <label className="scope-input">
