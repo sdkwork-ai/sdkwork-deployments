@@ -15,7 +15,12 @@
 .publishDialog,
 .drawerRoot,
 .cascaderPanel {
-  --pda-bg: var(--dsw-specific-menu, #ffffff);
+  /* 弹窗/抽屉/级联面板的底色必须是**不透明**实色：--dsw-specific-menu 是给
+     带自身背衬的菜单表面用的半透明值（BirdCoder 深色下 alpha 仅 0.45），
+     拿它当面板底色会把面板背后的内容透出来。layer token 语义就是分层
+     不透明表面；控制台与 Web Server 控制台两个宿主没有 --dsw-* token，
+     落到原有 fallback，行为不变。 */
+  --pda-bg: var(--dsw-alias-bg-layer-1, #ffffff);
   --pda-surface: var(--dsw-specific-input-major, #f7f8fa);
   --pda-border: var(--dsw-alias-border-l2, #e2e5ea);
   --pda-text: var(--dsw-alias-label-primary, #1c2128);
@@ -28,7 +33,7 @@
      选中标签只剩一圈描边可辨；深色下 accent-soft 是半透明蓝，
      叠在深底上对比度掉到 1.0（文字直接看不见）。
      这里取一个**不透明**的实色，保证在浅底与深底下都能与表头条拉开层次。 */
-  --pda-pill-active: var(--dsw-specific-menu, #ffffff);
+  --pda-pill-active: var(--dsw-alias-bg-layer-2, #ffffff);
   --pda-danger: var(--dsw-alias-state-error-primary, #dc2626);
   --pda-focus: color-mix(in srgb, var(--dsw-alias-state-business-primary, #2563eb) 35%, transparent);
   /* 级联列表滚动条：常态极淡只在需要时被感知，悬停加深提示可拖拽。 */
@@ -42,7 +47,7 @@
 .publishDialog[data-theme="dark"],
 .drawerRoot[data-theme="dark"],
 .cascaderPanel[data-theme="dark"] {
-  --pda-bg: var(--dsw-specific-menu, #1e2430);
+  --pda-bg: var(--dsw-alias-bg-layer-1, #1e2430);
   --pda-surface: var(--dsw-specific-input-major, #161b26);
   --pda-border: var(--dsw-alias-border-l2, #2c3444);
   --pda-text: var(--dsw-alias-label-primary, #e6e9ef);
@@ -50,13 +55,15 @@
   --pda-accent: var(--dsw-alias-state-business-primary, #4f8cff);
   --pda-accent-hover: var(--dsw-alias-state-business-primary, #3b7bf2);
   --pda-accent-soft: var(--dsw-alias-interactive-bg-hover-accent, rgba(79, 140, 255, 0.14));
-  /* 深色下选中态：必须**比表头条明显亮一档**。
-     表头条底色 = 半透明 accent(0.14) 叠在对话框底上，实测 ≈ #1d2b44。
+  /* 深色下选中态：必须**比面板底色明显亮一档**。
+     表头条底色 = 半透明 accent(0.14) 叠在面板底上，实测 ≈ #1d2b44。
      之前这里 fallback 到 #2a3344，与表头条只差 1.12 对比度 ⇒
      选中页签看起来像个空心描边，而未选中页签用的是更亮的 surface(#161b26 字面值虽深，
      但 accent-soft 底在深色下整体偏亮)，视觉上反而更像「被选中」，层次是反的。
-     这里直接给一个不透明、且在深蓝底上足够跳的中间灰蓝。 */
-  --pda-pill-active: var(--dsw-alias-bg-base, #38445c);
+     这里直接给一个不透明、且在深底上足够跳的中间灰蓝。token 取 layer-3
+     （BirdCoder 深色下 rgb(53,54,56)，比面板底 layer-1 rgb(35,35,36) 亮一档）；
+     bg-base 在该宿主是比面板底更暗的 950，层次会反向，不能用。 */
+  --pda-pill-active: var(--dsw-alias-bg-layer-3, #38445c);
   --pda-danger: var(--dsw-alias-state-error-primary, #f87171);
   --pda-focus: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4f8cff) 40%, transparent);
   /* 深色下用浅色 thumb：同一 alpha 在深底上会更「消失」，故取更亮的基色 + 略高不透明度。 */
