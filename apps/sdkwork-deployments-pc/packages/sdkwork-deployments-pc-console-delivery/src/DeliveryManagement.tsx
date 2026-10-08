@@ -1379,11 +1379,18 @@ interface DnsRecordFormValues {
   recordType: DnsRecordType;
   host: string;
   recordValue: string;
+  recordLine: string;
   ttlSeconds: string;
 }
 
 function emptyDnsRecordForm(): DnsRecordFormValues {
-  return { recordType: "A", host: "", recordValue: "", ttlSeconds: String(DNS_DEFAULT_TTL) };
+  return {
+    recordType: "A",
+    host: "",
+    recordValue: "",
+    recordLine: "",
+    ttlSeconds: String(DNS_DEFAULT_TTL),
+  };
 }
 
 function typedRecordType(value: string): DnsRecordType {
@@ -1395,6 +1402,7 @@ function dnsRecordFormFrom(record: DomainDnsRecordResponse): DnsRecordFormValues
     recordType: typedRecordType(record.recordType),
     host: record.host,
     recordValue: record.recordValue,
+    recordLine: record.recordLine ?? "",
     ttlSeconds: record.ttlSeconds === undefined ? "" : String(record.ttlSeconds),
   };
 }
@@ -1469,6 +1477,7 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
     if (!recordValue) return { ok: false, message: t("dnsValueRequired") };
     const ttlRaw = form.ttlSeconds.trim();
     const ttlSeconds = ttlRaw === "" ? undefined : Number(ttlRaw);
+    const recordLine = form.recordLine.trim();
     return {
       ok: true,
       body: {
@@ -1476,6 +1485,7 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
         host,
         recordValue,
         ...(ttlSeconds === undefined || Number.isNaN(ttlSeconds) ? {} : { ttlSeconds }),
+        ...(recordLine === "" ? {} : { recordLine }),
       },
     };
   };
@@ -1501,7 +1511,8 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
       host: read.body.host,
       recordValue: read.body.recordValue,
       ...(read.body.ttlSeconds === undefined ? {} : { ttlSeconds: read.body.ttlSeconds }),
-    } as UpdateDomainDnsRecordRequest).then(() => {
+      ...(read.body.recordLine === undefined ? {} : { recordLine: read.body.recordLine }),
+    } satisfies UpdateDomainDnsRecordRequest).then(() => {
       setEditId(undefined);
       setRefreshVersion((value) => value + 1);
     }).catch((cause) => setFormError(errorText(cause)));
@@ -1634,6 +1645,14 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
         onChange={(event) => setForm({ ...form, recordValue: event.target.value })}
         type="text"
         value={form.recordValue}
+      />
+      <input
+        aria-label={t("dnsRecordLine")}
+        disabled={managementDisabled}
+        onChange={(event) => setForm({ ...form, recordLine: event.target.value })}
+        placeholder="default"
+        type="text"
+        value={form.recordLine}
       />
       <select
         aria-label={t("dnsTtl")}
