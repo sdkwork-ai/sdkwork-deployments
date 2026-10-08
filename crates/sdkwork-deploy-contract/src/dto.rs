@@ -322,6 +322,11 @@ pub struct DomainDnsRecordResponse {
     /// Absolute record owner inside the zone, e.g. `www.example.com`.
     #[serde(rename = "recordName")]
     pub record_name: String,
+    /// Zone-relative owner — the 主机记录 the provider consoles ask for
+    /// (`@` for the apex, `www`, `api.eu`, `*`). Derived from `recordName`
+    /// against the Zone apex, so the two cannot disagree.
+    #[serde(rename = "host")]
+    pub host: String,
     /// Record type as the provider spells it (`A`, `AAAA`, `CNAME`, `TXT`, `MX`).
     #[serde(rename = "recordType")]
     pub record_type: String,
@@ -338,6 +343,10 @@ pub struct DomainDnsRecordResponse {
     /// per-line records.
     #[serde(rename = "recordLine", skip_serializing_if = "Option::is_none")]
     pub record_line: Option<String>,
+    /// The provider-side resolution state: `ENABLED` answers, `DISABLED` is
+    /// the vendor's paused record (暂停解析).
+    #[serde(rename = "recordStatus")]
+    pub record_status: String,
     /// The registered hostname this record resolves, when its owner matched
     /// one at sync time (wildcard semantics applied there); absent when the
     /// owner matches none.
@@ -365,6 +374,52 @@ pub struct DomainDnsRecordPage {
     pub total: i64,
     pub page: i32,
     pub page_size: i32,
+}
+
+/// Creates one resolution record of any managed type through the Zone's cloud
+/// account. The host is the zone-relative 主机记录 (`@`, `www`, `*`); the value
+/// is validated per type before the vendor is asked.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateDomainDnsRecordRequest {
+    #[serde(rename = "recordType")]
+    pub record_type: String,
+    #[serde(rename = "host")]
+    pub host: String,
+    #[serde(rename = "recordValue")]
+    pub record_value: String,
+    #[serde(rename = "ttlSeconds", default)]
+    pub ttl_seconds: Option<i32>,
+    #[serde(default)]
+    pub priority: Option<i32>,
+    #[serde(rename = "recordLine", default)]
+    pub record_line: Option<String>,
+}
+
+/// Edits one record in place: a full replace of owner/type/value/TTL.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateDomainDnsRecordRequest {
+    #[serde(rename = "recordType")]
+    pub record_type: String,
+    #[serde(rename = "host")]
+    pub host: String,
+    #[serde(rename = "recordValue")]
+    pub record_value: String,
+    #[serde(rename = "ttlSeconds", default)]
+    pub ttl_seconds: Option<i32>,
+    #[serde(default)]
+    pub priority: Option<i32>,
+    #[serde(rename = "recordLine", default)]
+    pub record_line: Option<String>,
+}
+
+/// Pauses one record (暂停解析) or resumes it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DomainDnsRecordStatusRequest {
+    #[serde(rename = "enabled")]
+    pub enabled: bool,
 }
 
 /// What one cloud-account sync run established.

@@ -1,16 +1,17 @@
 use axum::{
-    Extension, Json, Router,
     extract::{Path, Query, State},
     http::HeaderMap,
     response::Response,
     routing::{get, post, put},
+    Extension, Json, Router,
 };
 use sdkwork_deploy_contract::{
     CompleteDeployUploadSessionRequest, CreateArtifactRequest, CreateCertificateRequest,
-    CreateCloudAccountRequest, CreateDeployUploadSessionRequest, CreateDomainHostnameRequest,
-    CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi,
-    DeployAppRequestContext, EnsureDomainHostnameClaimsRequest, ListCloudAccountsQuery,
-    ListDomainDnsRecordsQuery, ListDomainZonesQuery, UpdateAppCompositionRequest,
+    CreateCloudAccountRequest, CreateDeployUploadSessionRequest, CreateDomainDnsRecordRequest,
+    CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
+    CreateHealthCheckRequest, DeployAppApi, DeployAppRequestContext, DomainDnsRecordStatusRequest,
+    EnsureDomainHostnameClaimsRequest, ListCloudAccountsQuery, ListDomainDnsRecordsQuery,
+    ListDomainZonesQuery, UpdateAppCompositionRequest, UpdateDomainDnsRecordRequest,
     UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
 };
 use sdkwork_routes_deploy_common::{
@@ -86,7 +87,16 @@ pub fn build_domain_management_router() -> Router<AppState> {
         )
         .route(
             paths::DOMAIN_ZONE_DNS_RECORDS,
-            get(list_domain_zone_dns_records),
+            get(list_domain_zone_dns_records).post(create_domain_zone_dns_record),
+        )
+        .route(
+            paths::DOMAIN_ZONE_DNS_RECORD,
+            axum::routing::patch(update_domain_zone_dns_record)
+                .delete(delete_domain_zone_dns_record),
+        )
+        .route(
+            paths::DOMAIN_ZONE_DNS_RECORD_STATUS,
+            axum::routing::patch(set_domain_zone_dns_record_status),
         )
         .route(
             paths::DOMAIN_ZONE_DNS_RECORDS_SYNC,
@@ -371,6 +381,95 @@ async fn list_domain_zone_dns_records(
                 query.page,
                 query.page_size,
             ))
+        }
+        .await,
+    )
+}
+
+/// Creates one resolution record of any managed type through the Zone's cloud
+/// account and joins it to the snapshot.
+async fn create_domain_zone_dns_record(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(zone_id): Path<String>,
+    Json(request): Json<CreateDomainDnsRecordRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .create_domain_zone_dns_record(&context, &zone_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Replaces one record in place on the provider, then in the snapshot.
+async fn update_domain_zone_dns_record(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path((zone_id, record_id)): Path<(String, String)>,
+    Json(request): Json<UpdateDomainDnsRecordRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .update_domain_zone_dns_record(&context, &zone_id, &record_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Deletes one record on the provider and removes the stored row.
+async fn delete_domain_zone_dns_record(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path((zone_id, record_id)): Path<(String, String)>,
+) -> Response {
+    finish_no_content(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            service_result(
+                state
+                    .api
+                    .delete_domain_zone_dns_record(&context, &zone_id, &record_id)
+                    .await,
+            )
+        }
+        .await,
+    )
+}
+
+/// Pauses one record (暂停解析) or resumes it.
+async fn set_domain_zone_dns_record_status(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path((zone_id, record_id)): Path<(String, String)>,
+    Json(request): Json<DomainDnsRecordStatusRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .set_domain_zone_dns_record_status(&context, &zone_id, &record_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
         }
         .await,
     )
@@ -1015,17 +1114,13 @@ mod tests {
     #[test]
     fn composition_precondition_headers_are_required() {
         let headers = HeaderMap::new();
-        assert!(
-            parse_if_match(&headers)
-                .expect_err("If-Match must be required")
-                .to_string()
-                .contains("if-match header is required")
-        );
-        assert!(
-            required_header(&headers, "idempotency-key")
-                .expect_err("Idempotency-Key must be required")
-                .to_string()
-                .contains("idempotency-key header is required")
-        );
+        assert!(parse_if_match(&headers)
+            .expect_err("If-Match must be required")
+            .to_string()
+            .contains("if-match header is required"));
+        assert!(required_header(&headers, "idempotency-key")
+            .expect_err("Idempotency-Key must be required")
+            .to_string()
+            .contains("idempotency-key header is required"));
     }
 }

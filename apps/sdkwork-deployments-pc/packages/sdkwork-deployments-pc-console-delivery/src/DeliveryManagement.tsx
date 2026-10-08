@@ -5,12 +5,14 @@ import {
   type CloudAccountDnsProvider,
   type CloudAccountRegistrationResponse,
   type CloudAccountResponse,
+  type CreateDomainDnsRecordRequest,
   type DomainDnsRecordResponse,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
   type DomainVerifyResponse,
   type DomainZoneResponse,
   type PageInfo,
+  type UpdateDomainDnsRecordRequest,
   useDeploymentsDeliveryService,
 } from "@sdkwork/deployments-pc-console-core";
 import {
@@ -1352,21 +1354,50 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
 }
 
 /**
- * One hostname's own page: its synced DNS resolution records.
+ * One hostname's own page: its DNS resolution records, managed the way the
+ * provider consoles manage them (对齐阿里云解析设置).
  *
- * The records are a snapshot, never a live lookup: the page renders what the
- * last cloud-account sync read from the provider, and the sync button is the
- * only gesture that touches the provider. That keeps a page render a store
- * read, and it keeps the answer honest about its age — the snapshot instant
- * sits in every row and in the summary line, so a stale view says so instead
- * of posing as current.
+ * The page reads the cloud-account snapshot — never a live provider query on
+ * a render — and carries the write-through plane on top of it: an inline add
+ * row, per-row edit, pause/resume (暂停解析), and delete, each writing to the
+ * provider first and then updating the snapshot row. A vendor refusal leaves
+ * the snapshot untouched, so the page never claims a change the provider did
+ * not accept. Cloudflare has no per-record pause; its refusal is the vendor's
+ * own advice (delete the record instead).
  *
- * The rows shown are the ones the sync matched to *this* hostname, wildcard
- * semantics already applied: an exact hostname shows its own owner's records,
- * and a wildcard hostname shows its star record, its base owner, and every
- * owner exactly one label beneath it. Zone-level records matched to no
- * registered hostname are the Zone page's business, not this page's.
+ * The rows shown are the ones matched to *this* hostname, wildcard semantics
+ * already applied at sync time. The two filters — 主机记录 keyword and record
+ * type — are the pair Aliyun's own 解析设置 page offers, applied on submit.
  */
+const DNS_RECORD_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "NS", "CAA"] as const;
+const DNS_DEFAULT_TTL = 600;
+
+type DnsRecordType = (typeof DNS_RECORD_TYPES)[number];
+
+interface DnsRecordFormValues {
+  recordType: DnsRecordType;
+  host: string;
+  recordValue: string;
+  ttlSeconds: string;
+}
+
+function emptyDnsRecordForm(): DnsRecordFormValues {
+  return { recordType: "A", host: "", recordValue: "", ttlSeconds: String(DNS_DEFAULT_TTL) };
+}
+
+function typedRecordType(value: string): DnsRecordType {
+  return (DNS_RECORD_TYPES as readonly string[]).includes(value) ? (value as DnsRecordType) : "A";
+}
+
+function dnsRecordFormFrom(record: DomainDnsRecordResponse): DnsRecordFormValues {
+  return {
+    recordType: typedRecordType(record.recordType),
+    host: record.host,
+    recordValue: record.recordValue,
+    ttlSeconds: record.ttlSeconds === undefined ? "" : String(record.ttlSeconds),
+  };
+}
+
 function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
   const { zoneId = "", hostnameId = "" } = useParams();
   const service = useDeploymentsDeliveryService();
@@ -1381,13 +1412,32 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
   const [syncSummary, setSyncSummary] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  // The two 解析设置 filters: the keyword applies on submit, the type select
+  // applies on change (a selection is already a complete statement).
+  const [hostFilterDraft, setHostFilterDraft] = useState("");
+  const [hostFilter, setHostFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  // The Aliyun-shaped management state: an open add row, the row being edited,
+  // and the delete awaiting confirmation.
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState<DnsRecordFormValues>(emptyDnsRecordForm);
+  const [editId, setEditId] = useState<string>();
+  const [editForm, setEditForm] = useState<DnsRecordFormValues>(emptyDnsRecordForm);
+  const [deleteTarget, setDeleteTarget] = useState<DomainDnsRecordResponse>();
+  const [formError, setFormError] = useState<string>();
 
   useEffect(() => {
     let active = true;
     setBusy(true); setError(undefined);
     void Promise.all([
       service.listDomainHostnames(zoneId, { page: 1, pageSize: 20 }),
-      service.listZoneDnsRecords(zoneId, { page, pageSize, ...(hostnameId ? { hostnameId } : {}) }),
+      service.listZoneDnsRecords(zoneId, {
+        page,
+        pageSize,
+        ...(hostnameId ? { hostnameId } : {}),
+        ...(hostFilter ? { host: hostFilter } : {}),
+        ...(typeFilter ? { recordType: typeFilter } : {}),
+      }),
     ]).then(([hostnameResult, recordResult]) => {
       if (!active) return;
       setHostname(hostnameResult.items.find((row) => row.id === hostnameId));
@@ -1395,14 +1445,11 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
       setPageInfo(recordResult.pageInfo);
     }).catch((cause) => { if (active) setError(errorText(cause)); }).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [hostnameId, page, pageSize, refreshVersion, service, zoneId]);
+  }, [hostFilter, hostnameId, page, pageSize, refreshVersion, service, typeFilter, zoneId]);
 
   /**
-   * The one gesture that reaches the provider: re-read the zone's inventory
-   * through its cloud account and replace the snapshot. The account resolves
-   * exactly as the zone's DNS operations do — its pin, then the account
-   * center's choice, then the deployment-level configuration — so a zone
-   * pinned to no account still syncs when such an account exists.
+   * The one gesture that reaches the read side of the provider: re-read the
+   * zone's inventory through its cloud account and replace the snapshot.
    */
   const runSync = () => {
     setSyncing(true); setError(undefined);
@@ -1413,37 +1460,230 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
     }).catch((cause) => setError(errorText(cause))).finally(() => setSyncing(false));
   };
 
-  const recordColumns = useMemo<DataTableColumn<DomainDnsRecordResponse>[]>(() => [
-    {
-      id: "recordName",
-      header: t("hostname"),
-      cell: (record) => <span className="hostname-cell"><Globe2 size={15} /><span>{record.recordName}</span></span>,
-      width: 260,
-    },
+  /** Reads the editable fields into the wire shape the API contract defines. */
+  const readDnsForm = (form: DnsRecordFormValues): { ok: true; body: CreateDomainDnsRecordRequest } | { ok: false; message: string } => {
+    const host = form.host.trim();
+    if (!host) return { ok: false, message: t("dnsHostRequired") };
+    const recordValue = form.recordValue.trim();
+    if (!recordValue) return { ok: false, message: t("dnsValueRequired") };
+    const ttlRaw = form.ttlSeconds.trim();
+    const ttlSeconds = ttlRaw === "" ? undefined : Number(ttlRaw);
+    return {
+      ok: true,
+      body: {
+        recordType: typedRecordType(form.recordType),
+        host,
+        recordValue,
+        ...(ttlSeconds === undefined || Number.isNaN(ttlSeconds) ? {} : { ttlSeconds }),
+      },
+    };
+  };
+
+  const submitAdd = () => {
+    const read = readDnsForm(addForm);
+    if (!read.ok) { setFormError(read.message); return; }
+    setFormError(undefined);
+    void service.createZoneDnsRecord(zoneId, read.body).then(() => {
+      setAddOpen(false);
+      setAddForm(emptyDnsRecordForm());
+      setRefreshVersion((value) => value + 1);
+    }).catch((cause) => setFormError(errorText(cause)));
+  };
+
+  const submitEdit = () => {
+    if (editId === undefined) return;
+    const read = readDnsForm(editForm);
+    if (!read.ok) { setFormError(read.message); return; }
+    setFormError(undefined);
+    void service.updateZoneDnsRecord(zoneId, editId, {
+      recordType: read.body.recordType,
+      host: read.body.host,
+      recordValue: read.body.recordValue,
+      ...(read.body.ttlSeconds === undefined ? {} : { ttlSeconds: read.body.ttlSeconds }),
+    } as UpdateDomainDnsRecordRequest).then(() => {
+      setEditId(undefined);
+      setRefreshVersion((value) => value + 1);
+    }).catch((cause) => setFormError(errorText(cause)));
+  };
+
+  /** Provider first, snapshot row second — the order the backend enforces. */
+  const flipStatus = (record: DomainDnsRecordResponse) => {
+    setFormError(undefined);
+    void service.setZoneDnsRecordStatus(zoneId, record.id, record.recordStatus !== "ENABLED")
+      .then(() => setRefreshVersion((value) => value + 1))
+      .catch((cause) => setError(errorText(cause)));
+  };
+
+  const removeRecord = (record: DomainDnsRecordResponse) => {
+    setFormError(undefined);
+    void service.deleteZoneDnsRecord(zoneId, record.id).then(() => {
+      setDeleteTarget(undefined);
+      setRefreshVersion((value) => value + 1);
+    }).catch((cause) => { setDeleteTarget(undefined); setError(errorText(cause)); });
+  };
+
+  const managementDisabled = syncing || busy;
+
+  const dnsFilterToolbar = (
+    <div className="resource-query">
+      <form
+        className="search-box"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setPage(1);
+          setHostFilter(hostFilterDraft.trim());
+        }}
+      >
+        <Search size={16} />
+        <input
+          aria-label={t("dnsFilterHost")}
+          onChange={(event) => setHostFilterDraft(event.target.value)}
+          placeholder={t("dnsFilterHost")}
+          value={hostFilterDraft}
+        />
+      </form>
+      <label className="cloud-account-filter">
+        <span>{t("dnsRecordType")}</span>
+        <select
+          onChange={(event) => {
+            setPage(1);
+            setTypeFilter(event.target.value);
+          }}
+          value={typeFilter}
+        >
+          <option value="">{t("dnsFilterType")}</option>
+          {DNS_RECORD_TYPES.map((recordType) => (
+            <option key={recordType} value={recordType}>{recordType}</option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+
+  const dnsRecordColumns = useMemo<DataTableColumn<DomainDnsRecordResponse>[]>(() => [
     { id: "recordType", header: t("dnsRecordType"), cell: (record) => <StatusBadge value={record.recordType} t={t} />, width: 110 },
+    { id: "host", header: t("dnsRecordHost"), cell: (record) => <code>{record.host}</code>, width: 200 },
     // The resolution answer itself: the IP for A/AAAA, the target for
     // CNAME/MX. Mono-spaced by the cell style, so a value is copyable without
     // quoting mistakes.
     { id: "recordValue", header: t("dnsRecordValue"), cell: (record) => <span><code>{record.recordValue}</code>{record.priority === undefined ? "" : ` · ${record.priority}`}</span>, width: 240 },
-    { id: "recordLine", header: t("dnsRecordLine"), cell: (record) => record.recordLine ?? "-", width: 110 },
-    { id: "ttlSeconds", header: t("dnsTtl"), cell: (record) => record.ttlSeconds ?? "-", width: 100 },
-    { id: "syncedAt", header: t("dnsSyncedAt"), cell: (record) => formatDate(record.syncedAt, locale), width: 180 },
-  ], [locale, t]);
+    { id: "recordLine", header: t("dnsRecordLine"), cell: (record) => record.recordLine ?? "-", width: 100 },
+    { id: "ttlSeconds", header: t("dnsTtl"), cell: (record) => record.ttlSeconds ?? "-", width: 90 },
+    { id: "recordStatus", header: t("dnsRecordStatus"), cell: (record) => <StatusBadge value={record.recordStatus === "DISABLED" ? "PAUSED" : "ACTIVE"} t={t} />, width: 110 },
+    { id: "syncedAt", header: t("dnsSyncedAt"), cell: (record) => formatDate(record.syncedAt, locale), width: 170 },
+    {
+      id: "operations",
+      header: t("operations"),
+      cell: (record) => (
+        <div className="row-actions">
+          <button
+            aria-label={`${t("dnsEditRecord")} ${record.host}`}
+            className="table-action"
+            disabled={managementDisabled || addOpen || editId !== undefined}
+            onClick={() => { setAddOpen(false); setEditForm(dnsRecordFormFrom(record)); setFormError(undefined); setEditId(record.id); }}
+            title={t("dnsEditRecord")}
+            type="button"
+          ><Pencil size={16} /></button>
+          <button
+            aria-label={`${record.recordStatus === "DISABLED" ? t("dnsResumeRecord") : t("dnsPauseRecord")} ${record.host}`}
+            className="table-action"
+            disabled={managementDisabled || addOpen || editId !== undefined}
+            onClick={() => flipStatus(record)}
+            title={record.recordStatus === "DISABLED" ? t("dnsResumeRecord") : t("dnsPauseRecord")}
+            type="button"
+          >{record.recordStatus === "DISABLED" ? <CirclePlay size={16} /> : <CirclePause size={16} />}</button>
+          <button
+            aria-label={`${t("dnsDeleteRecord")} ${record.host}`}
+            className="table-action danger-action"
+            disabled={managementDisabled || addOpen || editId !== undefined}
+            onClick={() => setDeleteTarget(record)}
+            title={t("dnsDeleteRecord")}
+            type="button"
+          ><Trash2 size={16} /></button>
+        </div>
+      ),
+      width: 150,
+    },
+  ], [addOpen, editId, locale, managementDisabled, t]);
+
+  /** The editor strip and the add strip share one field set, Aliyun-style. */
+  const renderDnsFormFields = (form: DnsRecordFormValues, setForm: (next: DnsRecordFormValues) => void) => (
+    <>
+      <select
+        aria-label={t("dnsRecordType")}
+        disabled={managementDisabled}
+        onChange={(event) => setForm({ ...form, recordType: typedRecordType(event.target.value) })}
+        value={form.recordType}
+      >
+        {DNS_RECORD_TYPES.map((recordType) => (
+          <option key={recordType} value={recordType}>{recordType}</option>
+        ))}
+      </select>
+      <input
+        aria-label={t("dnsRecordHost")}
+        disabled={managementDisabled}
+        onChange={(event) => setForm({ ...form, host: event.target.value })}
+        placeholder={t("dnsRecordHostPlaceholder")}
+        type="text"
+        value={form.host}
+      />
+      <input
+        aria-label={t("dnsRecordValue")}
+        disabled={managementDisabled}
+        onChange={(event) => setForm({ ...form, recordValue: event.target.value })}
+        type="text"
+        value={form.recordValue}
+      />
+      <select
+        aria-label={t("dnsTtl")}
+        disabled={managementDisabled}
+        onChange={(event) => setForm({ ...form, ttlSeconds: event.target.value })}
+        value={form.ttlSeconds}
+      >
+        {[600, 1800, 3600, 86400].map((ttl) => (
+          <option key={ttl} value={String(ttl)}>{ttl}</option>
+        ))}
+        {form.ttlSeconds !== "" && ![600, 1800, 3600, 86400].includes(Number(form.ttlSeconds)) ? (
+          <option value={form.ttlSeconds}>{form.ttlSeconds}</option>
+        ) : null}
+      </select>
+    </>
+  );
 
   return <section className="resource-page domain-page">
     <Link className="back-link" to={`/console/domains/${zoneId}`}><ArrowLeft size={16} />{t("backHostnames")}</Link>
     <div className="resource-commandbar">
       <div className="resource-identity"><h1>{hostname?.hostname ?? hostnameId}</h1></div>
       <div className="actions">
-        <button className="icon-button" type="button" disabled={busy} title={t("refresh")} onClick={() => { setRefreshVersion((value) => value + 1); setPage(1); }}><RefreshCw size={17} /></button>
+        <button className="icon-button" type="button" disabled={managementDisabled} title={t("refresh")} onClick={() => { setRefreshVersion((value) => value + 1); setPage(1); }}><RefreshCw size={17} /></button>
         <button className="command-button" type="button" disabled={syncing} title={t("dnsSync")} onClick={runSync}><RefreshCw size={16} />{t("dnsSync")}</button>
+        <button
+          className="command-button"
+          type="button"
+          disabled={managementDisabled || addOpen || editId !== undefined}
+          title={t("dnsAddRecord")}
+          onClick={() => { setEditId(undefined); setAddForm(emptyDnsRecordForm()); setFormError(undefined); setAddOpen(true); }}
+        ><Plus size={16} />{t("dnsAddRecord")}</button>
       </div>
     </div>
     {syncSummary && <p className="form-hint">{syncSummary}</p>}
-    <p className="form-hint">{t("dnsSyncHint")}</p>
     {error && <ErrorBanner message={error} t={t} />}
+    {formError && <ErrorBanner message={formError} t={t} />}
+    {addOpen || editId !== undefined ? (
+      <div className="table-frame domain-table-frame">
+        <div className="resource-query" role="group" aria-label={addOpen ? t("dnsAddRecord") : t("dnsEditRecord")}>
+          {renderDnsFormFields(addOpen ? addForm : editForm, addOpen ? setAddForm : setEditForm)}
+          <button className="command-button" disabled={managementDisabled} onClick={addOpen ? submitAdd : submitEdit} type="button">
+            {addOpen ? t("dnsAddRecord") : t("dnsSaveRecord")}
+          </button>
+          <button className="secondary-button" disabled={managementDisabled} onClick={() => { setAddOpen(false); setEditId(undefined); setFormError(undefined); }} type="button">
+            {t("dnsCancelEdit")}
+          </button>
+        </div>
+      </div>
+    ) : null}
     <DataTable<DomainDnsRecordResponse>
-      columns={recordColumns}
+      columns={dnsRecordColumns}
       density="compact"
       emptyState={<span><Globe2 size={24} />{t("dnsNoRecords")}</span>}
       getRowId={(record) => record.id}
@@ -1451,7 +1691,9 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
       pagination={serverPagination(page, pageInfo, busy, setPage, setPageSize)}
       rows={records}
       stickyHeader
+      toolbar={dnsFilterToolbar}
     />
+    {deleteTarget && <ConfirmDialog title={t("dnsDeleteRecord")} message={t("dnsDeleteRecordConfirm", { host: deleteTarget.host, type: deleteTarget.recordType })} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await removeRecord(deleteTarget); }} />}
   </section>;
 }
 

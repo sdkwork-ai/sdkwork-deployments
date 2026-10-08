@@ -2,13 +2,13 @@
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
-    AppDatabaseMigrationPage, AppDatabaseMigrationResponse, AppDatabaseProfilePage,
-    AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse, AppDomainPage,
-    AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage, AppReleaseResponse,
-    AppResponse, AppSourceSpecPage, AppSourceSpecResponse, BindAppSourceSpecSourceRequest,
-    BuildPage, BuildResponse, BuildTemplatePage, BuildTemplateResponse, ChannelPage,
-    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
-    CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
+    is_deploy_package_artifact_type, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
+    AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
+    AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
+    AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
+    BindAppSourceSpecSourceRequest, BuildPage, BuildResponse, BuildTemplatePage,
+    BuildTemplateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
+    ChannelRolloutResponse, CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
     CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateArtifactRequest,
     CreateBuildRequest, CreateBuildTemplateRequest, CreateCertificateRequest,
@@ -20,11 +20,10 @@ use sdkwork_deploy_contract::{
     PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
     PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
     RequestCertificateOrderRequest, SigningIdentityPage, SigningIdentityResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, UPLOAD_SESSION_STATUS_CANCELLED,
-    UPLOAD_SESSION_STATUS_COMPLETED, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
-    UpdateAppRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
-    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery,
-    is_deploy_package_artifact_type,
+    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
+    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateAppSourceSpecRequest,
+    UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
+    UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
 };
 use sdkwork_deploy_drive_port::{DriveRequestCredentials, PrepareDeployUploadCommand};
 
@@ -504,6 +503,8 @@ impl DeployAppApi for DeployService {
             zone_id,
             &crate::repository::DomainDnsRecordFilter {
                 hostname_id: query.hostname_id.clone(),
+                host: query.host.clone(),
+                record_type: query.record_type.clone(),
             },
             query.page,
             query.page_size,
@@ -525,6 +526,196 @@ impl DeployAppApi for DeployService {
             zone_id,
         )
         .await
+    }
+
+    /// Creates one record through the Zone's cloud account and joins it to the
+    /// stored snapshot. Validated before the vendor is asked; an owner already
+    /// carrying the zone suffix is refused where the apex is in hand.
+    async fn create_domain_zone_dns_record(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        request: &sdkwork_deploy_contract::CreateDomainDnsRecordRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainDnsRecordResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let (resolved, write) = crate::domain_dns_records::resolve_zone_write_context(
+            &self.repository,
+            &self.certificate_dns01,
+            tenant_id,
+            context.actor_id,
+            zone_id,
+        )
+        .await?;
+        let change =
+            crate::domain_dns_records::normalize_dns_record_change(request, &write.zone_apex)?;
+        let record = resolved
+            .presenter
+            .create_record(&resolved.zone_apex, &change)
+            .await
+            .map_err(crate::domain_dns_records::map_dns_sync_error)?;
+        let hostname_assets = self
+            .repository
+            .list_domain_hostname_assets(tenant_id, context.actor_id, zone_id)
+            .await?;
+        self.repository
+            .insert_domain_zone_dns_record(
+                tenant_id,
+                zone_id,
+                &crate::repository::DomainDnsRecordUpsert {
+                    record_name: record.record_name.clone(),
+                    record_type: record.record_type.clone(),
+                    record_value: record.record_value.clone(),
+                    ttl_seconds: record
+                        .ttl_seconds
+                        .and_then(|value| i32::try_from(value).ok()),
+                    priority: record.priority.and_then(|value| i32::try_from(value).ok()),
+                    record_line: record.record_line.clone(),
+                    domain_id: crate::domain_dns_records::matched_domain(
+                        &hostname_assets,
+                        &record.record_name,
+                    ),
+                    dns_provider: write.provider,
+                    provider_account_id: write.provider_account_id,
+                    provider_record_ref: record.provider_record_ref.clone(),
+                },
+            )
+            .await
+    }
+
+    /// Replaces one record on the provider, then in the stored row.
+    async fn update_domain_zone_dns_record(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        record_id: &str,
+        request: &sdkwork_deploy_contract::UpdateDomainDnsRecordRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainDnsRecordResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let (resolved, write) = crate::domain_dns_records::resolve_zone_write_context(
+            &self.repository,
+            &self.certificate_dns01,
+            tenant_id,
+            context.actor_id,
+            zone_id,
+        )
+        .await?;
+        let record_ref = self
+            .repository
+            .domain_zone_dns_record_ref(tenant_id, zone_id, record_id)
+            .await?
+            .ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::NotFound(
+                    "dns record not found".to_string(),
+                )
+            })?;
+        let change =
+            crate::domain_dns_records::normalize_dns_record_change(request, &write.zone_apex)?;
+        let record = resolved
+            .presenter
+            .update_record(&resolved.zone_apex, &record_ref, &change)
+            .await
+            .map_err(crate::domain_dns_records::map_dns_sync_error)?;
+        let hostname_assets = self
+            .repository
+            .list_domain_hostname_assets(tenant_id, context.actor_id, zone_id)
+            .await?;
+        self.repository
+            .update_domain_zone_dns_record(
+                tenant_id,
+                zone_id,
+                record_id,
+                &crate::repository::DomainDnsRecordUpsert {
+                    record_name: record.record_name.clone(),
+                    record_type: record.record_type.clone(),
+                    record_value: record.record_value.clone(),
+                    ttl_seconds: record
+                        .ttl_seconds
+                        .and_then(|value| i32::try_from(value).ok()),
+                    priority: record.priority.and_then(|value| i32::try_from(value).ok()),
+                    record_line: record.record_line.clone(),
+                    domain_id: crate::domain_dns_records::matched_domain(
+                        &hostname_assets,
+                        &record.record_name,
+                    ),
+                    dns_provider: write.provider,
+                    provider_account_id: write.provider_account_id,
+                    provider_record_ref: record.provider_record_ref.clone(),
+                },
+            )
+            .await
+    }
+
+    /// Deletes one record on the provider and removes the stored row.
+    async fn delete_domain_zone_dns_record(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        record_id: &str,
+    ) -> DeployServiceResult<()> {
+        let tenant_id = Self::require_tenant(context)?;
+        let (resolved, _write) = crate::domain_dns_records::resolve_zone_write_context(
+            &self.repository,
+            &self.certificate_dns01,
+            tenant_id,
+            context.actor_id,
+            zone_id,
+        )
+        .await?;
+        let record_ref = self
+            .repository
+            .domain_zone_dns_record_ref(tenant_id, zone_id, record_id)
+            .await?
+            .ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::NotFound(
+                    "dns record not found".to_string(),
+                )
+            })?;
+        resolved
+            .presenter
+            .delete_record(&resolved.zone_apex, &record_ref)
+            .await
+            .map_err(crate::domain_dns_records::map_dns_sync_error)?;
+        self.repository
+            .delete_domain_zone_dns_record(tenant_id, zone_id, record_id)
+            .await
+    }
+
+    /// Pauses one record (暂停解析) or resumes it — the provider first, the
+    /// stored row second, so a failed provider call never leaves the page
+    /// claiming a state the vendor did not accept.
+    async fn set_domain_zone_dns_record_status(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        record_id: &str,
+        request: &sdkwork_deploy_contract::DomainDnsRecordStatusRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainDnsRecordResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        let (resolved, _write) = crate::domain_dns_records::resolve_zone_write_context(
+            &self.repository,
+            &self.certificate_dns01,
+            tenant_id,
+            context.actor_id,
+            zone_id,
+        )
+        .await?;
+        let record_ref = self
+            .repository
+            .domain_zone_dns_record_ref(tenant_id, zone_id, record_id)
+            .await?
+            .ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::NotFound(
+                    "dns record not found".to_string(),
+                )
+            })?;
+        resolved
+            .presenter
+            .set_record_status(&resolved.zone_apex, &record_ref, request.enabled)
+            .await
+            .map_err(crate::domain_dns_records::map_dns_sync_error)?;
+        self.repository
+            .set_domain_zone_dns_record_status(tenant_id, zone_id, record_id, request.enabled)
+            .await
     }
 
     /// Declares whatever is missing from the request and advances each hostname's
@@ -648,7 +839,7 @@ impl DeployAppApi for DeployService {
         query: &sdkwork_deploy_contract::ListCloudAccountsQuery,
     ) -> DeployServiceResult<sdkwork_deploy_contract::CloudAccountPage> {
         use sdkwork_deploy_cloud_account_port::{
-            CAPABILITY_DNS, CLOUD_ACCOUNT_SCOPES, ListCloudAccountsCommand, dns_provider,
+            dns_provider, ListCloudAccountsCommand, CAPABILITY_DNS, CLOUD_ACCOUNT_SCOPES,
         };
 
         let tenant_id = Self::require_tenant(context)?;
@@ -738,7 +929,7 @@ impl DeployAppApi for DeployService {
         context: &DeployAppRequestContext,
         request: &sdkwork_deploy_contract::CreateCloudAccountRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::CloudAccountRegistrationResponse> {
-        use sdkwork_deploy_cloud_account_port::{RegisterCloudAccountCommand, dns_provider};
+        use sdkwork_deploy_cloud_account_port::{dns_provider, RegisterCloudAccountCommand};
 
         let tenant_id = Self::require_tenant(context)?;
         let display_name = crate::cloud_accounts::required_text(

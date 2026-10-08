@@ -34,13 +34,14 @@ use sdkwork_deploy_contract::{
     UpdateServerRequest, UsageEventPage, UsageEventResponse, UsageReconciliationResponse,
 };
 use sdkwork_deploy_contract::{
-    DeployServiceError, DeployServiceResult, DomainDnsRecordPage, ProvisionAppDomainsResult,
-    ResolvedDeployServer, UsageEventIngestItem, UsageEventQuery, UsageIngestResult,
+    DeployServiceError, DeployServiceResult, DomainDnsRecordPage, DomainDnsRecordResponse,
+    ProvisionAppDomainsResult, ResolvedDeployServer, UsageEventIngestItem, UsageEventQuery,
+    UsageIngestResult,
 };
 use sdkwork_deploy_web_port::RuntimeAssignmentReceipt;
 use sdkwork_intelligence_deploy_service::repository::{
-    DomainDnsRecordFilter, DomainDnsSnapshotWrite, DomainHostnameAsset, InsertAuditLogCommand,
-    InsertUsageEventCommand, ZoneDnsSyncTarget,
+    DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset,
+    InsertAuditLogCommand, InsertUsageEventCommand, ZoneDnsSyncTarget,
 };
 use sdkwork_intelligence_deploy_service::repository::{RepositoryMatch, TriggerTarget};
 use sdkwork_intelligence_deploy_service::runtime_publication::{
@@ -176,6 +177,58 @@ impl DeployRepositoryPort for DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<DomainDnsRecordPage> {
         self.list_domain_zone_dns_records_repo(tenant_id, zone_id, filter, page, page_size)
+            .await
+    }
+
+    async fn insert_domain_zone_dns_record(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> DeployServiceResult<DomainDnsRecordResponse> {
+        self.insert_domain_zone_dns_record_repo(tenant_id, zone_id, record)
+            .await
+    }
+
+    async fn update_domain_zone_dns_record(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> DeployServiceResult<DomainDnsRecordResponse> {
+        self.update_domain_zone_dns_record_repo(tenant_id, zone_id, record_id, record)
+            .await
+    }
+
+    async fn set_domain_zone_dns_record_status(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+        enabled: bool,
+    ) -> DeployServiceResult<DomainDnsRecordResponse> {
+        self.set_domain_zone_dns_record_status_repo(tenant_id, zone_id, record_id, enabled)
+            .await
+    }
+
+    async fn delete_domain_zone_dns_record(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+    ) -> DeployServiceResult<()> {
+        self.delete_domain_zone_dns_record_repo(tenant_id, zone_id, record_id)
+            .await
+    }
+
+    async fn domain_zone_dns_record_ref(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+    ) -> DeployServiceResult<Option<String>> {
+        self.domain_zone_dns_record_ref_repo(tenant_id, zone_id, record_id)
             .await
     }
 

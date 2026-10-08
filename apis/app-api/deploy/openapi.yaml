@@ -579,6 +579,60 @@ paths:
   /app/v3/api/domain_zones/{zoneId}/dns_records:
     parameters:
     - $ref: '#/components/parameters/DomainZoneIdParam'
+    post:
+      operationId: domainZones.dnsRecords.create
+      summary: Create a resolution record through the Zone's cloud account
+      description: >-
+        Validates the change (type in the managed set, owner in the DNS label
+        alphabet, value parsed per type) and writes it through the Zone's cloud
+        account, then joins the vendor's answer to the stored snapshot. The
+        owner is the zone-relative 主机记录 (`@`, `www`, `*`); an owner already
+        carrying the zone suffix is refused before the vendor is asked.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDomainDnsRecordRequest'
+      responses:
+        '201':
+          description: Resolution record created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsRecordResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
     get:
       operationId: domainZones.dnsRecords.list
       summary: List a Zone's synced DNS resolution records
@@ -609,6 +663,28 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: host
+        in: query
+        description: >-
+          Restrict the page to records whose 主机记录 (zone-relative owner)
+          contains this keyword, case-insensitive.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 253
+      - name: record_type
+        in: query
+        description: Restrict the page to one record type (exact spelling, e.g. `A`).
+        schema:
+          type: string
+          enum:
+          - A
+          - AAAA
+          - CNAME
+          - TXT
+          - MX
+          - NS
+          - CAA
       responses:
         '200':
           description: Zone resolution records returned successfully.
@@ -680,6 +756,154 @@ paths:
                       properties:
                         item:
                           $ref: '#/components/schemas/DomainDnsSyncResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}:
+    parameters:
+    - $ref: '#/components/parameters/DomainZoneIdParam'
+    - name: recordId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      operationId: domainZones.dnsRecords.update
+      summary: Replace a resolution record in place through the Zone's cloud account
+      description: >-
+        A full replace of owner/type/value/TTL — the update shape every
+        integrated vendor shares — followed by the same replace in the stored
+        snapshot. The provider-side pause state is not touched here; only the
+        status operation flips it.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDomainDnsRecordRequest'
+      responses:
+        '200':
+          description: Resolution record updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsRecordResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      operationId: domainZones.dnsRecords.delete
+      summary: Delete a resolution record through the Zone's cloud account
+      description: >-
+        Deletes on the provider first and removes the stored row second, so a
+        failed vendor delete never leaves a page serving a name the zone does
+        not answer.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      responses:
+        '204':
+          description: Resolution record deleted successfully.
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}/status:
+    parameters:
+    - $ref: '#/components/parameters/DomainZoneIdParam'
+    - name: recordId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      operationId: domainZones.dnsRecords.status.update
+      summary: Pause a resolution record or resume it
+      description: >-
+        The provider is flipped first and the stored row second, so a failed
+        vendor call never leaves the page claiming a state the vendor did not
+        accept. A vendor without a per-record pause (Cloudflare) answers its
+        own refusal.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainDnsRecordStatusRequest'
+      responses:
+        '200':
+          description: Resolution record status updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainDnsRecordResponse'
         '404':
           description: 资源不存在
           content:
@@ -6900,8 +7124,10 @@ components:
       required:
       - id
       - recordName
+      - host
       - recordType
       - recordValue
+      - recordStatus
       - dnsProvider
       - providerAccountId
       - syncedAt
@@ -6912,6 +7138,9 @@ components:
         recordName:
           type: string
           description: zone 内记录的绝对 owner，例如 `www.example.com`。
+        host:
+          type: string
+          description: zone 相对主机记录（`@` 为 apex，`www`，`*`）。
         recordType:
           type: string
           maxLength: 16
@@ -6931,6 +7160,12 @@ components:
           type: string
           maxLength: 64
           description: 服务商解析线路；按线路拆分记录时为该行所属线路。
+        recordStatus:
+          type: string
+          enum:
+          - ENABLED
+          - DISABLED
+          description: 服务商侧解析状态；DISABLED 为已暂停。
         hostnameId:
           type: string
           format: uuid
@@ -6951,6 +7186,90 @@ components:
           type: string
           format: date-time
           description: 该行从服务商读取的时间。
+    CreateDomainDnsRecordRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - recordType
+      - host
+      - recordValue
+      properties:
+        recordType:
+          type: string
+          enum:
+          - A
+          - AAAA
+          - CNAME
+          - TXT
+          - MX
+          - NS
+          - CAA
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+          description: zone 相对主机记录（`@` 为 apex，`www`，`api.eu`，`*`）。
+        recordValue:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 604800
+        priority:
+          type: integer
+          minimum: 0
+          description: MX 优先级；不携带优先级的类型会被拒绝。
+        recordLine:
+          type: string
+          maxLength: 64
+          description: 服务商解析线路；省略即默认线路。
+    UpdateDomainDnsRecordRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - recordType
+      - host
+      - recordValue
+      properties:
+        recordType:
+          type: string
+          enum:
+          - A
+          - AAAA
+          - CNAME
+          - TXT
+          - MX
+          - NS
+          - CAA
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+        recordValue:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 604800
+        priority:
+          type: integer
+          minimum: 0
+        recordLine:
+          type: string
+          maxLength: 64
+    DomainDnsRecordStatusRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      properties:
+        enabled:
+          type: boolean
+          description: true 恢复解析；false 暂停解析。
     DomainDnsSyncResponse:
       type: object
       additionalProperties: false

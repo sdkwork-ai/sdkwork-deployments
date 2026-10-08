@@ -8,6 +8,9 @@ pub const DOMAIN_ZONE_HOSTNAME_VERIFY: &str =
     "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}/verify";
 pub const DOMAIN_ZONE_HOSTNAME_CLAIMS: &str = "/app/v3/api/domain_zones/{zoneId}/hostname_claims";
 pub const DOMAIN_ZONE_DNS_RECORDS: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records";
+pub const DOMAIN_ZONE_DNS_RECORD: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}";
+pub const DOMAIN_ZONE_DNS_RECORD_STATUS: &str =
+    "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}/status";
 pub const DOMAIN_ZONE_DNS_RECORDS_SYNC: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records/sync";
 /// Cloud accounts a zone or certificate can be bound to.
 ///

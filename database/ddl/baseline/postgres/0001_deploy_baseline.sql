@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS deploy_domain_dns_record (
     CONSTRAINT fk_deploy_domain_dns_record_zone FOREIGN KEY (zone_id) REFERENCES deploy_dns_zone(id),
     CONSTRAINT fk_deploy_domain_dns_record_domain FOREIGN KEY (domain_id) REFERENCES deploy_domain(id),
     CONSTRAINT chk_deploy_domain_dns_record_owner CHECK (record_name <> ''),
+    CONSTRAINT chk_deploy_domain_dns_record_status CHECK (record_status IN ('ENABLED', 'DISABLED')),
     CONSTRAINT chk_deploy_domain_dns_record_provider_account CHECK (
         provider_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
     )
@@ -224,6 +225,7 @@ CREATE TABLE IF NOT EXISTS deploy_domain_dns_record (
 
 COMMENT ON TABLE deploy_domain_dns_record IS 'DNS Zone 解析记录同步快照';
 COMMENT ON COLUMN deploy_domain_dns_record.domain_id IS '该记录解析到的 hostname 行；owner 未匹配任何已登记 hostname 时为 NULL';
+COMMENT ON COLUMN deploy_domain_dns_record.record_status IS '服务商侧解析状态快照：ENABLED 或 DISABLED（已暂停）';
 COMMENT ON COLUMN deploy_domain_dns_record.synced_at IS '本次快照从服务商读取的时间';
 
 CREATE INDEX IF NOT EXISTS idx_deploy_domain_dns_record_zone

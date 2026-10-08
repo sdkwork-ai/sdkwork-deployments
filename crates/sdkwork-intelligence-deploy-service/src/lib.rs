@@ -58,8 +58,8 @@ pub use domain_verification::{
 };
 pub use repository::{
     CertificateOrderClaim, CertificateRenewalClaim, DeployRepositoryPort, DnsChallengeZone,
-    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsSnapshotWrite, DomainHostnameAsset,
-    ExpiredCertificateSweep, ZoneDnsSyncTarget,
+    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite,
+    DomainHostnameAsset, ExpiredCertificateSweep, ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,

@@ -201,3 +201,46 @@ tables:
   - name: deploy_domain_dns_record
     lifecycle_status: active
     owner: deploy-platform
+    columns:
+      id: { type: int64, required: true }
+      uuid: { type: string, required: true }
+      tenant_id: { type: int64, required: true }
+      organization_id: { type: int64, required: true }
+      zone_id: { type: int64, required: true }
+      domain_id: { type: int64, required: false }
+      record_name: { type: string, required: true }
+      record_type: { type: string, required: true }
+      record_value: { type: string, required: true }
+      ttl_seconds: { type: int32, required: false }
+      priority: { type: int32, required: false }
+      record_line: { type: string, required: false }
+      dns_provider: { type: string, required: true }
+      provider_account_id: { type: string, required: true }
+      provider_record_ref: { type: string, required: false }
+      record_status: { type: string, required: true }
+      synced_at: { type: instant, required: true }
+      created_by: { type: int64, required: false }
+      created_at: { type: instant, required: true }
+      updated_at: { type: instant, required: true }
+      version: { type: int64, required: true }
+      deleted_at: { type: instant, required: false }
+    constraints:
+      - { name: deploy_domain_dns_record_pkey, type: primary_key, columns: [id] }
+      - { name: uk_deploy_domain_dns_record_uuid, type: unique, columns: [uuid] }
+      - name: fk_deploy_domain_dns_record_zone
+        type: foreign_key
+        columns: [zone_id]
+        references_table: deploy_dns_zone
+        references_columns: [id]
+      - name: fk_deploy_domain_dns_record_domain
+        type: foreign_key
+        columns: [domain_id]
+        references_table: deploy_domain
+        references_columns: [id]
+      - { name: chk_deploy_domain_dns_record_owner, type: check }
+      - { name: chk_deploy_domain_dns_record_status, type: check }
+      - { name: chk_deploy_domain_dns_record_provider_account, type: check }
+    indexes:
+      - { name: uk_deploy_domain_dns_record_uuid, columns: [uuid], unique: true }
+      - { name: idx_deploy_domain_dns_record_zone, columns: [tenant_id, zone_id, synced_at, id], predicate: "deleted_at IS NULL" }
+      - { name: idx_deploy_domain_dns_record_domain, columns: [tenant_id, domain_id], predicate: "deleted_at IS NULL" }

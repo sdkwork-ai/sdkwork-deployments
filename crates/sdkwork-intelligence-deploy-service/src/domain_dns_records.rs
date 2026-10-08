@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult, DomainDnsSyncResponse};
-use sdkwork_webserver_acme_service::DnsZoneRecord;
+use sdkwork_webserver_acme_service::{DnsRecordChange, DnsZoneRecord};
 
 use crate::certificate_issuance::CertificateDns01Selector;
 use crate::repository::{
@@ -63,7 +63,10 @@ pub fn hostname_matches_record(hostname: &str, record_name: &str) -> bool {
 /// The order matters for a zone that registered both `api.example.com` and
 /// `*.example.com` — the record at `api.example.com` is the exact row's
 /// answer, whatever the wildcard would also cover.
-fn matched_domain<'a>(assets: &'a [DomainHostnameAsset], record_name: &str) -> Option<i64> {
+pub(crate) fn matched_domain<'a>(
+    assets: &'a [DomainHostnameAsset],
+    record_name: &str,
+) -> Option<i64> {
     assets
         .iter()
         .find(|asset| asset.hostname_ascii == record_name)
@@ -166,6 +169,158 @@ pub(crate) async fn sync_zone_dns_records(
         dns_provider: provider,
         provider_account_id: account_id,
     })
+}
+
+/// Validates and converts a create/edit request into the adapter's change
+/// shape. Runs before the vendor is asked, so a malformed value is a
+/// validation error naming the field; an owner that already carries the zone
+/// suffix is refused here, where the apex is in hand — the doubled-name
+/// mistake (\`www.example.com.<zone>\`) every provider console sees.
+pub(crate) fn normalize_dns_record_change(
+    request: &impl DnsRecordChangeFields,
+    zone_apex: &str,
+) -> DeployServiceResult<DnsRecordChange> {
+    let owner = request.host().trim();
+    let lowered = owner.to_ascii_lowercase();
+    if lowered == zone_apex.to_ascii_lowercase()
+        || lowered.ends_with(&format!(".{}", zone_apex.to_ascii_lowercase()))
+    {
+        return Err(DeployServiceError::validation(format!(
+            "host must be the zone-relative 主机记录 (for example `@` or `www`), not the absolute name `{owner}` which would create `{owner}.{zone_apex}`"
+        )));
+    }
+    let ttl_seconds = match request.ttl_seconds() {
+        None => None,
+        Some(value) => Some(u32::try_from(value).map_err(|_| {
+            DeployServiceError::validation("ttlSeconds must be a positive number of seconds")
+        })?),
+    };
+    let priority = match request.priority() {
+        None => None,
+        Some(value) => Some(u32::try_from(value).map_err(|_| {
+            DeployServiceError::validation("priority must be a non-negative number")
+        })?),
+    };
+    DnsRecordChange::new(
+        request.record_type(),
+        owner,
+        request.record_value(),
+        ttl_seconds,
+        priority,
+        request.record_line().as_deref(),
+    )
+    .map_err(|error| DeployServiceError::validation(error.to_string()))
+}
+
+/// The two field sets a create and an edit carry; the trait form lets
+/// [`normalize_dns_record_change`] read either request without duplication.
+trait DnsRecordChangeFields {
+    fn record_type(&self) -> &str;
+    fn host(&self) -> &str;
+    fn record_value(&self) -> &str;
+    fn ttl_seconds(&self) -> Option<i32>;
+    fn priority(&self) -> Option<i32>;
+    fn record_line(&self) -> &Option<String>;
+}
+
+impl DnsRecordChangeFields for sdkwork_deploy_contract::CreateDomainDnsRecordRequest {
+    fn record_type(&self) -> &str {
+        &self.record_type
+    }
+    fn host(&self) -> &str {
+        &self.host
+    }
+    fn record_value(&self) -> &str {
+        &self.record_value
+    }
+    fn ttl_seconds(&self) -> Option<i32> {
+        self.ttl_seconds
+    }
+    fn priority(&self) -> Option<i32> {
+        self.priority
+    }
+    fn record_line(&self) -> &Option<String> {
+        &self.record_line
+    }
+}
+
+impl DnsRecordChangeFields for sdkwork_deploy_contract::UpdateDomainDnsRecordRequest {
+    fn record_type(&self) -> &str {
+        &self.record_type
+    }
+    fn host(&self) -> &str {
+        &self.host
+    }
+    fn record_value(&self) -> &str {
+        &self.record_value
+    }
+    fn ttl_seconds(&self) -> Option<i32> {
+        self.ttl_seconds
+    }
+    fn priority(&self) -> Option<i32> {
+        self.priority
+    }
+    fn record_line(&self) -> &Option<String> {
+        &self.record_line
+    }
+}
+
+/// The shared write skeleton: resolve the zone, resolve the presenter through
+/// the same chain issuance uses, hand the change to the vendor, and return the
+/// vendor's answer next to the resolution context (provider + account id) the
+/// snapshot row carries.
+pub(crate) struct DnsRecordWriteContext {
+    pub zone_id: String,
+    pub zone_apex: String,
+    pub provider: String,
+    pub provider_account_id: String,
+}
+
+pub(crate) async fn resolve_zone_write_context(
+    repository: &Arc<dyn DeployRepositoryPort>,
+    dns01: &Arc<dyn crate::certificate_issuance::CertificateDns01PresenterPort>,
+    tenant_id: i64,
+    owner_user_id: Option<i64>,
+    zone_id: &str,
+) -> DeployServiceResult<(
+    crate::certificate_issuance::CertificateDns01Context,
+    DnsRecordWriteContext,
+)> {
+    let target = repository
+        .domain_zone_dns_sync_target(tenant_id, owner_user_id, zone_id)
+        .await?
+        .ok_or_else(|| DeployServiceError::NotFound("domain zone not found".to_string()))?;
+    let resolved = dns01
+        .resolve(CertificateDns01Selector {
+            tenant_id,
+            certificate_provider_account_id: target.provider_account_id.as_deref(),
+            hostname: &target.apex_hostname,
+        })
+        .await?
+        .ok_or_else(|| {
+            DeployServiceError::validation(
+                "no DNS provider is configured for this zone; bind a cloud account                  to it or configure the deployment-level DNS provider",
+            )
+        })?;
+    let provider = resolved
+        .presenter
+        .provider_kind()
+        .map(|kind| kind.as_str().to_owned())
+        .unwrap_or_else(|| "UNKNOWN".to_owned());
+    let account_id = resolved
+        .provider_account_id
+        .clone()
+        .unwrap_or_else(|| DEPLOYMENT_CONFIG_ACCOUNT.to_owned());
+    let zone_apex = resolved.zone_apex.clone();
+    Ok((
+        resolved,
+        DnsRecordWriteContext {
+            zone_id: zone_id.to_owned(),
+            zone_apex,
+            provider,
+            provider_account_id: account_id,
+        },
+    ))
 }
 
 /// Maps an inventory read's failure to the error an operator can act on.

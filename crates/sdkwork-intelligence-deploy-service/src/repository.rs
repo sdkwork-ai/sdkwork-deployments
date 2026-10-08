@@ -22,14 +22,14 @@ use sdkwork_deploy_contract::{
     CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
     CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
     CreateTemplateCategoryRequest, DeployAppRequestContext, DeployUploadSessionResponse,
-    DeploymentStatus, DomainDnsRecordPage, DomainHostnamePage, DomainHostnameResponse,
-    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage,
-    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
-    HealthCheckResponse, ListAppTemplatesAdminQuery, ListAppTemplatesQuery, ListAppsQuery,
-    ListDomainZonesQuery, ListMarketplaceTemplatesQuery, ListNginxConfigsQuery, NginxConfigPage,
-    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
-    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
-    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    DeploymentStatus, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
+    DomainHostnameResponse, DomainZonePage, DomainZoneResponse, EntitlementProjectionPage,
+    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
+    HealthCheckPage, HealthCheckResponse, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
+    ListAppsQuery, ListDomainZonesQuery, ListMarketplaceTemplatesQuery, ListNginxConfigsQuery,
+    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
+    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
+    PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
     ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
     RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
     ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
@@ -238,15 +238,34 @@ pub struct DomainDnsSnapshotWrite {
     pub records: Vec<DnsRecordSnapshotRow>,
 }
 
-/// The hostname restriction of a snapshot read.
+/// The restrictions of a snapshot read.
 ///
-/// The sync has already applied the wildcard semantics (a wildcard
-/// declaration's rows are its base owner and every owner beneath it) when it
-/// stamped `domain_id`, so the read filters on that match directly instead of
-/// re-deriving it from the hostname string.
+/// `hostname_id` selects one hostname's rows — the sync already applied the
+/// wildcard semantics when it stamped `domain_id`. `host` is the 主机记录
+/// keyword filter (substring, case-insensitive) and `record_type` the exact
+/// type filter — the pair Aliyun's own 解析设置 page offers. Absent members
+/// filter nothing.
 #[derive(Clone, Debug, Default)]
 pub struct DomainDnsRecordFilter {
     pub hostname_id: Option<String>,
+    pub host: Option<String>,
+    pub record_type: Option<String>,
+}
+
+/// One resolution-record write, expressed in store terms: the snapshot row
+/// fields a create/update produces, with the hostname match already applied.
+#[derive(Clone, Debug)]
+pub struct DomainDnsRecordUpsert {
+    pub record_name: String,
+    pub record_type: String,
+    pub record_value: String,
+    pub ttl_seconds: Option<i32>,
+    pub priority: Option<i32>,
+    pub record_line: Option<String>,
+    pub domain_id: Option<i64>,
+    pub dns_provider: String,
+    pub provider_account_id: String,
+    pub provider_record_ref: Option<String>,
 }
 
 // The trait's methods are grouped by the aggregate they read or write.
@@ -375,6 +394,52 @@ pub trait DeployRepositoryPort:
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainDnsRecordPage>;
+
+    /// Appends one write-through row to the stored snapshot, answered with the
+    /// stored row's uuid. The provider write has already happened; this is the
+    /// join so the page reads one table.
+    async fn insert_domain_zone_dns_record(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> DeployServiceResult<DomainDnsRecordResponse>;
+
+    /// Replaces one stored row in place after a provider update.
+    async fn update_domain_zone_dns_record(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+        record: &DomainDnsRecordUpsert,
+    ) -> DeployServiceResult<DomainDnsRecordResponse>;
+
+    /// Flips one stored row's provider-side state after the vendor accepted
+    /// the pause/resume.
+    async fn set_domain_zone_dns_record_status(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+        enabled: bool,
+    ) -> DeployServiceResult<DomainDnsRecordResponse>;
+
+    /// Removes one stored row after the provider confirmed the delete.
+    async fn delete_domain_zone_dns_record(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Loads one stored row's provider record ref, for the write that has to
+    /// address the vendor by its own id.
+    async fn domain_zone_dns_record_ref(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        record_id: &str,
+    ) -> DeployServiceResult<Option<String>>;
 
     async fn create_domain_hostname(
         &self,
@@ -880,7 +945,7 @@ pub trait DeployRepositoryPort:
     ) -> DeployServiceResult<ChannelResponse>;
 
     async fn list_channels(&self, tenant_id: i64, app_id: &str)
-    -> DeployServiceResult<ChannelPage>;
+        -> DeployServiceResult<ChannelPage>;
 
     async fn promote_channel(
         &self,

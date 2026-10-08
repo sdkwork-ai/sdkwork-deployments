@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
+import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainDnsRecordRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainDnsRecordRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
 
 
 export interface DomainCloudAccountsListParams {
@@ -50,17 +50,11 @@ export class DomainCloudAccountsApi {
   }
 }
 
-export interface DomainDomainZonesDnsRecordsListParams {
-  page?: number;
-  pageSize?: number;
-  hostnameId?: string;
-}
-
-export interface DomainDomainZonesDnsRecordsSyncParams {
+export interface DomainDomainZonesDnsRecordsStatusUpdateParams {
   idempotencyKey: string;
 }
 
-export class DomainDomainZonesDnsRecordsApi {
+export class DomainDomainZonesDnsRecordsStatusApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -68,12 +62,71 @@ export class DomainDomainZonesDnsRecordsApi {
   }
 
 
+/** Pause a resolution record or resume it */
+  async update(zoneId: string, recordId: string, body: DomainDnsRecordStatusRequest, params: DomainDomainZonesDnsRecordsStatusUpdateParams, requestOptions?: ApiRequestOptions): Promise<DomainDnsRecordResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainDnsRecordResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records/${serializePathParameter(recordId, { name: 'recordId', style: 'simple', explode: false })}/status`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface DomainDomainZonesDnsRecordsCreateParams {
+  idempotencyKey: string;
+}
+
+export interface DomainDomainZonesDnsRecordsListParams {
+  page?: number;
+  pageSize?: number;
+  hostnameId?: string;
+  host?: string;
+  recordType?: 'A' | 'AAAA' | 'CNAME' | 'TXT' | 'MX' | 'NS' | 'CAA';
+}
+
+export interface DomainDomainZonesDnsRecordsSyncParams {
+  idempotencyKey: string;
+}
+
+export interface DomainDomainZonesDnsRecordsUpdateParams {
+  idempotencyKey: string;
+}
+
+export interface DomainDomainZonesDnsRecordsDeleteParams {
+  idempotencyKey: string;
+}
+
+export class DomainDomainZonesDnsRecordsApi {
+  private client: HttpClient;
+  public readonly status: DomainDomainZonesDnsRecordsStatusApi;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+    this.status = new DomainDomainZonesDnsRecordsStatusApi(client);
+  }
+
+
+/** Create a resolution record through the Zone's cloud account */
+  async create(zoneId: string, body: CreateDomainDnsRecordRequest, params: DomainDomainZonesDnsRecordsCreateParams, requestOptions?: ApiRequestOptions): Promise<DomainDnsRecordResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainDnsRecordResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
 /** List a Zone's synced DNS resolution records */
   async list(zoneId: string, params?: DomainDomainZonesDnsRecordsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'hostname_id', value: params?.hostnameId, style: 'form', explode: true, allowReserved: false },
+      { name: 'host', value: params?.host, style: 'form', explode: true, allowReserved: false },
+      { name: 'record_type', value: params?.recordType, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
@@ -87,6 +140,28 @@ export class DomainDomainZonesDnsRecordsApi {
       {}
     );
     return this.client.request<DomainDnsSyncResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records/sync`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Replace a resolution record in place through the Zone's cloud account */
+  async update(zoneId: string, recordId: string, body: UpdateDomainDnsRecordRequest, params: DomainDomainZonesDnsRecordsUpdateParams, requestOptions?: ApiRequestOptions): Promise<DomainDnsRecordResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainDnsRecordResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records/${serializePathParameter(recordId, { name: 'recordId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Delete a resolution record through the Zone's cloud account */
+  async delete(zoneId: string, recordId: string, params: DomainDomainZonesDnsRecordsDeleteParams, requestOptions?: ApiRequestOptions): Promise<void> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<void>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records/${serializePathParameter(recordId, { name: 'recordId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}) });
   }
 }
 

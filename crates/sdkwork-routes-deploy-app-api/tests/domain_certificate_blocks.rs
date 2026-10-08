@@ -28,6 +28,10 @@ fn block_paths() -> Vec<(HttpMethod, &'static str)> {
         // the snapshot through the block, and the sync is its one provider
         // gesture.
         (HttpMethod::Get, paths::DOMAIN_ZONE_DNS_RECORDS),
+        (HttpMethod::Post, paths::DOMAIN_ZONE_DNS_RECORDS),
+        (HttpMethod::Patch, paths::DOMAIN_ZONE_DNS_RECORD),
+        (HttpMethod::Delete, paths::DOMAIN_ZONE_DNS_RECORD),
+        (HttpMethod::Patch, paths::DOMAIN_ZONE_DNS_RECORD_STATUS),
         (HttpMethod::Post, paths::DOMAIN_ZONE_DNS_RECORDS_SYNC),
         (HttpMethod::Get, paths::CERTIFICATES),
         (HttpMethod::Post, paths::CERTIFICATES),

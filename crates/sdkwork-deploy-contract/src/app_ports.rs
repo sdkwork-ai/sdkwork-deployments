@@ -151,6 +151,12 @@ pub struct ListDomainDnsRecordsQuery {
     pub page_size: i32,
     #[serde(rename = "hostname_id", default)]
     pub hostname_id: Option<String>,
+    /// 主机记录 keyword filter (substring, case-insensitive).
+    #[serde(rename = "host", default)]
+    pub host: Option<String>,
+    /// Exact record-type filter (`A`, `AAAA`, `CNAME`, `TXT`, `MX`).
+    #[serde(rename = "record_type", default)]
+    pub record_type: Option<String>,
 }
 
 /// The cloud-account pin a zone listing is restricted to.
@@ -346,6 +352,61 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<DomainDnsSyncResponse> {
         Err(crate::DeployServiceError::Internal(
             "domain dns record sync API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Creates one resolution record of any managed type through the Zone's
+    /// cloud account and joins it to the stored snapshot. The value is
+    /// validated per type before the vendor is asked; the answer is the row
+    /// as the provider now holds it.
+    async fn create_domain_zone_dns_record(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+        _request: &CreateDomainDnsRecordRequest,
+    ) -> DeployServiceResult<DomainDnsRecordResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "domain dns record create API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Replaces one record in place through the Zone's cloud account and
+    /// updates the stored row.
+    async fn update_domain_zone_dns_record(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+        _record_id: &str,
+        _request: &UpdateDomainDnsRecordRequest,
+    ) -> DeployServiceResult<DomainDnsRecordResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "domain dns record update API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Deletes one record on the provider and removes the stored row.
+    async fn delete_domain_zone_dns_record(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+        _record_id: &str,
+    ) -> DeployServiceResult<()> {
+        Err(crate::DeployServiceError::Internal(
+            "domain dns record delete API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Pauses one record (暂停解析) or resumes it, on the provider first and
+    /// then in the stored row.
+    async fn set_domain_zone_dns_record_status(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+        _record_id: &str,
+        _request: &DomainDnsRecordStatusRequest,
+    ) -> DeployServiceResult<DomainDnsRecordResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "domain dns record status API is not implemented".to_owned(),
         ))
     }
 

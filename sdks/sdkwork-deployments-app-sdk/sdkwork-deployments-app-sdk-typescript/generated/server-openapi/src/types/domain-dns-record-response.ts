@@ -2,6 +2,8 @@ export interface DomainDnsRecordResponse {
   id: string;
   /** zone 内记录的绝对 owner，例如 `www.example.com`。 */
   recordName: string;
+  /** zone 相对主机记录（`@` 为 apex，`www`，`*`）。 */
+  host: string;
   /** 记录类型，沿用服务商拼写（A、AAAA、CNAME、TXT、MX）。 */
   recordType: string;
   /** 记录值 —— A/AAAA 为解析 IP，CNAME/MX 为目标。 */
@@ -11,6 +13,8 @@ export interface DomainDnsRecordResponse {
   priority?: number;
   /** 服务商解析线路；按线路拆分记录时为该行所属线路。 */
   recordLine?: string;
+  /** 服务商侧解析状态；DISABLED 为已暂停。 */
+  recordStatus: 'ENABLED' | 'DISABLED';
   /** 该记录解析到的已登记 hostname；owner 未匹配任何 hostname 时省略。 */
   hostnameId?: string;
   /** 快照读取自的服务商家族。 */

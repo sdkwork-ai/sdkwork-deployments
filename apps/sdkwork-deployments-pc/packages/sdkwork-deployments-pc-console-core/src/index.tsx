@@ -6,9 +6,11 @@ import {
   type CloudAccountResponse,
   type CreateCertificateRequest,
   type CreateCloudAccountRequest,
+  type CreateDomainDnsRecordRequest,
   type CreateDomainHostnameRequest,
   type CreateDomainZoneRequest,
   type DomainDnsRecordResponse,
+  type DomainDnsRecordStatusRequest,
   type DomainDnsSyncResponse,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
@@ -17,6 +19,7 @@ import {
   type EnsureDomainHostnameClaimsRequest,
   type PageInfo,
   type SdkworkDeployAppClient,
+  type UpdateDomainDnsRecordRequest,
   type UpdateDomainHostnameRequest,
   type UpdateDomainZoneRequest,
 } from "@sdkwork/deployments-app-sdk";
@@ -41,9 +44,11 @@ export type {
   CloudAccountResponse,
   CreateCertificateRequest,
   CreateCloudAccountRequest,
+  CreateDomainDnsRecordRequest,
   CreateDomainHostnameRequest,
   CreateDomainZoneRequest,
   DomainDnsRecordResponse,
+  DomainDnsRecordStatusRequest,
   DomainDnsSyncResponse,
   DomainHostnameClaimResponse,
   DomainHostnameResponse,
@@ -51,6 +56,7 @@ export type {
   DomainZoneResponse,
   EnsureDomainHostnameClaimsRequest,
   PageInfo,
+  UpdateDomainDnsRecordRequest,
   UpdateDomainHostnameRequest,
   UpdateDomainZoneRequest,
 };
@@ -116,6 +122,10 @@ export interface DeploymentsDeliveryService {
    * provider.
    */
   syncZoneDnsRecords(zoneId: string): Promise<DomainDnsSyncResponse>;
+  createZoneDnsRecord(zoneId: string, body: CreateDomainDnsRecordRequest): Promise<DomainDnsRecordResponse>;
+  updateZoneDnsRecord(zoneId: string, recordId: string, body: UpdateDomainDnsRecordRequest): Promise<DomainDnsRecordResponse>;
+  deleteZoneDnsRecord(zoneId: string, recordId: string): Promise<void>;
+  setZoneDnsRecordStatus(zoneId: string, recordId: string, enabled: boolean): Promise<DomainDnsRecordResponse>;
   listCertificates(params?: { page?: number; pageSize?: number }): Promise<{ items: CertificateResponse[]; pageInfo: PageInfo }>;
   createCertificate(body: CreateCertificateRequest): Promise<CertificateResponse>;
   renewCertificate(certificateId: string): Promise<CertificateResponse>;
@@ -227,6 +237,12 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
         },
       ),
     syncZoneDnsRecords: (zoneId) => zones.dnsRecords.sync(zoneId, idempotencyParams()),
+    createZoneDnsRecord: (zoneId, body) => zones.dnsRecords.create(zoneId, body, idempotencyParams()),
+    updateZoneDnsRecord: (zoneId, recordId, body) =>
+      zones.dnsRecords.update(zoneId, recordId, body, idempotencyParams()),
+    deleteZoneDnsRecord: (zoneId, recordId) => zones.dnsRecords.delete(zoneId, recordId, idempotencyParams()),
+    setZoneDnsRecordStatus: (zoneId, recordId, enabled) =>
+      zones.dnsRecords.status.update(zoneId, recordId, { enabled }, idempotencyParams()),
     listCertificates: (params) => client.certificate.list(params),
     createCertificate: (body) => client.certificate.create(body, idempotencyParams()),
     renewCertificate: (certificateId) => client.certificate.renew(certificateId, idempotencyParams()),

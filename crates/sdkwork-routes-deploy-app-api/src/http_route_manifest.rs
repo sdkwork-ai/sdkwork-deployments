@@ -92,6 +92,14 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.domainZones.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/domain_zones/{zoneId}/dns_records",
+        "domain",
+        "domainZones.dnsRecords.create",
+    )
+    .with_required_permission("deploy.domainZones.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/domain_zones/{zoneId}/dns_records",
         "domain",
@@ -103,6 +111,30 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "/app/v3/api/domain_zones/{zoneId}/dns_records/sync",
         "domain",
         "domainZones.dnsRecords.sync",
+    )
+    .with_required_permission("deploy.domainZones.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}",
+        "domain",
+        "domainZones.dnsRecords.update",
+    )
+    .with_required_permission("deploy.domainZones.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}",
+        "domain",
+        "domainZones.dnsRecords.delete",
+    )
+    .with_required_permission("deploy.domainZones.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}/status",
+        "domain",
+        "domainZones.dnsRecords.status.update",
     )
     .with_required_permission("deploy.domainZones.write")
     .with_idempotent(true),
