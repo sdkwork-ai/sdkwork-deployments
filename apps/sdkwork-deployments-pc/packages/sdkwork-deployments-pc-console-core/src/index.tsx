@@ -115,7 +115,7 @@ export interface DeploymentsDeliveryService {
    * one hostname. Store-only: the page renders the last cloud-account sync's
    * snapshot and never waits on a provider.
    */
-  listZoneDnsRecords(zoneId: string, params?: { page?: number; pageSize?: number; hostnameId?: string }): Promise<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo }>;
+  listZoneDnsRecords(zoneId: string, params?: { page?: number; pageSize?: number; hostnameId?: string; host?: string; recordType?: DnsRecordTypeFilter }): Promise<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo }>;
   /**
    * Re-reads the Zone's inventory through its cloud account and replaces the
    * stored snapshot — the one gesture on the resolution page that touches the
@@ -167,6 +167,12 @@ export interface DeploymentsDeliveryService {
  * picker's vocabulary pinned to the server's.
  */
 export type CloudAccountDnsProvider = NonNullable<CloudAccountResponse["dnsProvider"]>;
+
+/**
+ * The resolution-record types the management plane can filter by — the same
+ * managed set the write-through plane accepts (A/AAAA/CNAME/TXT/MX/NS/CAA).
+ */
+export type DnsRecordTypeFilter = 'A' | 'AAAA' | 'CNAME' | 'TXT' | 'MX' | 'NS' | 'CAA';
 /** Visibility levels the picker offers. `organization` is deliberately absent. */
 export type CloudAccountScopeType = CloudAccountResponse["scopeType"];
 
@@ -234,6 +240,8 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
           ...(params.page === undefined ? {} : { page: params.page }),
           ...(params.pageSize === undefined ? {} : { pageSize: params.pageSize }),
           ...(params.hostnameId === undefined ? {} : { hostnameId: params.hostnameId }),
+          ...(params.host === undefined ? {} : { host: params.host }),
+          ...(params.recordType === undefined ? {} : { recordType: params.recordType }),
         },
       ),
     syncZoneDnsRecords: (zoneId) => zones.dnsRecords.sync(zoneId, idempotencyParams()),

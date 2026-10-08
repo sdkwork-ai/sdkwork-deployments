@@ -379,16 +379,19 @@ pub trait DeployRepositoryPort:
     async fn replace_domain_zone_dns_records(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         snapshot: &DomainDnsSnapshotWrite,
     ) -> DeployServiceResult<i64>;
 
     /// Pages the stored snapshot, optionally restricted to one hostname.
     /// Store-level pagination: the page bounds bound the query, not a
-    /// post-read slice.
+    /// post-read slice. `owner_user_id` scopes the read to the caller's own
+    /// zones; see [`Self::list_domain_zones`].
     async fn list_domain_zone_dns_records(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         filter: &DomainDnsRecordFilter,
         page: i32,
@@ -401,6 +404,7 @@ pub trait DeployRepositoryPort:
     async fn insert_domain_zone_dns_record(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse>;
@@ -409,6 +413,7 @@ pub trait DeployRepositoryPort:
     async fn update_domain_zone_dns_record(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
         record: &DomainDnsRecordUpsert,
@@ -419,6 +424,7 @@ pub trait DeployRepositoryPort:
     async fn set_domain_zone_dns_record_status(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
         enabled: bool,
@@ -428,6 +434,7 @@ pub trait DeployRepositoryPort:
     async fn delete_domain_zone_dns_record(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<()>;
@@ -437,6 +444,7 @@ pub trait DeployRepositoryPort:
     async fn domain_zone_dns_record_ref(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<Option<String>>;

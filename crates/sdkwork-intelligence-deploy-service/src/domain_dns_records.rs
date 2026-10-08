@@ -22,13 +22,14 @@ use crate::repository::{
 pub(crate) async fn list_zone_dns_records(
     repository: &Arc<dyn DeployRepositoryPort>,
     tenant_id: i64,
+    owner_user_id: Option<i64>,
     zone_id: &str,
     filter: &DomainDnsRecordFilter,
     page: i32,
     page_size: i32,
 ) -> DeployServiceResult<sdkwork_deploy_contract::DomainDnsRecordPage> {
     repository
-        .list_domain_zone_dns_records(tenant_id, zone_id, filter, page, page_size)
+        .list_domain_zone_dns_records(tenant_id, owner_user_id, zone_id, filter, page, page_size)
         .await
 }
 
@@ -153,6 +154,7 @@ pub(crate) async fn sync_zone_dns_records(
     let record_count = repository
         .replace_domain_zone_dns_records(
             tenant_id,
+            owner_user_id,
             zone_id,
             &DomainDnsSnapshotWrite {
                 dns_provider: provider.clone(),

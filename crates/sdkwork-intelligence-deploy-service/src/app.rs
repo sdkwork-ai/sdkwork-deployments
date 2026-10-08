@@ -500,6 +500,7 @@ impl DeployAppApi for DeployService {
         crate::domain_dns_records::list_zone_dns_records(
             &self.repository,
             tenant_id,
+            context.actor_id,
             zone_id,
             &crate::repository::DomainDnsRecordFilter {
                 hostname_id: query.hostname_id.clone(),
@@ -560,6 +561,7 @@ impl DeployAppApi for DeployService {
         self.repository
             .insert_domain_zone_dns_record(
                 tenant_id,
+                context.actor_id,
                 zone_id,
                 &crate::repository::DomainDnsRecordUpsert {
                     record_name: record.record_name.clone(),
@@ -601,7 +603,7 @@ impl DeployAppApi for DeployService {
         .await?;
         let record_ref = self
             .repository
-            .domain_zone_dns_record_ref(tenant_id, zone_id, record_id)
+            .domain_zone_dns_record_ref(tenant_id, context.actor_id, zone_id, record_id)
             .await?
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::NotFound(
@@ -622,6 +624,7 @@ impl DeployAppApi for DeployService {
         self.repository
             .update_domain_zone_dns_record(
                 tenant_id,
+                context.actor_id,
                 zone_id,
                 record_id,
                 &crate::repository::DomainDnsRecordUpsert {
@@ -663,7 +666,7 @@ impl DeployAppApi for DeployService {
         .await?;
         let record_ref = self
             .repository
-            .domain_zone_dns_record_ref(tenant_id, zone_id, record_id)
+            .domain_zone_dns_record_ref(tenant_id, context.actor_id, zone_id, record_id)
             .await?
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::NotFound(
@@ -676,7 +679,7 @@ impl DeployAppApi for DeployService {
             .await
             .map_err(crate::domain_dns_records::map_dns_sync_error)?;
         self.repository
-            .delete_domain_zone_dns_record(tenant_id, zone_id, record_id)
+            .delete_domain_zone_dns_record(tenant_id, context.actor_id, zone_id, record_id)
             .await
     }
 
@@ -701,7 +704,7 @@ impl DeployAppApi for DeployService {
         .await?;
         let record_ref = self
             .repository
-            .domain_zone_dns_record_ref(tenant_id, zone_id, record_id)
+            .domain_zone_dns_record_ref(tenant_id, context.actor_id, zone_id, record_id)
             .await?
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::NotFound(
@@ -714,7 +717,7 @@ impl DeployAppApi for DeployService {
             .await
             .map_err(crate::domain_dns_records::map_dns_sync_error)?;
         self.repository
-            .set_domain_zone_dns_record_status(tenant_id, zone_id, record_id, request.enabled)
+            .set_domain_zone_dns_record_status(tenant_id, context.actor_id, zone_id, record_id, request.enabled)
             .await
     }
 

@@ -118,6 +118,7 @@ impl DeployRepository {
     pub(super) async fn replace_domain_zone_dns_records_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         snapshot: &DomainDnsSnapshotWrite,
     ) -> DeployServiceResult<i64> {
@@ -197,6 +198,7 @@ impl DeployRepository {
     pub(super) async fn list_domain_zone_dns_records_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         filter: &DomainDnsRecordFilter,
         page: i32,
@@ -241,11 +243,13 @@ impl DeployRepository {
              LEFT JOIN deploy_domain d ON d.id = rec.domain_id
              WHERE rec.tenant_id = $1
                AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {owner_gate}
                AND rec.deleted_at IS NULL
                AND (rec.domain_id IS NULL OR d.deleted_at IS NULL)
                AND ($3::text IS NULL OR d.uuid = $3)
                AND ($4::text IS NULL OR LOWER(rec.record_name) LIKE $4 ESCAPE '\\\\')
-               AND ($5::text IS NULL OR UPPER(rec.record_type) = $5)"
+               AND ($5::text IS NULL OR UPPER(rec.record_type) = $5)",
+            owner_gate = zone_owner_gate(6)
         );
 
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!("SELECT COUNT(*) {predicate}")))
@@ -254,6 +258,7 @@ impl DeployRepository {
             .bind(hostname_uuid)
             .bind(host_keyword.as_deref())
             .bind(record_type.as_deref())
+            .bind(owner_user_id)
             .fetch_one(&self.pool)
             .await
             .map_err(|error| store_error("count deploy_domain_dns_record", error))?;
@@ -265,13 +270,14 @@ impl DeployRepository {
                     rec.provider_record_ref, d.uuid AS hostname_uuid,
                     rec.synced_at
              {predicate}
-             ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $6 OFFSET $7"
+             ORDER BY rec.synced_at DESC, rec.id DESC LIMIT $7 OFFSET $8"
         )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(hostname_uuid)
         .bind(host_keyword.as_deref())
         .bind(record_type.as_deref())
+        .bind(owner_user_id)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -299,6 +305,7 @@ impl DeployRepository {
     pub(super) async fn insert_domain_zone_dns_record_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
@@ -359,11 +366,12 @@ impl DeployRepository {
     pub(super) async fn update_domain_zone_dns_record_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        let zone_internal_id = self.resolve_zone_internal_id(tenant_id, zone_id).await?;
+        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
         // `record_status` is deliberately absent: an edit does not touch the
         // provider-side pause state, which only the status operation flips.
         let result = sqlx::query(AssertSqlSafe(
@@ -404,11 +412,12 @@ impl DeployRepository {
     pub(super) async fn set_domain_zone_dns_record_status_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
         enabled: bool,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        let zone_internal_id = self.resolve_zone_internal_id(tenant_id, zone_id).await?;
+        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
         let status = if enabled { "ENABLED" } else { "DISABLED" };
         let result = sqlx::query(AssertSqlSafe(
             "UPDATE deploy_domain_dns_record
@@ -436,10 +445,11 @@ impl DeployRepository {
     pub(super) async fn delete_domain_zone_dns_record_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<()> {
-        let zone_internal_id = self.resolve_zone_internal_id(tenant_id, zone_id).await?;
+        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
         // Hard delete: the provider no longer holds the record, so a row left
         // behind would answer a resolution the zone does not have.
         let result = sqlx::query(
@@ -463,10 +473,11 @@ impl DeployRepository {
     pub(super) async fn domain_zone_dns_record_ref_repo(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<Option<String>> {
-        let zone_internal_id = self.resolve_zone_internal_id(tenant_id, zone_id).await?;
+        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
         let row = sqlx::query(
             "SELECT provider_record_ref FROM deploy_domain_dns_record
              WHERE tenant_id = $1 AND zone_id = $2 AND uuid = $3
@@ -485,17 +496,26 @@ impl DeployRepository {
         .transpose()
     }
 
-    async fn resolve_zone_internal_id(
+    /// Resolves the Zone's internal id under the same owner gate every
+    /// caller-facing zone query carries, so a snapshot read can never reach a
+    /// zone the caller does not own.
+    async fn resolve_gated_zone_internal_id(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<i64> {
-        let zone = sqlx::query(
-            "SELECT id FROM deploy_dns_zone
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
-        )
+        // $1 tenant, $2 zone uuid, $3 owner (the gate is `user_id IS NULL OR
+        // user_id = $3`; see `zone_owner_gate`).
+        let zone = sqlx::query(AssertSqlSafe(format!(
+            "SELECT z.id FROM deploy_dns_zone z
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {}",
+            zone_owner_gate(3)
+        )))
         .bind(tenant_id)
         .bind(zone_id)
+        .bind(owner_user_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("resolve deploy_dns_zone id", error))?

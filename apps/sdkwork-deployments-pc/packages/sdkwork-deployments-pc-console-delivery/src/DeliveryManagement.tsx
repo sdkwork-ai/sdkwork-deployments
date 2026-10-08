@@ -7,6 +7,7 @@ import {
   type CloudAccountResponse,
   type CreateDomainDnsRecordRequest,
   type DomainDnsRecordResponse,
+  type DnsRecordTypeFilter,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
   type DomainVerifyResponse,
@@ -1416,7 +1417,7 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
   // applies on change (a selection is already a complete statement).
   const [hostFilterDraft, setHostFilterDraft] = useState("");
   const [hostFilter, setHostFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState<DnsRecordTypeFilter | "">("");
   // The Aliyun-shaped management state: an open add row, the row being edited,
   // and the delete awaiting confirmation.
   const [addOpen, setAddOpen] = useState(false);
@@ -1547,7 +1548,7 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
         <select
           onChange={(event) => {
             setPage(1);
-            setTypeFilter(event.target.value);
+            setTypeFilter(((DNS_RECORD_TYPES as readonly string[]).includes(event.target.value) ? event.target.value : "") as DnsRecordTypeFilter | "");
           }}
           value={typeFilter}
         >

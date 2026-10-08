@@ -161,74 +161,81 @@ impl DeployRepositoryPort for DeployRepository {
     async fn replace_domain_zone_dns_records(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         snapshot: &DomainDnsSnapshotWrite,
     ) -> DeployServiceResult<i64> {
-        self.replace_domain_zone_dns_records_repo(tenant_id, zone_id, snapshot)
+        self.replace_domain_zone_dns_records_repo(tenant_id, owner_user_id, zone_id, snapshot)
             .await
     }
 
     async fn list_domain_zone_dns_records(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         filter: &DomainDnsRecordFilter,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainDnsRecordPage> {
-        self.list_domain_zone_dns_records_repo(tenant_id, zone_id, filter, page, page_size)
+        self.list_domain_zone_dns_records_repo(tenant_id, owner_user_id, zone_id, filter, page, page_size)
             .await
     }
 
     async fn insert_domain_zone_dns_record(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.insert_domain_zone_dns_record_repo(tenant_id, zone_id, record)
+        self.insert_domain_zone_dns_record_repo(tenant_id, owner_user_id, zone_id, record)
             .await
     }
 
     async fn update_domain_zone_dns_record(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.update_domain_zone_dns_record_repo(tenant_id, zone_id, record_id, record)
+        self.update_domain_zone_dns_record_repo(tenant_id, owner_user_id, zone_id, record_id, record)
             .await
     }
 
     async fn set_domain_zone_dns_record_status(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
         enabled: bool,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.set_domain_zone_dns_record_status_repo(tenant_id, zone_id, record_id, enabled)
+        self.set_domain_zone_dns_record_status_repo(tenant_id, owner_user_id, zone_id, record_id, enabled)
             .await
     }
 
     async fn delete_domain_zone_dns_record(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<()> {
-        self.delete_domain_zone_dns_record_repo(tenant_id, zone_id, record_id)
+        self.delete_domain_zone_dns_record_repo(tenant_id, owner_user_id, zone_id, record_id)
             .await
     }
 
     async fn domain_zone_dns_record_ref(
         &self,
         tenant_id: i64,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<Option<String>> {
-        self.domain_zone_dns_record_ref_repo(tenant_id, zone_id, record_id)
+        self.domain_zone_dns_record_ref_repo(tenant_id, owner_user_id, zone_id, record_id)
             .await
     }
 
