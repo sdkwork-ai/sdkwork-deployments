@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
+import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
 
 
 export interface DomainCloudAccountsListParams {
@@ -47,6 +47,46 @@ export class DomainCloudAccountsApi {
       {}
     );
     return this.client.request<CloudAccountRegistrationResponse>(appApiPath(`/cloud_accounts`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface DomainDomainZonesDnsRecordsListParams {
+  page?: number;
+  pageSize?: number;
+  hostnameId?: string;
+}
+
+export interface DomainDomainZonesDnsRecordsSyncParams {
+  idempotencyKey: string;
+}
+
+export class DomainDomainZonesDnsRecordsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List a Zone's synced DNS resolution records */
+  async list(zoneId: string, params?: DomainDomainZonesDnsRecordsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'hostname_id', value: params?.hostnameId, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Sync a Zone's resolution records through its cloud account */
+  async sync(zoneId: string, params: DomainDomainZonesDnsRecordsSyncParams, requestOptions?: ApiRequestOptions): Promise<DomainDnsSyncResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainDnsSyncResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/dns_records/sync`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -159,11 +199,13 @@ export class DomainDomainZonesApi {
   private client: HttpClient;
   public readonly hostnames: DomainDomainZonesHostnamesApi;
   public readonly hostnameClaims: DomainDomainZonesHostnameClaimsApi;
+  public readonly dnsRecords: DomainDomainZonesDnsRecordsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.hostnames = new DomainDomainZonesHostnamesApi(client);
     this.hostnameClaims = new DomainDomainZonesHostnameClaimsApi(client);
+    this.dnsRecords = new DomainDomainZonesDnsRecordsApi(client);
   }
 
 

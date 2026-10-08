@@ -5,6 +5,7 @@ import {
   type CloudAccountDnsProvider,
   type CloudAccountRegistrationResponse,
   type CloudAccountResponse,
+  type DomainDnsRecordResponse,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
   type DomainVerifyResponse,
@@ -75,6 +76,10 @@ export function DomainManagementPage({ locale }: DeploymentsResourcePageProps) {
   return <Routes>
     <Route index element={<DomainZoneList locale={locale} />} />
     <Route path=":zoneId" element={<DomainHostnameList locale={locale} />} />
+    {/* The third level: one hostname's own page. It reads the zone's synced
+        resolution records restricted to that hostname and offers the
+        cloud-account sync that refreshes them. */}
+    <Route path=":zoneId/hostnames/:hostnameId" element={<DomainHostnameDetail locale={locale} />} />
     <Route path="*" element={<Navigate to="/console/domains" replace />} />
   </Routes>;
 }
@@ -1269,7 +1274,9 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     {
       id: "hostname",
       header: t("hostname"),
-      cell: (hostname) => <span className="hostname-cell"><Globe2 size={16} /><strong>{hostname.hostname}</strong></span>,
+      // The hostname is the drill-in: its own page carries the resolution
+      // records this list can only summarize.
+      cell: (hostname) => <Link className="hostname-cell" to={`hostnames/${hostname.id}`}><Globe2 size={16} /><strong>{hostname.hostname}</strong></Link>,
       width: 260,
     },
     { id: "hostnameType", header: t("type"), cell: (hostname) => hostname.hostnameType === "WILDCARD" ? t("wildcard") : t("exact"), width: 110 },
@@ -1341,6 +1348,110 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     {editTarget && <HostnameFormDialog hostname={editTarget} t={t} close={() => setEditTarget(undefined)} submit={async (relativeName) => { await service.updateDomainHostname(zoneId, editTarget.id, { relativeName }); setEditTarget(undefined); reload(); }} />}
     {deleteTarget && <ConfirmDialog title={t("deleteHostnameTitle")} message={t("deleteHostnameConfirm")} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await service.deleteDomainHostname(zoneId, deleteTarget.id); setDeleteTarget(undefined); reload(); }} />}
     {verification && <VerificationDialog result={verification} t={t} zoneApex={zone?.apexHostname} close={() => setVerification(undefined)} />}
+  </section>;
+}
+
+/**
+ * One hostname's own page: its synced DNS resolution records.
+ *
+ * The records are a snapshot, never a live lookup: the page renders what the
+ * last cloud-account sync read from the provider, and the sync button is the
+ * only gesture that touches the provider. That keeps a page render a store
+ * read, and it keeps the answer honest about its age — the snapshot instant
+ * sits in every row and in the summary line, so a stale view says so instead
+ * of posing as current.
+ *
+ * The rows shown are the ones the sync matched to *this* hostname, wildcard
+ * semantics already applied: an exact hostname shows its own owner's records,
+ * and a wildcard hostname shows its star record, its base owner, and every
+ * owner exactly one label beneath it. Zone-level records matched to no
+ * registered hostname are the Zone page's business, not this page's.
+ */
+function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
+  const { zoneId = "", hostnameId = "" } = useParams();
+  const service = useDeploymentsDeliveryService();
+  const t = translator(locale);
+  const [hostname, setHostname] = useState<DomainHostnameResponse>();
+  const [records, setRecords] = useState<DomainDnsRecordResponse[]>([]);
+  const [pageInfo, setPageInfo] = useState<PageInfo>({ mode: "offset", page: 1, pageSize: 20, hasMore: false });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncSummary, setSyncSummary] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    setBusy(true); setError(undefined);
+    void Promise.all([
+      service.listDomainHostnames(zoneId, { page: 1, pageSize: 20 }),
+      service.listZoneDnsRecords(zoneId, { page, pageSize, ...(hostnameId ? { hostnameId } : {}) }),
+    ]).then(([hostnameResult, recordResult]) => {
+      if (!active) return;
+      setHostname(hostnameResult.items.find((row) => row.id === hostnameId));
+      setRecords(recordResult.items);
+      setPageInfo(recordResult.pageInfo);
+    }).catch((cause) => { if (active) setError(errorText(cause)); }).finally(() => { if (active) setBusy(false); });
+    return () => { active = false; };
+  }, [hostnameId, page, pageSize, refreshVersion, service, zoneId]);
+
+  /**
+   * The one gesture that reaches the provider: re-read the zone's inventory
+   * through its cloud account and replace the snapshot. The account resolves
+   * exactly as the zone's DNS operations do — its pin, then the account
+   * center's choice, then the deployment-level configuration — so a zone
+   * pinned to no account still syncs when such an account exists.
+   */
+  const runSync = () => {
+    setSyncing(true); setError(undefined);
+    void service.syncZoneDnsRecords(zoneId).then((result) => {
+      setSyncSummary(t("dnsSyncedSummary", { syncedAt: formatDate(result.syncedAt, locale), provider: result.dnsProvider, count: result.recordCount }));
+      setRefreshVersion((value) => value + 1);
+      setPage(1);
+    }).catch((cause) => setError(errorText(cause))).finally(() => setSyncing(false));
+  };
+
+  const recordColumns = useMemo<DataTableColumn<DomainDnsRecordResponse>[]>(() => [
+    {
+      id: "recordName",
+      header: t("hostname"),
+      cell: (record) => <span className="hostname-cell"><Globe2 size={15} /><span>{record.recordName}</span></span>,
+      width: 260,
+    },
+    { id: "recordType", header: t("dnsRecordType"), cell: (record) => <StatusBadge value={record.recordType} t={t} />, width: 110 },
+    // The resolution answer itself: the IP for A/AAAA, the target for
+    // CNAME/MX. Mono-spaced by the cell style, so a value is copyable without
+    // quoting mistakes.
+    { id: "recordValue", header: t("dnsRecordValue"), cell: (record) => <span><code>{record.recordValue}</code>{record.priority === undefined ? "" : ` · ${record.priority}`}</span>, width: 240 },
+    { id: "recordLine", header: t("dnsRecordLine"), cell: (record) => record.recordLine ?? "-", width: 110 },
+    { id: "ttlSeconds", header: t("dnsTtl"), cell: (record) => record.ttlSeconds ?? "-", width: 100 },
+    { id: "syncedAt", header: t("dnsSyncedAt"), cell: (record) => formatDate(record.syncedAt, locale), width: 180 },
+  ], [locale, t]);
+
+  return <section className="resource-page domain-page">
+    <Link className="back-link" to={`/console/domains/${zoneId}`}><ArrowLeft size={16} />{t("backHostnames")}</Link>
+    <div className="resource-commandbar">
+      <div className="resource-identity"><h1>{hostname?.hostname ?? hostnameId}</h1></div>
+      <div className="actions">
+        <button className="icon-button" type="button" disabled={busy} title={t("refresh")} onClick={() => { setRefreshVersion((value) => value + 1); setPage(1); }}><RefreshCw size={17} /></button>
+        <button className="command-button" type="button" disabled={syncing} title={t("dnsSync")} onClick={runSync}><RefreshCw size={16} />{t("dnsSync")}</button>
+      </div>
+    </div>
+    {syncSummary && <p className="form-hint">{syncSummary}</p>}
+    <p className="form-hint">{t("dnsSyncHint")}</p>
+    {error && <ErrorBanner message={error} t={t} />}
+    <DataTable<DomainDnsRecordResponse>
+      columns={recordColumns}
+      density="compact"
+      emptyState={<span><Globe2 size={24} />{t("dnsNoRecords")}</span>}
+      getRowId={(record) => record.id}
+      loading={(busy || syncing) && records.length === 0}
+      pagination={serverPagination(page, pageInfo, busy, setPage, setPageSize)}
+      rows={records}
+      stickyHeader
+    />
   </section>;
 }
 

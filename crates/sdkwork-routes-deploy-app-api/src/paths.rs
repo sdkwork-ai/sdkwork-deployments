@@ -7,6 +7,8 @@ pub const DOMAIN_ZONE_HOSTNAME: &str = "/app/v3/api/domain_zones/{zoneId}/hostna
 pub const DOMAIN_ZONE_HOSTNAME_VERIFY: &str =
     "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}/verify";
 pub const DOMAIN_ZONE_HOSTNAME_CLAIMS: &str = "/app/v3/api/domain_zones/{zoneId}/hostname_claims";
+pub const DOMAIN_ZONE_DNS_RECORDS: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records";
+pub const DOMAIN_ZONE_DNS_RECORDS_SYNC: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records/sync";
 /// Cloud accounts a zone or certificate can be bound to.
 ///
 /// A top-level collection rather than a sub-resource of a zone: the same account is

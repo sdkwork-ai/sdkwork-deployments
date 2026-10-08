@@ -151,6 +151,10 @@ impl CertificateDns01PresenterPort for AccountBackedDns01PresenterResolver {
         Ok(Some(CertificateDns01Context {
             presenter,
             zone_apex: zone.zone_apex.clone(),
+            // The id travels with the answer so a caller that reports which
+            // account served it does not have to re-derive the choice — and
+            // cannot derive a different one.
+            provider_account_id: Some(account_id.clone()),
         }))
     }
 }

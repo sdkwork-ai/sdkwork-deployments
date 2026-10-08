@@ -17,8 +17,8 @@ pub use app_delivery::*;
 pub use app_domains::{ProvisionAppDomainsResult, ResolvedDeployServer};
 pub use app_ports::{
     DeployAppApi, DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
-    ListAppsQuery, ListDomainZonesQuery, UsageEventQuery, ZoneProviderAccountFilter,
-    ZONE_PROVIDER_ACCOUNT_UNASSIGNED,
+    ListAppsQuery, ListDomainDnsRecordsQuery, ListDomainZonesQuery, UsageEventQuery,
+    ZoneProviderAccountFilter, ZONE_PROVIDER_ACCOUNT_UNASSIGNED,
 };
 pub use app_source_spec::*;
 pub use certificate_plan::*;

@@ -93,6 +93,21 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/domain_zones/{zoneId}/dns_records",
+        "domain",
+        "domainZones.dnsRecords.list",
+    )
+    .with_required_permission("deploy.domainZones.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/domain_zones/{zoneId}/dns_records/sync",
+        "domain",
+        "domainZones.dnsRecords.sync",
+    )
+    .with_required_permission("deploy.domainZones.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/cloud_accounts",
         "domain",
         "cloudAccounts.list",

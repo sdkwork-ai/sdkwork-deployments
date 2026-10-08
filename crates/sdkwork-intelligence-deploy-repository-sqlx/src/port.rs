@@ -34,12 +34,13 @@ use sdkwork_deploy_contract::{
     UpdateServerRequest, UsageEventPage, UsageEventResponse, UsageReconciliationResponse,
 };
 use sdkwork_deploy_contract::{
-    DeployServiceError, DeployServiceResult, ProvisionAppDomainsResult, ResolvedDeployServer,
-    UsageEventIngestItem, UsageEventQuery, UsageIngestResult,
+    DeployServiceError, DeployServiceResult, DomainDnsRecordPage, ProvisionAppDomainsResult,
+    ResolvedDeployServer, UsageEventIngestItem, UsageEventQuery, UsageIngestResult,
 };
 use sdkwork_deploy_web_port::RuntimeAssignmentReceipt;
 use sdkwork_intelligence_deploy_service::repository::{
-    InsertAuditLogCommand, InsertUsageEventCommand,
+    DomainDnsRecordFilter, DomainDnsSnapshotWrite, DomainHostnameAsset, InsertAuditLogCommand,
+    InsertUsageEventCommand, ZoneDnsSyncTarget,
 };
 use sdkwork_intelligence_deploy_service::repository::{RepositoryMatch, TriggerTarget};
 use sdkwork_intelligence_deploy_service::runtime_publication::{
@@ -133,6 +134,48 @@ impl DeployRepositoryPort for DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<DomainHostnamePage> {
         self.list_domain_hostnames_repo(tenant_id, owner_user_id, zone_id, page, page_size)
+            .await
+    }
+
+    async fn domain_zone_dns_sync_target(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Option<ZoneDnsSyncTarget>> {
+        self.domain_zone_dns_sync_target_repo(tenant_id, owner_user_id, zone_id)
+            .await
+    }
+
+    async fn list_domain_hostname_assets(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Vec<DomainHostnameAsset>> {
+        self.list_domain_hostname_assets_repo(tenant_id, owner_user_id, zone_id)
+            .await
+    }
+
+    async fn replace_domain_zone_dns_records(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        snapshot: &DomainDnsSnapshotWrite,
+    ) -> DeployServiceResult<i64> {
+        self.replace_domain_zone_dns_records_repo(tenant_id, zone_id, snapshot)
+            .await
+    }
+
+    async fn list_domain_zone_dns_records(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        filter: &DomainDnsRecordFilter,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<DomainDnsRecordPage> {
+        self.list_domain_zone_dns_records_repo(tenant_id, zone_id, filter, page, page_size)
             .await
     }
 

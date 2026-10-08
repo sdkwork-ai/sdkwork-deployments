@@ -1043,6 +1043,191 @@
         "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
+    "/app/v3/api/domain_zones/{zoneId}/dns_records": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DomainZoneIdParam"
+        }
+      ],
+      "get": {
+        "operationId": "domainZones.dnsRecords.list",
+        "summary": "List a Zone's synced DNS resolution records",
+        "description": "Pages the resolution-record snapshot the last cloud-account sync read from the provider: record type and record content (the resolution IP for A/AAAA, the target for CNAME/MX) per owner. The read never contacts the provider — `domainZones.dnsRecords.sync` does that. A record whose owner matches no registered hostname still shows here at Zone scope; a record matched to a hostname deleted after the sync does not.",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          },
+          {
+            "name": "hostname_id",
+            "in": "query",
+            "description": "Restrict the page to one registered hostname by id. The sync has already applied the wildcard semantics when it stamped each record with its hostname — a wildcard declaration's rows are its star record, its base owner and every owner exactly one label beneath it — so the filter is one equality, not a name match.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zone resolution records returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/DomainDnsRecordResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.read"
+      }
+    },
+    "/app/v3/api/domain_zones/{zoneId}/dns_records/sync": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/DomainZoneIdParam"
+        }
+      ],
+      "post": {
+        "operationId": "domainZones.dnsRecords.sync",
+        "summary": "Sync a Zone's resolution records through its cloud account",
+        "description": "Re-reads the Zone's record inventory from its DNS provider through the same presenter chain certificate issuance uses — the Zone's pinned account, then the account center's choice for the declared provider, then the deployment-level configuration — and replaces the stored snapshot whole. Two syncs in a row answer with equivalent snapshots, so the operation is idempotent.",
+        "tags": [
+          "domain"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "x-sdkwork-idempotent": true,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resolution records synced successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/DomainDnsSyncResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "校验错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.domainZones.write"
+      }
+    },
     "/app/v3/api/cloud_accounts": {
       "get": {
         "operationId": "cloudAccounts.list",
@@ -11140,6 +11325,114 @@
             "type": "string",
             "format": "date-time",
             "description": "当前验证尝试的失效时间；域名已验证时可省略。"
+          }
+        }
+      },
+      "DomainDnsRecordResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "recordName",
+          "recordType",
+          "recordValue",
+          "dnsProvider",
+          "providerAccountId",
+          "syncedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recordName": {
+            "type": "string",
+            "description": "zone 内记录的绝对 owner，例如 `www.example.com`。"
+          },
+          "recordType": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "记录类型，沿用服务商拼写（A、AAAA、CNAME、TXT、MX）。"
+          },
+          "recordValue": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "记录值 —— A/AAAA 为解析 IP，CNAME/MX 为目标。"
+          },
+          "ttlSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "MX/SRV 等携带优先级的记录类型的优先级。"
+          },
+          "recordLine": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "服务商解析线路；按线路拆分记录时为该行所属线路。"
+          },
+          "hostnameId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "该记录解析到的已登记 hostname；owner 未匹配任何 hostname 时省略。"
+          },
+          "dnsProvider": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "快照读取自的服务商家族。"
+          },
+          "providerAccountId": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "读取快照所用的云账号；部署级凭据应答时为 `deployment-config`。"
+          },
+          "providerRecordRef": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "服务商返回的记录标识（如有）。"
+          },
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "该行从服务商读取的时间。"
+          }
+        }
+      },
+      "DomainDnsSyncResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "recordCount",
+          "syncedAt",
+          "zoneApex",
+          "dnsProvider",
+          "providerAccountId"
+        ],
+        "properties": {
+          "recordCount": {
+            "type": "string",
+            "format": "int64",
+            "minimum": 0,
+            "x-sdkwork-int64-string": true
+          },
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "zoneApex": {
+            "type": "string",
+            "description": "本次读取的服务商 inventory 覆盖的 zone apex。"
+          },
+          "dnsProvider": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "providerAccountId": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "应答本次读取的云账号。"
           }
         }
       },

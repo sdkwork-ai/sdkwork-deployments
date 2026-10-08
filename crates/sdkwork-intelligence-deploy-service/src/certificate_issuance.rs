@@ -50,6 +50,12 @@ pub struct CertificateDns01Context {
     pub presenter: Arc<dyn Dns01Presenter>,
     /// The hosted zone apex that owns the `_acme-challenge` records.
     pub zone_apex: String,
+    /// The account-center id the resolution answered through, when an account
+    /// did. `None` is the deployment-level configuration's answer, which has
+    /// no account-center row to name — a caller that reports which account
+    /// served a request carries this instead of re-deriving it, so the report
+    /// and the credential that was used cannot disagree.
+    pub provider_account_id: Option<String>,
 }
 
 /// One issuance request, owned so it can cross an `async` trait boundary.

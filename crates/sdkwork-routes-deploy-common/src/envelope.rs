@@ -12,16 +12,17 @@ use sdkwork_deploy_contract::{
     CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
     CertificateRenewalPage, CertificateRenewalResponse, CertificateResponse, ChannelPage,
     ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage,
-    CloudAccountResponse, DomainHostnamePage, DomainHostnameResponse, DomainVerifyResponse,
-    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse,
-    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
-    HealthCheckPage, HealthCheckResponse, NginxConfigPage, NginxConfigResponse,
-    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
-    SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
-    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage,
-    TemplateCategoryResponse, UsageEventPage, UsageEventResponse,
+    CloudAccountResponse, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
+    DomainHostnameResponse, DomainVerifyResponse, DomainZonePage, DomainZoneResponse,
+    EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage, EnvVariableResponse,
+    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
+    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
+    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
+    PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage, RunnerHealthResponse, ServerPage,
+    ServerResponse, SigningIdentityHealthPage, SigningIdentityHealthResponse, SigningIdentityPage,
+    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
+    SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse, UsageEventPage,
+    UsageEventResponse,
 };
 use sdkwork_deploy_core::normalize_pagination;
 use sdkwork_utils_rust::{PageInfo, PageMode, SdkWorkPageData, SdkWorkResourceData};
@@ -166,6 +167,14 @@ pub fn domain_zone_page(page: DomainZonePage) -> SdkWorkPageData<DomainZoneRespo
 
 pub fn domain_hostname_page(page: DomainHostnamePage) -> SdkWorkPageData<DomainHostnameResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+pub fn domain_dns_record_page(
+    page: DomainDnsRecordPage,
+    page_num: i32,
+    page_size: i32,
+) -> SdkWorkPageData<DomainDnsRecordResponse> {
+    offset_page(page.items, page_num, page_size, page.total)
 }
 
 pub fn env_variable_page(data: EnvVariablePage) -> SdkWorkPageData<EnvVariableResponse> {

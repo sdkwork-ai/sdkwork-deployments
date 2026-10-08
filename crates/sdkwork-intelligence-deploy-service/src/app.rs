@@ -2,13 +2,13 @@
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
-    is_deploy_package_artifact_type, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
-    AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
-    AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
-    BindAppSourceSpecSourceRequest, BuildPage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
-    ChannelRolloutResponse, CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
+    AppDatabaseMigrationPage, AppDatabaseMigrationResponse, AppDatabaseProfilePage,
+    AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse, AppDomainPage,
+    AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage, AppReleaseResponse,
+    AppResponse, AppSourceSpecPage, AppSourceSpecResponse, BindAppSourceSpecSourceRequest,
+    BuildPage, BuildResponse, BuildTemplatePage, BuildTemplateResponse, ChannelPage,
+    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
+    CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
     CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateArtifactRequest,
     CreateBuildRequest, CreateBuildTemplateRequest, CreateCertificateRequest,
@@ -20,10 +20,11 @@ use sdkwork_deploy_contract::{
     PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
     PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
     RequestCertificateOrderRequest, SigningIdentityPage, SigningIdentityResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateAppSourceSpecRequest,
-    UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
-    UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
+    SourceRepositoryPage, SourceRepositoryResponse, UPLOAD_SESSION_STATUS_CANCELLED,
+    UPLOAD_SESSION_STATUS_COMPLETED, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
+    UpdateAppRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
+    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery,
+    is_deploy_package_artifact_type,
 };
 use sdkwork_deploy_drive_port::{DriveRequestCredentials, PrepareDeployUploadCommand};
 
@@ -490,6 +491,42 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn list_domain_zone_dns_records(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        query: &sdkwork_deploy_contract::ListDomainDnsRecordsQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainDnsRecordPage> {
+        let tenant_id = Self::require_tenant(context)?;
+        crate::domain_dns_records::list_zone_dns_records(
+            &self.repository,
+            tenant_id,
+            zone_id,
+            &crate::repository::DomainDnsRecordFilter {
+                hostname_id: query.hostname_id.clone(),
+            },
+            query.page,
+            query.page_size,
+        )
+        .await
+    }
+
+    async fn sync_domain_zone_dns_records(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainDnsSyncResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        crate::domain_dns_records::sync_zone_dns_records(
+            &self.repository,
+            &self.certificate_dns01,
+            tenant_id,
+            context.actor_id,
+            zone_id,
+        )
+        .await
+    }
+
     /// Declares whatever is missing from the request and advances each hostname's
     /// proof once, so an order that covers `N` names costs one round trip instead
     /// of `2N`.
@@ -611,7 +648,7 @@ impl DeployAppApi for DeployService {
         query: &sdkwork_deploy_contract::ListCloudAccountsQuery,
     ) -> DeployServiceResult<sdkwork_deploy_contract::CloudAccountPage> {
         use sdkwork_deploy_cloud_account_port::{
-            dns_provider, ListCloudAccountsCommand, CAPABILITY_DNS, CLOUD_ACCOUNT_SCOPES,
+            CAPABILITY_DNS, CLOUD_ACCOUNT_SCOPES, ListCloudAccountsCommand, dns_provider,
         };
 
         let tenant_id = Self::require_tenant(context)?;
@@ -701,7 +738,7 @@ impl DeployAppApi for DeployService {
         context: &DeployAppRequestContext,
         request: &sdkwork_deploy_contract::CreateCloudAccountRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::CloudAccountRegistrationResponse> {
-        use sdkwork_deploy_cloud_account_port::{dns_provider, RegisterCloudAccountCommand};
+        use sdkwork_deploy_cloud_account_port::{RegisterCloudAccountCommand, dns_provider};
 
         let tenant_id = Self::require_tenant(context)?;
         let display_name = crate::cloud_accounts::required_text(

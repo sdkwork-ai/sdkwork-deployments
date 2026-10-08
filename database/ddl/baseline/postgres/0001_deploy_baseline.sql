@@ -182,6 +182,58 @@ CREATE INDEX IF NOT EXISTS idx_deploy_domain_verification_due
     ON deploy_domain_verification (status, next_attempt_at, expires_at, id)
     WHERE status IN ('PENDING', 'CHECKING');
 
+-- The last synced snapshot of one Zone's DNS resolution records, read from the
+-- provider through the Zone's cloud account (`deploy_dns_zone.provider_account_id`).
+-- One sync run replaces the Zone's whole snapshot in one transaction, so the
+-- table always answers with what the provider answered at `synced_at` -- never
+-- a merge of two runs. `domain_id` is the hostname the record resolves (matched
+-- at sync time, wildcard semantics already applied); NULL is the state of a
+-- record whose owner matches no registered hostname, which the Zone-scoped read
+-- still shows.
+CREATE TABLE IF NOT EXISTS deploy_domain_dns_record (
+    id              BIGINT        NOT NULL,
+    uuid            VARCHAR(36)   NOT NULL,
+    tenant_id       BIGINT        NOT NULL,
+    organization_id BIGINT        NOT NULL DEFAULT 0,
+    zone_id         BIGINT        NOT NULL,
+    domain_id       BIGINT,
+    record_name     VARCHAR(253)  NOT NULL,
+    record_type     VARCHAR(16)   NOT NULL,
+    record_value    VARCHAR(1024) NOT NULL,
+    ttl_seconds     INTEGER,
+    priority        INTEGER,
+    record_line     VARCHAR(64),
+    dns_provider    VARCHAR(32)   NOT NULL,
+    provider_account_id VARCHAR(128) NOT NULL,
+    provider_record_ref VARCHAR(128),
+    synced_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    created_by      BIGINT,
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    version         BIGINT        NOT NULL DEFAULT 1,
+    deleted_at      TIMESTAMPTZ,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_domain_dns_record_uuid UNIQUE (uuid),
+    CONSTRAINT fk_deploy_domain_dns_record_zone FOREIGN KEY (zone_id) REFERENCES deploy_dns_zone(id),
+    CONSTRAINT fk_deploy_domain_dns_record_domain FOREIGN KEY (domain_id) REFERENCES deploy_domain(id),
+    CONSTRAINT chk_deploy_domain_dns_record_owner CHECK (record_name <> ''),
+    CONSTRAINT chk_deploy_domain_dns_record_provider_account CHECK (
+        provider_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
+    )
+);
+
+COMMENT ON TABLE deploy_domain_dns_record IS 'DNS Zone 解析记录同步快照';
+COMMENT ON COLUMN deploy_domain_dns_record.domain_id IS '该记录解析到的 hostname 行；owner 未匹配任何已登记 hostname 时为 NULL';
+COMMENT ON COLUMN deploy_domain_dns_record.synced_at IS '本次快照从服务商读取的时间';
+
+CREATE INDEX IF NOT EXISTS idx_deploy_domain_dns_record_zone
+    ON deploy_domain_dns_record (tenant_id, zone_id, synced_at DESC, id DESC)
+    WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_deploy_domain_dns_record_domain
+    ON deploy_domain_dns_record (tenant_id, domain_id)
+    WHERE deleted_at IS NULL;
+
 -- source: migrations/003_create_deploy_nginx_config.sql
 -- Migration: 003_create_deploy_nginx_config
 -- Description: 创建 Nginx 配置版本表

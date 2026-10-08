@@ -22,18 +22,19 @@ use sdkwork_deploy_contract::{
     CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
     CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
     CreateTemplateCategoryRequest, DeployAppRequestContext, DeployUploadSessionResponse,
-    DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
-    DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    ListAppTemplatesAdminQuery, ListAppTemplatesQuery, ListAppsQuery, ListDomainZonesQuery,
-    ListMarketplaceTemplatesQuery, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
-    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    PromoteChannelRequest, PromoteEnvironmentRequest, ProvisionAppDomainsResult,
-    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, ResolvedDeployServer,
-    RetentionRunResponse, RunnerHealthPage, ServerPage, ServerResponse, SigningIdentityHealthPage,
-    SigningIdentityPage, SigningIdentityResponse, SourceEventPage, SourceEventResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse,
+    DeploymentStatus, DomainDnsRecordPage, DomainHostnamePage, DomainHostnameResponse,
+    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage,
+    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
+    HealthCheckResponse, ListAppTemplatesAdminQuery, ListAppTemplatesQuery, ListAppsQuery,
+    ListDomainZonesQuery, ListMarketplaceTemplatesQuery, ListNginxConfigsQuery, NginxConfigPage,
+    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
+    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
+    RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
+    ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
+    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
+    SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse,
     UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
     UpdateAppSourceSpecRequest, UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest,
     UpdateBuildStateRequest, UpdateDomainZoneRequest, UpdateNginxConfigRequest,
@@ -183,6 +184,71 @@ pub struct DnsChallengeZone {
     pub provider_account_id: Option<String>,
 }
 
+/// The Zone a resolution-records sync targets.
+///
+/// The snapshot rows key on the internal id, the provider inventory is read
+/// for the apex, and the account binding decides which credential answers —
+/// the same three facts the sync operation needs, carried once so the store
+/// read and the provider call cannot disagree about which Zone they describe.
+#[derive(Clone, Debug)]
+pub struct ZoneDnsSyncTarget {
+    pub zone_id: i64,
+    pub apex_hostname: String,
+    pub dns_provider: Option<String>,
+    pub provider_account_id: Option<String>,
+}
+
+/// One active hostname of a Zone, for the sync's record-to-hostname match.
+#[derive(Clone, Debug)]
+pub struct DomainHostnameAsset {
+    pub domain_id: i64,
+    pub hostname_ascii: String,
+    pub hostname_type: String,
+}
+
+/// One row of a provider inventory read, expressed in store terms.
+///
+/// The service converts the provider adapter's record type into this row so
+/// the repository depends on no DNS adapter: the store writes what it is
+/// given, and the vocabulary of providers stops at the service boundary.
+#[derive(Clone, Debug)]
+pub struct DnsRecordSnapshotRow {
+    pub record_name: String,
+    pub record_type: String,
+    pub record_value: String,
+    pub ttl_seconds: Option<i32>,
+    pub priority: Option<i32>,
+    pub record_line: Option<String>,
+    pub provider_record_ref: Option<String>,
+    /// The hostname this record resolves, matched by the service before the
+    /// write; `None` for a record whose owner matches no registered hostname.
+    pub domain_id: Option<i64>,
+}
+
+/// One sync run's whole write: the read's metadata plus every row.
+///
+/// The store replaces the Zone's snapshot in one transaction, so this carries
+/// the complete inventory rather than a diff — the truth is "what the provider
+/// answered now", not a merge with a previous answer.
+#[derive(Clone, Debug)]
+pub struct DomainDnsSnapshotWrite {
+    pub dns_provider: String,
+    pub provider_account_id: String,
+    pub synced_at: String,
+    pub records: Vec<DnsRecordSnapshotRow>,
+}
+
+/// The hostname restriction of a snapshot read.
+///
+/// The sync has already applied the wildcard semantics (a wildcard
+/// declaration's rows are its base owner and every owner beneath it) when it
+/// stamped `domain_id`, so the read filters on that match directly instead of
+/// re-deriving it from the hostname string.
+#[derive(Clone, Debug, Default)]
+pub struct DomainDnsRecordFilter {
+    pub hostname_id: Option<String>,
+}
+
 // The trait's methods are grouped by the aggregate they read or write.
 //
 // `AppSourceSpecRepositoryPort` is a supertrait rather than another block of
@@ -267,6 +333,48 @@ pub trait DeployRepositoryPort:
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainHostnamePage>;
+
+    /// The Zone a resolution-records sync targets, or `None` when the id is
+    /// unknown (the sync refuses rather than guessing an apex).
+    async fn domain_zone_dns_sync_target(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Option<ZoneDnsSyncTarget>>;
+
+    /// Every active hostname of the Zone, for the sync's record match.
+    /// Bounded by the Zone's hostname inventory, which is why it is a plain
+    /// read rather than a paged one.
+    async fn list_domain_hostname_assets(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Vec<DomainHostnameAsset>>;
+
+    /// Replaces the Zone's whole resolution-record snapshot in one
+    /// transaction and returns the stored row count. The Zone row is locked
+    /// for the write, so a concurrent delete cannot free the zone under the
+    /// snapshot.
+    async fn replace_domain_zone_dns_records(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        snapshot: &DomainDnsSnapshotWrite,
+    ) -> DeployServiceResult<i64>;
+
+    /// Pages the stored snapshot, optionally restricted to one hostname.
+    /// Store-level pagination: the page bounds bound the query, not a
+    /// post-read slice.
+    async fn list_domain_zone_dns_records(
+        &self,
+        tenant_id: i64,
+        zone_id: &str,
+        filter: &DomainDnsRecordFilter,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<DomainDnsRecordPage>;
 
     async fn create_domain_hostname(
         &self,
@@ -772,7 +880,7 @@ pub trait DeployRepositoryPort:
     ) -> DeployServiceResult<ChannelResponse>;
 
     async fn list_channels(&self, tenant_id: i64, app_id: &str)
-        -> DeployServiceResult<ChannelPage>;
+    -> DeployServiceResult<ChannelPage>;
 
     async fn promote_channel(
         &self,

@@ -152,6 +152,35 @@ class DomainApi {
     })();
   }
 
+  /// List a Zone's synced DNS resolution records
+  Future<DomainZonesDnsRecordsListResponse?> zonesDnsRecordsList(String zoneId, [int? page, int? pageSize, String? hostnameId]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('hostname_id', hostnameId, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/dns_records'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DomainZonesDnsRecordsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Sync a Zone's resolution records through its cloud account
+  Future<DomainZonesDnsRecordsSyncResponse?> zonesDnsRecordsSync(String zoneId, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/dns_records/sync'), headers: requestHeaders);
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DomainZonesDnsRecordsSyncResponse.fromJson(map);
+    })();
+  }
+
   /// List cloud accounts usable for DNS automation
   Future<CloudAccountsListResponse?> cloudAccountsList([int? page, int? pageSize, String? dnsProvider, String? scopeType, bool? mine, String? keyword]) async {
     final query = buildQueryString([

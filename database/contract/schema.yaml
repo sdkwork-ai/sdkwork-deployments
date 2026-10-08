@@ -198,3 +198,6 @@ tables:
   - name: deploy_app_template_version
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_domain_dns_record
+    lifecycle_status: active
+    owner: deploy-platform

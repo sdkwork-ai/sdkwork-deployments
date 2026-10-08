@@ -13,6 +13,7 @@ pub mod certificate_issuance;
 pub mod certificate_material;
 pub mod certificate_renewal;
 pub mod cloud_accounts;
+pub mod domain_dns_records;
 pub mod domain_verification;
 pub mod entitlement;
 pub mod repository;
@@ -48,6 +49,7 @@ pub use certificate_renewal::{
     MAXIMUM_RENEW_BEFORE_DAYS, MINIMUM_RENEW_BEFORE_DAYS, RENEWAL_OVERDUE_GRACE_DAYS,
     SWEEP_LOOKAHEAD_DAYS,
 };
+pub use domain_dns_records::hostname_matches_record;
 pub use domain_verification::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, normalize_domain_hostname,
     normalize_zone_apex, relative_name_for_hostname, DomainOwnershipVerifierPort,
@@ -56,7 +58,8 @@ pub use domain_verification::{
 };
 pub use repository::{
     CertificateOrderClaim, CertificateRenewalClaim, DeployRepositoryPort, DnsChallengeZone,
-    ExpiredCertificateSweep,
+    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsSnapshotWrite, DomainHostnameAsset,
+    ExpiredCertificateSweep, ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,

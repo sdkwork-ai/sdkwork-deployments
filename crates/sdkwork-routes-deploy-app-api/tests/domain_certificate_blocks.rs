@@ -23,6 +23,12 @@ fn block_paths() -> Vec<(HttpMethod, &'static str)> {
         (HttpMethod::Delete, paths::DOMAIN_ZONE_HOSTNAME),
         (HttpMethod::Post, paths::DOMAIN_ZONE_HOSTNAME_VERIFY),
         (HttpMethod::Post, paths::DOMAIN_ZONE_HOSTNAME_CLAIMS),
+        // The resolution-records read and its provider sync are zone-block
+        // routes like the hostname routes beside them: the detail page reads
+        // the snapshot through the block, and the sync is its one provider
+        // gesture.
+        (HttpMethod::Get, paths::DOMAIN_ZONE_DNS_RECORDS),
+        (HttpMethod::Post, paths::DOMAIN_ZONE_DNS_RECORDS_SYNC),
         (HttpMethod::Get, paths::CERTIFICATES),
         (HttpMethod::Post, paths::CERTIFICATES),
         (HttpMethod::Get, paths::CERTIFICATE),

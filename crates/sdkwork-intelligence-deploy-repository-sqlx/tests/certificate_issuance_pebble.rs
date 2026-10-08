@@ -496,6 +496,7 @@ async fn dns01_wildcard_reaches_version_stored() {
         context: CertificateDns01Context {
             presenter,
             zone_apex: E2E_HOSTNAME.to_owned(),
+            provider_account_id: None,
         },
     };
 
@@ -768,6 +769,7 @@ async fn a_wildcard_certificate_is_renewed_through_dns01() {
         context: CertificateDns01Context {
             presenter,
             zone_apex: E2E_HOSTNAME.to_owned(),
+            provider_account_id: None,
         },
     };
     let service = issuance_service(&Arc::new(repository), &env, Some(Arc::new(resolver)));
@@ -881,6 +883,7 @@ impl CertificateDns01PresenterPort for FixedDns01Resolver {
         Ok(Some(CertificateDns01Context {
             presenter: self.context.presenter.clone(),
             zone_apex: self.context.zone_apex.clone(),
+            provider_account_id: None,
         }))
     }
 }

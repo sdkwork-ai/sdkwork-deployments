@@ -8,6 +8,8 @@ import {
   type CreateCloudAccountRequest,
   type CreateDomainHostnameRequest,
   type CreateDomainZoneRequest,
+  type DomainDnsRecordResponse,
+  type DomainDnsSyncResponse,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
   type DomainVerifyResponse,
@@ -41,6 +43,8 @@ export type {
   CreateCloudAccountRequest,
   CreateDomainHostnameRequest,
   CreateDomainZoneRequest,
+  DomainDnsRecordResponse,
+  DomainDnsSyncResponse,
   DomainHostnameClaimResponse,
   DomainHostnameResponse,
   DomainVerifyResponse,
@@ -100,6 +104,18 @@ export interface DeploymentsDeliveryService {
   verifyDomainHostname(zoneId: string, hostnameId: string): Promise<DomainVerifyResponse>;
   ensureDomainHostnameClaims(zoneId: string, body: EnsureDomainHostnameClaimsRequest): Promise<{ items: DomainHostnameClaimResponse[] }>;
   deleteDomainHostname(zoneId: string, hostnameId: string): Promise<void>;
+  /**
+   * Pages the Zone's synced DNS resolution records, optionally restricted to
+   * one hostname. Store-only: the page renders the last cloud-account sync's
+   * snapshot and never waits on a provider.
+   */
+  listZoneDnsRecords(zoneId: string, params?: { page?: number; pageSize?: number; hostnameId?: string }): Promise<{ items: DomainDnsRecordResponse[]; pageInfo: PageInfo }>;
+  /**
+   * Re-reads the Zone's inventory through its cloud account and replaces the
+   * stored snapshot — the one gesture on the resolution page that touches the
+   * provider.
+   */
+  syncZoneDnsRecords(zoneId: string): Promise<DomainDnsSyncResponse>;
   listCertificates(params?: { page?: number; pageSize?: number }): Promise<{ items: CertificateResponse[]; pageInfo: PageInfo }>;
   createCertificate(body: CreateCertificateRequest): Promise<CertificateResponse>;
   renewCertificate(certificateId: string): Promise<CertificateResponse>;
@@ -201,6 +217,16 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
     verifyDomainHostname: (zoneId, hostnameId) => zones.hostnames.verify(zoneId, hostnameId, idempotencyParams()),
     ensureDomainHostnameClaims: (zoneId, body) => zones.hostnameClaims.ensure(zoneId, body, idempotencyParams()),
     deleteDomainHostname: (zoneId, hostnameId) => zones.hostnames.delete(zoneId, hostnameId),
+    listZoneDnsRecords: (zoneId, params) =>
+      zones.dnsRecords.list(
+        zoneId,
+        params && {
+          ...(params.page === undefined ? {} : { page: params.page }),
+          ...(params.pageSize === undefined ? {} : { pageSize: params.pageSize }),
+          ...(params.hostnameId === undefined ? {} : { hostnameId: params.hostnameId }),
+        },
+      ),
+    syncZoneDnsRecords: (zoneId) => zones.dnsRecords.sync(zoneId, idempotencyParams()),
     listCertificates: (params) => client.certificate.list(params),
     createCertificate: (body) => client.certificate.create(body, idempotencyParams()),
     renewCertificate: (certificateId) => client.certificate.renew(certificateId, idempotencyParams()),

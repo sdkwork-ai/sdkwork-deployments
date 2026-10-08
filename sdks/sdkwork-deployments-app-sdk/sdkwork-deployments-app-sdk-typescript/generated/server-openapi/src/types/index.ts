@@ -52,6 +52,8 @@ export type { CreateDomainHostnameRequest } from './create-domain-hostname-reque
 export type { UpdateDomainHostnameRequest } from './update-domain-hostname-request';
 export type { DomainHostnameResponse } from './domain-hostname-response';
 export type { DomainVerifyResponse } from './domain-verify-response';
+export type { DomainDnsRecordResponse } from './domain-dns-record-response';
+export type { DomainDnsSyncResponse } from './domain-dns-sync-response';
 export type { EnsureDomainHostnameClaimsRequest } from './ensure-domain-hostname-claims-request';
 export type { DomainHostnameClaimResponse } from './domain-hostname-claim-response';
 export type { CreateDeploymentRequest } from './create-deployment-request';
@@ -148,6 +150,8 @@ export type { DomainZonesHostnamesRetrieveResponse } from './domain-zones-hostna
 export type { DomainZonesHostnamesUpdateResponse } from './domain-zones-hostnames-update-response';
 export type { DomainZonesHostnamesVerifyResponse } from './domain-zones-hostnames-verify-response';
 export type { DomainZonesHostnameClaimsEnsureResponse } from './domain-zones-hostname-claims-ensure-response';
+export type { DomainZonesDnsRecordsListResponse } from './domain-zones-dns-records-list-response';
+export type { DomainZonesDnsRecordsSyncResponse } from './domain-zones-dns-records-sync-response';
 export type { CloudAccountsListResponse } from './cloud-accounts-list-response';
 export type { CloudAccountsCreateResponse201 } from './cloud-accounts-create-response201';
 export type { CertificatesListResponse } from './certificates-list-response';

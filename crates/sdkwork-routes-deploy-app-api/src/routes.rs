@@ -1,17 +1,17 @@
 use axum::{
+    Extension, Json, Router,
     extract::{Path, Query, State},
     http::HeaderMap,
     response::Response,
     routing::{get, post, put},
-    Extension, Json, Router,
 };
 use sdkwork_deploy_contract::{
     CompleteDeployUploadSessionRequest, CreateArtifactRequest, CreateCertificateRequest,
     CreateCloudAccountRequest, CreateDeployUploadSessionRequest, CreateDomainHostnameRequest,
     CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi,
     DeployAppRequestContext, EnsureDomainHostnameClaimsRequest, ListCloudAccountsQuery,
-    ListDomainZonesQuery, UpdateAppCompositionRequest, UpdateDomainHostnameRequest,
-    UpdateDomainZoneRequest,
+    ListDomainDnsRecordsQuery, ListDomainZonesQuery, UpdateAppCompositionRequest,
+    UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -83,6 +83,14 @@ pub fn build_domain_management_router() -> Router<AppState> {
         .route(
             paths::DOMAIN_ZONE_HOSTNAME_CLAIMS,
             post(ensure_domain_hostname_claims),
+        )
+        .route(
+            paths::DOMAIN_ZONE_DNS_RECORDS,
+            get(list_domain_zone_dns_records),
+        )
+        .route(
+            paths::DOMAIN_ZONE_DNS_RECORDS_SYNC,
+            post(sync_domain_zone_dns_records),
         )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
@@ -335,6 +343,58 @@ async fn list_domain_hostnames(
                 .list_domain_hostnames(&context, &zone_id, query.page, query.page_size)
                 .await?;
             ok_json(envelope::domain_hostname_page(page))
+        }
+        .await,
+    )
+}
+
+/// Reads the Zone's synced resolution records, optionally restricted to one
+/// hostname. Store-only: the page renders the last sync's snapshot and never
+/// waits on a provider.
+async fn list_domain_zone_dns_records(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(zone_id): Path<String>,
+    Query(query): Query<ListDomainDnsRecordsQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = state
+                .api
+                .list_domain_zone_dns_records(&context, &zone_id, &query)
+                .await?;
+            ok_json(envelope::domain_dns_record_page(
+                page,
+                query.page,
+                query.page_size,
+            ))
+        }
+        .await,
+    )
+}
+
+/// Re-reads the Zone's inventory through its cloud account and replaces the
+/// stored snapshot. Idempotent in effect — two syncs replace the snapshot with
+/// equivalent answers — so the route carries the same contract as the other
+/// idempotent writes.
+async fn sync_domain_zone_dns_records(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(zone_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .sync_domain_zone_dns_records(&context, &zone_id)
+                .await?;
+            ok_json(envelope::resource(item))
         }
         .await,
     )
@@ -955,13 +1015,17 @@ mod tests {
     #[test]
     fn composition_precondition_headers_are_required() {
         let headers = HeaderMap::new();
-        assert!(parse_if_match(&headers)
-            .expect_err("If-Match must be required")
-            .to_string()
-            .contains("if-match header is required"));
-        assert!(required_header(&headers, "idempotency-key")
-            .expect_err("Idempotency-Key must be required")
-            .to_string()
-            .contains("idempotency-key header is required"));
+        assert!(
+            parse_if_match(&headers)
+                .expect_err("If-Match must be required")
+                .to_string()
+                .contains("if-match header is required")
+        );
+        assert!(
+            required_header(&headers, "idempotency-key")
+                .expect_err("Idempotency-Key must be required")
+                .to_string()
+                .contains("idempotency-key header is required")
+        );
     }
 }

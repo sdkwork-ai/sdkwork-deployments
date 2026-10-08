@@ -292,6 +292,9 @@ impl CertificateDns01PresenterPort for EnvDns01PresenterResolver {
         Ok(Some(CertificateDns01Context {
             presenter,
             zone_apex: self.zone_apex.clone(),
+            // The deployment-level credential has no account-center row: the
+            // absence is the honest report, not a missing lookup.
+            provider_account_id: None,
         }))
     }
 }

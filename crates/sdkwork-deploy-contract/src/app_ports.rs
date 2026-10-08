@@ -137,6 +137,22 @@ pub struct ListDomainZonesQuery {
 /// literal rather than a second boolean parameter.
 pub const ZONE_PROVIDER_ACCOUNT_UNASSIGNED: &str = "UNASSIGNED";
 
+/// Query of a Zone's synced resolution records.
+///
+/// `hostname_id` restricts the page to one registered hostname — the rows the
+/// sync matched to that hostname, wildcard semantics already applied at sync
+/// time. An absent member pages the whole Zone snapshot, which is what the
+/// Zone-level read asks for.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ListDomainDnsRecordsQuery {
+    #[serde(default = "crate::dto::default_page")]
+    pub page: i32,
+    #[serde(default = "crate::dto::default_page_size")]
+    pub page_size: i32,
+    #[serde(rename = "hostname_id", default)]
+    pub hostname_id: Option<String>,
+}
+
 /// The cloud-account pin a zone listing is restricted to.
 ///
 /// The three states are mutually exclusive by construction rather than by
@@ -302,6 +318,34 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<DomainVerifyResponse> {
         Err(crate::DeployServiceError::Internal(
             "domain hostname verification API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Pages the Zone's synced DNS resolution records, optionally restricted
+    /// to one hostname. The read is over the last cloud-account sync's
+    /// snapshot: it never contacts the provider, so a page render costs a
+    /// store read and never a vendor round trip.
+    async fn list_domain_zone_dns_records(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+        _query: &ListDomainDnsRecordsQuery,
+    ) -> DeployServiceResult<DomainDnsRecordPage> {
+        Err(crate::DeployServiceError::Internal(
+            "domain dns records API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Re-reads the Zone's record inventory through the same presenter chain
+    /// issuance uses (the zone's pin, then the account center, then the
+    /// deployment-level configuration) and replaces the stored snapshot.
+    async fn sync_domain_zone_dns_records(
+        &self,
+        _context: &DeployAppRequestContext,
+        _zone_id: &str,
+    ) -> DeployServiceResult<DomainDnsSyncResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "domain dns record sync API is not implemented".to_owned(),
         ))
     }
 
