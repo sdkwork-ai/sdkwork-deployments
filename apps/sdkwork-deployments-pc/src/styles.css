@@ -459,3 +459,4 @@
 .version-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .version-list li{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:8px 10px;border:1px solid #e1e5e7;border-radius:5px}
 .version-list li span:last-child{color:#657178}
+.resolution-summary{display:grid;gap:3px;min-width:0}.resolution-chip{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 6px;background:#f7f9fa;border:1px solid #d5dbde;border-radius:4px;font-size:12px}.resolution-chip-disabled{opacity:.62;background:#fff8e8;border-color:#e3c77c;color:#8a6116}

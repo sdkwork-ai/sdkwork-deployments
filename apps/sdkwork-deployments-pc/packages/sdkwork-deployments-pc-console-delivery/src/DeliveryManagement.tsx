@@ -1251,6 +1251,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
   const [editTarget, setEditTarget] = useState<DomainHostnameResponse>();
   const [deleteTarget, setDeleteTarget] = useState<DomainHostnameResponse>();
   const [verification, setVerification] = useState<DomainVerifyResponse>();
+  const [resolutionGroups, setResolutionGroups] = useState<Map<string, DomainDnsRecordResponse[]>>(new Map());
 
   useEffect(() => {
     let active = true;
@@ -1267,6 +1268,25 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     return () => { active = false; };
   }, [page, pageSize, refreshVersion, service, zoneId]);
 
+  // One zone-wide snapshot read feeds every row's 解析 summary. It tracks the
+  // same refresh gesture as the list but not the hostname pagination, and a
+  // failed summary read must not blank the ledger — the rows degrade to "-".
+  useEffect(() => {
+    let active = true;
+    void service.listZoneDnsRecords(zoneId, { page: 1, pageSize: 200 }).then((result) => {
+      if (!active) return;
+      const groups = new Map<string, DomainDnsRecordResponse[]>();
+      for (const record of result.items) {
+        if (record.hostnameId === undefined) continue;
+        const bucket = groups.get(record.hostnameId);
+        if (bucket === undefined) groups.set(record.hostnameId, [record]);
+        else bucket.push(record);
+      }
+      setResolutionGroups(groups);
+    }).catch(() => { if (active) setResolutionGroups(new Map()); });
+    return () => { active = false; };
+  }, [refreshVersion, service, zoneId]);
+
   const reload = () => setRefreshVersion((value) => value + 1);
 
   /**
@@ -1282,12 +1302,18 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
       cell: (hostname) => <Link className="hostname-cell" to={`hostnames/${hostname.id}`}><Globe2 size={16} /><strong>{hostname.hostname}</strong></Link>,
       width: 260,
     },
+    {
+      id: "resolution",
+      header: t("dnsRecords"),
+      cell: (hostname) => <ResolutionSummary records={resolutionGroups.get(hostname.id) ?? []} t={t} />,
+      width: 300,
+    },
     { id: "hostnameType", header: t("type"), cell: (hostname) => hostname.hostnameType === "WILDCARD" ? t("wildcard") : t("exact"), width: 110 },
     { id: "verificationStatus", header: t("verification"), cell: (hostname) => <StatusBadge value={hostname.verificationStatus} t={t} />, width: 130 },
     { id: "certificateCount", header: t("certificateCoverage"), cell: (hostname) => hostname.certificateCount, width: 130 },
     { id: "bindingCount", header: t("appBindings"), cell: (hostname) => hostname.bindingCount, width: 110 },
     { id: "updatedAt", header: t("updated"), cell: (hostname) => formatDate(hostname.updatedAt, locale), width: 180 },
-  ], [locale, t]);
+  ], [locale, t, resolutionGroups]);
 
   // The loading guard sits *after* every hook, not before them. It used to sit
   // above `hostnameColumns`, which made the hook count depend on the state it
@@ -3276,6 +3302,33 @@ const LEDGER_PAGE_SIZES = [20, 50, 100] as const;
 
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="domain-metric"><span>{label}</span><strong>{value}</strong></div>;
+}
+
+/**
+ * Compact per-row resolution summary: `TYPE value` lines with the paused
+ * ones marked. The list answers "这个子域名解析到哪" without the drill-in;
+ * the editable ledger stays on the hostname page.
+ */
+function ResolutionSummary({ records, t }: { records: DomainDnsRecordResponse[]; t: Translator }) {
+  if (records.length === 0) return <span className="cell-subtitle">-</span>;
+  const shown = records.slice(0, 3);
+  return (
+    <span className="resolution-summary">
+      {shown.map((record) => (
+        // One chip per record: the column is the first thing a narrow table
+        // squeezes, so the chip ellipsizes as one unit instead of splitting
+        // the type from its value.
+        <code
+          className={record.recordStatus === "DISABLED" ? "resolution-chip resolution-chip-disabled" : "resolution-chip"}
+          key={record.id}
+          title={record.recordStatus === "DISABLED" ? `${record.recordType} ${record.recordValue} · ${t("dnsStatusDisabled")}` : `${record.recordType} ${record.recordValue}`}
+        >
+          {record.recordType} {record.recordValue}
+        </code>
+      ))}
+      {records.length > shown.length ? <span className="cell-subtitle">+{records.length - shown.length}</span> : null}
+    </span>
+  );
 }
 
 function StatusBadge({ t, value }: { t: Translator; value: string }) {
