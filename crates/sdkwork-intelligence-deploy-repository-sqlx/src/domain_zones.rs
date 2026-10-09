@@ -383,7 +383,7 @@ impl DeployRepository {
         content: &str,
     ) -> DeployServiceResult<String> {
         let zone = sqlx::query(AssertSqlSafe(format!(
-            "SELECT id FROM deploy_dns_zone z
+            "SELECT id, organization_id FROM deploy_dns_zone z
              WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
                AND {}",
             zone_owner_gate(3)
@@ -398,17 +398,32 @@ impl DeployRepository {
         let zone_internal_id: i64 = zone
             .try_get("id")
             .map_err(|error| store_error("map deploy_dns_zone id", error))?;
+        let organization_id: i64 = zone
+            .try_get::<i64, _>("organization_id")
+            .unwrap_or_default();
+        // 模块基线形态：雪花 id + uuid 镜像 + tenant/organization；zone 唯一
+        // 约束承载"一个 Zone 至多一份"的替换语义。
+        let row_id = next_id(self.id_generator())?;
+        let row_uuid = new_uuid();
         let updated_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
-            "INSERT INTO deploy_dns_zone_wechat_verification (zone_id, file_name, content)
-             VALUES ($1, $2, $3)
+            "INSERT INTO deploy_dns_zone_wechat_verification (
+                id, uuid, tenant_id, organization_id, zone_id, file_name, content, user_id, updated_by
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              ON CONFLICT (zone_id) DO UPDATE
                SET file_name = EXCLUDED.file_name, content = EXCLUDED.content,
+                   user_id = EXCLUDED.user_id, updated_by = EXCLUDED.updated_by,
                    updated_at = NOW()
              RETURNING updated_at",
         )
+        .bind(row_id)
+        .bind(&row_uuid)
+        .bind(tenant_id)
+        .bind(organization_id)
         .bind(zone_internal_id)
         .bind(file_name)
         .bind(content)
+        .bind(owner_user_id)
+        .bind(owner_user_id)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("upsert deploy_dns_zone_wechat_verification", error))?;
