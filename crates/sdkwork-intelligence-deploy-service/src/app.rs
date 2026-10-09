@@ -392,6 +392,47 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn retrieve_domain_zone_wechat_verification(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainWechatVerificationResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.retrieve_wechat_verification(tenant_id, context.actor_id, zone_id)
+            .await
+    }
+
+    async fn upsert_domain_zone_wechat_verification(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+        request: &sdkwork_deploy_contract::UpsertDomainWechatVerificationRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainWechatVerificationResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.upsert_wechat_verification(tenant_id, context.actor_id, zone_id, request)
+            .await
+    }
+
+    async fn delete_domain_zone_wechat_verification(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+    ) -> DeployServiceResult<()> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.delete_wechat_verification(tenant_id, context.actor_id, zone_id)
+            .await
+    }
+
+    async fn check_domain_zone_wechat_verification(
+        &self,
+        context: &DeployAppRequestContext,
+        zone_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainWechatVerificationCheckResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.check_wechat_verification(tenant_id, context.actor_id, zone_id)
+            .await
+    }
+
     async fn list_domain_hostnames(
         &self,
         context: &DeployAppRequestContext,
@@ -717,7 +758,13 @@ impl DeployAppApi for DeployService {
             .await
             .map_err(crate::domain_dns_records::map_dns_sync_error)?;
         self.repository
-            .set_domain_zone_dns_record_status(tenant_id, context.actor_id, zone_id, record_id, request.enabled)
+            .set_domain_zone_dns_record_status(
+                tenant_id,
+                context.actor_id,
+                zone_id,
+                record_id,
+                request.enabled,
+            )
             .await
     }
 

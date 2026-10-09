@@ -68,6 +68,39 @@ class DomainApi {
     await _client.delete(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}'));
   }
 
+  /// Read the Zone's WeChat MP domain-ownership verification file
+  Future<DomainZonesWechatVerificationRetrieveResponse?> zonesWechatVerificationRetrieve(String zoneId) async {
+    final response = await _client.get(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DomainZonesWechatVerificationRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Upload (or wholly replace) the Zone's WeChat verification file
+  Future<DomainZonesWechatVerificationUpsertResponse?> zonesWechatVerificationUpsert(String zoneId, UpsertDomainWechatVerificationRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DomainZonesWechatVerificationUpsertResponse.fromJson(map);
+    })();
+  }
+
+  /// Delete the Zone's WeChat verification file
+  Future<void> zonesWechatVerificationDelete(String zoneId) async {
+    await _client.delete(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification'));
+  }
+
+  /// Self-check the Zone's WeChat verification file
+  Future<DomainZonesWechatVerificationCheckResponse?> zonesWechatVerificationCheck(String zoneId) async {
+    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification/check'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : DomainZonesWechatVerificationCheckResponse.fromJson(map);
+    })();
+  }
+
   /// List hostnames in a root domain zone
   Future<DomainZonesHostnamesListResponse?> zonesHostnamesList(String zoneId, [int? page, int? pageSize]) async {
     final query = buildQueryString([

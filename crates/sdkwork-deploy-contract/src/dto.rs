@@ -1280,6 +1280,41 @@ pub struct DeployUploadSessionResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DomainWechatVerificationResponse {
+    #[serde(rename = "zoneId")]
+    pub zone_id: String,
+    #[serde(rename = "fileName", skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    #[serde(rename = "content", skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpsertDomainWechatVerificationRequest {
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DomainWechatVerificationCheckResponse {
+    #[serde(rename = "reachable")]
+    pub reachable: bool,
+    #[serde(rename = "matched")]
+    pub matched: bool,
+    #[serde(rename = "statusCode", skip_serializing_if = "Option::is_none")]
+    pub status_code: Option<i32>,
+    #[serde(rename = "scheme", skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
+    #[serde(rename = "detail", skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(rename = "checkedAt")]
+    pub checked_at: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompletedUploadPartInput {
     #[serde(rename = "partNo")]
     pub part_no: i64,

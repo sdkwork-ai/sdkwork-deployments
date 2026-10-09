@@ -11,6 +11,11 @@ pub const DOMAIN_ZONE_DNS_RECORDS: &str = "/app/v3/api/domain_zones/{zoneId}/dns
 pub const DOMAIN_ZONE_DNS_RECORD: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}";
 pub const DOMAIN_ZONE_DNS_RECORD_STATUS: &str =
     "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}/status";
+
+pub const DOMAIN_ZONE_WECHAT_VERIFICATION: &str =
+    "/app/v3/api/domain_zones/{zoneId}/wechat_verification";
+pub const DOMAIN_ZONE_WECHAT_VERIFICATION_CHECK: &str =
+    "/app/v3/api/domain_zones/{zoneId}/wechat_verification/check";
 pub const DOMAIN_ZONE_DNS_RECORDS_SYNC: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records/sync";
 /// Cloud accounts a zone or certificate can be bound to.
 ///

@@ -371,7 +371,9 @@ impl DeployRepository {
         record_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
+        let zone_internal_id = self
+            .resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id)
+            .await?;
         // `record_status` is deliberately absent: an edit does not touch the
         // provider-side pause state, which only the status operation flips.
         let result = sqlx::query(AssertSqlSafe(
@@ -417,7 +419,9 @@ impl DeployRepository {
         record_id: &str,
         enabled: bool,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
+        let zone_internal_id = self
+            .resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id)
+            .await?;
         let status = if enabled { "ENABLED" } else { "DISABLED" };
         let result = sqlx::query(AssertSqlSafe(
             "UPDATE deploy_domain_dns_record
@@ -449,7 +453,9 @@ impl DeployRepository {
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<()> {
-        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
+        let zone_internal_id = self
+            .resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id)
+            .await?;
         // Hard delete: the provider no longer holds the record, so a row left
         // behind would answer a resolution the zone does not have.
         let result = sqlx::query(
@@ -477,7 +483,9 @@ impl DeployRepository {
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<Option<String>> {
-        let zone_internal_id = self.resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id).await?;
+        let zone_internal_id = self
+            .resolve_gated_zone_internal_id(tenant_id, owner_user_id, zone_id)
+            .await?;
         let row = sqlx::query(
             "SELECT provider_record_ref FROM deploy_domain_dns_record
              WHERE tenant_id = $1 AND zone_id = $2 AND uuid = $3

@@ -137,6 +137,102 @@
     },
     {
       "method": "GET",
+      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+      "operationId": "domainZones.wechatVerification.retrieve",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.domainZones.read",
+      "idempotent": false
+    },
+    {
+      "method": "PUT",
+      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+      "operationId": "domainZones.wechatVerification.upsert",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.domainZones.write",
+      "idempotent": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+      "operationId": "domainZones.wechatVerification.delete",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.domainZones.write",
+      "idempotent": false
+    },
+    {
+      "method": "POST",
+      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification/check",
+      "operationId": "domainZones.wechatVerification.check",
+      "tags": [
+        "domain"
+      ],
+      "auth": {
+        "mode": "dual-token",
+        "required": true
+      },
+      "handler": {
+        "module": "crate::routes",
+        "name": null
+      },
+      "ownership": {
+        "owner": "sdkwork-deploy",
+        "apiAuthority": "sdkwork-deploy-app-api"
+      },
+      "requestContext": "WebRequestContext",
+      "apiSurface": "app-api",
+      "permission": "deploy.domainZones.write",
+      "idempotent": false
+    },
+    {
+      "method": "GET",
       "path": "/app/v3/api/domain_zones/{zoneId}/hostnames",
       "operationId": "domainZones.hostnames.list",
       "tags": [

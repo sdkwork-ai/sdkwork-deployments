@@ -372,6 +372,134 @@ impl DeployRepository {
         ))
     }
 
+    /// Uploads (or wholly replaces) the Zone's WeChat verification file and
+    /// returns the write's timestamp.
+    pub(super) async fn upsert_dns_zone_wechat_verification_repo(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> DeployServiceResult<String> {
+        let zone = sqlx::query(AssertSqlSafe(format!(
+            "SELECT id FROM deploy_dns_zone z
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {}",
+            zone_owner_gate(3)
+        )))
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(owner_user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_dns_zone for wechat verification", error))?
+        .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
+        let zone_internal_id: i64 = zone
+            .try_get("id")
+            .map_err(|error| store_error("map deploy_dns_zone id", error))?;
+        let updated_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+            "INSERT INTO deploy_dns_zone_wechat_verification (zone_id, file_name, content)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (zone_id) DO UPDATE
+               SET file_name = EXCLUDED.file_name, content = EXCLUDED.content,
+                   updated_at = NOW()
+             RETURNING updated_at",
+        )
+        .bind(zone_internal_id)
+        .bind(file_name)
+        .bind(content)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("upsert deploy_dns_zone_wechat_verification", error))?;
+        Ok(updated_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+    }
+
+    /// Reads the Zone's WeChat verification file as
+    /// `(file_name, content, updated_at)`; `None` when none is configured.
+    pub(super) async fn dns_zone_wechat_verification_repo(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Option<(String, String, String)>> {
+        let zone = sqlx::query(AssertSqlSafe(format!(
+            "SELECT id FROM deploy_dns_zone z
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {}",
+            zone_owner_gate(3)
+        )))
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(owner_user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_dns_zone for wechat verification", error))?
+        .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
+        let zone_internal_id: i64 = zone
+            .try_get("id")
+            .map_err(|error| store_error("map deploy_dns_zone id", error))?;
+        let row = sqlx::query(
+            "SELECT file_name, content, updated_at
+             FROM deploy_dns_zone_wechat_verification WHERE zone_id = $1",
+        )
+        .bind(zone_internal_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read deploy_dns_zone_wechat_verification", error))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let file_name: String = row
+            .try_get("file_name")
+            .map_err(|error| store_error("map wechat verification file name", error))?;
+        let content: String = row
+            .try_get("content")
+            .map_err(|error| store_error("map wechat verification content", error))?;
+        let updated_at: chrono::DateTime<chrono::Utc> = row
+            .try_get("updated_at")
+            .map_err(|error| store_error("map wechat verification updated_at", error))?;
+        Ok(Some((
+            file_name,
+            content,
+            updated_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        )))
+    }
+
+    /// Deletes the Zone's WeChat verification file; `false` when there was
+    /// none.
+    pub(super) async fn delete_dns_zone_wechat_verification_repo(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<bool> {
+        let zone = sqlx::query(AssertSqlSafe(format!(
+            "SELECT id FROM deploy_dns_zone z
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {}",
+            zone_owner_gate(3)
+        )))
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(owner_user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_dns_zone for wechat verification", error))?
+        .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
+        let zone_internal_id: i64 = zone
+            .try_get("id")
+            .map_err(|error| store_error("map deploy_dns_zone id", error))?;
+        let deleted =
+            sqlx::query("DELETE FROM deploy_dns_zone_wechat_verification WHERE zone_id = $1")
+                .bind(zone_internal_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|error| store_error("delete deploy_dns_zone_wechat_verification", error))?
+                .rows_affected();
+        Ok(deleted > 0)
+    }
+
     pub(super) async fn delete_domain_zone_repo(
         &self,
         tenant_id: i64,

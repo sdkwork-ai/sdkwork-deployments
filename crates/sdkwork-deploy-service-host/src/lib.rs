@@ -27,6 +27,7 @@ use sdkwork_intelligence_deploy_service::{
 mod certificate_caa;
 mod certificate_issuance;
 mod domain_verification;
+mod wechat_verification_probe;
 
 use certificate_caa::HickoryCaaResolver;
 use certificate_issuance::{certificate_issuance_from_env, EnvDns01PresenterResolver};
@@ -286,6 +287,11 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     )
     .with_certificate_caa_authorization(certificate_caa_from_env()?)
     .with_cloud_accounts(cloud_accounts.clone());
+    // The WeChat verification self-check shares the crawler's bounds: a probe
+    // that could read more than the platform's fetcher would endorse nothing.
+    if let Ok(probe) = wechat_verification_probe::BoundedWechatVerificationProbe::new() {
+        service = service.with_wechat_verification_probe(std::sync::Arc::new(probe));
+    }
     if let Some(key_provider) = certificate_material_key_from_env()? {
         service = service.with_certificate_material_key_provider(key_provider);
     }

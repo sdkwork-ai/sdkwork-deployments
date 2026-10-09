@@ -342,6 +342,34 @@ pub trait DeployRepositoryPort:
         zone_id: &str,
     ) -> DeployServiceResult<()>;
 
+    /// Uploads (or wholly replaces) the Zone's WeChat verification file.
+    async fn upsert_dns_zone_wechat_verification(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> DeployServiceResult<String>;
+
+    /// Reads the Zone's WeChat verification file:
+    /// `(file_name, content, updated_at)`, or `None` when none is configured.
+    async fn dns_zone_wechat_verification(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Option<(String, String, String)>>;
+
+    /// Deletes the Zone's WeChat verification file; `false` when there was
+    /// none.
+    async fn delete_dns_zone_wechat_verification(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<bool>;
+
     /// `owner_user_id` scopes the read to the caller's own zones; see
     /// [`Self::list_domain_zones`].
     async fn list_domain_hostnames(

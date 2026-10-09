@@ -41,6 +41,34 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+        "domain",
+        "domainZones.wechatVerification.retrieve",
+    )
+    .with_required_permission("deploy.domainZones.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+        "domain",
+        "domainZones.wechatVerification.upsert",
+    )
+    .with_required_permission("deploy.domainZones.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+        "domain",
+        "domainZones.wechatVerification.delete",
+    )
+    .with_required_permission("deploy.domainZones.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/domain_zones/{zoneId}/wechat_verification/check",
+        "domain",
+        "domainZones.wechatVerification.check",
+    )
+    .with_required_permission("deploy.domainZones.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/domain_zones/{zoneId}/hostnames",
         "domain",
         "domainZones.hostnames.list",

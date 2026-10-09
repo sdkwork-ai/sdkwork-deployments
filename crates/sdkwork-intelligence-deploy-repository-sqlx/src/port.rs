@@ -126,6 +126,44 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn upsert_dns_zone_wechat_verification(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> DeployServiceResult<String> {
+        self.upsert_dns_zone_wechat_verification_repo(
+            tenant_id,
+            owner_user_id,
+            zone_id,
+            file_name,
+            content,
+        )
+        .await
+    }
+
+    async fn dns_zone_wechat_verification(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<Option<(String, String, String)>> {
+        self.dns_zone_wechat_verification_repo(tenant_id, owner_user_id, zone_id)
+            .await
+    }
+
+    async fn delete_dns_zone_wechat_verification(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+    ) -> DeployServiceResult<bool> {
+        self.delete_dns_zone_wechat_verification_repo(tenant_id, owner_user_id, zone_id)
+            .await
+    }
+
     async fn list_domain_hostnames(
         &self,
         tenant_id: i64,
@@ -178,8 +216,15 @@ impl DeployRepositoryPort for DeployRepository {
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainDnsRecordPage> {
-        self.list_domain_zone_dns_records_repo(tenant_id, owner_user_id, zone_id, filter, page, page_size)
-            .await
+        self.list_domain_zone_dns_records_repo(
+            tenant_id,
+            owner_user_id,
+            zone_id,
+            filter,
+            page,
+            page_size,
+        )
+        .await
     }
 
     async fn insert_domain_zone_dns_record(
@@ -201,8 +246,14 @@ impl DeployRepositoryPort for DeployRepository {
         record_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.update_domain_zone_dns_record_repo(tenant_id, owner_user_id, zone_id, record_id, record)
-            .await
+        self.update_domain_zone_dns_record_repo(
+            tenant_id,
+            owner_user_id,
+            zone_id,
+            record_id,
+            record,
+        )
+        .await
     }
 
     async fn set_domain_zone_dns_record_status(
@@ -213,8 +264,14 @@ impl DeployRepositoryPort for DeployRepository {
         record_id: &str,
         enabled: bool,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.set_domain_zone_dns_record_status_repo(tenant_id, owner_user_id, zone_id, record_id, enabled)
-            .await
+        self.set_domain_zone_dns_record_status_repo(
+            tenant_id,
+            owner_user_id,
+            zone_id,
+            record_id,
+            enabled,
+        )
+        .await
     }
 
     async fn delete_domain_zone_dns_record(

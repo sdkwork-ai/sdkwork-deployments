@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainDnsRecordRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainDnsRecordRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
+import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainDnsRecordRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainWechatVerificationCheckResponse, DomainWechatVerificationResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainDnsRecordRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UpsertDomainWechatVerificationRequest } from '../types';
 
 
 export interface DomainCloudAccountsListParams {
@@ -257,6 +257,35 @@ export class DomainDomainZonesHostnamesApi {
   }
 }
 
+export class DomainDomainZonesWechatVerificationApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Read the Zone's WeChat MP domain-ownership verification file */
+  async retrieve(zoneId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
+    return this.client.request<DomainWechatVerificationResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Upload (or wholly replace) the Zone's WeChat verification file */
+  async upsert(zoneId: string, body: UpsertDomainWechatVerificationRequest, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
+    return this.client.request<DomainWechatVerificationResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+
+/** Delete the Zone's WeChat verification file */
+  async delete(zoneId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+
+/** Self-check the Zone's WeChat verification file */
+  async check(zoneId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationCheckResponse> {
+    return this.client.request<DomainWechatVerificationCheckResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification/check`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
 export interface DomainDomainZonesListParams {
   page?: number;
   pageSize?: number;
@@ -272,12 +301,14 @@ export interface DomainDomainZonesCreateParams {
 
 export class DomainDomainZonesApi {
   private client: HttpClient;
+  public readonly wechatVerification: DomainDomainZonesWechatVerificationApi;
   public readonly hostnames: DomainDomainZonesHostnamesApi;
   public readonly hostnameClaims: DomainDomainZonesHostnameClaimsApi;
   public readonly dnsRecords: DomainDomainZonesDnsRecordsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.wechatVerification = new DomainDomainZonesWechatVerificationApi(client);
     this.hostnames = new DomainDomainZonesHostnamesApi(client);
     this.hostnameClaims = new DomainDomainZonesHostnameClaimsApi(client);
     this.dnsRecords = new DomainDomainZonesDnsRecordsApi(client);

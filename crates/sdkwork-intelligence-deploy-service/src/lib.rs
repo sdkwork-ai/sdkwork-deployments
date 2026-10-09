@@ -18,6 +18,7 @@ pub mod domain_verification;
 pub mod entitlement;
 pub mod repository;
 pub mod runtime_publication;
+pub mod wechat_verification;
 
 pub use app_composition::{AppCompositionRepositoryPort, ReplaceAppCompositionCommand};
 pub use app_source_specs::{
@@ -65,6 +66,9 @@ pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,
     RuntimeObservationEvidence, RuntimeObservationPersistenceResult, RuntimeObservationState,
     RuntimePublicationBatchResult, RuntimePublicationService,
+};
+pub use wechat_verification::{
+    UnconfiguredWechatVerificationProbe, WechatProbeOutcome, WechatVerificationProbePort,
 };
 
 use std::sync::Arc;
@@ -114,6 +118,10 @@ pub struct DeployService {
     /// empty inventory: "this tenant has no DNS account" and "nobody wired the
     /// account center" look the same to an operator and mean opposite things.
     pub(crate) cloud_accounts: Arc<dyn DeployCloudAccountPort>,
+    /// Production probe for the WeChat verification self-check: bounded to
+    /// what the WeChat crawler itself can do (timeouts, body caps), because a
+    /// self-check with powers the crawler lacks endorses nothing.
+    pub(crate) wechat_probe: Arc<dyn crate::wechat_verification::WechatVerificationProbePort>,
     runtime_publication: Option<Arc<RuntimePublicationService>>,
 }
 
@@ -130,6 +138,7 @@ impl DeployService {
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
+            wechat_probe: Arc::new(crate::wechat_verification::UnconfiguredWechatVerificationProbe),
             runtime_publication: None,
         }
     }
@@ -152,8 +161,21 @@ impl DeployService {
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
+            wechat_probe: Arc::new(crate::wechat_verification::UnconfiguredWechatVerificationProbe),
             runtime_publication: Some(runtime_publication),
         }
+    }
+
+    /// Installs the WeChat verification self-check probe.
+    ///
+    /// Without it the self-check answers "probe unavailable" rather than
+    /// pretending a fetch it never made succeeded.
+    pub fn with_wechat_verification_probe(
+        mut self,
+        probe: Arc<dyn crate::wechat_verification::WechatVerificationProbePort>,
+    ) -> Self {
+        self.wechat_probe = probe;
+        self
     }
 
     /// Replaces the CAA resolver.

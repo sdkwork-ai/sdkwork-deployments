@@ -2772,6 +2772,138 @@ class UpdateDomainZoneRequest {
   }
 }
 
+class DomainWechatVerificationResponse {
+  final String zoneId;
+  final String? fileName;
+  final String? content;
+  final String? updatedAt;
+
+  DomainWechatVerificationResponse({
+    required this.zoneId,
+    this.fileName,
+    this.content,
+    this.updatedAt
+  });
+
+  factory DomainWechatVerificationResponse.fromJson(Map<String, dynamic> json) {
+    return DomainWechatVerificationResponse(
+      zoneId: (() {
+        final value = json['zoneId']?.toString();
+        if (value == null) {
+          throw FormatException('DomainWechatVerificationResponse.zoneId is required');
+        }
+        return value;
+      })(),
+      fileName: json['fileName']?.toString(),
+      content: json['content']?.toString(),
+      updatedAt: json['updatedAt']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'zoneId': zoneId,
+      'fileName': fileName,
+      'content': content,
+      'updatedAt': updatedAt,
+    };
+  }
+}
+
+class UpsertDomainWechatVerificationRequest {
+  final String fileName;
+  final String content;
+
+  UpsertDomainWechatVerificationRequest({
+    required this.fileName,
+    required this.content
+  });
+
+  factory UpsertDomainWechatVerificationRequest.fromJson(Map<String, dynamic> json) {
+    return UpsertDomainWechatVerificationRequest(
+      fileName: (() {
+        final value = json['fileName']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertDomainWechatVerificationRequest.fileName is required');
+        }
+        return value;
+      })(),
+      content: (() {
+        final value = json['content']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertDomainWechatVerificationRequest.content is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'fileName': fileName,
+      'content': content,
+    };
+  }
+}
+
+class DomainWechatVerificationCheckResponse {
+  final bool reachable;
+  final bool matched;
+  final int? statusCode;
+  final String? scheme;
+  final String? detail;
+  final String checkedAt;
+
+  DomainWechatVerificationCheckResponse({
+    required this.reachable,
+    required this.matched,
+    this.statusCode,
+    this.scheme,
+    this.detail,
+    required this.checkedAt
+  });
+
+  factory DomainWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
+    return DomainWechatVerificationCheckResponse(
+      reachable: (() {
+        final value = json['reachable'];
+        if (value is! bool) {
+          throw FormatException('DomainWechatVerificationCheckResponse.reachable is required');
+        }
+        return value;
+      })(),
+      matched: (() {
+        final value = json['matched'];
+        if (value is! bool) {
+          throw FormatException('DomainWechatVerificationCheckResponse.matched is required');
+        }
+        return value;
+      })(),
+      statusCode: json['statusCode'] is int ? json['statusCode'] : null,
+      scheme: json['scheme']?.toString(),
+      detail: json['detail']?.toString(),
+      checkedAt: (() {
+        final value = json['checkedAt']?.toString();
+        if (value == null) {
+          throw FormatException('DomainWechatVerificationCheckResponse.checkedAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'reachable': reachable,
+      'matched': matched,
+      'statusCode': statusCode,
+      'scheme': scheme,
+      'detail': detail,
+      'checkedAt': checkedAt,
+    };
+  }
+}
+
 class DomainZoneResponse {
   final String id;
   final String apexHostname;
@@ -9014,6 +9146,144 @@ class DomainZonesUpdateResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('DomainZonesUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DomainZonesWechatVerificationRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DomainZonesWechatVerificationRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DomainZonesWechatVerificationRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return DomainZonesWechatVerificationRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DomainZonesWechatVerificationRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('DomainZonesWechatVerificationRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DomainZonesWechatVerificationRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DomainZonesWechatVerificationUpsertResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DomainZonesWechatVerificationUpsertResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DomainZonesWechatVerificationUpsertResponse.fromJson(Map<String, dynamic> json) {
+    return DomainZonesWechatVerificationUpsertResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DomainZonesWechatVerificationUpsertResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('DomainZonesWechatVerificationUpsertResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DomainZonesWechatVerificationUpsertResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DomainZonesWechatVerificationCheckResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DomainZonesWechatVerificationCheckResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DomainZonesWechatVerificationCheckResponse.fromJson(Map<String, dynamic> json) {
+    return DomainZonesWechatVerificationCheckResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DomainZonesWechatVerificationCheckResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('DomainZonesWechatVerificationCheckResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DomainZonesWechatVerificationCheckResponse.traceId is required');
         }
         return value;
       })()

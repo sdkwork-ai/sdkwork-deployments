@@ -249,6 +249,156 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
+  /app/v3/api/domain_zones/{zoneId}/wechat_verification:
+    parameters:
+    - $ref: '#/components/parameters/DomainZoneIdParam'
+    get:
+      operationId: domainZones.wechatVerification.retrieve
+      summary: Read the Zone's WeChat MP domain-ownership verification file
+      description: |-
+        The platform-issued MP_verify_xxx.txt file this Zone publishes, if any.
+        The edge serves it verbatim at https://<hostname>/<fileName> for every
+        hostname in the Zone; a subdomain and the apex manage the same file.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainWechatVerificationResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
+    put:
+      operationId: domainZones.wechatVerification.upsert
+      summary: Upload (or wholly replace) the Zone's WeChat verification file
+      description: |-
+        Content is stored byte-exact: WeChat compares bytes, so nothing is
+        normalized. A fresh platform file replaces the previous one whole.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertDomainWechatVerificationRequest'
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainWechatVerificationResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
+    delete:
+      operationId: domainZones.wechatVerification.delete
+      summary: Delete the Zone's WeChat verification file
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
+  /app/v3/api/domain_zones/{zoneId}/wechat_verification/check:
+    parameters:
+    - $ref: '#/components/parameters/DomainZoneIdParam'
+    post:
+      operationId: domainZones.wechatVerification.check
+      summary: Self-check the Zone's WeChat verification file
+      description: |-
+        Fetches https://<apex>/<fileName> the way the WeChat crawler does
+        (falling back to http to separate "no TLS" from "no DNS") and compares
+        the body byte-for-byte with the stored file. Never throws: transport
+        failures fold into the returned facts.
+      tags:
+      - domain
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: Probe outcome
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/DomainWechatVerificationCheckResponse'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      parameters: []
   /app/v3/api/domain_zones/{zoneId}/hostnames:
     parameters:
     - $ref: '#/components/parameters/DomainZoneIdParam'
@@ -6732,6 +6882,63 @@ components:
           enum:
           - ACTIVE
           - PAUSED
+    DomainWechatVerificationResponse:
+      type: object
+      required:
+      - zoneId
+      properties:
+        zoneId:
+          type: string
+        fileName:
+          type: string
+          description: 平台发放的文件名(如 MP_verify_xxx.txt),按精确名称服务
+        content:
+          type: string
+          description: 文件原文,逐字节保存与返回
+        updatedAt:
+          type: string
+          description: 最近一次上传/替换的时间
+    UpsertDomainWechatVerificationRequest:
+      type: object
+      required:
+      - fileName
+      - content
+      properties:
+        fileName:
+          type: string
+          maxLength: 64
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*\.txt$'
+          description: 平台发放的文件名,必须是 .txt 结尾
+        content:
+          type: string
+          maxLength: 2048
+          description: 文件原文,逐字节保存与返回
+    DomainWechatVerificationCheckResponse:
+      type: object
+      required:
+      - reachable
+      - matched
+      - checkedAt
+      properties:
+        reachable:
+          type: boolean
+          description: 是否有任一协议取回了 2xx 响应
+        matched:
+          type: boolean
+          description: 取回内容是否与保存的文件逐字节一致
+        statusCode:
+          type: integer
+          format: int32
+          description: 命中方案的 HTTP 状态码
+        scheme:
+          type: string
+          description: 命中方案(https 或 http)
+        detail:
+          type: string
+          description: 未通过时的一句话事实(各协议的结果)
+        checkedAt:
+          type: string
+          description: 自检时间
     DomainZoneResponse:
       type: object
       additionalProperties: false

@@ -1,7 +1,3 @@
-//! ⚠️ 未落地：crate 内没有任何 `mod` 声明指向本文件，rustc 不会编译它。
-//! 它随 `wip/deploy-certificate` 一并到来，是后续落地的规格——接线方式是补上
-//! 模块声明，不是删除本文件。
-//!
 //! 微信公众号域名验证文件：存储、归一化、自检。
 //!
 //! 微信公众平台要求在域名根路径可访问一个形如 `MP_verify_xxxxx.txt` 的校验
@@ -23,9 +19,11 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use sdkwork_deploy_contract::{
-    DeployServiceError, DeployServiceResult, DomainWechatVerificationCheckResponse,
-    DomainWechatVerificationResponse, OwnershipReach, UpsertDomainWechatVerificationRequest,
+    DomainWechatVerificationCheckResponse, DomainWechatVerificationResponse,
+    UpsertDomainWechatVerificationRequest,
 };
+
+use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult};
 
 /// 文件名上限（含 `.txt` 后缀）。微信生成的文件名远短于此；上限只为封住滥用。
 pub const WECHAT_VERIFICATION_FILE_NAME_MAX: usize = 64;
@@ -118,7 +116,7 @@ impl crate::DeployService {
     pub(crate) async fn upsert_wechat_verification(
         &self,
         tenant_id: i64,
-        owner: OwnershipReach,
+        owner_user_id: Option<i64>,
         zone_id: &str,
         request: &UpsertDomainWechatVerificationRequest,
     ) -> DeployServiceResult<DomainWechatVerificationResponse> {
@@ -126,7 +124,13 @@ impl crate::DeployService {
         let content = normalize_content(&request.content)?;
         let updated_at = self
             .repository
-            .upsert_dns_zone_wechat_verification(tenant_id, owner, zone_id, &file_name, &content)
+            .upsert_dns_zone_wechat_verification(
+                tenant_id,
+                owner_user_id,
+                zone_id,
+                &file_name,
+                &content,
+            )
             .await?;
         Ok(DomainWechatVerificationResponse {
             zone_id: zone_id.to_owned(),
@@ -139,12 +143,12 @@ impl crate::DeployService {
     pub(crate) async fn retrieve_wechat_verification(
         &self,
         tenant_id: i64,
-        owner: OwnershipReach,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<DomainWechatVerificationResponse> {
         let state = self
             .repository
-            .dns_zone_wechat_verification(tenant_id, owner, zone_id)
+            .dns_zone_wechat_verification(tenant_id, owner_user_id, zone_id)
             .await?;
         Ok(match state {
             Some((file_name, content, updated_at)) => DomainWechatVerificationResponse {
@@ -165,12 +169,12 @@ impl crate::DeployService {
     pub(crate) async fn delete_wechat_verification(
         &self,
         tenant_id: i64,
-        owner: OwnershipReach,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<()> {
         let deleted = self
             .repository
-            .delete_dns_zone_wechat_verification(tenant_id, owner, zone_id)
+            .delete_dns_zone_wechat_verification(tenant_id, owner_user_id, zone_id)
             .await?;
         if !deleted {
             return Err(DeployServiceError::not_found(
@@ -189,12 +193,12 @@ impl crate::DeployService {
     pub(crate) async fn check_wechat_verification(
         &self,
         tenant_id: i64,
-        owner: OwnershipReach,
+        owner_user_id: Option<i64>,
         zone_id: &str,
     ) -> DeployServiceResult<DomainWechatVerificationCheckResponse> {
         let (file_name, content, _updated_at) = self
             .repository
-            .dns_zone_wechat_verification(tenant_id, owner, zone_id)
+            .dns_zone_wechat_verification(tenant_id, owner_user_id, zone_id)
             .await?
             .ok_or_else(|| {
                 DeployServiceError::not_found(
@@ -203,7 +207,7 @@ impl crate::DeployService {
             })?;
         let apex = self
             .repository
-            .retrieve_domain_zone(tenant_id, owner, zone_id)
+            .retrieve_domain_zone(tenant_id, owner_user_id, zone_id)
             .await?
             .apex_hostname;
         let checked_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
