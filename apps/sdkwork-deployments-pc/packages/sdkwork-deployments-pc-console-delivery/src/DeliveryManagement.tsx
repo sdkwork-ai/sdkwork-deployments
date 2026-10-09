@@ -1484,6 +1484,8 @@ function ZoneDnsRecordLedger({ backLabel, backTo, hostnameId, locale, title, zon
   const [editForm, setEditForm] = useState<DnsRecordFormValues>(emptyDnsRecordForm);
   const [deleteTarget, setDeleteTarget] = useState<DomainDnsRecordResponse>();
   const [formError, setFormError] = useState<string>();
+  // The third-party platform TXT verification assistant (WeChat MP and the like).
+  const [txtOpen, setTxtOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -1730,6 +1732,13 @@ function ZoneDnsRecordLedger({ backLabel, backTo, hostnameId, locale, title, zon
           title={t("dnsAddRecord")}
           onClick={() => { setEditId(undefined); setAddForm(emptyDnsRecordForm()); setFormError(undefined); setAddOpen(true); }}
         ><Plus size={16} />{t("dnsAddRecord")}</button>
+        <button
+          className="command-button"
+          type="button"
+          disabled={managementDisabled || addOpen || editId !== undefined}
+          title={t("dnsTxtVerifyHint")}
+          onClick={() => setTxtOpen(true)}
+        ><BadgeCheck size={16} />{t("dnsTxtVerify")}</button>
       </div>
     </div>
     {syncSummary && <p className="form-hint">{syncSummary}</p>}
@@ -1760,7 +1769,67 @@ function ZoneDnsRecordLedger({ backLabel, backTo, hostnameId, locale, title, zon
       toolbar={dnsFilterToolbar}
     />
     {deleteTarget && <ConfirmDialog title={t("dnsDeleteRecord")} message={t("dnsDeleteRecordConfirm", { host: deleteTarget.host, type: deleteTarget.recordType })} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await removeRecord(deleteTarget); }} />}
+    {txtOpen && <TxtVerifyDialog t={t} close={() => setTxtOpen(false)} submit={async (body) => { await service.createZoneDnsRecord(zoneId, body); setRefreshVersion((value) => value + 1); }} />}
   </section>;
+}
+
+/**
+ * The third-party platform TXT verification assistant: WeChat MP, WeChat
+ * Pay, QQ and the like prove domain ownership by looking up a TXT record
+ * whose host and value the platform dictates. The dialog creates exactly
+ * that record — type locked to TXT, provider default line, standard TTL —
+ * so the operator never hand-shapes a verification row in the main strip.
+ */
+function TxtVerifyDialog({ close, submit, t }: { close(): void; submit(body: CreateDomainDnsRecordRequest): Promise<void>; t: Translator }) {
+  const [preset, setPreset] = useState("_dnsauth");
+  const [host, setHost] = useState("_dnsauth");
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  async function onSubmit() {
+    if (!host.trim()) { setError(t("dnsHostRequired")); return; }
+    if (!value.trim()) { setError(t("dnsValueRequired")); return; }
+    setBusy(true); setError(undefined);
+    try {
+      await submit({ recordType: typedRecordType("TXT"), host: host.trim(), recordValue: value.trim(), ttlSeconds: 600 });
+      close();
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <Modal close={close} closeLabel={t("close")} title={t("dnsTxtVerifyTitle")}>
+    <form onSubmit={(event) => { event.preventDefault(); void onSubmit(); }}>
+      <p className="form-hint">{t("dnsTxtVerifyHint")}</p>
+      <div className="form-grid single-column">
+        <label>
+          <span>{t("dnsTxtVerifyPlatform")}</span>
+          <select
+            onChange={(event) => {
+              const next = event.target.value;
+              setPreset(next);
+              if (next !== "") setHost(next);
+            }}
+            value={preset}
+          >
+            <option value="_dnsauth">{t("dnsTxtVerifyPresetDnsAuth")}</option>
+            <option value="">{t("dnsTxtVerifyPresetCustom")}</option>
+          </select>
+        </label>
+        <label>
+          <span>{t("dnsRecordHost")}</span>
+          <input autoFocus required value={host} onChange={(event) => setHost(event.target.value)} placeholder="_dnsauth / mp_verify_xxx" autoComplete="off" />
+        </label>
+        <label>
+          <span>{t("dnsRecordValue")}</span>
+          <input required value={value} onChange={(event) => setValue(event.target.value)} placeholder={t("dnsTxtVerifyHint")} autoComplete="off" />
+        </label>
+      </div>
+      {error && <ErrorBanner message={error} t={t} />}
+      <DialogFooter busy={busy} close={close} submitLabel={t("dnsSaveRecord")} t={t} />
+    </form>
+  </Modal>;
 }
 
 function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
