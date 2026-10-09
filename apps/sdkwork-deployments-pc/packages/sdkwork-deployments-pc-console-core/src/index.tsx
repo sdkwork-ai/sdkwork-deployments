@@ -14,6 +14,9 @@ import {
   type DomainDnsSyncResponse,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
+  type DomainWechatVerificationCheckResponse,
+  type DomainWechatVerificationResponse,
+  type UpsertDomainWechatVerificationRequest,
   type DomainVerifyResponse,
   type DomainZoneResponse,
   type EnsureDomainHostnameClaimsRequest,
@@ -53,9 +56,12 @@ export type {
   DomainHostnameClaimResponse,
   DomainHostnameResponse,
   DomainVerifyResponse,
+  DomainWechatVerificationCheckResponse,
+  DomainWechatVerificationResponse,
   DomainZoneResponse,
   EnsureDomainHostnameClaimsRequest,
   PageInfo,
+  UpsertDomainWechatVerificationRequest,
   UpdateDomainDnsRecordRequest,
   UpdateDomainHostnameRequest,
   UpdateDomainZoneRequest,
@@ -122,6 +128,11 @@ export interface DeploymentsDeliveryService {
    * provider.
    */
   syncZoneDnsRecords(zoneId: string): Promise<DomainDnsSyncResponse>;
+  /** 微信公众号/小程序域名归属验证文件(每 Zone 一份,边缘按主机名原样提供)。 */
+  retrieveZoneWechatVerification(zoneId: string): Promise<DomainWechatVerificationResponse>;
+  upsertZoneWechatVerification(zoneId: string, body: UpsertDomainWechatVerificationRequest): Promise<DomainWechatVerificationResponse>;
+  deleteZoneWechatVerification(zoneId: string): Promise<void>;
+  checkZoneWechatVerification(zoneId: string): Promise<DomainWechatVerificationCheckResponse>;
   createZoneDnsRecord(zoneId: string, body: CreateDomainDnsRecordRequest): Promise<DomainDnsRecordResponse>;
   updateZoneDnsRecord(zoneId: string, recordId: string, body: UpdateDomainDnsRecordRequest): Promise<DomainDnsRecordResponse>;
   deleteZoneDnsRecord(zoneId: string, recordId: string): Promise<void>;
@@ -245,6 +256,10 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
         },
       ),
     syncZoneDnsRecords: (zoneId) => zones.dnsRecords.sync(zoneId, idempotencyParams()),
+    retrieveZoneWechatVerification: (zoneId) => zones.wechatVerification.retrieve(zoneId),
+    upsertZoneWechatVerification: (zoneId, body) => zones.wechatVerification.upsert(zoneId, body),
+    deleteZoneWechatVerification: (zoneId) => zones.wechatVerification.delete(zoneId),
+    checkZoneWechatVerification: (zoneId) => zones.wechatVerification.check(zoneId),
     createZoneDnsRecord: (zoneId, body) => zones.dnsRecords.create(zoneId, body, idempotencyParams()),
     updateZoneDnsRecord: (zoneId, recordId, body) =>
       zones.dnsRecords.update(zoneId, recordId, body, idempotencyParams()),
