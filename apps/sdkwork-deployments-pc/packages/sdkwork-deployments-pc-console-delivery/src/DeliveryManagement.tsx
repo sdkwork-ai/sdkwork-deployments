@@ -1252,6 +1252,8 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
   const [deleteTarget, setDeleteTarget] = useState<DomainHostnameResponse>();
   const [verification, setVerification] = useState<DomainVerifyResponse>();
   const [resolutionGroups, setResolutionGroups] = useState<Map<string, DomainDnsRecordResponse[]>>(new Map());
+  const [syncing, setSyncing] = useState(false);
+  const [syncSummary, setSyncSummary] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -1288,6 +1290,17 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
   }, [refreshVersion, service, zoneId]);
 
   const reload = () => setRefreshVersion((value) => value + 1);
+
+  /** The one provider-touching gesture on this page: re-read the zone's
+   * inventory through its cloud account and replace the snapshot the
+   * resolution column renders. */
+  const runSync = () => {
+    setSyncing(true);
+    void service.syncZoneDnsRecords(zoneId).then((result) => {
+      setSyncSummary(t("dnsSyncedSummary", { syncedAt: formatDate(result.syncedAt, locale), provider: result.dnsProvider, count: result.recordCount }));
+      setRefreshVersion((value) => value + 1);
+    }).catch((cause) => setError(errorText(cause))).finally(() => setSyncing(false));
+  };
 
   /**
    * 子域名台账列。rename/delete 的锁定规则来自 `rowLocks`（与向导的覆盖域名
@@ -1331,7 +1344,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
     <Link className="back-link" to="/console/domains"><ArrowLeft size={16} />{t("backDomains")}</Link>
     <div className="resource-commandbar">
       <div className="resource-identity"><h1>{zone?.apexHostname ?? "-"}</h1></div>
-      <div className="actions"><button className="icon-button" type="button" disabled={busy} title={t("refresh")} onClick={reload}><RefreshCw size={17} /></button><button className="command-button" type="button" onClick={() => setCreateOpen(true)}><Plus size={16} />{t("addHostname")}</button></div>
+      <div className="actions"><button className="icon-button" type="button" disabled={busy || syncing} title={t("refresh")} onClick={reload}><RefreshCw size={17} /></button><button className="command-button" type="button" disabled={syncing} title={t("dnsSyncHint")} onClick={runSync}><RefreshCw size={16} />{t("dnsSync")}</button><button className="command-button" type="button" onClick={() => setCreateOpen(true)}><Plus size={16} />{t("addHostname")}</button></div>
     </div>
     {zone && <div className="metric-strip">
       <Metric label={t("verification")} value={t("verifiedSummary", { verified: zone.verifiedHostnameCount, total: zone.hostnameCount })} />
@@ -1340,6 +1353,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
       <Metric label={t("status")} value={zone.status === "ACTIVE" ? t("active") : t("paused")} />
     </div>}
     {error && <ErrorBanner message={error} t={t} />}
+    {syncSummary && <p className="form-hint">{syncSummary}</p>}
     <DataTable<DomainHostnameResponse>
       columns={hostnameColumns}
       density="compact"
