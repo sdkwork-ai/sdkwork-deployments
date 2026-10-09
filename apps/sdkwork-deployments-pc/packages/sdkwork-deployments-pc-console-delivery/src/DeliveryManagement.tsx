@@ -27,6 +27,7 @@ import {
   FileKey2,
   Globe2,
   History,
+  Network,
   Pencil,
   Plus,
   RefreshCw,
@@ -79,6 +80,9 @@ export function DomainManagementPage({ locale }: DeploymentsResourcePageProps) {
   return <Routes>
     <Route index element={<DomainZoneList locale={locale} />} />
     <Route path=":zoneId" element={<DomainHostnameList locale={locale} />} />
+    {/* The standalone 域名解析 page: the whole zone's records, opened straight
+        from the root-domain list the way a DNS provider's console does it. */}
+    <Route path=":zoneId/dns" element={<DomainZoneDnsPage locale={locale} />} />
     {/* The third level: one hostname's own page. It reads the zone's synced
         resolution records restricted to that hostname and offers the
         cloud-account sync that refreshes them. */}
@@ -324,6 +328,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
               table for, and neither is guessable from a glyph alone. The literal
               text stays inside the accessible name so the label still matches
               what is read out. */}
+          <Link className="table-action table-action-text" to={`${zone.id}/dns`} title={t("dnsResolution")} aria-label={`${t("dnsResolution")} · ${zone.apexHostname}`}><Network size={15} /><span>{t("dnsResolution")}</span></Link>
           <Link className="table-action table-action-text" to={zone.id} title={t("open")} aria-label={`${t("hostnames")} · ${zone.apexHostname}`}><Globe2 size={15} /><span>{t("hostnames")}</span></Link>
           <Link className="table-action table-action-text" to={`/console/certificates?zoneId=${encodeURIComponent(zone.id)}&apex=${encodeURIComponent(zone.apexHostname)}`} title={t("requestCertificate")} aria-label={`${t("certificates")} · ${zone.apexHostname}`}><FileKey2 size={15} /><span>{t("certificates")}</span></Link>
           <button className="table-action" type="button" title={t("edit")} aria-label={`${t("edit")} ${zone.apexHostname}`} onClick={() => setDialog({ kind: "edit", zone })}><Pencil size={16} /></button>
@@ -1447,11 +1452,16 @@ function dnsRecordFormFrom(record: DomainDnsRecordResponse): DnsRecordFormValues
   };
 }
 
-function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
-  const { zoneId = "", hostnameId = "" } = useParams();
+/**
+ * The zone-scoped 解析设置 ledger, laid out the way a DNS provider's console
+ * does it: every record of the zone in one table — add, edit, pause, delete,
+ * filter, and the cloud-account sync — independent of any single hostname.
+ * The hostname page embeds it narrowed to one host via `hostnameId`; the
+ * standalone 域名解析 page mounts it for the whole zone.
+ */
+function ZoneDnsRecordLedger({ backLabel, backTo, hostnameId, locale, title, zoneId }: { backLabel: string; backTo: string; hostnameId?: string | undefined; locale: DeploymentsLocale; title: string; zoneId: string }) {
   const service = useDeploymentsDeliveryService();
   const t = translator(locale);
-  const [hostname, setHostname] = useState<DomainHostnameResponse>();
   const [records, setRecords] = useState<DomainDnsRecordResponse[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo>({ mode: "offset", page: 1, pageSize: 20, hasMore: false });
   const [page, setPage] = useState(1);
@@ -1478,18 +1488,14 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
   useEffect(() => {
     let active = true;
     setBusy(true); setError(undefined);
-    void Promise.all([
-      service.listDomainHostnames(zoneId, { page: 1, pageSize: 20 }),
-      service.listZoneDnsRecords(zoneId, {
-        page,
-        pageSize,
-        ...(hostnameId ? { hostnameId } : {}),
-        ...(hostFilter ? { host: hostFilter } : {}),
-        ...(typeFilter ? { recordType: typeFilter } : {}),
-      }),
-    ]).then(([hostnameResult, recordResult]) => {
+    void service.listZoneDnsRecords(zoneId, {
+      page,
+      pageSize,
+      ...(hostnameId ? { hostnameId } : {}),
+      ...(hostFilter ? { host: hostFilter } : {}),
+      ...(typeFilter ? { recordType: typeFilter } : {}),
+    }).then((recordResult) => {
       if (!active) return;
-      setHostname(hostnameResult.items.find((row) => row.id === hostnameId));
       setRecords(recordResult.items);
       setPageInfo(recordResult.pageInfo);
     }).catch((cause) => { if (active) setError(errorText(cause)); }).finally(() => { if (active) setBusy(false); });
@@ -1711,9 +1717,9 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
   );
 
   return <section className="resource-page domain-page">
-    <Link className="back-link" to={`/console/domains/${zoneId}`}><ArrowLeft size={16} />{t("backHostnames")}</Link>
+    <Link className="back-link" to={backTo}><ArrowLeft size={16} />{backLabel}</Link>
     <div className="resource-commandbar">
-      <div className="resource-identity"><h1>{hostname?.hostname ?? hostnameId}</h1></div>
+      <div className="resource-identity"><h1>{title}</h1></div>
       <div className="actions">
         <button className="icon-button" type="button" disabled={managementDisabled} title={t("refresh")} onClick={() => { setRefreshVersion((value) => value + 1); setPage(1); }}><RefreshCw size={17} /></button>
         <button className="command-button" type="button" disabled={syncing} title={t("dnsSync")} onClick={runSync}><RefreshCw size={16} />{t("dnsSync")}</button>
@@ -1755,6 +1761,45 @@ function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
     />
     {deleteTarget && <ConfirmDialog title={t("dnsDeleteRecord")} message={t("dnsDeleteRecordConfirm", { host: deleteTarget.host, type: deleteTarget.recordType })} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await removeRecord(deleteTarget); }} />}
   </section>;
+}
+
+function DomainHostnameDetail({ locale }: { locale: DeploymentsLocale }) {
+  const { zoneId = "", hostnameId = "" } = useParams();
+  const service = useDeploymentsDeliveryService();
+  const t = translator(locale);
+  const [hostname, setHostname] = useState<DomainHostnameResponse>();
+
+  // The header names the hostname; the ledger below is the shared zone
+  // component narrowed by `hostnameId`.
+  useEffect(() => {
+    let active = true;
+    void service.listDomainHostnames(zoneId, { page: 1, pageSize: 20 }).then((result) => {
+      if (!active) return;
+      setHostname(result.items.find((row) => row.id === hostnameId));
+    }).catch(() => { if (active) setHostname(undefined); });
+    return () => { active = false; };
+  }, [hostnameId, service, zoneId]);
+
+  return <ZoneDnsRecordLedger backLabel={t("backHostnames")} backTo={`/console/domains/${zoneId}`} hostnameId={hostnameId} locale={locale} title={hostname?.hostname ?? hostnameId} zoneId={zoneId} />;
+}
+
+/** The standalone 域名解析 page for one zone: the whole zone's records on
+ * their own URL, the way Aliyun's 解析设置 opens from the domain list. */
+function DomainZoneDnsPage({ locale }: { locale: DeploymentsLocale }) {
+  const { zoneId = "" } = useParams();
+  const service = useDeploymentsDeliveryService();
+  const t = translator(locale);
+  const [zone, setZone] = useState<DomainZoneResponse>();
+
+  useEffect(() => {
+    let active = true;
+    void service.retrieveDomainZone(zoneId).then((result) => {
+      if (active) setZone(result);
+    }).catch(() => { if (active) setZone(undefined); });
+    return () => { active = false; };
+  }, [service, zoneId]);
+
+  return <ZoneDnsRecordLedger backLabel={t("backDomains")} backTo="/console/domains" locale={locale} title={zone?.apexHostname ?? zoneId} zoneId={zoneId} />;
 }
 
 /**
