@@ -9,6 +9,14 @@ node_modules/
 *.db
 *.db-*
 
+# Local recovery / backup scratch (never commit)
+# Historically `.sdkwork/` had only per-subdirectory rules, so locally generated
+# recovery scratch such as `.sdkwork/recovery/` slipped through as untracked.
+# See method-tools scripts that write stash-contamination backups here.
+**/.sdkwork/recovery/
+**/.sdkwork/*.patch
+**/.sdkwork/backups/
+
 # SDKWork local runtime state
 .runtime/
 **/.runtime/
