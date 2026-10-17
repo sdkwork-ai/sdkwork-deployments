@@ -207,6 +207,7 @@ CREATE TABLE IF NOT EXISTS deploy_domain_dns_record (
     provider_account_id VARCHAR(128) NOT NULL,
     provider_record_ref VARCHAR(128),
     synced_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    record_status   VARCHAR(8)    NOT NULL DEFAULT 'ENABLED',
     created_by      BIGINT,
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
