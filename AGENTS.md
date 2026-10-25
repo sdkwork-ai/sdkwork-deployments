@@ -23,7 +23,7 @@ resolve, stop and report the broken workspace layout.
 
 ## Application Identity
 
-Read `sdkwork.app.config.json` for Deploy identity, API/SDK inventory, release metadata, packaging,
+Read `agent.app.config.json` for Deploy identity, API/SDK inventory, release metadata, packaging,
 or app-owned capabilities. Read `etc/` for concrete environment, bind, upstream, runtime, and
 deployment values. The app manifest is not runtime configuration authority.
 
@@ -31,7 +31,7 @@ deployment values. The app manifest is not runtime configuration authority.
 
 - `AGENTS.md`: repository agent entrypoint and relative SDKWork spec index.
 - `CLAUDE.md`, `GEMINI.md`, `CODEX.md`: compatibility shims that point to `AGENTS.md`.
-- `sdkwork.app.config.json`: Deploy application identity, runtime, release, and capability metadata.
+- `agent.app.config.json`: Deploy application identity, runtime, release, and capability metadata.
 - `etc/`: source-controlled topology profiles, gateway templates, and safe secret-file references.
 - `sdkwork.workflow.json`: GitHub packaging/release workflow manifest.
 - `.github/workflows/package.yml`: thin reusable workflow call only.
@@ -58,7 +58,7 @@ deployment values. The app manifest is not runtime configuration authority.
 Use dynamic progressive loading for the current task:
 
 1. Read this `AGENTS.md` and any nearer component-level `AGENTS.md`.
-2. Read `sdkwork.app.config.json` only when app behavior, runtime config, SDK wiring, release,
+2. Read `agent.app.config.json` only when app behavior, runtime config, SDK wiring, release,
    packaging, or app-owned capabilities are touched.
 3. Read local `specs/README.md` and `specs/component.spec.json` only when the task touches that
    contract.

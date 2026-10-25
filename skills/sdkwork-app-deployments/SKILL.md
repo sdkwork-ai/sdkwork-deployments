@@ -5,18 +5,18 @@ description: Build, package, upload, release, and deploy an SDKWork application 
 
 # SDKWork App Deployments
 
-Publish an application from its root without guessing build outputs or bypassing SDK boundaries. Keep build declarations in `sdkwork.app.config.json`, concrete environment values in `etc/`, artifact bytes in Drive, and release/deployment state in SDKWork Deploy.
+Publish an application from its root without guessing build outputs or bypassing SDK boundaries. Keep build declarations in `agent.app.config.json`, concrete environment values in `etc/`, artifact bytes in Drive, and release/deployment state in SDKWork Deploy.
 
 ## Resolve The Application
 
-1. Read the nearest `AGENTS.md`, `sdkwork.app.config.json`, applicable component `specs/`, and `etc/sdkwork.deployment.config.json`.
+1. Read the nearest `AGENTS.md`, `agent.app.config.json`, applicable component `specs/`, and `etc/sdkwork.deployment.config.json`.
 2. Resolve the application root, build target, lifecycle environment, deployment profile, Site identity, version, and deployment type from those authorities.
 3. Require an explicit choice when more than one application root, Site, target, or profile matches.
 4. Before a production deployment or first production Site creation, show the resolved target and obtain confirmation unless the user's current request already names that exact production action.
 
 ## Preserve Boundaries
 
-- Use only build commands and outputs declared by `devApp.build.targets` in `sdkwork.app.config.json`. Do not infer `dist`, `build`, or framework defaults.
+- Use only build commands and outputs declared by `devApp.build.targets` in `agent.app.config.json`. Do not infer `dist`, `build`, or framework defaults.
 - Use the application's injected `@sdkwork/deployments-app-sdk` and `@sdkwork/drive-app-sdk` clients. Do not write raw HTTP wrappers, authorization headers, or local SDK forks.
 - Use `createDeployApplicationPublisher` from `@sdkwork/deployments-app-sdk/application-publisher` for Site resolution, Drive upload, artifact registration, release creation, and deployment creation.
 - Keep backend and app login profiles isolated. Never write tokens, passwords, presigned URLs, or secret values into tracked files or logs.

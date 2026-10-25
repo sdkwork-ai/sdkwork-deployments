@@ -133,7 +133,7 @@ the order app API for buy + entitlement.
 | `apps/sdkwork-deployments-flutter` | `lib/marketplace_page.dart` + `lib/marketplace_service.dart` | bottom-nav shell over the generated Dart SDK behind a `MarketplacePort` |
 
 There is no HarmonyOS client root in this repository; a HarmonyOS surface needs
-its own application root and `sdkwork.app.config.json` declaration before any
+its own application root and `agent.app.config.json` declaration before any
 page can be authored.
 
 ### 6b. Bootstrap: the first category

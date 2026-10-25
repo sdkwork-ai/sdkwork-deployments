@@ -252,7 +252,7 @@ export function surfacesOfDirectoryName(
  * 把宿主列举载荷翻译成对话框检测结果。规范判定（标记、表面、应用代码）
  * 全部委托给 {@link SdkworkProject}，这里只负责映射到对话框表面词汇。
  *
- * `sdkwork.app.config.json` 是文件且刻意不在此校验 —— 只看目录名的宿主桥
+ * `agent.app.config.json` 是文件且刻意不在此校验 —— 只看目录名的宿主桥
  * 观察不到它，该清单校验留给发布时的后端。
  */
 export function detectSdkworkProject(inspection: DeployProjectInspection): DeployProjectDetection {

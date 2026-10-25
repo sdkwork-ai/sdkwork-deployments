@@ -5,7 +5,7 @@ SDKWork Deploy is the SaaS-capable Deploy Web Server control plane. It manages w
 applications, domains, TLS certificates, Nginx-compatible configuration, build and deploy
 pipelines, release history, rollback, health checks, and operational audit.
 
-This repository follows `../sdkwork-specs/SDKWORK_WORKSPACE_SPEC.md`. Application identity is declared in `sdkwork.app.config.json`.
+This repository follows `../sdkwork-specs/SDKWORK_WORKSPACE_SPEC.md`. Application identity is declared in `agent.app.config.json`.
 
 ## Standards Alignment
 

@@ -38,14 +38,14 @@ source configuration.
 
 ## Application Identity
 
-Read `../../sdkwork.app.config.json` for Deployments application identity, API/SDK inventory,
+Read `../../agent.app.config.json` for Deployments application identity, API/SDK inventory,
 release metadata, packaging, or app-owned capabilities. Read `etc/` for concrete environment,
 bind, upstream, runtime, and deployment values. The app manifest is not runtime configuration
 authority.
 
 ## Application Identity And Configuration
 
-Read `../../sdkwork.app.config.json` for Web Server application identity, runtime, release, and
+Read `../../agent.app.config.json` for Web Server application identity, runtime, release, and
 capability metadata. `etc/` is deployable-root source configuration: environment, bind, upstream,
 runtime, and deployment values. The app manifest is not runtime configuration authority.
 

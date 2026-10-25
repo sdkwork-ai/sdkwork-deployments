@@ -22,7 +22,7 @@ export interface UploadDeclarationEntry {
   readonly uploadProfileCode: string;
 }
 
-/** This application's canonical `appId` from `sdkwork.app.config.json`. */
+/** This application's canonical `appId` from `agent.app.config.json`. */
 export const DEPLOY_APP_ID = "sdkwork-deployments-pc" as const;
 
 /**
