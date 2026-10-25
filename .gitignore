@@ -105,3 +105,14 @@ sdks/**/*-typescript/composed/**/*.js
 sdks/**/*-typescript/composed/**/*.d.ts
 sdks/**/*-typescript/src/*.js
 sdks/**/*-typescript/src/*.d.ts
+
+# ---- auto-audited: local artifacts that must never be committed ----
+*.key
+*.pem
+*.p12
+*.pfx
+*.keystore
+temp/
+*.tmp
+*.temp
+.next/

@@ -33,7 +33,7 @@ deployment values. The app manifest is not runtime configuration authority.
 - `CLAUDE.md`, `GEMINI.md`, `CODEX.md`: compatibility shims that point to `AGENTS.md`.
 - `agent.app.config.json`: Deploy application identity, runtime, release, and capability metadata.
 - `etc/`: source-controlled topology profiles, gateway templates, and safe secret-file references.
-- `sdkwork.workflow.json`: GitHub packaging/release workflow manifest.
+- `agent.workflow.json`: GitHub packaging/release workflow manifest.
 - `.github/workflows/package.yml`: thin reusable workflow call only.
 - `.sdkwork/`: repository/application AI workspace metadata.
 - `specs/`: local application/component contracts and topology authority.
@@ -324,7 +324,7 @@ Sibling SDKWork repositories are consumed through a dual-track model that MUST s
   `../sdkwork-*` relative path, and consumed with `workspace:*` in `package.json`. Never use
   `file:`/`link:`/git-URL specifiers for SDKWork sibling packages in any environment.
 - **CI / release packaging**: git-repository dependency checkout. Every sibling referenced by the
-  local workspace MUST have a matching `dependencies[]` entry in `sdkwork.workflow.json` so CI
+  local workspace MUST have a matching `dependencies[]` entry in `agent.workflow.json` so CI
   clones the sibling into the same `../sdkwork-*` relative layout (`GITHUB_WORKFLOW_SPEC.md`).
   `package.json` is never rewritten for CI.
 
