@@ -486,6 +486,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<BuildPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_builds(tenant_id, app_id, page, page_size)
             .await
@@ -498,6 +499,7 @@ impl DeployService {
         build_id: &str,
     ) -> DeployServiceResult<BuildResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_build(tenant_id, app_id, build_id)
             .await
@@ -512,6 +514,7 @@ impl DeployService {
         request: &UpdateBuildStateRequest,
     ) -> DeployServiceResult<BuildResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         if request.runner_node_uuid.trim().is_empty() {
             return Err(DeployServiceError::validation("runnerNodeUuid is required"));
         }
