@@ -303,6 +303,7 @@ impl DeployService {
         app_id: &str,
     ) -> DeployServiceResult<PlatformTargetPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_platform_targets(tenant_id, app_id)
             .await
@@ -315,6 +316,7 @@ impl DeployService {
         target_id: &str,
     ) -> DeployServiceResult<PlatformTargetResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_platform_target(tenant_id, app_id, target_id)
             .await
@@ -366,6 +368,7 @@ impl DeployService {
         app_id: &str,
     ) -> DeployServiceResult<SourceRepositoryPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_source_repositories(tenant_id, app_id)
             .await
@@ -378,6 +381,7 @@ impl DeployService {
         repo_id: &str,
     ) -> DeployServiceResult<SourceRepositoryResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_source_repository(tenant_id, app_id, repo_id)
             .await
@@ -679,6 +683,7 @@ impl DeployService {
         release_id: &str,
     ) -> DeployServiceResult<AppReleaseResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_app_release(tenant_id, app_id, release_id)
             .await
@@ -710,6 +715,7 @@ impl DeployService {
         app_id: &str,
     ) -> DeployServiceResult<ChannelPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository.list_channels(tenant_id, app_id).await
     }
 
@@ -720,6 +726,7 @@ impl DeployService {
         channel_id: &str,
     ) -> DeployServiceResult<ChannelResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_channel(tenant_id, app_id, channel_id)
             .await
@@ -752,6 +759,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<ChannelRolloutPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_channel_rollouts(tenant_id, app_id, channel_id, page, page_size)
             .await
@@ -818,6 +826,7 @@ impl DeployService {
         deployment_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppDeploymentResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_app_deployment(tenant_id, app_id, deployment_id)
             .await
@@ -937,6 +946,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<AppDatabaseProfilePage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_app_database_profiles(tenant_id, app_id, page, page_size)
             .await
@@ -949,6 +959,7 @@ impl DeployService {
         profile_id: &str,
     ) -> DeployServiceResult<AppDatabaseProfileResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_app_database_profile(tenant_id, app_id, profile_id)
             .await
@@ -1009,6 +1020,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<AppDatabaseMigrationPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_app_database_migrations(tenant_id, app_id, profile_id, page, page_size)
             .await
@@ -1022,6 +1034,7 @@ impl DeployService {
         migration_id: &str,
     ) -> DeployServiceResult<AppDatabaseMigrationResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_app_database_migration(tenant_id, app_id, profile_id, migration_id)
             .await
@@ -1080,6 +1093,7 @@ impl DeployService {
         environment_id: &str,
     ) -> DeployServiceResult<AppEnvironmentResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_app_environment(tenant_id, app_id, environment_id)
             .await
