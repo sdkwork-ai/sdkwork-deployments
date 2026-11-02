@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'marketplace_service.dart';
+import 'bootstrap/sdkwork_tls_trust.dart';
 import 'marketplace_page.dart';
+import 'marketplace_service.dart';
 import 'my_templates_page.dart';
 import 'runtime_config.dart';
 
 void main() {
+  // The HTTPS trust layer must be installed before any HTTP client is
+  // created, so it runs ahead of binding initialization and services.
+  SdkworkTlsTrust.installForApp();
+
   const config = DeploymentsRuntimeConfig.dev();
   final port = SdkworkMarketplacePort.fromConfig(config);
   runApp(DeploymentsFlutterApp(port: port));
