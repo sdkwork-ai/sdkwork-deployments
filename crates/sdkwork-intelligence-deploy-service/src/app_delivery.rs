@@ -959,6 +959,7 @@ impl DeployService {
         request: &UpdateAppDatabaseProfileRequest,
     ) -> DeployServiceResult<AppDatabaseProfileResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         if let Some(strategy) = request.migration_strategy.as_deref() {
             validate_migration_strategy(strategy).map_err(DeployServiceError::validation)?;
         }
@@ -982,6 +983,7 @@ impl DeployService {
         request: &CreateAppDatabaseMigrationRequest,
     ) -> DeployServiceResult<AppDatabaseMigrationResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         validate_migration_version(&request.migration_version)
             .map_err(DeployServiceError::validation)?;
         validate_migration_name(&request.migration_name).map_err(DeployServiceError::validation)?;
