@@ -216,6 +216,16 @@ impl DeployService {
         Ok(app)
     }
 
+    async fn assert_app_access(
+        &self,
+        context: &DeployAppRequestContext,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<()> {
+        let app = self.repository.retrieve_app(tenant_id, app_id).await?;
+        assert_app_reachable(context, &app)
+    }
+
     /// The app's publishing domains: default hostnames plus bound custom ones.
     pub async fn list_app_domains(
         &self,
@@ -247,6 +257,7 @@ impl DeployService {
         }
         // app-kind/platform compatibility requires the app's kind.
         let app = self.repository.retrieve_app(tenant_id, app_id).await?;
+        assert_app_reachable(context, &app)?;
         let Some(app_kind) = AppKind::parse(&app.app_kind) else {
             return Err(DeployServiceError::validation(format!(
                 "app kind {} is unknown",
@@ -678,6 +689,7 @@ impl DeployService {
         release_status: ReleaseStatus,
     ) -> DeployServiceResult<AppReleaseResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         let release = self
             .repository
             .update_app_release_status(tenant_id, app_id, release_id, release_status)
@@ -895,6 +907,7 @@ impl DeployService {
         request: &CreateAppDatabaseProfileRequest,
     ) -> DeployServiceResult<AppDatabaseProfileResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         validate_database_engine(&request.db_engine).map_err(DeployServiceError::validation)?;
         validate_catalog_name(&request.catalog_name).map_err(DeployServiceError::validation)?;
         validate_profile_key(&request.profile_key).map_err(DeployServiceError::validation)?;
