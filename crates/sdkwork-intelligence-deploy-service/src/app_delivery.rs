@@ -624,6 +624,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<PackagePage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_packages(tenant_id, app_id, page, page_size)
             .await
@@ -636,6 +637,7 @@ impl DeployService {
         package_id: &str,
     ) -> DeployServiceResult<PackageResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .retrieve_package(tenant_id, app_id, package_id)
             .await

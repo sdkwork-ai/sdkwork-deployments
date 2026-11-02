@@ -1124,9 +1124,14 @@ impl DeployAppApi for DeployService {
         artifact_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::ArtifactResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.repository
+        let artifact = self
+            .repository
             .retrieve_artifact(tenant_id, artifact_id)
-            .await
+            .await?;
+        if let Some(app_id) = artifact.app_id.as_deref() {
+            self.assert_app_access(context, tenant_id, app_id).await?;
+        }
+        Ok(artifact)
     }
 
     async fn retain_artifact(
@@ -1147,6 +1152,7 @@ impl DeployAppApi for DeployService {
         environment: Option<&str>,
     ) -> DeployServiceResult<sdkwork_deploy_contract::EnvVariablePage> {
         let tenant_id = Self::require_tenant(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_env_variables(tenant_id, app_id, environment)
             .await
@@ -1159,6 +1165,7 @@ impl DeployAppApi for DeployService {
         request: &CreateEnvVariableRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::EnvVariableResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .create_env_variable(tenant_id, app_id, request)
             .await
