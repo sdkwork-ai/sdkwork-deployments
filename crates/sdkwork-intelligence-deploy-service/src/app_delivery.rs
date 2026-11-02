@@ -328,6 +328,7 @@ impl DeployService {
         request: &CreateSourceRepositoryRequest,
     ) -> DeployServiceResult<SourceRepositoryResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         if request.repo_key.trim().is_empty() || request.repo_key.len() > 120 {
             return Err(DeployServiceError::validation(
                 "repoKey must be 1..=120 characters",
@@ -730,6 +731,7 @@ impl DeployService {
         request: &PromoteChannelRequest,
     ) -> DeployServiceResult<ChannelRolloutResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         let rollout = self
             .repository
             .promote_channel(tenant_id, app_id, channel_id, context.actor_id, request)
@@ -827,6 +829,7 @@ impl DeployService {
         platform_review_ref: Option<&str>,
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppDeploymentResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         let deployment = self
             .repository
             .update_app_deployment_state(
@@ -1027,6 +1030,7 @@ impl DeployService {
         request: &CreateAppEnvironmentRequest,
     ) -> DeployServiceResult<AppEnvironmentResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         validate_environment_key(&request.env_key)?;
         if request.env_name.trim().is_empty() || request.env_name.len() > 100 {
             return Err(DeployServiceError::validation(
@@ -1083,6 +1087,7 @@ impl DeployService {
         request: &UpdateAppEnvironmentRequest,
     ) -> DeployServiceResult<AppEnvironmentResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         if let Some(status) = request.env_status.as_deref() {
             if !matches!(status, "DRAFT" | "ACTIVE" | "ARCHIVED") {
                 return Err(DeployServiceError::validation(
