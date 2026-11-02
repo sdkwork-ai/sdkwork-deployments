@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "module": "sdkwork-deployments",
+  "default": "tenant-global",
+  "reason": "The deployment ledger partitions rows by tenant. organization_id is an owner/attribution column: deploy_app.owner_type = ORGANIZATION is enforced by app_owner_gate, and usage events carry the organization for billing attribution. Reads and mutations bind tenant_id, then apply the owner gate from DeployAppRequestContext; a bare organization_id predicate would hide tenant-wide apps.",
+  "organizationScopedTables": []
+}
