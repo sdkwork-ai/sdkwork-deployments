@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.client-env-materialization",
+  "application": "sdkwork-deployments",
+  "command": "pnpm workflow:materialize-client-env",
+  "deploymentConfig": "sdkwork.deployment.config.json",
+  "sourceIdentity": {
+    "deploymentProfileKeys": [
+      "SDKWORK_DEPLOY_DEPLOYMENT_PROFILE",
+      "SDKWORK_DEPLOYMENT_PROFILE"
+    ],
+    "environmentKeys": [
+      "SDKWORK_DEPLOY_ENVIRONMENT",
+      "SDKWORK_ENVIRONMENT"
+    ],
+    "profileIdKeys": [
+      "SDKWORK_DEPLOY_PROFILE_ID",
+      "SDKWORK_PROFILE_ID"
+    ]
+  },
+  "profiles": [
+    "standalone.development",
+    "standalone.test",
+    "standalone.staging",
+    "standalone.demo",
+    "standalone.production",
+    "cloud.development",
+    "cloud.test",
+    "cloud.staging",
+    "cloud.demo",
+    "cloud.production"
+  ],
+  "surfaces": [
+    {
+      "id": "sdkwork-deployments-h5",
+      "root": "apps/sdkwork-deployments-h5",
+      "format": "vite",
+      "runtimeTarget": "browser",
+      "includePrefixes": [],
+      "includeKeys": [],
+      "bindings": {
+        "VITE_SDKWORK_DEPLOY_APPLICATION_PUBLIC_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_APPLICATION_PUBLIC_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_APPLICATION_APP_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_APPLICATION_APP_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_APPLICATION_BACKEND_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_APPLICATION_BACKEND_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_PLATFORM_API_GATEWAY_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_PLATFORM_API_GATEWAY_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_WEB_INTERNAL_API_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_WEB_INTERNAL_API_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_CORS_ALLOWED_ORIGINS": {
+          "sources": [
+            "SDKWORK_CORS_ALLOWED_ORIGINS"
+          ],
+          "required": false
+        }
+      },
+      "constants": {
+        "VITE_SDKWORK_APPLICATION_CODE": "deployments",
+        "VITE_SDKWORK_SURFACE": "h5"
+      },
+      "requiredOutputKeys": [
+        "VITE_SDKWORK_ENVIRONMENT",
+        "VITE_SDKWORK_DEPLOYMENT_PROFILE",
+        "VITE_SDKWORK_PROFILE_ID",
+        "VITE_SDKWORK_RUNTIME_TARGET"
+      ]
+    },
+    {
+      "id": "sdkwork-deployments-pc",
+      "root": "apps/sdkwork-deployments-pc",
+      "format": "vite",
+      "runtimeTarget": "browser",
+      "includePrefixes": [],
+      "includeKeys": [],
+      "bindings": {
+        "VITE_SDKWORK_DEPLOY_APPLICATION_PUBLIC_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_APPLICATION_PUBLIC_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_APPLICATION_APP_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_APPLICATION_APP_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_APPLICATION_BACKEND_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_APPLICATION_BACKEND_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_PLATFORM_API_GATEWAY_HTTP_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_PLATFORM_API_GATEWAY_HTTP_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_DEPLOY_WEB_INTERNAL_API_URL": {
+          "sources": [
+            "SDKWORK_DEPLOY_WEB_INTERNAL_API_URL"
+          ],
+          "required": false
+        },
+        "VITE_SDKWORK_CORS_ALLOWED_ORIGINS": {
+          "sources": [
+            "SDKWORK_CORS_ALLOWED_ORIGINS"
+          ],
+          "required": false
+        }
+      },
+      "constants": {
+        "VITE_SDKWORK_APPLICATION_CODE": "deployments",
+        "VITE_SDKWORK_SURFACE": "pc"
+      },
+      "requiredOutputKeys": [
+        "VITE_SDKWORK_ENVIRONMENT",
+        "VITE_SDKWORK_DEPLOYMENT_PROFILE",
+        "VITE_SDKWORK_PROFILE_ID",
+        "VITE_SDKWORK_RUNTIME_TARGET"
+      ]
+    }
+  ]
+}
