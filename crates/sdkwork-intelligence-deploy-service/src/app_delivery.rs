@@ -216,7 +216,7 @@ impl DeployService {
         Ok(app)
     }
 
-    async fn assert_app_access(
+    pub(crate) async fn assert_app_access(
         &self,
         context: &DeployAppRequestContext,
         tenant_id: i64,
@@ -1139,6 +1139,7 @@ impl DeployService {
         request: &PromoteEnvironmentRequest,
     ) -> DeployServiceResult<EnvironmentPromotionResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         if request.release_id.trim().is_empty() {
             return Err(DeployServiceError::validation("releaseId is required"));
         }

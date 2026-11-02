@@ -1093,6 +1093,9 @@ impl DeployAppApi for DeployService {
         request: &CreateArtifactRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::ArtifactResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        if let Some(app_id) = request.app_id.as_deref() {
+            self.assert_app_access(context, tenant_id, app_id).await?;
+        }
         if !is_deploy_package_artifact_type(request.package_type) {
             return Err(sdkwork_deploy_contract::DeployServiceError::validation(
                 "packageType must identify a deployable package",
