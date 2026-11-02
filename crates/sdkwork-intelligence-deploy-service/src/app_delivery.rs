@@ -1239,7 +1239,7 @@ fn validate_deployment_pair(request: &CreateAppDeploymentRequest) -> DeployServi
     Ok(())
 }
 
-fn assert_app_reachable(
+pub(crate) fn assert_app_reachable(
     context: &DeployAppRequestContext,
     app: &AppResponse,
 ) -> DeployServiceResult<()> {

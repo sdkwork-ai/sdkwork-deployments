@@ -27,6 +27,7 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_deploy_drive_port::{DriveRequestCredentials, PrepareDeployUploadCommand};
 
+use crate::app_delivery::assert_app_reachable;
 use crate::DeployService;
 
 impl DeployService {
@@ -1054,6 +1055,8 @@ impl DeployAppApi for DeployService {
         app_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        let current = self.repository.retrieve_app(tenant_id, app_id).await?;
+        assert_app_reachable(context, &current)?;
         let app = self.repository.set_app_status(tenant_id, app_id, 1).await?;
         let _ = self.audit_app_action(context, "app.activate", app_id).await;
         Ok(app)
@@ -1065,6 +1068,8 @@ impl DeployAppApi for DeployService {
         app_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        let current = self.repository.retrieve_app(tenant_id, app_id).await?;
+        assert_app_reachable(context, &current)?;
         let app = self.repository.set_app_status(tenant_id, app_id, 2).await?;
         let _ = self.audit_app_action(context, "app.pause", app_id).await;
         Ok(app)
