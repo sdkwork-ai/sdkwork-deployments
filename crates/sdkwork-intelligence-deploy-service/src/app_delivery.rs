@@ -177,7 +177,9 @@ impl DeployService {
         app_id: &str,
     ) -> DeployServiceResult<AppResponse> {
         let tenant_id = Self::tenant_id(context)?;
-        self.repository.retrieve_app(tenant_id, app_id).await
+        let app = self.repository.retrieve_app(tenant_id, app_id).await?;
+        assert_app_reachable(context, &app)?;
+        Ok(app)
     }
 
     pub async fn update_app(
