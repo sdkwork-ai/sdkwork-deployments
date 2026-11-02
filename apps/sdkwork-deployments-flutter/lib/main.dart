@@ -25,7 +25,8 @@ class DeploymentsFlutterApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SDKWork Deployments',
-      theme: ThemeData(colorSchemeSeed: const Color(0xFFE0AD31), useMaterial3: true),
+      theme: ThemeData(
+          colorSchemeSeed: const Color(0xFFE0AD31), useMaterial3: true),
       home: MarketplaceHome(port: port),
     );
   }
@@ -61,8 +62,14 @@ class _MarketplaceHomeState extends State<MarketplaceHome> {
         selectedIndex: _tab,
         onDestinationSelected: (index) => setState(() => _tab = index),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront), label: '模板市场'),
-          NavigationDestination(icon: Icon(Icons.widgets_outlined), selectedIcon: Icon(Icons.widgets), label: '我的模板'),
+          NavigationDestination(
+              icon: Icon(Icons.store_outlined),
+              selectedIcon: Icon(Icons.store),
+              label: '模板市场'),
+          NavigationDestination(
+              icon: Icon(Icons.widgets_outlined),
+              selectedIcon: Icon(Icons.widgets),
+              label: '我的模板'),
         ],
       ),
     );
