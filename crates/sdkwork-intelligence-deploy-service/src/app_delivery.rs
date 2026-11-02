@@ -5,7 +5,8 @@
 use sdkwork_deploy_contract::{
     AppDatabaseMigrationPage, AppDatabaseMigrationResponse, AppDatabaseProfilePage,
     AppDatabaseProfileResponse, AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppKind,
-    AppPage, AppReleasePage, AppReleaseResponse, AppResponse, BuildPage, BuildResponse,
+    AppOwnerType, AppPage, AppReleasePage, AppReleaseResponse, AppResponse, BuildPage,
+    BuildResponse,
     BuildTemplatePage, BuildTemplateResponse, ChannelKey, ChannelPage, ChannelResponse,
     ChannelRolloutPage, ChannelRolloutResponse, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
@@ -186,6 +187,8 @@ impl DeployService {
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         let tenant_id = Self::tenant_id(context)?;
+        let current = self.repository.retrieve_app(tenant_id, app_id).await?;
+        assert_app_reachable(context, &current)?;
         if let Some(name) = request.name.as_deref() {
             if name.trim().is_empty() {
                 return Err(DeployServiceError::validation("app name must not be empty"));
@@ -1234,6 +1237,31 @@ fn validate_deployment_pair(request: &CreateAppDeploymentRequest) -> DeployServi
         )));
     }
     Ok(())
+}
+
+fn assert_app_reachable(
+    context: &DeployAppRequestContext,
+    app: &AppResponse,
+) -> DeployServiceResult<()> {
+    match app.owner_type {
+        AppOwnerType::Platform | AppOwnerType::Tenant => Ok(()),
+        AppOwnerType::Organization => {
+            let caller_org = context.organization_id.map(|value| value.to_string());
+            if caller_org.is_some() && caller_org == app.organization_id {
+                Ok(())
+            } else {
+                Err(DeployServiceError::not_found("app not found"))
+            }
+        }
+        AppOwnerType::User => {
+            let caller_user = context.actor_id.map(|value| value.to_string());
+            if caller_user.is_some() && caller_user == app.owner_user_id {
+                Ok(())
+            } else {
+                Err(DeployServiceError::not_found("app not found"))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
