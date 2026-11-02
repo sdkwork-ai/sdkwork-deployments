@@ -233,6 +233,7 @@ impl DeployService {
         app_id: &str,
     ) -> DeployServiceResult<AppDomainPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository.list_app_domains(tenant_id, app_id).await
     }
 
@@ -665,6 +666,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<AppReleasePage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_app_releases(tenant_id, app_id, page, page_size)
             .await
@@ -803,6 +805,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppDeploymentPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_app_deployments(tenant_id, app_id, page, page_size)
             .await
@@ -1064,6 +1067,7 @@ impl DeployService {
         page_size: i32,
     ) -> DeployServiceResult<AppEnvironmentPage> {
         let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_app_environments(tenant_id, app_id, page, page_size)
             .await
