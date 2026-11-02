@@ -15,11 +15,15 @@
     "list": [
       {
         "pagePath": "pages/marketplace/marketplace",
-        "text": "模板市场"
+        "text": "模板市场",
+        "iconPath": "assets/tabbar/marketplace-outline.png",
+        "selectedIconPath": "assets/tabbar/marketplace-filled.png"
       },
       {
         "pagePath": "pages/my-templates/my-templates",
-        "text": "我的模板"
+        "text": "我的模板",
+        "iconPath": "assets/tabbar/my-templates-outline.png",
+        "selectedIconPath": "assets/tabbar/my-templates-filled.png"
       }
     ]
   },
