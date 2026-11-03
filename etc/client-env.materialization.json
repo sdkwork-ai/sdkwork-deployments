@@ -222,6 +222,21 @@
           "drive.uploads.write"
         ]
       }
+    },
+    {
+      "id": "sdkwork-deployments-mini-program",
+      "root": "apps/sdkwork-deployments-mini-program",
+      "format": "mini-program",
+      "runtimeTarget": "mini-program",
+      "bindings": {},
+      "accessToken": {
+        "appId": "sdkwork-deployments-mini-program",
+        "tenantId": "100001",
+        "organizationId": "0",
+        "permissionScope": [
+          "iam:self"
+        ]
+      }
     }
   ]
 }
