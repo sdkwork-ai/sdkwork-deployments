@@ -111,8 +111,13 @@ impl SdkWebRuntimeFacade {
 
     fn client(&self) -> DeployServiceResult<SdkworkCustomClient> {
         let token = read_secret_file(&self.ingress_token_file)?;
+        // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
+        let base_url = sdkwork_utils_rust::service_base_url::registry_base_url_or(
+            "sdkwork-webserver",
+            &self.base_url,
+        );
         let client =
-            SdkworkCustomClient::new_with_base_url(&self.base_url).map_err(map_web_sdk_error)?;
+            SdkworkCustomClient::new_with_base_url(&base_url).map_err(map_web_sdk_error)?;
         client.set_api_key(token);
         Ok(client)
     }

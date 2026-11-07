@@ -17,6 +17,7 @@ use sdkwork_drive_app_sdk_generated_rust::{
 use sdkwork_drive_internal_sdk_generated_rust::SdkworkCustomClient as DriveInternalClient;
 use sdkwork_knowledgebase_internal_sdk::SdkworkCustomClient as KnowledgebaseInternalClient;
 use sdkwork_utils_rust::string::trim;
+use sdkwork_utils_rust::service_base_url::registry_base_url_or;
 
 use crate::{
     ContentProviderPort, ProviderRequestCredentials, ValidateContentProviderResourceCommand,
@@ -83,7 +84,9 @@ impl SdkContentProviderPort {
         &self,
         credentials: &ProviderRequestCredentials,
     ) -> DeployServiceResult<SdkworkAppClient> {
-        let client = SdkworkAppClient::new_with_base_url(&self.drive_app_url)
+        // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
+        let base_url = registry_base_url_or("sdkwork-drive", &self.drive_app_url);
+        let client = SdkworkAppClient::new_with_base_url(&base_url)
             .map_err(|_| provider_unavailable("Drive App API"))?;
         if let Some(token) = non_blank(credentials.auth_token.as_deref()) {
             client.set_auth_token(token);
@@ -95,16 +98,20 @@ impl SdkContentProviderPort {
     }
 
     fn drive_internal_client(&self) -> DeployServiceResult<DriveInternalClient> {
-        let client = DriveInternalClient::new_with_base_url(&self.drive_internal_url)
+        let base_url = registry_base_url_or("sdkwork-drive", &self.drive_internal_url);
+        let client = DriveInternalClient::new_with_base_url(&base_url)
             .map_err(|_| provider_unavailable("Drive Internal API"))?;
         client.set_api_key(read_secret_file(&self.drive_internal_token_file, "Drive")?);
         Ok(client)
     }
 
     fn knowledgebase_internal_client(&self) -> DeployServiceResult<KnowledgebaseInternalClient> {
-        let client =
-            KnowledgebaseInternalClient::new_with_base_url(&self.knowledgebase_internal_url)
-                .map_err(|_| provider_unavailable("Knowledgebase Internal API"))?;
+        let base_url = registry_base_url_or(
+            "sdkwork-knowledgebase",
+            &self.knowledgebase_internal_url,
+        );
+        let client = KnowledgebaseInternalClient::new_with_base_url(&base_url)
+            .map_err(|_| provider_unavailable("Knowledgebase Internal API"))?;
         client.set_api_key(read_secret_file(
             &self.knowledgebase_internal_token_file,
             "Knowledgebase",

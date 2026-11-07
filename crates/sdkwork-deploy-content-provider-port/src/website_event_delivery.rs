@@ -15,6 +15,7 @@ use sdkwork_drive_internal_sdk_generated_rust::{
     WebsiteRootEventDelivery,
 };
 use sdkwork_utils_rust::sha256_hash;
+use sdkwork_utils_rust::service_base_url::registry_base_url_or;
 use serde_json::Value;
 use tokio::task::JoinSet;
 use url::Url;
@@ -247,7 +248,9 @@ impl SdkWebsiteProviderEventDeliveryPort {
     }
 
     fn drive_internal_client(&self) -> DeployServiceResult<DriveInternalClient> {
-        let client = DriveInternalClient::new_with_base_url(&self.config.drive_internal_url)
+        // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
+        let base_url = registry_base_url_or("sdkwork-drive", &self.config.drive_internal_url);
+        let client = DriveInternalClient::new_with_base_url(&base_url)
             .map_err(|_| provider_unavailable("Drive Internal API"))?;
         client.set_api_key(read_secret_file(
             &self.config.drive_internal_token_file,

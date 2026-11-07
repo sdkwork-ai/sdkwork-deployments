@@ -40,8 +40,12 @@ impl SdkDriveAppFacade {
         &self,
         credentials: &DriveRequestCredentials,
     ) -> Result<SdkworkAppClient, DeployServiceError> {
-        let client =
-            SdkworkAppClient::new_with_base_url(&self.base_url).map_err(map_drive_error)?;
+        // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
+        let base_url = sdkwork_utils_rust::service_base_url::registry_base_url_or(
+            "sdkwork-drive",
+            &self.base_url,
+        );
+        let client = SdkworkAppClient::new_with_base_url(&base_url).map_err(map_drive_error)?;
         if let Some(token) = credentials
             .auth_token
             .as_deref()
