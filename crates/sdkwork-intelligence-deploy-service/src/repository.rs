@@ -43,6 +43,11 @@ use sdkwork_deploy_contract::{
 };
 
 use crate::{CertificateOrderCaaSubject, DomainVerificationChallenge};
+use sdkwork_deploy_contract::{
+    DownloadCardDto, DownloadCatalogDto, DownloadCatalogSummaryDto, DownloadItemDto,
+    DownloadUpdateDto, UpsertDownloadCardRequest, UpsertDownloadCatalogRequest,
+    UpsertDownloadItemRequest, UpsertDownloadUpdateRequest,
+};
 use sdkwork_deploy_contract::{UsageEventIngestItem, UsageEventQuery, UsageIngestResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1714,4 +1719,132 @@ pub trait DeployRepositoryPort:
         template_uuid: &str,
         request: &UpdateAppTemplateAdminRequest,
     ) -> DeployServiceResult<AppTemplateResponse>;
+
+    // -- download catalog ---------------------------------------------------
+    //
+    // The catalog, its cards/items and the per-installer update configuration
+    // replace the Cloud Router `downloads` site-settings document. Reads use
+    // `Option<i64>` where `None` is the operator's cross-tenant scope; writes
+    // require a concrete tenant.
+
+    /// Lists the caller's catalogs without their nested documents.
+    async fn list_download_catalogs(
+        &self,
+        tenant_id: Option<i64>,
+    ) -> DeployServiceResult<Vec<DownloadCatalogSummaryDto>>;
+
+    /// Reads one catalog with cards, items and update configurations.
+    async fn retrieve_download_catalog(
+        &self,
+        tenant_id: Option<i64>,
+        catalog_key: &str,
+    ) -> DeployServiceResult<DownloadCatalogDto>;
+
+    /// Creates the catalog when absent and patches the supplied fields otherwise.
+    async fn upsert_download_catalog(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        request: &UpsertDownloadCatalogRequest,
+    ) -> DeployServiceResult<DownloadCatalogDto>;
+
+    /// Bumps the revision and makes the catalog publicly readable.
+    async fn publish_download_catalog(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+    ) -> DeployServiceResult<DownloadCatalogDto>;
+
+    /// Creates or patches one card of a catalog.
+    async fn upsert_download_card(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        card_key: &str,
+        request: &UpsertDownloadCardRequest,
+    ) -> DeployServiceResult<DownloadCardDto>;
+
+    /// Soft-deletes one card and its items.
+    async fn delete_download_card(
+        &self,
+        tenant_id: i64,
+        catalog_key: &str,
+        card_key: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Creates or patches one installer of a card.
+    async fn upsert_download_item(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        card_key: &str,
+        item_key: &str,
+        request: &UpsertDownloadItemRequest,
+    ) -> DeployServiceResult<DownloadItemDto>;
+
+    /// Soft-deletes one installer and its update configuration.
+    async fn delete_download_item(
+        &self,
+        tenant_id: i64,
+        catalog_key: &str,
+        card_key: &str,
+        item_key: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Creates or replaces one installer's update configuration.
+    async fn upsert_download_update(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        card_key: &str,
+        item_key: &str,
+        request: &UpsertDownloadUpdateRequest,
+    ) -> DeployServiceResult<DownloadUpdateDto>;
+
+    /// Published catalog for the anonymous download page (unique key enforced by
+    /// the service when two tenants publish the same key).
+    async fn published_download_catalogs(
+        &self,
+        catalog_key: &str,
+    ) -> DeployServiceResult<Vec<DownloadCatalogDto>>;
+
+    /// Published installer resolved by product/platform/architecture.
+    async fn published_download_record(
+        &self,
+        product_key: &str,
+        platform: &str,
+        architecture: &str,
+    ) -> DeployServiceResult<Option<PublishedDownloadRecord>>;
+
+    /// Published installer resolved by its stable public uuid.
+    async fn published_download_record_by_item(
+        &self,
+        item_uuid: &str,
+    ) -> DeployServiceResult<Option<PublishedDownloadRecord>>;
+}
+
+/// One published installer with the release facts a feed needs.
+#[derive(Clone, Debug, Default)]
+pub struct PublishedDownloadRecord {
+    pub catalog: DownloadCatalogDto,
+    pub item: DownloadItemDto,
+    pub update: Option<DownloadUpdateDto>,
+    pub package: Option<PublishedDownloadPackage>,
+}
+
+/// Release-domain package facts joined onto a published installer.
+#[derive(Clone, Debug, Default)]
+pub struct PublishedDownloadPackage {
+    pub version: String,
+    pub file_name: String,
+    pub size_bytes: i64,
+    pub sha512: Option<String>,
+    pub drive_node_id: Option<String>,
+    pub drive_space_id: Option<String>,
+    pub release_notes_url: Option<String>,
 }

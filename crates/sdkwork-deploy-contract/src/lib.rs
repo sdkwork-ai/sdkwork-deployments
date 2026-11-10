@@ -6,6 +6,7 @@ pub mod app_domains;
 pub mod app_ports;
 pub mod app_source_spec;
 pub mod certificate_plan;
+pub mod downloads;
 pub mod dto;
 pub mod problem;
 pub mod runtime_env;
@@ -22,6 +23,7 @@ pub use app_ports::{
 };
 pub use app_source_spec::*;
 pub use certificate_plan::*;
+pub use downloads::*;
 pub use dto::*;
 pub use problem::{DeployServiceError, DeployServiceErrorKind, DeployServiceResult};
 pub use runtime_env::{

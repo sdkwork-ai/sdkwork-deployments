@@ -66,6 +66,7 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.appDatabase` - app_database API
 - `client.appEnvironment` - app_environment API
 - `client.template` - template API
+- `client.downloads` - downloads API
 
 ## Usage Examples
 
@@ -242,6 +243,14 @@ final params = <String, dynamic>{
   'include_disabled': true,
 };
 final result = await client.template.categoriesList(params);
+print(result);
+```
+
+### downloads
+```dart
+// Published download catalog rendered by the download page
+final catalogKey = 'catalogKey';
+final result = await client.downloads.downloadCatalogPublicRetrieve(catalogKey);
 print(result);
 ```
 

@@ -3,6 +3,7 @@
 pub mod app_delivery_routes;
 pub mod auth;
 pub mod domain_certificate_manifest;
+pub mod downloads_routes;
 pub mod http_route_manifest;
 pub mod paths;
 pub mod routes;
@@ -10,6 +11,7 @@ pub mod template_market_routes;
 pub mod web_bootstrap;
 
 pub use domain_certificate_manifest::domain_certificate_route_manifest;
+pub use downloads_routes::{build_downloads_public_router, DownloadsReadState};
 pub use http_route_manifest::app_route_manifest;
 pub use routes::{
     build_certificate_management_router, build_cloud_account_router,

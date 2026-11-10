@@ -804,6 +804,30 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_required_permission("deploy.appTemplateVersions.write")
     .with_idempotent(true),
+    HttpRoute::public(
+        HttpMethod::Get,
+        "/app/v3/api/downloads/catalog/{catalogKey}",
+        "downloads",
+        "downloadCatalog.publicRetrieve",
+    ),
+    HttpRoute::public(
+        HttpMethod::Get,
+        "/app/v3/api/downloads/config",
+        "downloads",
+        "downloadConfig.retrieve",
+    ),
+    HttpRoute::public(
+        HttpMethod::Get,
+        "/app/v3/api/downloads/feed/{productKey}/{platform}/{architecture}/{channelFile}",
+        "downloads",
+        "downloadFeed.retrieve",
+    ),
+    HttpRoute::public(
+        HttpMethod::Get,
+        "/app/v3/api/downloads/artifact/{itemUuid}",
+        "downloads",
+        "downloadArtifact.redirect",
+    ),
 ];
 
 pub fn app_route_manifest() -> HttpRouteManifest {

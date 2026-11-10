@@ -76,6 +76,7 @@ const client = new SdkworkDeployAppClient({
 - `client.appDatabase` - app_database API
 - `client.appEnvironment` - app_environment API
 - `client.template` - template API
+- `client.downloads` - downloads API
 
 ## Usage Examples
 
@@ -253,6 +254,14 @@ const params = {
   include_disabled: true,
 };
 const result = await client.template.templateCategories.list(params);
+```
+
+### downloads
+
+```typescript
+// Published download catalog rendered by the download page
+const catalogKey = 'catalogKey';
+const result = await client.downloads.downloadCatalog.publicRetrieve(catalogKey);
 ```
 
 ## Error Handling

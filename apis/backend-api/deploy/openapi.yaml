@@ -2019,6 +2019,306 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
+  /backend/v3/api/downloads/catalogs:
+    get:
+      operationId: downloadCatalog.list
+      summary: List download catalogs
+      description: 'Operator surface for the download page. Every catalog belongs to the caller''s tenant.'
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/DownloadCatalogSummaryResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /backend/v3/api/downloads/catalogs/{catalogKey}:
+    get:
+      operationId: downloadCatalog.retrieve
+      summary: Read one download catalog with cards, installers and update configurations
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadCatalogResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    put:
+      operationId: downloadCatalog.upsert
+      summary: Create or patch a download catalog
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadCatalogUpsertRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadCatalogResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /backend/v3/api/downloads/catalogs/{catalogKey}/publish:
+    post:
+      operationId: downloadCatalog.publish
+      summary: Publish a download catalog and bump its revision
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadCatalogResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}:
+    put:
+      operationId: downloadCard.upsert
+      summary: Create or patch one card of a download catalog
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      - $ref: '#/components/parameters/DownloadCardKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadCardUpsertRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadCardResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      operationId: downloadCard.delete
+      summary: Delete one card and its installers
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      - $ref: '#/components/parameters/DownloadCardKeyParam'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}:
+    put:
+      operationId: downloadItem.upsert
+      summary: Create or patch one installer of a card
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      - $ref: '#/components/parameters/DownloadCardKeyParam'
+      - $ref: '#/components/parameters/DownloadItemKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadItemUpsertRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadItemResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      operationId: downloadItem.delete
+      summary: Delete one installer and its update configuration
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      - $ref: '#/components/parameters/DownloadCardKeyParam'
+      - $ref: '#/components/parameters/DownloadItemKeyParam'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update:
+    put:
+      operationId: downloadUpdate.upsert
+      summary: Create or replace one installer's update configuration
+      tags:
+      - downloadCatalog
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      - $ref: '#/components/parameters/DownloadCardKeyParam'
+      - $ref: '#/components/parameters/DownloadItemKeyParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadUpdateUpsertRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadUpdateResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 components:
   securitySchemes:
     AuthToken:
@@ -2055,6 +2355,24 @@ components:
         minimum: 1
         maximum: 200
         default: 20
+    DownloadCatalogKeyParam:
+      name: catalogKey
+      in: path
+      required: true
+      schema:
+        type: string
+    DownloadCardKeyParam:
+      name: cardKey
+      in: path
+      required: true
+      schema:
+        type: string
+    DownloadItemKeyParam:
+      name: itemKey
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     TemplateCategoryResponse:
       type: object
@@ -3575,6 +3893,390 @@ components:
           format: int32
         duplicate:
           type: boolean
+    DownloadUpdateResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      - provider
+      - channelKey
+      - allowedChannels
+      - allowPrerelease
+      - allowDowngrade
+      - checkIntervalMinutes
+      - rolloutPercentage
+      properties:
+        enabled:
+          type: boolean
+        provider:
+          type: string
+          enum:
+          - deployments
+          - generic
+          - github
+          - none
+        feedUrl:
+          type: string
+        githubOwner:
+          type: string
+        githubRepo:
+          type: string
+        channelId:
+          type: string
+        channelKey:
+          type: string
+          enum:
+          - nightly
+          - stable
+        channelFile:
+          type: string
+        allowedChannels:
+          type: array
+          items:
+            type: string
+            enum:
+            - nightly
+            - stable
+        allowPrerelease:
+          type: boolean
+        allowDowngrade:
+          type: boolean
+        minimumSupportedVersion:
+          type: string
+        checkIntervalMinutes:
+          type: integer
+        rolloutPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        releaseNotesUrl:
+          type: string
+    DownloadUpdateUpsertRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        provider:
+          type: string
+          enum:
+          - deployments
+          - generic
+          - github
+          - none
+        feedUrl:
+          type: string
+        githubOwner:
+          type: string
+        githubRepo:
+          type: string
+        channelId:
+          type: string
+        channelKey:
+          type: string
+          enum:
+          - nightly
+          - stable
+        channelFile:
+          type: string
+        allowedChannels:
+          type: array
+          items:
+            type: string
+            enum:
+            - nightly
+            - stable
+        allowPrerelease:
+          type: boolean
+        allowDowngrade:
+          type: boolean
+        minimumSupportedVersion:
+          type: string
+        checkIntervalMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+        rolloutPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        releaseNotesUrl:
+          type: string
+    DownloadItemResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - itemKey
+      - platform
+      - architecture
+      - label
+      - primaryAction
+      - disabled
+      - sortOrder
+      properties:
+        id:
+          type: string
+        itemKey:
+          type: string
+        platform:
+          type: string
+        architecture:
+          type: string
+        label:
+          type: string
+        fileName:
+          type: string
+        version:
+          type: string
+        releaseTag:
+          type: string
+        packageId:
+          type: string
+        artifactId:
+          type: string
+        downloadSource:
+          type: object
+          additionalProperties: true
+        sizeBytes:
+          type: integer
+          format: int64
+        checksumSha256:
+          type: string
+        primaryAction:
+          type: boolean
+        disabled:
+          type: boolean
+        unavailableLabel:
+          type: string
+        sortOrder:
+          type: integer
+        update:
+          $ref: '#/components/schemas/DownloadUpdateResponse'
+    DownloadItemUpsertRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        platform:
+          type: string
+          enum:
+          - windows
+          - macos
+          - linux
+          - android
+          - ios
+          - harmonyos
+          - docker
+          - helm
+          - generic
+        architecture:
+          type: string
+          enum:
+          - x64
+          - arm64
+          - universal
+        label:
+          type: string
+        fileName:
+          type: string
+        version:
+          type: string
+        releaseTag:
+          type: string
+        packageId:
+          type: string
+        artifactId:
+          type: string
+        downloadSource:
+          type: object
+          additionalProperties: true
+        sizeBytes:
+          type: number
+        checksumSha256:
+          type: string
+        primaryAction:
+          type: boolean
+        disabled:
+          type: boolean
+        unavailableLabel:
+          type: string
+        sortOrder:
+          type: integer
+    DownloadCardResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - cardKey
+      - title
+      - primaryStrategy
+      - hidden
+      - sortOrder
+      properties:
+        id:
+          type: string
+        cardKey:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        tone:
+          type: string
+        kind:
+          type: string
+        badge:
+          type: string
+        primaryStrategy:
+          type: string
+          enum:
+          - detected-platform
+          - first-available
+        hidden:
+          type: boolean
+        sortOrder:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadItemResponse'
+    DownloadCardUpsertRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        tone:
+          type: string
+        kind:
+          type: string
+        badge:
+          type: string
+        primaryStrategy:
+          type: string
+          enum:
+          - detected-platform
+          - first-available
+        hidden:
+          type: boolean
+        sortOrder:
+          type: integer
+    DownloadCatalogSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - catalogKey
+      - productKey
+      - productName
+      - productVersion
+      - status
+      - revision
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+        catalogKey:
+          type: string
+        productKey:
+          type: string
+        productName:
+          type: string
+        productVersion:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - ARCHIVED
+        revision:
+          type: integer
+          format: int64
+        publishedAt:
+          type: string
+        updatedAt:
+          type: string
+        version:
+          type: string
+    DownloadCatalogResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - catalogKey
+      - productKey
+      - productName
+      - productVersion
+      - defaultChannelKey
+      - status
+      - revision
+      - createdAt
+      - updatedAt
+      - version
+      properties:
+        id:
+          type: string
+        appId:
+          type: string
+        catalogKey:
+          type: string
+        productKey:
+          type: string
+        productName:
+          type: string
+        productVersion:
+          type: string
+        defaultChannelKey:
+          type: string
+          enum:
+          - nightly
+          - stable
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - ARCHIVED
+        revision:
+          type: integer
+          format: int64
+        publishedAt:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        version:
+          type: string
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadCardResponse'
+    DownloadCatalogUpsertRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        appId:
+          type: string
+        productKey:
+          type: string
+        productName:
+          type: string
+        productVersion:
+          type: string
+        defaultChannelKey:
+          type: string
+          enum:
+          - nightly
+          - stable
   responses:
     BadRequest:
       description: 请求参数错误

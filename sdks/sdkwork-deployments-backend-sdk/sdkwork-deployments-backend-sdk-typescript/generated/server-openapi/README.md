@@ -27,7 +27,7 @@ client.setAuthToken('your-auth-token');
 client.setAccessToken('your-access-token');
 
 // Use the SDK
-const result = await client.nginx.runtime.retrieve();
+const result = await client.downloadCatalog.list();
 ```
 
 ## Authentication
@@ -67,6 +67,7 @@ const client = new SdkworkDeployBackendClient({
 - `client.signingHealth` - signing_health API
 - `client.sourceEvents` - source_events API
 - `client.template` - template API
+- `client.downloadCatalog` - download_catalog API
 
 ## Usage Examples
 
@@ -218,13 +219,20 @@ const params = {
 const result = await client.template.templateCategories.list(params);
 ```
 
+### download_catalog
+
+```typescript
+// List download catalogs
+const result = await client.downloadCatalog.list();
+```
+
 ## Error Handling
 
 ```typescript
 import { SdkworkDeployBackendClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/deployments-backend-sdk';
 
 try {
-  const result = await client.nginx.runtime.retrieve();
+  const result = await client.downloadCatalog.list();
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

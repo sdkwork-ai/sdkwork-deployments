@@ -13,6 +13,7 @@ axum.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sdkwork-deploy-contract.workspace = true
+sdkwork-deploy-feed.workspace = true
 sdkwork-routes-deploy-common.workspace = true
 sdkwork-iam-web-adapter.workspace = true
 sdkwork-web-axum.workspace = true

@@ -12,6 +12,8 @@ members = [
   "crates/sdkwork-deploy-web-port",
   "crates/sdkwork-routes-deploy-common",
   "crates/sdkwork-deploy-contract",
+  "crates/sdkwork-deploy-feed",
+  "crates/sdkwork-deploy-download-catalog-importer",
   "crates/sdkwork-deploy-core",
   "crates/sdkwork-intelligence-deploy-service",
   "crates/sdkwork-intelligence-deploy-repository-sqlx",
@@ -80,6 +82,7 @@ rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem
 rustls-pki-types = "1.14"
 
 sdkwork-deploy-contract = { path = "crates/sdkwork-deploy-contract" }
+sdkwork-deploy-feed = { path = "crates/sdkwork-deploy-feed" }
 sdkwork-deploy-core = { path = "crates/sdkwork-deploy-core" }
 sdkwork-deploy-drive-port = { path = "crates/sdkwork-deploy-drive-port" }
 sdkwork-deploy-cloud-account-port = { path = "crates/sdkwork-deploy-cloud-account-port" }

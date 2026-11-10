@@ -21,7 +21,7 @@ export type DeploymentsSurface = "app-console" | "backend-admin";
  * one listing, so the shell requires the scope field to carry that listing's
  * template uuid before it loads anything.
  */
-export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs" | "templateCategories" | "appTemplates" | "appTemplateVersions" | "marketplace" | "myTemplates";
+export type DeploymentsResourceKey = "configuration" | "domains" | "certificates" | "apps" | "artifacts" | "releases" | "deployments" | "monitoring" | "nginx" | "clusters" | "nodes" | "audit" | "localProjects" | "sourceSpecs" | "templateCategories" | "appTemplates" | "appTemplateVersions" | "marketplace" | "myTemplates" | "downloadCatalog";
 export interface DeploymentsModuleEntry { description: string; label: string; order: number; permission?: string | undefined; resource: DeploymentsResourceKey; }
 export interface DeploymentsPcModuleDefinition { entries: readonly DeploymentsModuleEntry[]; id: string; label: string; surface: DeploymentsSurface; }
 export interface DeploymentsQuery { page: number; pageSize: number; scopeId?: string | undefined; search?: string | undefined; }

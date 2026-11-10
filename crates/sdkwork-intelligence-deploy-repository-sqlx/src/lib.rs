@@ -14,6 +14,7 @@ mod certificates;
 mod database_profiles;
 mod domain_dns_records;
 mod domain_zones;
+mod downloads;
 mod entitlement;
 mod env_variables;
 mod environments;

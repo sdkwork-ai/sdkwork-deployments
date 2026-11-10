@@ -3950,148 +3950,6 @@ class DomainHostnameClaimResponse {
   }
 }
 
-class CreateDeploymentRequest {
-  final int deployType;
-  final String? versionTag;
-  final String? commitHash;
-  final String? sourceRef;
-  final String? environment;
-  final String? releaseId;
-  final String? idempotencyKey;
-
-  CreateDeploymentRequest({
-    required this.deployType,
-    this.versionTag,
-    this.commitHash,
-    this.sourceRef,
-    this.environment,
-    this.releaseId,
-    this.idempotencyKey
-  });
-
-  factory CreateDeploymentRequest.fromJson(Map<String, dynamic> json) {
-    return CreateDeploymentRequest(
-      deployType: (() {
-        final value = json['deployType'];
-        if (value is! int) {
-          throw FormatException('CreateDeploymentRequest.deployType is required');
-        }
-        return value;
-      })(),
-      versionTag: json['versionTag']?.toString(),
-      commitHash: json['commitHash']?.toString(),
-      sourceRef: json['sourceRef']?.toString(),
-      environment: json['environment']?.toString(),
-      releaseId: json['releaseId']?.toString(),
-      idempotencyKey: json['idempotencyKey']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'deployType': deployType,
-      'versionTag': versionTag,
-      'commitHash': commitHash,
-      'sourceRef': sourceRef,
-      'environment': environment,
-      'releaseId': releaseId,
-      'idempotencyKey': idempotencyKey,
-    };
-  }
-}
-
-class DeploymentResponse {
-  final String? id;
-  final String? siteId;
-  final int? deployType;
-  final String? releaseId;
-  final String? versionTag;
-  final int? status;
-  final String? startedAt;
-  final String? completedAt;
-  final String? durationMs;
-  final String? createdAt;
-
-  DeploymentResponse({
-    this.id,
-    this.siteId,
-    this.deployType,
-    this.releaseId,
-    this.versionTag,
-    this.status,
-    this.startedAt,
-    this.completedAt,
-    this.durationMs,
-    this.createdAt
-  });
-
-  factory DeploymentResponse.fromJson(Map<String, dynamic> json) {
-    return DeploymentResponse(
-      id: json['id']?.toString(),
-      siteId: json['siteId']?.toString(),
-      deployType: json['deployType'] is int ? json['deployType'] : null,
-      releaseId: json['releaseId']?.toString(),
-      versionTag: json['versionTag']?.toString(),
-      status: json['status'] is int ? json['status'] : null,
-      startedAt: json['startedAt']?.toString(),
-      completedAt: json['completedAt']?.toString(),
-      durationMs: json['durationMs']?.toString(),
-      createdAt: json['createdAt']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'id': id,
-      'siteId': siteId,
-      'deployType': deployType,
-      'releaseId': releaseId,
-      'versionTag': versionTag,
-      'status': status,
-      'startedAt': startedAt,
-      'completedAt': completedAt,
-      'durationMs': durationMs,
-      'createdAt': createdAt,
-    };
-  }
-}
-
-class DeploymentPage {
-  final List<DeploymentResponse>? items;
-  final String? total;
-
-  DeploymentPage({
-    this.items,
-    this.total
-  });
-
-  factory DeploymentPage.fromJson(Map<String, dynamic> json) {
-    return DeploymentPage(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          return null;
-        }
-        return list
-            .map((item) => (() {
-        final map = _sdkworkAsMap(item);
-        return map == null ? null : DeploymentResponse.fromJson(map);
-      })())
-            .whereType<DeploymentResponse>()
-            .toList();
-      })(),
-      total: json['total']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items?.map((item) => item.toJson()).toList(),
-      'total': total,
-    };
-  }
-}
-
 class CreateEnvVariableRequest {
   final String key;
   final String value;
@@ -4168,42 +4026,6 @@ class EnvVariableResponse {
       'environment': environment,
       'isSecret': isSecret,
       'createdAt': createdAt,
-    };
-  }
-}
-
-class EnvVariablePage {
-  final List<EnvVariableResponse>? items;
-  final String? total;
-
-  EnvVariablePage({
-    this.items,
-    this.total
-  });
-
-  factory EnvVariablePage.fromJson(Map<String, dynamic> json) {
-    return EnvVariablePage(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          return null;
-        }
-        return list
-            .map((item) => (() {
-        final map = _sdkworkAsMap(item);
-        return map == null ? null : EnvVariableResponse.fromJson(map);
-      })())
-            .whereType<EnvVariableResponse>()
-            .toList();
-      })(),
-      total: json['total']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items?.map((item) => item.toJson()).toList(),
-      'total': total,
     };
   }
 }
@@ -4612,42 +4434,6 @@ class CertificateResponse {
   }
 }
 
-class CertificatePage {
-  final List<CertificateResponse>? items;
-  final String? total;
-
-  CertificatePage({
-    this.items,
-    this.total
-  });
-
-  factory CertificatePage.fromJson(Map<String, dynamic> json) {
-    return CertificatePage(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          return null;
-        }
-        return list
-            .map((item) => (() {
-        final map = _sdkworkAsMap(item);
-        return map == null ? null : CertificateResponse.fromJson(map);
-      })())
-            .whereType<CertificateResponse>()
-            .toList();
-      })(),
-      total: json['total']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items?.map((item) => item.toJson()).toList(),
-      'total': total,
-    };
-  }
-}
-
 class CreateHealthCheckRequest {
   final int checkType;
   final String? checkUrl;
@@ -4726,42 +4512,6 @@ class HealthCheckResponse {
       'checkInterval': checkInterval,
       'status': status,
       'createdAt': createdAt,
-    };
-  }
-}
-
-class HealthCheckPage {
-  final List<HealthCheckResponse>? items;
-  final String? total;
-
-  HealthCheckPage({
-    this.items,
-    this.total
-  });
-
-  factory HealthCheckPage.fromJson(Map<String, dynamic> json) {
-    return HealthCheckPage(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          return null;
-        }
-        return list
-            .map((item) => (() {
-        final map = _sdkworkAsMap(item);
-        return map == null ? null : HealthCheckResponse.fromJson(map);
-      })())
-            .whereType<HealthCheckResponse>()
-            .toList();
-      })(),
-      total: json['total']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items?.map((item) => item.toJson()).toList(),
-      'total': total,
     };
   }
 }
@@ -4930,158 +4680,6 @@ class CreateArtifactRequest {
       'driveSpaceId': driveSpaceId,
       'driveNodeId': driveNodeId,
       'idempotencyKey': idempotencyKey,
-    };
-  }
-}
-
-class ArtifactPage {
-  final List<ArtifactResponse>? items;
-  final String? total;
-
-  ArtifactPage({
-    this.items,
-    this.total
-  });
-
-  factory ArtifactPage.fromJson(Map<String, dynamic> json) {
-    return ArtifactPage(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          return null;
-        }
-        return list
-            .map((item) => (() {
-        final map = _sdkworkAsMap(item);
-        return map == null ? null : ArtifactResponse.fromJson(map);
-      })())
-            .whereType<ArtifactResponse>()
-            .toList();
-      })(),
-      total: json['total']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items?.map((item) => item.toJson()).toList(),
-      'total': total,
-    };
-  }
-}
-
-class CreateReleaseRequest {
-  final String artifactId;
-  final String? versionTag;
-  final String idempotencyKey;
-
-  CreateReleaseRequest({
-    required this.artifactId,
-    this.versionTag,
-    required this.idempotencyKey
-  });
-
-  factory CreateReleaseRequest.fromJson(Map<String, dynamic> json) {
-    return CreateReleaseRequest(
-      artifactId: (() {
-        final value = json['artifactId']?.toString();
-        if (value == null) {
-          throw FormatException('CreateReleaseRequest.artifactId is required');
-        }
-        return value;
-      })(),
-      versionTag: json['versionTag']?.toString(),
-      idempotencyKey: (() {
-        final value = json['idempotencyKey']?.toString();
-        if (value == null) {
-          throw FormatException('CreateReleaseRequest.idempotencyKey is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'artifactId': artifactId,
-      'versionTag': versionTag,
-      'idempotencyKey': idempotencyKey,
-    };
-  }
-}
-
-class ReleaseResponse {
-  final String? id;
-  final String? siteId;
-  final String? artifactId;
-  final String? versionTag;
-  final int? status;
-  final String? createdAt;
-
-  ReleaseResponse({
-    this.id,
-    this.siteId,
-    this.artifactId,
-    this.versionTag,
-    this.status,
-    this.createdAt
-  });
-
-  factory ReleaseResponse.fromJson(Map<String, dynamic> json) {
-    return ReleaseResponse(
-      id: json['id']?.toString(),
-      siteId: json['siteId']?.toString(),
-      artifactId: json['artifactId']?.toString(),
-      versionTag: json['versionTag']?.toString(),
-      status: json['status'] is int ? json['status'] : null,
-      createdAt: json['createdAt']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'id': id,
-      'siteId': siteId,
-      'artifactId': artifactId,
-      'versionTag': versionTag,
-      'status': status,
-      'createdAt': createdAt,
-    };
-  }
-}
-
-class ReleasePage {
-  final List<ReleaseResponse>? items;
-  final String? total;
-
-  ReleasePage({
-    this.items,
-    this.total
-  });
-
-  factory ReleasePage.fromJson(Map<String, dynamic> json) {
-    return ReleasePage(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          return null;
-        }
-        return list
-            .map((item) => (() {
-        final map = _sdkworkAsMap(item);
-        return map == null ? null : ReleaseResponse.fromJson(map);
-      })())
-            .whereType<ReleaseResponse>()
-            .toList();
-      })(),
-      total: json['total']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items?.map((item) => item.toJson()).toList(),
-      'total': total,
     };
   }
 }
@@ -5358,105 +4956,6 @@ class SdkWorkApiResponse {
   }
 }
 
-class SdkWorkResourceData {
-  final Map<String, dynamic> item;
-
-  SdkWorkResourceData({
-    required this.item
-  });
-
-  factory SdkWorkResourceData.fromJson(Map<String, dynamic> json) {
-    return SdkWorkResourceData(
-      item: (() {
-        final map = _sdkworkAsMap(json['item']);
-        if (map == null) {
-          throw FormatException('SdkWorkResourceData.item is required');
-        }
-        return map;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'item': item,
-    };
-  }
-}
-
-class SdkWorkPageData {
-  final List<Map<String, dynamic>> items;
-  final PageInfo pageInfo;
-
-  SdkWorkPageData({
-    required this.items,
-    required this.pageInfo
-  });
-
-  factory SdkWorkPageData.fromJson(Map<String, dynamic> json) {
-    return SdkWorkPageData(
-      items: (() {
-        final list = _sdkworkAsList(json['items']);
-        if (list == null) {
-          throw FormatException('SdkWorkPageData.items is required');
-        }
-        return list
-            .map((item) => _sdkworkAsMap(item))
-            .whereType<Map<String, dynamic>>()
-            .toList();
-      })(),
-      pageInfo: (() {
-        final map = _sdkworkAsMap(json['pageInfo']);
-        if (map == null) {
-          throw FormatException('SdkWorkPageData.pageInfo is required');
-        }
-        return PageInfo.fromJson(map);
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'items': items.map((item) => item).toList(),
-      'pageInfo': pageInfo.toJson(),
-    };
-  }
-}
-
-class SdkWorkCommandData {
-  final bool accepted;
-  final String? resourceId;
-  final String? status;
-
-  SdkWorkCommandData({
-    required this.accepted,
-    this.resourceId,
-    this.status
-  });
-
-  factory SdkWorkCommandData.fromJson(Map<String, dynamic> json) {
-    return SdkWorkCommandData(
-      accepted: (() {
-        final value = json['accepted'];
-        if (value is! bool) {
-          throw FormatException('SdkWorkCommandData.accepted is required');
-        }
-        return value;
-      })(),
-      resourceId: json['resourceId']?.toString(),
-      status: json['status']?.toString()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'accepted': accepted,
-      'resourceId': resourceId,
-      'status': status,
-    };
-  }
-}
-
 class PageInfo {
   final String mode;
   final int? page;
@@ -5564,126 +5063,6 @@ class FieldError {
       'code': code,
       'i18nKey': i18nKey,
       'params': params?.map((key, item) => MapEntry(key, item)),
-    };
-  }
-}
-
-class SdkWorkResourceResponse {
-  final int code;
-  final dynamic data;
-  final String traceId;
-
-  SdkWorkResourceResponse({
-    required this.code,
-    required this.data,
-    required this.traceId
-  });
-
-  factory SdkWorkResourceResponse.fromJson(Map<String, dynamic> json) {
-    return SdkWorkResourceResponse(
-      code: (() {
-        final value = json['code'];
-        if (value is! int) {
-          throw FormatException('SdkWorkResourceResponse.code is required');
-        }
-        return value;
-      })(),
-      data: json['data'],
-      traceId: (() {
-        final value = json['traceId']?.toString();
-        if (value == null) {
-          throw FormatException('SdkWorkResourceResponse.traceId is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
-    };
-  }
-}
-
-class SdkWorkListResponse {
-  final int code;
-  final dynamic data;
-  final String traceId;
-
-  SdkWorkListResponse({
-    required this.code,
-    required this.data,
-    required this.traceId
-  });
-
-  factory SdkWorkListResponse.fromJson(Map<String, dynamic> json) {
-    return SdkWorkListResponse(
-      code: (() {
-        final value = json['code'];
-        if (value is! int) {
-          throw FormatException('SdkWorkListResponse.code is required');
-        }
-        return value;
-      })(),
-      data: json['data'],
-      traceId: (() {
-        final value = json['traceId']?.toString();
-        if (value == null) {
-          throw FormatException('SdkWorkListResponse.traceId is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
-    };
-  }
-}
-
-class SdkWorkCommandResponse {
-  final int code;
-  final dynamic data;
-  final String traceId;
-
-  SdkWorkCommandResponse({
-    required this.code,
-    required this.data,
-    required this.traceId
-  });
-
-  factory SdkWorkCommandResponse.fromJson(Map<String, dynamic> json) {
-    return SdkWorkCommandResponse(
-      code: (() {
-        final value = json['code'];
-        if (value is! int) {
-          throw FormatException('SdkWorkCommandResponse.code is required');
-        }
-        return value;
-      })(),
-      data: json['data'],
-      traceId: (() {
-        final value = json['traceId']?.toString();
-        if (value == null) {
-          throw FormatException('SdkWorkCommandResponse.traceId is required');
-        }
-        return value;
-      })()
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return <String, dynamic>{
-      'code': code,
-      'data': data,
-      'traceId': traceId,
     };
   }
 }
@@ -8973,6 +8352,539 @@ class EnvironmentPromotionResponse {
       'promotedBy': promotedBy,
       'note': note,
       'createdAt': createdAt,
+    };
+  }
+}
+
+class DownloadCatalogDocument {
+  final String schemaVersion;
+  final String generatedAt;
+  final DownloadProductDocument product;
+  final List<DownloadCardDocument> cards;
+
+  DownloadCatalogDocument({
+    required this.schemaVersion,
+    required this.generatedAt,
+    required this.product,
+    required this.cards
+  });
+
+  factory DownloadCatalogDocument.fromJson(Map<String, dynamic> json) {
+    return DownloadCatalogDocument(
+      schemaVersion: (() {
+        final value = json['schemaVersion']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCatalogDocument.schemaVersion is required');
+        }
+        return value;
+      })(),
+      generatedAt: (() {
+        final value = json['generatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCatalogDocument.generatedAt is required');
+        }
+        return value;
+      })(),
+      product: (() {
+        final map = _sdkworkAsMap(json['product']);
+        if (map == null) {
+          throw FormatException('DownloadCatalogDocument.product is required');
+        }
+        return DownloadProductDocument.fromJson(map);
+      })(),
+      cards: (() {
+        final list = _sdkworkAsList(json['cards']);
+        if (list == null) {
+          throw FormatException('DownloadCatalogDocument.cards is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : DownloadCardDocument.fromJson(map);
+      })())
+            .whereType<DownloadCardDocument>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'schemaVersion': schemaVersion,
+      'generatedAt': generatedAt,
+      'product': product.toJson(),
+      'cards': cards.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class DownloadProductDocument {
+  final String id;
+  final String name;
+  final String version;
+  final String? channel;
+
+  DownloadProductDocument({
+    required this.id,
+    required this.name,
+    required this.version,
+    this.channel
+  });
+
+  factory DownloadProductDocument.fromJson(Map<String, dynamic> json) {
+    return DownloadProductDocument(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadProductDocument.id is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final value = json['name']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadProductDocument.name is required');
+        }
+        return value;
+      })(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadProductDocument.version is required');
+        }
+        return value;
+      })(),
+      channel: json['channel']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'name': name,
+      'version': version,
+      'channel': channel,
+    };
+  }
+}
+
+class DownloadCardDocument {
+  final String id;
+  final String title;
+  final String description;
+  final String? icon;
+  final String? tone;
+  final String? kind;
+  final String? badge;
+  final String primaryActionStrategy;
+  final List<DownloadActionDocument> actions;
+
+  DownloadCardDocument({
+    required this.id,
+    required this.title,
+    required this.description,
+    this.icon,
+    this.tone,
+    this.kind,
+    this.badge,
+    required this.primaryActionStrategy,
+    required this.actions
+  });
+
+  factory DownloadCardDocument.fromJson(Map<String, dynamic> json) {
+    return DownloadCardDocument(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCardDocument.id is required');
+        }
+        return value;
+      })(),
+      title: (() {
+        final value = json['title']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCardDocument.title is required');
+        }
+        return value;
+      })(),
+      description: (() {
+        final value = json['description']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCardDocument.description is required');
+        }
+        return value;
+      })(),
+      icon: json['icon']?.toString(),
+      tone: json['tone']?.toString(),
+      kind: json['kind']?.toString(),
+      badge: json['badge']?.toString(),
+      primaryActionStrategy: (() {
+        final value = json['primaryActionStrategy']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCardDocument.primaryActionStrategy is required');
+        }
+        return value;
+      })(),
+      actions: (() {
+        final list = _sdkworkAsList(json['actions']);
+        if (list == null) {
+          throw FormatException('DownloadCardDocument.actions is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : DownloadActionDocument.fromJson(map);
+      })())
+            .whereType<DownloadActionDocument>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'title': title,
+      'description': description,
+      'icon': icon,
+      'tone': tone,
+      'kind': kind,
+      'badge': badge,
+      'primaryActionStrategy': primaryActionStrategy,
+      'actions': actions.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class DownloadActionDocument {
+  final String id;
+  final String label;
+  final String platform;
+  final String architecture;
+  final String href;
+  final String? fileName;
+  final String? version;
+  final String? releaseTag;
+  final int? sizeBytes;
+  final String? sha256;
+  final bool primary;
+  final bool disabled;
+  final String? unavailableLabel;
+
+  DownloadActionDocument({
+    required this.id,
+    required this.label,
+    required this.platform,
+    required this.architecture,
+    required this.href,
+    this.fileName,
+    this.version,
+    this.releaseTag,
+    this.sizeBytes,
+    this.sha256,
+    required this.primary,
+    required this.disabled,
+    this.unavailableLabel
+  });
+
+  factory DownloadActionDocument.fromJson(Map<String, dynamic> json) {
+    return DownloadActionDocument(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadActionDocument.id is required');
+        }
+        return value;
+      })(),
+      label: (() {
+        final value = json['label']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadActionDocument.label is required');
+        }
+        return value;
+      })(),
+      platform: (() {
+        final value = json['platform']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadActionDocument.platform is required');
+        }
+        return value;
+      })(),
+      architecture: (() {
+        final value = json['architecture']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadActionDocument.architecture is required');
+        }
+        return value;
+      })(),
+      href: (() {
+        final value = json['href']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadActionDocument.href is required');
+        }
+        return value;
+      })(),
+      fileName: json['fileName']?.toString(),
+      version: json['version']?.toString(),
+      releaseTag: json['releaseTag']?.toString(),
+      sizeBytes: json['sizeBytes'] is int ? json['sizeBytes'] : null,
+      sha256: json['sha256']?.toString(),
+      primary: (() {
+        final value = json['primary'];
+        if (value is! bool) {
+          throw FormatException('DownloadActionDocument.primary is required');
+        }
+        return value;
+      })(),
+      disabled: (() {
+        final value = json['disabled'];
+        if (value is! bool) {
+          throw FormatException('DownloadActionDocument.disabled is required');
+        }
+        return value;
+      })(),
+      unavailableLabel: json['unavailableLabel']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'label': label,
+      'platform': platform,
+      'architecture': architecture,
+      'href': href,
+      'fileName': fileName,
+      'version': version,
+      'releaseTag': releaseTag,
+      'sizeBytes': sizeBytes,
+      'sha256': sha256,
+      'primary': primary,
+      'disabled': disabled,
+      'unavailableLabel': unavailableLabel,
+    };
+  }
+}
+
+class DownloadUpdateConfigDocument {
+  final String schemaVersion;
+  final String catalogKey;
+  final String itemKey;
+  final String productKey;
+  final String platform;
+  final String architecture;
+  final String? version;
+  final String revision;
+  final DownloadUpdateSettingsDocument update;
+
+  DownloadUpdateConfigDocument({
+    required this.schemaVersion,
+    required this.catalogKey,
+    required this.itemKey,
+    required this.productKey,
+    required this.platform,
+    required this.architecture,
+    this.version,
+    required this.revision,
+    required this.update
+  });
+
+  factory DownloadUpdateConfigDocument.fromJson(Map<String, dynamic> json) {
+    return DownloadUpdateConfigDocument(
+      schemaVersion: (() {
+        final value = json['schemaVersion']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.schemaVersion is required');
+        }
+        return value;
+      })(),
+      catalogKey: (() {
+        final value = json['catalogKey']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.catalogKey is required');
+        }
+        return value;
+      })(),
+      itemKey: (() {
+        final value = json['itemKey']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.itemKey is required');
+        }
+        return value;
+      })(),
+      productKey: (() {
+        final value = json['productKey']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.productKey is required');
+        }
+        return value;
+      })(),
+      platform: (() {
+        final value = json['platform']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.platform is required');
+        }
+        return value;
+      })(),
+      architecture: (() {
+        final value = json['architecture']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.architecture is required');
+        }
+        return value;
+      })(),
+      version: json['version']?.toString(),
+      revision: (() {
+        final value = json['revision']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateConfigDocument.revision is required');
+        }
+        return value;
+      })(),
+      update: (() {
+        final map = _sdkworkAsMap(json['update']);
+        if (map == null) {
+          throw FormatException('DownloadUpdateConfigDocument.update is required');
+        }
+        return DownloadUpdateSettingsDocument.fromJson(map);
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'schemaVersion': schemaVersion,
+      'catalogKey': catalogKey,
+      'itemKey': itemKey,
+      'productKey': productKey,
+      'platform': platform,
+      'architecture': architecture,
+      'version': version,
+      'revision': revision,
+      'update': update.toJson(),
+    };
+  }
+}
+
+class DownloadUpdateSettingsDocument {
+  final bool enabled;
+  final String provider;
+  final String? feedUrl;
+  final String? githubOwner;
+  final String? githubRepo;
+  final String channel;
+  final String? channelFile;
+  final List<String> allowedChannels;
+  final bool allowPrerelease;
+  final bool allowDowngrade;
+  final String? minimumSupportedVersion;
+  final int checkIntervalMinutes;
+  final int rolloutPercentage;
+  final String? releaseNotesUrl;
+
+  DownloadUpdateSettingsDocument({
+    required this.enabled,
+    required this.provider,
+    this.feedUrl,
+    this.githubOwner,
+    this.githubRepo,
+    required this.channel,
+    this.channelFile,
+    required this.allowedChannels,
+    required this.allowPrerelease,
+    required this.allowDowngrade,
+    this.minimumSupportedVersion,
+    required this.checkIntervalMinutes,
+    required this.rolloutPercentage,
+    this.releaseNotesUrl
+  });
+
+  factory DownloadUpdateSettingsDocument.fromJson(Map<String, dynamic> json) {
+    return DownloadUpdateSettingsDocument(
+      enabled: (() {
+        final value = json['enabled'];
+        if (value is! bool) {
+          throw FormatException('DownloadUpdateSettingsDocument.enabled is required');
+        }
+        return value;
+      })(),
+      provider: (() {
+        final value = json['provider']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateSettingsDocument.provider is required');
+        }
+        return value;
+      })(),
+      feedUrl: json['feedUrl']?.toString(),
+      githubOwner: json['githubOwner']?.toString(),
+      githubRepo: json['githubRepo']?.toString(),
+      channel: (() {
+        final value = json['channel']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadUpdateSettingsDocument.channel is required');
+        }
+        return value;
+      })(),
+      channelFile: json['channelFile']?.toString(),
+      allowedChannels: (() {
+        final list = _sdkworkAsList(json['allowedChannels']);
+        if (list == null) {
+          throw FormatException('DownloadUpdateSettingsDocument.allowedChannels is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      allowPrerelease: (() {
+        final value = json['allowPrerelease'];
+        if (value is! bool) {
+          throw FormatException('DownloadUpdateSettingsDocument.allowPrerelease is required');
+        }
+        return value;
+      })(),
+      allowDowngrade: (() {
+        final value = json['allowDowngrade'];
+        if (value is! bool) {
+          throw FormatException('DownloadUpdateSettingsDocument.allowDowngrade is required');
+        }
+        return value;
+      })(),
+      minimumSupportedVersion: json['minimumSupportedVersion']?.toString(),
+      checkIntervalMinutes: (() {
+        final value = json['checkIntervalMinutes'];
+        if (value is! int) {
+          throw FormatException('DownloadUpdateSettingsDocument.checkIntervalMinutes is required');
+        }
+        return value;
+      })(),
+      rolloutPercentage: (() {
+        final value = json['rolloutPercentage'];
+        if (value is! int) {
+          throw FormatException('DownloadUpdateSettingsDocument.rolloutPercentage is required');
+        }
+        return value;
+      })(),
+      releaseNotesUrl: json['releaseNotesUrl']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'enabled': enabled,
+      'provider': provider,
+      'feedUrl': feedUrl,
+      'githubOwner': githubOwner,
+      'githubRepo': githubRepo,
+      'channel': channel,
+      'channelFile': channelFile,
+      'allowedChannels': allowedChannels.map((item) => item).toList(),
+      'allowPrerelease': allowPrerelease,
+      'allowDowngrade': allowDowngrade,
+      'minimumSupportedVersion': minimumSupportedVersion,
+      'checkIntervalMinutes': checkIntervalMinutes,
+      'rolloutPercentage': rolloutPercentage,
+      'releaseNotesUrl': releaseNotesUrl,
     };
   }
 }
@@ -13654,6 +13566,86 @@ class AppTemplateVersionsCreateResponse201 {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AppTemplateVersionsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DownloadCatalogPublicRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DownloadCatalogPublicRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DownloadCatalogPublicRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return DownloadCatalogPublicRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DownloadCatalogPublicRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: json['data'],
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadCatalogPublicRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class DownloadConfigRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  DownloadConfigRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory DownloadConfigRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return DownloadConfigRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('DownloadConfigRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: json['data'],
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('DownloadConfigRetrieveResponse.traceId is required');
         }
         return value;
       })()

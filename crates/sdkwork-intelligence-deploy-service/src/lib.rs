@@ -15,6 +15,7 @@ pub mod certificate_renewal;
 pub mod cloud_accounts;
 pub mod domain_dns_records;
 pub mod domain_verification;
+pub mod downloads;
 pub mod entitlement;
 pub mod repository;
 pub mod runtime_publication;

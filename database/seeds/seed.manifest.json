@@ -40,7 +40,50 @@
       }
     },
     "standard": {
-      "common": [],
+      "common": [
+        "common/010_birdcoder_catalog_core.sql",
+        "common/014_birdcoder_catalog_production.sql"
+      ],
+      "locales": {
+        "zh-CN": [],
+        "en-US": []
+      }
+    },
+    "test": {
+      "common": [
+        "common/010_birdcoder_catalog_core.sql",
+        "common/011_birdcoder_catalog_test.sql"
+      ],
+      "locales": {
+        "zh-CN": [],
+        "en-US": []
+      }
+    },
+    "development": {
+      "common": [
+        "common/010_birdcoder_catalog_core.sql",
+        "common/012_birdcoder_catalog_development.sql"
+      ],
+      "locales": {
+        "zh-CN": [],
+        "en-US": []
+      }
+    },
+    "staging": {
+      "common": [
+        "common/010_birdcoder_catalog_core.sql",
+        "common/013_birdcoder_catalog_staging.sql"
+      ],
+      "locales": {
+        "zh-CN": [],
+        "en-US": []
+      }
+    },
+    "production": {
+      "common": [
+        "common/010_birdcoder_catalog_core.sql",
+        "common/014_birdcoder_catalog_production.sql"
+      ],
       "locales": {
         "zh-CN": [],
         "en-US": []

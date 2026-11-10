@@ -1941,6 +1941,155 @@ impl DeployRepositoryPort for DeployRepository {
         self.review_app_template_repo(tenant_id, operator_id, template_uuid, request)
             .await
     }
+    // -- download catalog ---------------------------------------------------
+
+    async fn list_download_catalogs(
+        &self,
+        tenant_id: Option<i64>,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        Vec<sdkwork_deploy_contract::DownloadCatalogSummaryDto>,
+    > {
+        self.list_download_catalogs_repo(tenant_id).await
+    }
+
+    async fn retrieve_download_catalog(
+        &self,
+        tenant_id: Option<i64>,
+        catalog_key: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::DownloadCatalogDto>
+    {
+        self.retrieve_download_catalog_repo(tenant_id, catalog_key)
+            .await
+    }
+
+    async fn upsert_download_catalog(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        request: &sdkwork_deploy_contract::UpsertDownloadCatalogRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::DownloadCatalogDto>
+    {
+        self.upsert_download_catalog_repo(tenant_id, operator_id, catalog_key, request)
+            .await
+    }
+
+    async fn publish_download_catalog(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::DownloadCatalogDto>
+    {
+        self.publish_download_catalog_repo(tenant_id, operator_id, catalog_key)
+            .await
+    }
+
+    async fn upsert_download_card(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        card_key: &str,
+        request: &sdkwork_deploy_contract::UpsertDownloadCardRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::DownloadCardDto>
+    {
+        self.upsert_download_card_repo(tenant_id, operator_id, catalog_key, card_key, request)
+            .await
+    }
+
+    async fn delete_download_card(
+        &self,
+        tenant_id: i64,
+        catalog_key: &str,
+        card_key: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
+        self.delete_download_card_repo(tenant_id, catalog_key, card_key)
+            .await
+    }
+
+    async fn upsert_download_item(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        card_key: &str,
+        item_key: &str,
+        request: &sdkwork_deploy_contract::UpsertDownloadItemRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::DownloadItemDto>
+    {
+        self.upsert_download_item_repo(
+            tenant_id,
+            operator_id,
+            catalog_key,
+            card_key,
+            item_key,
+            request,
+        )
+        .await
+    }
+
+    async fn delete_download_item(
+        &self,
+        tenant_id: i64,
+        catalog_key: &str,
+        card_key: &str,
+        item_key: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
+        self.delete_download_item_repo(tenant_id, catalog_key, card_key, item_key)
+            .await
+    }
+
+    async fn upsert_download_update(
+        &self,
+        tenant_id: i64,
+        operator_id: Option<i64>,
+        catalog_key: &str,
+        card_key: &str,
+        item_key: &str,
+        request: &sdkwork_deploy_contract::UpsertDownloadUpdateRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::DownloadUpdateDto>
+    {
+        self.upsert_download_update_repo(
+            tenant_id,
+            operator_id,
+            catalog_key,
+            card_key,
+            item_key,
+            request,
+        )
+        .await
+    }
+
+    async fn published_download_catalogs(
+        &self,
+        catalog_key: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        Vec<sdkwork_deploy_contract::DownloadCatalogDto>,
+    > {
+        self.published_download_catalogs_repo(catalog_key).await
+    }
+
+    async fn published_download_record(
+        &self,
+        product_key: &str,
+        platform: &str,
+        architecture: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        Option<sdkwork_intelligence_deploy_service::repository::PublishedDownloadRecord>,
+    > {
+        self.published_download_record_repo(product_key, platform, architecture)
+            .await
+    }
+
+    async fn published_download_record_by_item(
+        &self,
+        item_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        Option<sdkwork_intelligence_deploy_service::repository::PublishedDownloadRecord>,
+    > {
+        self.published_download_record_by_item_repo(item_uuid).await
+    }
 }
 #[async_trait]
 impl DeployRuntimeAssignmentRepositoryPort for DeployRepository {

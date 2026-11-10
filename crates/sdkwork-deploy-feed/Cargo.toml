@@ -1,0 +1,17 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-feed"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sdkwork-deploy-contract.workspace = true
+sdkwork-utils-rust.workspace = true
+
+[dev-dependencies]

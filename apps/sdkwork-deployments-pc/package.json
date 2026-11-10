@@ -33,6 +33,7 @@
     "@sdkwork/deployments-backend-sdk": "workspace:*",
     "@sdkwork/deployments-pc-admin-app-templates": "workspace:*",
     "@sdkwork/deployments-pc-admin-audit": "workspace:*",
+    "@sdkwork/deployments-pc-admin-downloads": "workspace:*",
     "@sdkwork/deployments-pc-admin-core": "workspace:*",
     "@sdkwork/deployments-pc-admin-infrastructure": "workspace:*",
     "@sdkwork/deployments-pc-admin-local-projects": "workspace:*",

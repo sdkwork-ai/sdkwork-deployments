@@ -1,0 +1,17 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-download-catalog-importer"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+sdkwork-deploy-contract.workspace = true
+sdkwork-intelligence-deploy-service.workspace = true
+sdkwork-intelligence-deploy-repository-sqlx.workspace = true

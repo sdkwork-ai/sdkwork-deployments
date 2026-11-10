@@ -13,3 +13,4 @@ export { UsageApi, createUsageApi } from './usage';
 export { SigningHealthApi, createSigningHealthApi } from './signing-health';
 export { SourceEventsApi, createSourceEventsApi } from './source-events';
 export { TemplateApi, createTemplateApi } from './template';
+export { DownloadCatalogApi, createDownloadCatalogApi } from './download-catalog';

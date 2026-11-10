@@ -308,6 +308,64 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "appTemplateVersions.retrieve",
     )
     .with_required_permission("deploy.appTemplateVersions.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/downloads/catalogs",
+        "downloadCatalog",
+        "downloadCatalog.list",
+    ),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}",
+        "downloadCatalog",
+        "downloadCatalog.retrieve",
+    ),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}",
+        "downloadCatalog",
+        "downloadCatalog.upsert",
+    )
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}/publish",
+        "downloadCatalog",
+        "downloadCatalog.publish",
+    ),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
+        "downloadCatalog",
+        "downloadCard.upsert",
+    )
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
+        "downloadCatalog",
+        "downloadCard.delete",
+    ),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
+        "downloadCatalog",
+        "downloadItem.upsert",
+    )
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
+        "downloadCatalog",
+        "downloadItem.delete",
+    ),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update",
+        "downloadCatalog",
+        "downloadUpdate.upsert",
+    )
+    .with_idempotent(true),
 ];
 
 pub fn backend_route_manifest() -> HttpRouteManifest {

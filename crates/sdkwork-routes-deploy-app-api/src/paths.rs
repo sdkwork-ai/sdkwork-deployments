@@ -98,3 +98,11 @@ pub const APP_TEMPLATES: &str = "/app/v3/api/app_templates";
 pub const APP_TEMPLATE: &str = "/app/v3/api/app_templates/{templateUuid}";
 pub const APP_TEMPLATE_SUBMIT: &str = "/app/v3/api/app_templates/{templateUuid}/submit";
 pub const APP_TEMPLATE_VERSIONS: &str = "/app/v3/api/app_templates/{templateUuid}/versions";
+
+// -- download catalog (public) -------------------------------------------------
+
+pub const DOWNLOAD_CATALOG: &str = "/app/v3/api/downloads/catalog/{catalogKey}";
+pub const DOWNLOAD_CONFIG: &str = "/app/v3/api/downloads/config";
+pub const DOWNLOAD_FEED: &str =
+    "/app/v3/api/downloads/feed/{productKey}/{platform}/{architecture}/{channelFile}";
+pub const DOWNLOAD_ARTIFACT: &str = "/app/v3/api/downloads/artifact/{itemUuid}";

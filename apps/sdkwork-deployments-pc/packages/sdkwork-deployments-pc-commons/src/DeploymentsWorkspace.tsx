@@ -1,4 +1,4 @@
-import { Activity, AppWindow, Boxes, FileKey2, FolderTree, Globe2, Layers, ListTree, LogOut, Network, Package, PackageOpen, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shapes, Shield, Store, Tags, Upload, X } from "lucide-react";
+import { Activity, AppWindow, Boxes, Download, FileKey2, FolderTree, Globe2, Layers, ListTree, LogOut, Network, Package, PackageOpen, RefreshCw, Rocket, ScrollText, Search, Server, ServerCog, Settings2, Shapes, Shield, Store, Tags, Upload, X } from "lucide-react";
 import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
@@ -214,6 +214,7 @@ function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
     appTemplateVersions: Boxes,
     marketplace: Store,
     myTemplates: PackageOpen,
+    downloadCatalog: Download,
   } satisfies Record<DeploymentsResourceKey, typeof AppWindow>;
   const Icon = icons[resource];
   return <Icon size={17} />;

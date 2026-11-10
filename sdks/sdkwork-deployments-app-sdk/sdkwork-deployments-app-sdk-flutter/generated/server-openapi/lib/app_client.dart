@@ -16,6 +16,7 @@ import 'src/api/usage.dart';
 import 'src/api/app_database.dart';
 import 'src/api/app_environment.dart';
 import 'src/api/template.dart';
+import 'src/api/downloads.dart';
 
 class SdkworkAppClient {
   final HttpClient _httpClient;
@@ -36,6 +37,7 @@ class SdkworkAppClient {
   late final AppDatabaseApi appDatabase;
   late final AppEnvironmentApi appEnvironment;
   late final TemplateApi template;
+  late final DownloadsApi downloads;
 
   SdkworkAppClient({
     required SdkConfig config,
@@ -56,6 +58,7 @@ class SdkworkAppClient {
     appDatabase = AppDatabaseApi(_httpClient);
     appEnvironment = AppEnvironmentApi(_httpClient);
     template = TemplateApi(_httpClient);
+    downloads = DownloadsApi(_httpClient);
   }
 
   factory SdkworkAppClient.withBaseUrl({

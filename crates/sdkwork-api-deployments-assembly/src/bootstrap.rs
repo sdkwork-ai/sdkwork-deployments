@@ -6,13 +6,14 @@ use sdkwork_deploy_service_host::bootstrap_deploy_service_host_from_env;
 use sdkwork_intelligence_deploy_service::DeployService;
 use sdkwork_routes_deploy_app_api::{
     build_certificate_management_router, build_cloud_account_router,
-    build_domain_management_router, deploy_app_api_domain_context_injectors,
-    domain_certificate_route_manifest, gateway_mount as mount_app,
-    gateway_route_manifest as app_route_manifest,
+    build_domain_management_router, build_downloads_public_router,
+    deploy_app_api_domain_context_injectors, domain_certificate_route_manifest,
+    gateway_mount as mount_app, gateway_route_manifest as app_route_manifest,
     wrap_router_with_web_framework_from_env as wrap_app, AppState,
 };
 use sdkwork_routes_deploy_backend_api::{
-    gateway_mount as mount_backend, gateway_route_manifest as backend_route_manifest,
+    build_downloads_backend_router, gateway_mount as mount_backend,
+    gateway_route_manifest as backend_route_manifest,
     wrap_router_with_web_framework_from_env as wrap_backend,
 };
 use sdkwork_web_bootstrap::{ApiAssemblyContribution, ReadinessCheck, ReadinessFuture, WebModule};
@@ -48,8 +49,13 @@ pub async fn assemble_api_router_with_pool(pool: DatabasePool) -> Result<ApiAsse
 async fn assemble_business_routes_with_service(
     service: Arc<DeployService>,
 ) -> Result<ApiAssembly, String> {
-    let app = wrap_app(mount_app(service.clone())).await;
-    let backend = wrap_backend(mount_backend(service.clone())).await;
+    let app =
+        wrap_app(mount_app(service.clone()).merge(build_downloads_public_router(service.clone())))
+            .await;
+    let backend = wrap_backend(
+        mount_backend(service.clone()).merge(build_downloads_backend_router(service.clone())),
+    )
+    .await;
     let router = Router::new()
         .merge(app)
         .merge(backend)

@@ -57,6 +57,15 @@ export type { UsageReconciliationResponse } from './usage-reconciliation-respons
 export type { SigningIdentityHealthResponse } from './signing-identity-health-response';
 export type { SourceEventResponse } from './source-event-response';
 export type { SourceEventIngestResponse } from './source-event-ingest-response';
+export type { DownloadUpdateResponse } from './download-update-response';
+export type { DownloadUpdateUpsertRequest } from './download-update-upsert-request';
+export type { DownloadItemResponse } from './download-item-response';
+export type { DownloadItemUpsertRequest } from './download-item-upsert-request';
+export type { DownloadCardResponse } from './download-card-response';
+export type { DownloadCardUpsertRequest } from './download-card-upsert-request';
+export type { DownloadCatalogSummaryResponse } from './download-catalog-summary-response';
+export type { DownloadCatalogResponse } from './download-catalog-response';
+export type { DownloadCatalogUpsertRequest } from './download-catalog-upsert-request';
 export type { ConfigsListResponse } from './configs-list-response';
 export type { ConfigsCreateResponse201 } from './configs-create-response201';
 export type { ConfigsRetrieveResponse } from './configs-retrieve-response';
@@ -100,3 +109,10 @@ export type { AppTemplatesRetrieveResponse } from './app-templates-retrieve-resp
 export type { AppTemplatesUpdateResponse } from './app-templates-update-response';
 export type { AppTemplateVersionsListResponse } from './app-template-versions-list-response';
 export type { AppTemplateVersionsRetrieveResponse } from './app-template-versions-retrieve-response';
+export type { DownloadCatalogListResponse } from './download-catalog-list-response';
+export type { DownloadCatalogRetrieveResponse } from './download-catalog-retrieve-response';
+export type { DownloadCatalogUpsertResponse } from './download-catalog-upsert-response';
+export type { DownloadCatalogPublishResponse } from './download-catalog-publish-response';
+export type { DownloadCardUpsertResponse } from './download-card-upsert-response';
+export type { DownloadItemUpsertResponse } from './download-item-upsert-response';
+export type { DownloadUpdateUpsertResponse } from './download-update-upsert-response';

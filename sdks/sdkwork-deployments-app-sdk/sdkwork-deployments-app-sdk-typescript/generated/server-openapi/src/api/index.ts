@@ -16,3 +16,4 @@ export { UsageApi, createUsageApi } from './usage';
 export { AppDatabaseApi, createAppDatabaseApi } from './app-database';
 export { AppEnvironmentApi, createAppEnvironmentApi } from './app-environment';
 export { TemplateApi, createTemplateApi } from './template';
+export { DownloadsApi, createDownloadsApi } from './downloads';

@@ -16,8 +16,8 @@ use sdkwork_drive_app_sdk_generated_rust::{
 };
 use sdkwork_drive_internal_sdk_generated_rust::SdkworkCustomClient as DriveInternalClient;
 use sdkwork_knowledgebase_internal_sdk::SdkworkCustomClient as KnowledgebaseInternalClient;
-use sdkwork_utils_rust::string::trim;
 use sdkwork_utils_rust::service_base_url::registry_base_url_or;
+use sdkwork_utils_rust::string::trim;
 
 use crate::{
     ContentProviderPort, ProviderRequestCredentials, ValidateContentProviderResourceCommand,
@@ -106,10 +106,8 @@ impl SdkContentProviderPort {
     }
 
     fn knowledgebase_internal_client(&self) -> DeployServiceResult<KnowledgebaseInternalClient> {
-        let base_url = registry_base_url_or(
-            "sdkwork-knowledgebase",
-            &self.knowledgebase_internal_url,
-        );
+        let base_url =
+            registry_base_url_or("sdkwork-knowledgebase", &self.knowledgebase_internal_url);
         let client = KnowledgebaseInternalClient::new_with_base_url(&base_url)
             .map_err(|_| provider_unavailable("Knowledgebase Internal API"))?;
         client.set_api_key(read_secret_file(

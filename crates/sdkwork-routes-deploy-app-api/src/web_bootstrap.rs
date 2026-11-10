@@ -17,7 +17,9 @@ use crate::http_route_manifest::app_route_manifest;
 use crate::paths;
 
 pub fn deploy_app_api_public_path_prefixes() -> Vec<String> {
-    Vec::new()
+    // The download catalog, update configuration, feed and artifact endpoints
+    // are read by anonymous visitors and by desktop clients without a session.
+    vec!["/app/v3/api/downloads/".to_owned()]
 }
 
 pub fn deploy_app_api_prefixes() -> Vec<String> {

@@ -38,3 +38,15 @@ pub const APP_TEMPLATE: &str = "/backend/v3/api/app_templates/{templateUuid}";
 pub const APP_TEMPLATE_VERSIONS: &str = "/backend/v3/api/app_templates/{templateUuid}/versions";
 pub const APP_TEMPLATE_VERSION: &str =
     "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}";
+
+// -- download catalog (admin) --------------------------------------------------
+
+pub const DOWNLOADS_CATALOGS: &str = "/backend/v3/api/downloads/catalogs";
+pub const DOWNLOADS_CATALOG: &str = "/backend/v3/api/downloads/catalogs/{catalogKey}";
+pub const DOWNLOADS_CATALOG_PUBLISH: &str =
+    "/backend/v3/api/downloads/catalogs/{catalogKey}/publish";
+pub const DOWNLOADS_CARD: &str = "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}";
+pub const DOWNLOADS_ITEM: &str =
+    "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}";
+pub const DOWNLOADS_UPDATE: &str =
+    "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update";

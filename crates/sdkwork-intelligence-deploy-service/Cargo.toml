@@ -10,6 +10,7 @@ workspace = true
 [dependencies]
 async-trait.workspace = true
 sdkwork-deploy-contract.workspace = true
+sdkwork-deploy-feed.workspace = true
 sdkwork-deploy-core.workspace = true
 sdkwork-deploy-certificate-material.workspace = true
 sdkwork-deploy-cloud-account-port.workspace = true

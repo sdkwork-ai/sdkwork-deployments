@@ -2,6 +2,10 @@ import { deploymentsModule as adminAppTemplates } from "@sdkwork/deployments-pc-
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { sourceSpecsModule, SourceSpecsAdminPage } from "@sdkwork/deployments-pc-admin-core";
 import { deploymentsModule as adminAudit } from "@sdkwork/deployments-pc-admin-audit";
+import {
+  deploymentsModule as adminDownloads,
+  DownloadCatalogPage,
+} from "@sdkwork/deployments-pc-admin-downloads";
 import { deploymentsModule as infrastructure } from "@sdkwork/deployments-pc-admin-infrastructure";
 import {
   deploymentsModule as localProjects,
@@ -50,13 +54,13 @@ function MyTemplatesBridge({ locale }: { locale: DeploymentsLocale }) {
 }
 
 const consoleResourcePages = { apps: PublishingAppsBridge, marketplace: MarketplaceBridge, myTemplates: MyTemplatesBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
-const adminModules = [localProjects, infrastructure, adminNodes, adminAppTemplates, adminAudit, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
+const adminModules = [localProjects, infrastructure, adminNodes, adminAppTemplates, adminAudit, adminDownloads, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
 /**
  * The source-specs ledger mounts straight from the capability that owns the
  * vocabulary: unlike `PublishingAppsBridge`, it needs no clients injected —
  * it reads through its port from context. So the component goes in as-is.
  */
-const adminResourcePages = { localProjects: LocalProjectsPage, sourceSpecs: SourceSpecsAdminPage } as const;
+const adminResourcePages = { localProjects: LocalProjectsPage, sourceSpecs: SourceSpecsAdminPage, downloadCatalog: DownloadCatalogPage } as const;
 const LazyAuth = lazy(() => import("./auth/DeploymentsAuthRoutes.tsx").then((module) => ({ default: module.DeploymentsAuthRoutes })));
 const LazyAdmin = lazy(() => import("./surfaces/DeploymentsAdminSurface.tsx").then((module) => ({ default: module.DeploymentsAdminSurface })));
 

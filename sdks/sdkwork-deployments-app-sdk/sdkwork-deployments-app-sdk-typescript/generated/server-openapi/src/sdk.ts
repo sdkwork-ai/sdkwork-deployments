@@ -18,6 +18,7 @@ import { UsageApi, createUsageApi } from './api/usage';
 import { AppDatabaseApi, createAppDatabaseApi } from './api/app-database';
 import { AppEnvironmentApi, createAppEnvironmentApi } from './api/app-environment';
 import { TemplateApi, createTemplateApi } from './api/template';
+import { DownloadsApi, createDownloadsApi } from './api/downloads';
 
 export class SdkworkDeployAppClient {
   private httpClient: HttpClient;
@@ -38,6 +39,7 @@ export class SdkworkDeployAppClient {
   public readonly appDatabase: AppDatabaseApi;
   public readonly appEnvironment: AppEnvironmentApi;
   public readonly template: TemplateApi;
+  public readonly downloads: DownloadsApi;
 
   constructor(config: SdkworkAppConfig) {
     this.httpClient = createHttpClient(config);
@@ -72,6 +74,8 @@ export class SdkworkDeployAppClient {
     this.appEnvironment = createAppEnvironmentApi(this.httpClient);
 
     this.template = createTemplateApi(this.httpClient);
+
+    this.downloads = createDownloadsApi(this.httpClient);
   }
   setAuthToken(token: string): this {
     this.httpClient.setAuthToken(token);

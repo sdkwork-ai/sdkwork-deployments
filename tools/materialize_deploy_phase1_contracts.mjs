@@ -289,6 +289,7 @@ function extractRoutes(openapi, profile) {
 }
 
 function httpRouteAuthHelper(authMode) {
+  if (authMode === "public" || authMode === "anonymous") return "public";
   return authMode === "api-key" ? "api_key" : "dual_token";
 }
 

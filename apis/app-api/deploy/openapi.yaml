@@ -5279,6 +5279,181 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/downloads/catalog/{catalogKey}:
+    get:
+      operationId: downloadCatalog.publicRetrieve
+      summary: Published download catalog rendered by the download page
+      description: 'Anonymous surface: only PUBLISHED catalogs are reachable, hidden cards and disabled installers are omitted, and no tenant identifier is returned.'
+      tags:
+      - downloads
+      security: []
+      x-sdkwork-auth-mode: anonymous
+      x-sdkwork-permission: false
+      parameters:
+      - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadCatalogDocument'
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/downloads/config:
+    get:
+      operationId: downloadConfig.retrieve
+      summary: Update configuration for one installer, read by desktop clients
+      tags:
+      - downloads
+      security: []
+      x-sdkwork-auth-mode: anonymous
+      x-sdkwork-permission: false
+      parameters:
+      - name: product_key
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: platform
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - windows
+          - macos
+          - linux
+          - android
+          - ios
+          - harmonyos
+          - docker
+          - helm
+          - generic
+      - name: architecture
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - x64
+          - arm64
+          - universal
+      - name: channel
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - nightly
+          - stable
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DownloadUpdateConfigDocument'
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/downloads/feed/{productKey}/{platform}/{architecture}/{channelFile}:
+    get:
+      operationId: downloadFeed.retrieve
+      x-sdkwork-wire-protocol: external
+      x-sdkwork-external-protocol-id: electron-updater-feed
+      summary: electron-updater channel file generated from the published release
+      description: 'Returned as raw YAML, not wrapped in the JSON envelope: this is the document electron-updater parses.'
+      tags:
+      - downloads
+      security: []
+      x-sdkwork-auth-mode: anonymous
+      x-sdkwork-permission: false
+      parameters:
+      - name: productKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: platform
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: architecture
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: channelFile
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: electron-updater channel document
+          content:
+            text/yaml:
+              schema:
+                type: string
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/downloads/artifact/{itemUuid}:
+    get:
+      operationId: downloadArtifact.redirect
+      x-sdkwork-wire-protocol: external
+      x-sdkwork-external-protocol-id: download-artifact
+      summary: Stable redirect to the installer's current download location
+      tags:
+      - downloads
+      security: []
+      x-sdkwork-auth-mode: anonymous
+      x-sdkwork-permission: false
+      parameters:
+      - name: itemUuid
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '302':
+          description: Redirect to the installer
+          headers:
+            Location:
+              schema:
+                type: string
+        '404':
+          description: Resource not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 components:
   securitySchemes:
     AuthToken:
@@ -5371,6 +5546,12 @@ components:
       schema:
         type: string
         format: uuid
+    DownloadCatalogKeyParam:
+      name: catalogKey
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     TemplateCategoryResponse:
       type: object
@@ -10108,6 +10289,189 @@ components:
         createdAt:
           type: string
           format: date-time
+    DownloadCatalogDocument:
+      type: object
+      additionalProperties: false
+      required:
+      - schemaVersion
+      - generatedAt
+      - product
+      - cards
+      properties:
+        schemaVersion:
+          type: string
+        generatedAt:
+          type: string
+        product:
+          $ref: '#/components/schemas/DownloadProductDocument'
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadCardDocument'
+    DownloadProductDocument:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - name
+      - version
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        channel:
+          type: string
+    DownloadCardDocument:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - title
+      - description
+      - primaryActionStrategy
+      - actions
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        tone:
+          type: string
+        kind:
+          type: string
+        badge:
+          type: string
+        primaryActionStrategy:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadActionDocument'
+    DownloadActionDocument:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - label
+      - platform
+      - architecture
+      - href
+      - primary
+      - disabled
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        platform:
+          type: string
+        architecture:
+          type: string
+        href:
+          type: string
+        fileName:
+          type: string
+        version:
+          type: string
+        releaseTag:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        sha256:
+          type: string
+        primary:
+          type: boolean
+        disabled:
+          type: boolean
+        unavailableLabel:
+          type: string
+    DownloadUpdateConfigDocument:
+      type: object
+      additionalProperties: false
+      required:
+      - schemaVersion
+      - catalogKey
+      - itemKey
+      - productKey
+      - platform
+      - architecture
+      - revision
+      - update
+      properties:
+        schemaVersion:
+          type: string
+        catalogKey:
+          type: string
+        itemKey:
+          type: string
+        productKey:
+          type: string
+        platform:
+          type: string
+        architecture:
+          type: string
+        version:
+          type: string
+        revision:
+          type: string
+        update:
+          $ref: '#/components/schemas/DownloadUpdateSettingsDocument'
+    DownloadUpdateSettingsDocument:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      - provider
+      - channel
+      - allowedChannels
+      - allowPrerelease
+      - allowDowngrade
+      - checkIntervalMinutes
+      - rolloutPercentage
+      properties:
+        enabled:
+          type: boolean
+        provider:
+          type: string
+          enum:
+          - deployments
+          - generic
+          - github
+          - none
+        feedUrl:
+          type: string
+        githubOwner:
+          type: string
+        githubRepo:
+          type: string
+        channel:
+          type: string
+        channelFile:
+          type: string
+        allowedChannels:
+          type: array
+          items:
+            type: string
+        allowPrerelease:
+          type: boolean
+        allowDowngrade:
+          type: boolean
+        minimumSupportedVersion:
+          type: string
+        checkIntervalMinutes:
+          type: integer
+        rolloutPercentage:
+          type: integer
+        releaseNotesUrl:
+          type: string
   responses:
     BadRequest:
       description: 请求参数错误
