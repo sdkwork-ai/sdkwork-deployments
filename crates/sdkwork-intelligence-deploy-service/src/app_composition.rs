@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 use chrono::{SecondsFormat, Utc};
 use sdkwork_deploy_content_provider_port::{
-    ProviderRequestCredentials, ValidateContentProviderResourceCommand,
+    ContentProviderActor, ProviderRequestCredentials, ValidateContentProviderResourceCommand,
     ValidatedContentProviderResource,
 };
 use sdkwork_deploy_contract::{
@@ -91,7 +91,12 @@ where
                     &credentials,
                     ValidateContentProviderResourceCommand {
                         tenant_id: input.tenant_id,
+                        organization_id: input.context.organization_id.unwrap_or(0),
                         app_uuid: input.app_id.to_owned(),
+                        operator: input
+                            .context
+                            .actor_id
+                            .map(|actor_id| ContentProviderActor::user(actor_id.to_string())),
                         resource: resource.clone(),
                     },
                 )

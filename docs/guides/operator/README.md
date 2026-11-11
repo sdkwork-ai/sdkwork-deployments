@@ -1,4 +1,4 @@
-﻿# Operator Guide
+# Operator Guide
 
 ## Deployment Manifest
 
@@ -10,13 +10,18 @@
 
 ## Production Provider Configuration
 
-Production must fail closed into generated SDK adapters:
+Production must fail closed, and no sibling module is reached over HTTP by default:
 
 ```text
 SDKWORK_DEPLOY_USE_MEMORY_DRIVE=0
-SDKWORK_DRIVE_FACADE_URL=<drive-app-api-url>
+SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=in_process
 SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false
 SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false
+# Read only by an explicit split-deployment opt-in
+# (SDKWORK_DEPLOY_DRIVE_MODE=http):
+SDKWORK_DRIVE_FACADE_URL=<drive-app-api-url>
+# Read only by the opt-in split-deployment content adapter
+# (SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http):
 SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL=<drive-internal-api-url>
 SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-drive-internal-ingress-token
 SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL=<knowledgebase-internal-api-url>

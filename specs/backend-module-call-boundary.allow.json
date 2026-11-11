@@ -1,0 +1,29 @@
+{
+  "comment": "Deliberate exceptions to MODULE_SPEC.md §4.2 (Backend Module Call Boundary, In-Process First). SDKWork Deploy reaches sdkwork-drive and sdkwork-knowledgebase IN-PROCESS by default: crates/sdkwork-deploy-content-provider-port/src/in_process.rs validates Drive website roots through sdkwork-drive-workspace-service (SqlDrivePermissionService is_space_owner/resolve_effective_node_access + DriveWebsiteRootService create_or_get/get_root) and Knowledgebase wiki publications through the same active-publication read the knowledgebase internal API delegates to, and crates/sdkwork-deploy-content-provider-port/src/website_event_delivery.rs registers Drive website-root provider events through DriveWebsiteRootEventDeliveryService — all on the host PostgreSQL pool. No sibling endpoint variable is read unless a deployment explicitly opts into a split deployment. Each entry below is gated behind an explicit mode variable, is built during startup (so a missing endpoint or ingress token aborts the boot instead of failing the first publication), and is never constructed by a deployment that leaves the mode unset.",
+  "allow": [
+    {
+      "file": "crates/sdkwork-deploy-content-provider-port/src/content_provider_http_adapter.rs",
+      "envVar": "SDKWORK_DRIVE_FACADE_URL",
+      "module": "drive",
+      "reason": "Opt-in split deployment only. SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http selects this adapter; the default is in_process on the host pool (in_process.rs), and SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false also maps to in_process, not to HTTP. HttpContentProviderAdapter::from_env() fails at startup when this URL, the Drive internal endpoint, or either ingress token file is missing, so no default deployment can reach it. This is the same shape recorded for sdkwork-appstore -> drive in MODULE_SPEC.md §4.2.6."
+    },
+    {
+      "file": "crates/sdkwork-deploy-content-provider-port/src/content_provider_http_adapter.rs",
+      "envVar": "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL",
+      "module": "drive",
+      "reason": "Opt-in split deployment only, same adapter and same startup validation as SDKWORK_DRIVE_FACADE_URL. It is read only to re-read the created website root over the Drive Internal API when HTTP mode is selected; the default path reads the same row through DriveWebsiteRootService::get_root in-process."
+    },
+    {
+      "file": "crates/sdkwork-deploy-content-provider-port/src/content_provider_http_adapter.rs",
+      "envVar": "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL",
+      "module": "knowledgebase",
+      "reason": "Opt-in split deployment only. The default path reads the active wiki publication row in-process (knowledgebase_publication.rs); HTTP is selected by SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http and startup fails when this URL or its ingress token file is missing, so an unconfigured deployment never issues the call."
+    },
+    {
+      "file": "crates/sdkwork-deploy-drive-port/src/drive_http_adapter.rs",
+      "envVar": "SDKWORK_DRIVE_FACADE_URL",
+      "module": "drive",
+      "reason": "Opt-in split deployment only. The default path is in-process: crates/sdkwork-deploy-drive-port/src/in_process.rs runs DriveUploadSessionService over sdkwork-drive-object-runtime::DriveObjectRuntimeUploadStorage on the host PostgreSQL pool, so tenant scoping, the writer/reader ACL, part accounting, idempotency and finalization are Drive's own rules and no endpoint is read. This literal stays only for a real split deployment that sets SDKWORK_DEPLOY_DRIVE_MODE=http explicitly; HttpContentProviderAdapter-style startup validation (SdkDriveAppFacade::from_env) aborts the boot when the endpoint is missing, and no unconfigured deployment ever constructs it."
+    }
+  ]
+}

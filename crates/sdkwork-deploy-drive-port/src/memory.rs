@@ -6,7 +6,9 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_utils_rust::{format_datetime, now};
 
-use crate::{DeployDrivePort, DriveRequestCredentials, PrepareDeployUploadCommand};
+use crate::{
+    DeployDrivePort, DeployDriveScope, DriveRequestCredentials, PrepareDeployUploadCommand,
+};
 
 const STATUS_PENDING: i32 = 0;
 const STATUS_COMPLETED: i32 = 1;
@@ -58,6 +60,7 @@ impl DeployDrivePort for MemoryDeployDrivePort {
     async fn retrieve_upload_session(
         &self,
         _credentials: &DriveRequestCredentials,
+        _scope: &DeployDriveScope,
         drive_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         Ok(DeployUploadSessionResponse {
@@ -81,6 +84,7 @@ impl DeployDrivePort for MemoryDeployDrivePort {
     async fn complete_upload_session(
         &self,
         _credentials: &DriveRequestCredentials,
+        _scope: &DeployDriveScope,
         drive_session_id: &str,
         request: &CompleteDeployUploadSessionRequest,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
@@ -105,6 +109,7 @@ impl DeployDrivePort for MemoryDeployDrivePort {
     async fn cancel_upload_session(
         &self,
         _credentials: &DriveRequestCredentials,
+        _scope: &DeployDriveScope,
         drive_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         Ok(DeployUploadSessionResponse {

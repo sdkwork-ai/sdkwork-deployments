@@ -1,5 +1,20 @@
+//! Opt-in split-deployment HTTP adapter for the content provider port.
+//!
+//! MODULE_SPEC.md §4.2.3 allows a deliberate split deployment to keep calling a
+//! sibling module over its HTTP surface, provided HTTP is **never** the default,
+//! requires an explicit opt-in, and fails at startup when the opt-in lacks its
+//! configuration. That is this module:
+//!
+//! * It is only constructed when `SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http`.
+//! * `from_env` builds every client eagerly and returns an error for a missing
+//!   endpoint or ingress token file, so a half-configured split deployment
+//!   aborts the boot instead of failing the first website publication.
+//!
+//! The default deployment never loads it. The in-process ports in
+//! [`crate::in_process`] are the default path.
+
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
@@ -17,8 +32,11 @@ use sdkwork_drive_app_sdk_generated_rust::{
 use sdkwork_drive_internal_sdk_generated_rust::SdkworkCustomClient as DriveInternalClient;
 use sdkwork_knowledgebase_internal_sdk::SdkworkCustomClient as KnowledgebaseInternalClient;
 use sdkwork_utils_rust::service_base_url::registry_base_url_or;
-use sdkwork_utils_rust::string::trim;
 
+use crate::support::{
+    map_provider_error, non_blank, provider_unavailable, read_secret_file, required_env,
+    required_value, stable_root_key, valid_opaque_id,
+};
 use crate::{
     ContentProviderPort, ProviderRequestCredentials, ValidateContentProviderResourceCommand,
     ValidatedContentProviderResource,
@@ -33,8 +51,10 @@ pub const KNOWLEDGEBASE_INTERNAL_API_URL_ENV: &str =
 pub const KNOWLEDGEBASE_INTERNAL_TOKEN_FILE_ENV: &str =
     "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE";
 
+/// Split-deployment content provider: Drive App API + Drive/Knowledgebase
+/// Internal APIs over HTTP. Never the default.
 #[derive(Clone, Debug)]
-pub struct SdkContentProviderPort {
+pub struct HttpContentProviderAdapter {
     drive_app_url: String,
     drive_internal_url: String,
     drive_internal_token_file: PathBuf,
@@ -42,7 +62,7 @@ pub struct SdkContentProviderPort {
     knowledgebase_internal_token_file: PathBuf,
 }
 
-impl SdkContentProviderPort {
+impl HttpContentProviderAdapter {
     pub fn new(
         drive_app_url: String,
         drive_internal_url: String,
@@ -60,6 +80,16 @@ impl SdkContentProviderPort {
             || knowledgebase_internal_token_file.as_os_str().is_empty()
         {
             return Err("content provider ingress token file paths must not be blank".to_owned());
+        }
+        if !drive_internal_token_file.is_file() {
+            return Err(format!(
+                "{DRIVE_INTERNAL_TOKEN_FILE_ENV} does not name a readable file"
+            ));
+        }
+        if !knowledgebase_internal_token_file.is_file() {
+            return Err(format!(
+                "{KNOWLEDGEBASE_INTERNAL_TOKEN_FILE_ENV} does not name a readable file"
+            ));
         }
         Ok(Self {
             drive_app_url,
@@ -119,7 +149,7 @@ impl SdkContentProviderPort {
 }
 
 #[async_trait]
-impl ContentProviderPort for SdkContentProviderPort {
+impl ContentProviderPort for HttpContentProviderAdapter {
     async fn validate_resource(
         &self,
         credentials: &ProviderRequestCredentials,
@@ -226,32 +256,6 @@ fn validated_knowledgebase_resource(
     })
 }
 
-pub(crate) fn required_env(key: &str) -> Result<String, String> {
-    std::env::var(key).map_err(|_| format!("{key} is required"))
-}
-
-pub(crate) fn required_value(value: &str, key: &str) -> Result<String, String> {
-    let value = trim(value);
-    if value.is_empty() {
-        return Err(format!("{key} must not be blank"));
-    }
-    Ok(value.to_owned())
-}
-
-fn non_blank(value: Option<&str>) -> Option<String> {
-    value.map(trim).filter(|value| !value.is_empty())
-}
-
-pub(crate) fn read_secret_file(path: &Path, provider: &str) -> DeployServiceResult<String> {
-    let value = std::fs::read_to_string(path)
-        .map_err(|_| provider_unavailable(&format!("{provider} Internal API")))?;
-    let value = trim(&value);
-    if !(16..=4_096).contains(&value.len()) || value.bytes().any(|byte| byte.is_ascii_control()) {
-        return Err(provider_unavailable(&format!("{provider} Internal API")));
-    }
-    Ok(value.to_owned())
-}
-
 fn drive_selector(root: &DriveWebsiteRootSelector) -> DeployServiceResult<WebsiteRootSelector> {
     match root {
         DriveWebsiteRootSelector::SpaceRoot => Ok(WebsiteRootSelector::WebsiteRootSpaceSelector(
@@ -330,61 +334,10 @@ fn validate_observed_drive_root(
     Ok(())
 }
 
-fn stable_root_key(tenant_id: i64, app_uuid: &str, resource_key: &str) -> String {
-    let digest = sdkwork_utils_rust::sha256_hash(
-        format!("{tenant_id}:{app_uuid}:{resource_key}").as_bytes(),
-    );
-    format!("deploy-{}", &digest[..32])
-}
-
-pub(crate) fn valid_opaque_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
-}
-
-pub(crate) fn map_provider_error(provider: &str, message: &str) -> DeployServiceError {
-    let lowercase = message.to_ascii_lowercase();
-    if message.contains("404") || lowercase.contains("not found") {
-        DeployServiceError::not_found(format!("{provider} publication resource was not found"))
-    } else if message.contains("401") || message.contains("403") {
-        DeployServiceError::forbidden("provider content access forbidden")
-    } else if message.contains("409") {
-        DeployServiceError::conflict(format!("{provider} publication resource conflicts"))
-    } else if message.contains("400") || message.contains("422") {
-        DeployServiceError::validation(format!("{provider} publication resource is invalid"))
-    } else {
-        provider_unavailable(&format!("{provider} API"))
-    }
-}
-
-pub(crate) fn provider_unavailable(provider: &str) -> DeployServiceError {
-    DeployServiceError::Internal(format!("{provider} is unavailable"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use sdkwork_deploy_contract::DriveWebsiteRootSelector;
-
-    #[test]
-    fn provider_errors_are_redacted() {
-        let error = map_provider_error("Drive", "500 token=do-not-leak");
-        assert_eq!(
-            error.to_string(),
-            "internal error: Drive API is unavailable"
-        );
-    }
-
-    #[test]
-    fn root_keys_are_stable_and_bounded() {
-        let left = stable_root_key(7, "site", "desktop");
-        let right = stable_root_key(7, "site", "desktop");
-        assert_eq!(left, right);
-        assert!(left.len() <= 64);
-    }
 
     #[test]
     fn drive_folder_selector_requires_a_valid_folder_node_id() {

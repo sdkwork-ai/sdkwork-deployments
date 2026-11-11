@@ -1,3 +1,19 @@
+//! Opt-in split-deployment HTTP adapter for the Drive upload-session port.
+//!
+//! MODULE_SPEC.md §4.2.3 allows a deliberately split deployment to keep calling a
+//! sibling module over HTTP when HTTP is never the default, requires an explicit
+//! opt-in, and fails at startup when the opt-in lacks its configuration. That is
+//! this module: it is only constructed by the explicit
+//! `SDKWORK_DEPLOY_DRIVE_MODE=http` opt-in, and `from_env` refuses to build
+//! without the endpoint.
+//!
+//! The delegation is a *delegated client* call: it presents the end user's own
+//! Drive App API credentials, and the bytes travel directly from the client to
+//! Drive, never through this process. The default deployment does not need it:
+//! [`crate::InProcessDeployDrivePort`] runs the same upload-session lifecycle on
+//! the host pool. This adapter survives only for a real split deployment whose
+//! Drive runs in another process (MODULE_SPEC.md §4.2.3).
+
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
     CompleteDeployUploadSessionRequest, DeployServiceError, DeployServiceResult,
@@ -9,12 +25,18 @@ use sdkwork_drive_app_sdk_generated_rust::{
 };
 use sdkwork_utils_rust::{format_datetime, now, string::trim};
 
-use crate::{DeployDrivePort, DriveRequestCredentials, PrepareDeployUploadCommand};
+use crate::{
+    DeployDrivePort, DeployDriveScope, DriveRequestCredentials, PrepareDeployUploadCommand,
+};
 
 const DEPLOY_APP_RESOURCE_TYPE: &str = "deploy_package";
 const DEPLOY_UPLOAD_SCENE: &str = "deploy_artifact";
 const DEPLOY_UPLOAD_PROFILE: &str = "generic";
 const DEPLOY_APP_ID: &str = "sdkwork-deploy";
+
+/// Drive App API endpoint used by the split-deployment adapter. Read only by
+/// this module, and only after the explicit opt-in.
+pub const DRIVE_APP_API_URL_ENV: &str = "SDKWORK_DRIVE_FACADE_URL";
 
 const STATUS_PENDING: i32 = 0;
 const STATUS_COMPLETED: i32 = 1;
@@ -29,7 +51,7 @@ impl SdkDriveAppFacade {
     pub fn from_env(facade_url: String) -> Result<Self, String> {
         let base_url = trim(&facade_url);
         if base_url.is_empty() {
-            return Err("SDKWORK_DRIVE_FACADE_URL must not be blank".to_string());
+            return Err(format!("{DRIVE_APP_API_URL_ENV} must not be blank"));
         }
         Ok(Self {
             base_url: base_url.to_string(),
@@ -146,7 +168,7 @@ impl DeployDrivePort for SdkDriveAppFacade {
         let resource_id = request
             .app_id
             .clone()
-            .unwrap_or_else(|| format!("tenant-{}", command.tenant_id));
+            .unwrap_or_else(|| format!("tenant-{}", command.scope.tenant_id));
         let body = PrepareUploaderUploadRequest {
             id: upload_item_id.clone(),
             task_id: upload_item_id.clone(),
@@ -185,6 +207,7 @@ impl DeployDrivePort for SdkDriveAppFacade {
     async fn retrieve_upload_session(
         &self,
         credentials: &DriveRequestCredentials,
+        _scope: &DeployDriveScope,
         drive_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         let client = self.client(credentials)?;
@@ -215,6 +238,7 @@ impl DeployDrivePort for SdkDriveAppFacade {
     async fn complete_upload_session(
         &self,
         credentials: &DriveRequestCredentials,
+        _scope: &DeployDriveScope,
         drive_session_id: &str,
         request: &CompleteDeployUploadSessionRequest,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
@@ -265,6 +289,7 @@ impl DeployDrivePort for SdkDriveAppFacade {
     async fn cancel_upload_session(
         &self,
         credentials: &DriveRequestCredentials,
+        _scope: &DeployDriveScope,
         drive_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         let client = self.client(credentials)?;

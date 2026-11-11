@@ -146,6 +146,7 @@ impl DeployWebRuntimePort for CountingWebRuntime {
 impl WebsiteProviderEventDeliveryPort for FailingProviderEventDelivery {
     async fn ensure_runtime_set(
         &self,
+        _tenant_id: i64,
         _node_uuid: &str,
         _runtime_set: &serde_json::Value,
     ) -> DeployServiceResult<WebsiteProviderEventDeliveryResult> {
@@ -159,6 +160,7 @@ impl WebsiteProviderEventDeliveryPort for FailingProviderEventDelivery {
 impl WebsiteProviderEventDeliveryPort for SelectiveProviderEventDelivery {
     async fn ensure_runtime_set(
         &self,
+        _tenant_id: i64,
         node_uuid: &str,
         _runtime_set: &serde_json::Value,
     ) -> DeployServiceResult<WebsiteProviderEventDeliveryResult> {

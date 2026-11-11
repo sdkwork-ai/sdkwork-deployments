@@ -14,14 +14,15 @@ sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-core.workspace = true
 sdkwork-deploy-runtime-compiler.workspace = true
 sdkwork-drive-contract.workspace = true
+# In-process Drive website-root creation/read and provider-event registration on
+# the host PostgreSQL pool (MODULE_SPEC.md §4.2).
+sdkwork-drive-workspace-service.workspace = true
 sdkwork-utils-rust.workspace = true
 sdkwork_drive_app_sdk_generated_rust.workspace = true
 sdkwork-drive-internal-sdk-generated-rust.workspace = true
 sdkwork-knowledgebase-internal-sdk.workspace = true
+sqlx.workspace = true
 tokio.workspace = true
 url.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
-
-[dev-dependencies]
-axum.workspace = true

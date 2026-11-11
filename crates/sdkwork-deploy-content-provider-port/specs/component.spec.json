@@ -45,6 +45,7 @@
     "dependencyApiSurfaces": [],
     "events": [],
     "configKeys": [
+      "SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE",
       "SDKWORK_DRIVE_FACADE_URL",
       "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL",
       "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE",

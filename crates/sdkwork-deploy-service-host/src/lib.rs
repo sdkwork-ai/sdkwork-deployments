@@ -165,15 +165,27 @@ fn certificate_caa_from_env() -> Result<Arc<dyn CertificateAuthorityAuthorizatio
 
 pub async fn bootstrap_runtime_publication_host_from_env() -> Result<RuntimePublicationHost, String>
 {
-    let repository = repository_from_env().await?;
+    // The Drive provider-event registration runs in-process on the same pool, so
+    // the pool is bootstrapped first and the repository is built from it instead
+    // of opening a second one.
+    let database = bootstrap_deploy_database_from_env().await?;
+    let pool = database.pool().clone();
+    let repository = repository_from_pool(pool.clone()).await?;
     let runtime_repository = repository as Arc<dyn DeployRuntimeAssignmentRepositoryPort>;
     Ok(RuntimePublicationHost {
         publication: Arc::new(RuntimePublicationService::new_with_provider_event_delivery(
             runtime_repository,
             web_runtime_from_env()?,
-            website_provider_event_delivery_port_from_env()?,
+            website_provider_event_delivery_port_from_env(host_postgres_pool(&pool)?)?,
         )),
     })
+}
+
+/// The shared PostgreSQL pool, or the startup error a non-PostgreSQL
+/// deployment would otherwise hit at its first in-process sibling call.
+fn host_postgres_pool(pool: &DatabasePool) -> Result<&sqlx::PgPool, String> {
+    pool.as_postgres()
+        .ok_or_else(|| "Deploy sibling ports require the PostgreSQL database".to_owned())
 }
 
 /// Master key for certificate material at rest, loaded from a protected file.
@@ -270,6 +282,10 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     // the pool rather than a URL — and it takes a *clone* because the repository
     // needs the original to keep its own connections.
     let account_pool = pool.as_postgres().cloned();
+    let content_provider_pool = host_postgres_pool(&pool)?.clone();
+    // The Drive upload port runs in-process on the same pool by default, so the
+    // handle is read before `repository_from_pool` consumes it.
+    let drive_pool = host_postgres_pool(&pool)?.clone();
     let repository = repository_from_pool(pool).await?;
     let service_repository = repository.clone() as Arc<dyn DeployRepositoryPort>;
     let runtime_repository = repository as Arc<dyn DeployRuntimeAssignmentRepositoryPort>;
@@ -280,8 +296,8 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     let cloud_accounts = cloud_account_port_from_env(account_pool)?;
     let mut service = DeployService::new_with_runtime_publication(
         service_repository.clone(),
-        deploy_drive_port_from_env()?,
-        content_provider_port_from_env()?,
+        deploy_drive_port_from_env(&drive_pool)?,
+        content_provider_port_from_env(&content_provider_pool)?,
         Arc::new(DnsTxtDomainOwnershipVerifier::from_system_config()?),
         runtime_publication,
     )

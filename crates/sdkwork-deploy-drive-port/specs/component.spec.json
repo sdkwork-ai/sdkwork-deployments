@@ -78,6 +78,7 @@
     "dependencyApiSurfaces": [],
     "events": [],
     "configKeys": [
+      "SDKWORK_DEPLOY_DRIVE_MODE",
       "SDKWORK_DRIVE_FACADE_URL",
       "SDKWORK_DEPLOY_USE_MEMORY_DRIVE"
     ]

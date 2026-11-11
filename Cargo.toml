@@ -115,6 +115,8 @@ sdkwork-database-sqlx = { path = "../sdkwork-database/crates/sdkwork-database-sq
 sdkwork-database-id = { path = "../sdkwork-database/crates/sdkwork-database-id", package = "sdkwork-database-id" }
 sdkwork-utils-rust = { path = "../sdkwork-utils/packages/sdkwork-utils-rust" }
 sdkwork-drive-contract = { path = "../sdkwork-drive/crates/sdkwork-drive-contract" }
+sdkwork-drive-object-runtime = { path = "../sdkwork-drive/crates/sdkwork-drive-object-runtime" }
+sdkwork-drive-workspace-service = { path = "../sdkwork-drive/crates/sdkwork-drive-workspace-service" }
 sdkwork_drive_app_sdk_generated_rust = { package = "sdkwork-drive-app-sdk-generated-rust", path = "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-rust/generated/server-openapi" }
 sdkwork-drive-internal-sdk-generated-rust = { package = "sdkwork-drive-internal-sdk-generated-rust", path = "../sdkwork-drive/sdks/sdkwork-drive-internal-sdk/sdkwork-drive-internal-sdk-rust/generated/server-openapi" }
 sdkwork-knowledgebase-internal-sdk = { package = "sdkwork-knowledgebase-internal-sdk-generated-rust", path = "../sdkwork-knowledgebase/sdks/sdkwork-knowledgebase-internal-sdk/sdkwork-knowledgebase-internal-sdk-rust/generated/server-openapi" }

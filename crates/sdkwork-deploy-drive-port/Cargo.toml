@@ -13,4 +13,13 @@ sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-core.workspace = true
 sdkwork-utils-rust.workspace = true
 sdkwork-database-id.workspace = true
+# In-process Drive upload-session lifecycle on the host PostgreSQL pool
+# (MODULE_SPEC.md §4.2): Drive owns the state machine, the multipart storage
+# adapter and the space/node primitives this port composes.
+sdkwork-drive-workspace-service.workspace = true
+sdkwork-drive-object-runtime.workspace = true
 sdkwork_drive_app_sdk_generated_rust.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

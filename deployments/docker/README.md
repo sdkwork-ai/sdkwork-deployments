@@ -56,12 +56,18 @@ standalone (external-dependency) mode, matching `PROFILE_ID=standalone.<env>`.
 Production deployments must inject the shared PostgreSQL identity through `SDKWORK_DATABASE_*`.
 Deploy and IAM modules use that same database and schema; no module-specific database secret is
 supported. Production deployments must
-also set `SDKWORK_DEPLOY_USE_MEMORY_DRIVE=false`, `SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false`,
-`SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false`, `SDKWORK_DRIVE_FACADE_URL`, the Drive/Knowledgebase
-Internal API URLs, and
-`SDKWORK_DEPLOY_WEB_INTERNAL_API_URL`. Mount each Internal API ingress token as a read-only file at
-the path declared by its corresponding `*_INGRESS_TOKEN_FILE` key. Production Snowflake ids use
-the shared database lease allocator; static node ids are rejected.
+also set `SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false` and
+`SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=in_process` (the default: Drive website roots, Knowledgebase
+publications and Drive provider-event registration run in-process on the shared pool), plus
+`SDKWORK_DEPLOY_WEB_INTERNAL_API_URL`. Drive upload sessions also run in-process by default on the
+same pool (`DriveUploadSessionService` + `DriveObjectRuntimeUploadStorage`), so no Drive endpoint is
+required to boot. Only a real split deployment that explicitly sets
+`SDKWORK_DEPLOY_DRIVE_MODE=http` reads `SDKWORK_DRIVE_FACADE_URL` and validates it at startup;
+`SDKWORK_DEPLOY_USE_MEMORY_DRIVE=false` now selects the in-process port, not HTTP. Only a split
+deployment that sets `SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http` reads the Drive/Knowledgebase
+Internal API URLs and their ingress token files. Mount each Internal API ingress token as a
+read-only file at the path declared by its corresponding `*_INGRESS_TOKEN_FILE` key. Production
+Snowflake ids use the shared database lease allocator; static node ids are rejected.
 
 `SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS` is the one provider flag whose memory value is *not* how
 a development stack reaches the real thing. DNS provider credentials live in the IAM cloud account

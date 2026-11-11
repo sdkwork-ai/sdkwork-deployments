@@ -1,4 +1,4 @@
-﻿# Integrator Guide
+# Integrator Guide
 
 ## API And SDK Surfaces
 
@@ -60,12 +60,16 @@ SDKWork Drive; Deploy stores session metadata only. Completing an artifact packa
 `packageType` 1 through 5 creates an immutable artifact. This is the frozen artifact pipeline, not
 the live WebsiteRoot/WikiPublication path.
 
-Production artifact upload requires `SDKWORK_DRIVE_FACADE_URL` and
-`SDKWORK_DEPLOY_USE_MEMORY_DRIVE=0`. Live provider attachment additionally requires
-`SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER=false`, `SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false`
-(the DNS credential account center is the default; the flag only opts out), and the
-Drive/Knowledgebase Internal API URL and
-ingress-token-file settings.
+Production artifact upload runs in-process on the shared PostgreSQL pool: Deploy reaches Drive's
+upload-session lifecycle through `DriveUploadSessionService`, so no Drive endpoint is required and
+no transport is configured. Only a real split deployment opts into HTTP with
+`SDKWORK_DEPLOY_DRIVE_MODE=http` plus `SDKWORK_DRIVE_FACADE_URL`; there is no HTTP default, and the
+legacy `SDKWORK_DEPLOY_USE_MEMORY_DRIVE=0` now selects the in-process port. Live provider attachment
+runs in-process with `SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=in_process` (the default) together with
+`SDKWORK_DEPLOY_USE_MEMORY_CLOUD_ACCOUNTS=false` (the DNS credential account center is the
+default; the flag only opts out). The Drive/Knowledgebase Internal API URL and
+ingress-token-file settings are read only when a split deployment sets
+`SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http`.
 
 ## Artifact And Release Pipeline
 

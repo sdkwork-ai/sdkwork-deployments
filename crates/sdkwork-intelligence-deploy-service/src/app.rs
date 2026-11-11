@@ -25,7 +25,9 @@ use sdkwork_deploy_contract::{
     UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
     UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
 };
-use sdkwork_deploy_drive_port::{DriveRequestCredentials, PrepareDeployUploadCommand};
+use sdkwork_deploy_drive_port::{
+    DeployDriveActor, DeployDriveScope, DriveRequestCredentials, PrepareDeployUploadCommand,
+};
 
 use crate::app_delivery::assert_app_reachable;
 use crate::DeployService;
@@ -44,6 +46,20 @@ impl DeployService {
         DriveRequestCredentials {
             auth_token: context.auth_token.clone(),
             access_token: context.access_token.clone(),
+        }
+    }
+
+    /// Tenant and acting subject the Drive upload port must scope to.
+    ///
+    /// The in-process port hands the same identity to Drive's own ACL that the
+    /// removed Drive App API call derived from the authenticated request.
+    fn drive_scope(context: &DeployAppRequestContext) -> DeployDriveScope {
+        DeployDriveScope {
+            tenant_id: context.tenant_id,
+            operator: context
+                .actor_id
+                .filter(|actor_id| *actor_id > 0)
+                .map(|actor_id| DeployDriveActor::user(actor_id.to_string())),
         }
     }
 
@@ -1324,7 +1340,7 @@ impl DeployAppApi for DeployService {
             .prepare_package_upload(
                 &Self::drive_credentials(context),
                 PrepareDeployUploadCommand {
-                    tenant_id,
+                    scope: Self::drive_scope(context),
                     request: request.clone(),
                 },
             )
@@ -1365,6 +1381,7 @@ impl DeployAppApi for DeployService {
             .drive
             .retrieve_upload_session(
                 &Self::drive_credentials(context),
+                &Self::drive_scope(context),
                 &stored.drive_upload_session_id,
             )
             .await?;
@@ -1399,6 +1416,7 @@ impl DeployAppApi for DeployService {
             .drive
             .complete_upload_session(
                 &Self::drive_credentials(context),
+                &Self::drive_scope(context),
                 &stored.drive_upload_session_id,
                 request,
             )
@@ -1441,6 +1459,7 @@ impl DeployAppApi for DeployService {
             .drive
             .cancel_upload_session(
                 &Self::drive_credentials(context),
+                &Self::drive_scope(context),
                 &stored.drive_upload_session_id,
             )
             .await?;

@@ -28,7 +28,7 @@
 
 use async_trait::async_trait;
 use sdkwork_deploy_content_provider_port::{
-    ProviderRequestCredentials, ValidateContentProviderResourceCommand,
+    ContentProviderActor, ProviderRequestCredentials, ValidateContentProviderResourceCommand,
     ValidatedContentProviderResource,
 };
 use sdkwork_deploy_contract::{
@@ -343,7 +343,13 @@ impl crate::DeployService {
                 &credentials,
                 ValidateContentProviderResourceCommand {
                     tenant_id,
+                    organization_id: context.organization_id.unwrap_or(0),
                     app_uuid: app_id.to_owned(),
+                    // The in-process provider resolves the caller with drive's own
+                    // ACL; the HTTP adapter forwards `credentials` instead.
+                    operator: context
+                        .actor_id
+                        .map(|actor_id| ContentProviderActor::user(actor_id.to_string())),
                     // The provider only reads `source`; the key is what makes
                     // the command's diagnostics name the thing being validated,
                     // so the spec's own id is used rather than a placeholder.

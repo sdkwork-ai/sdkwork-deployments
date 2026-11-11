@@ -27,3 +27,5 @@ sdkwork-intelligence-deploy-repository-sqlx.workspace = true
 sdkwork-intelligence-deploy-service.workspace = true
 sdkwork-utils-rust.workspace = true
 sdkwork-webserver-acme-service.workspace = true
+# The in-process sibling ports (Drive/KB) are built on the host PgPool.
+sqlx.workspace = true

@@ -65,10 +65,6 @@ spec:
               value: https://web-internal.sdkwork.com
             - name: SDKWORK_DEPLOY_WEB_INTERNAL_API_INGRESS_TOKEN_FILE
               value: /run/secrets/sdkwork/deploy-web-internal-ingress-token
-            - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL
-              value: https://drive-internal.sdkwork.com
-            - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE
-              value: /run/secrets/sdkwork/deploy-drive-internal-ingress-token
             - name: SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL
               value: https://web-provider-events.sdkwork.com
             - name: SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_SECRET_DIRECTORY

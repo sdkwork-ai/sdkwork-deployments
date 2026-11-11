@@ -1,3 +1,14 @@
+//! Drive WebsiteRoot provider-event delivery, in-process.
+//!
+//! The runtime publication pass used to `PUT` every Drive website root's delivery
+//! channel to the Drive Internal API. MODULE_SPEC.md §4.2: that registration is
+//! drive state in the shared PostgreSQL database, so it is performed here through
+//! drive's own `DriveWebsiteRootEventDeliveryService` on the host pool.
+//!
+//! Preserved: channel-id derivation, verification-token derivation from the node
+//! derivation secret, the per-node renewal cache (expiration + secret rotation),
+//! the registration concurrency bound, and the receipt identity check.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,21 +21,20 @@ use sdkwork_drive_contract::drive::events::{
     derive_website_event_channel_id, derive_website_event_verification_token,
     WEBSITE_PROVIDER_EVENT_SUBSCRIPTION_ID,
 };
-use sdkwork_drive_internal_sdk_generated_rust::{
-    EnsureWebsiteRootEventDeliveryRequest, SdkworkCustomClient as DriveInternalClient,
-    WebsiteRootEventDelivery,
+use sdkwork_drive_workspace_service::application::website_root_event_delivery_service::{
+    DriveWebsiteRootEventDeliveryService, EnsureWebsiteRootEventDeliveryCommand,
 };
-use sdkwork_utils_rust::service_base_url::registry_base_url_or;
+use sdkwork_drive_workspace_service::domain::provider_event_delivery::DriveProviderEventDelivery;
+use sdkwork_drive_workspace_service::infrastructure::sql::provider_event_delivery_store::SqlProviderEventDeliveryStore;
+use sdkwork_drive_workspace_service::DriveServiceError;
 use sdkwork_utils_rust::sha256_hash;
 use serde_json::Value;
+use sqlx::PgPool;
 use tokio::task::JoinSet;
 use url::Url;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::sdk::{
-    map_provider_error, provider_unavailable, read_secret_file, required_env, required_value,
-    valid_opaque_id, DRIVE_INTERNAL_API_URL_ENV, DRIVE_INTERNAL_TOKEN_FILE_ENV,
-};
+use crate::support::{provider_unavailable, required_env, required_value};
 
 pub const WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL_ENV: &str =
     "SDKWORK_DEPLOY_WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL";
@@ -56,8 +66,12 @@ pub struct WebsiteProviderEventDeliveryResult {
 
 #[async_trait]
 pub trait WebsiteProviderEventDeliveryPort: Send + Sync {
+    /// `tenant_id` is the runtime assignment's tenant: the drive rows this
+    /// registers belong to it, and it must come from the assignment rather
+    /// than from an environment default.
     async fn ensure_runtime_set(
         &self,
+        tenant_id: i64,
         node_uuid: &str,
         runtime_set: &Value,
     ) -> DeployServiceResult<WebsiteProviderEventDeliveryResult>;
@@ -70,6 +84,7 @@ pub struct NoopWebsiteProviderEventDeliveryPort;
 impl WebsiteProviderEventDeliveryPort for NoopWebsiteProviderEventDeliveryPort {
     async fn ensure_runtime_set(
         &self,
+        _tenant_id: i64,
         _node_uuid: &str,
         _runtime_set: &Value,
     ) -> DeployServiceResult<WebsiteProviderEventDeliveryResult> {
@@ -79,8 +94,6 @@ impl WebsiteProviderEventDeliveryPort for NoopWebsiteProviderEventDeliveryPort {
 
 #[derive(Clone, Debug)]
 pub struct WebsiteProviderEventDeliveryConfig {
-    drive_internal_url: String,
-    drive_internal_token_file: PathBuf,
     callback_base_url: Url,
     node_secret_directory: PathBuf,
     expiration_seconds: u64,
@@ -89,26 +102,18 @@ pub struct WebsiteProviderEventDeliveryConfig {
 
 impl WebsiteProviderEventDeliveryConfig {
     pub fn new(
-        drive_internal_url: String,
-        drive_internal_token_file: PathBuf,
         callback_base_url: String,
         node_secret_directory: PathBuf,
         expiration_seconds: u64,
         renew_before_seconds: u64,
         production_like: bool,
     ) -> Result<Self, String> {
-        let drive_internal_url = required_value(&drive_internal_url, DRIVE_INTERNAL_API_URL_ENV)?;
-        if drive_internal_token_file.as_os_str().is_empty() {
-            return Err(format!("{DRIVE_INTERNAL_TOKEN_FILE_ENV} must not be blank"));
-        }
         if node_secret_directory.as_os_str().is_empty() {
             return Err(format!(
                 "{WEBSITE_PROVIDER_EVENT_SECRET_DIRECTORY_ENV} must not be blank"
             ));
         }
-        if production_like
-            && (!drive_internal_token_file.is_absolute() || !node_secret_directory.is_absolute())
-        {
+        if production_like && !node_secret_directory.is_absolute() {
             return Err(
                 "website provider event secret paths must be absolute in production-like environments"
                     .to_owned(),
@@ -129,8 +134,6 @@ impl WebsiteProviderEventDeliveryConfig {
             ));
         }
         Ok(Self {
-            drive_internal_url,
-            drive_internal_token_file,
             callback_base_url,
             node_secret_directory,
             expiration_seconds,
@@ -140,8 +143,6 @@ impl WebsiteProviderEventDeliveryConfig {
 
     pub fn from_env(production_like: bool) -> Result<Self, String> {
         Self::new(
-            required_env(DRIVE_INTERNAL_API_URL_ENV)?,
-            PathBuf::from(required_env(DRIVE_INTERNAL_TOKEN_FILE_ENV)?),
             required_env(WEBSITE_PROVIDER_EVENT_CALLBACK_BASE_URL_ENV)?,
             PathBuf::from(required_env(WEBSITE_PROVIDER_EVENT_SECRET_DIRECTORY_ENV)?),
             parse_u64_env(
@@ -227,43 +228,36 @@ impl RenewalCache {
     }
 }
 
+/// Registers website-root event deliveries in-process on the host pool.
 #[derive(Clone, Debug)]
-pub struct SdkWebsiteProviderEventDeliveryPort {
+pub struct InProcessWebsiteProviderEventDeliveryPort {
+    pool: PgPool,
     config: WebsiteProviderEventDeliveryConfig,
     renewal_cache: Arc<Mutex<RenewalCache>>,
 }
 
-impl SdkWebsiteProviderEventDeliveryPort {
-    pub fn new(config: WebsiteProviderEventDeliveryConfig) -> Self {
+impl InProcessWebsiteProviderEventDeliveryPort {
+    pub fn new(pool: PgPool, config: WebsiteProviderEventDeliveryConfig) -> Self {
         Self {
+            pool,
             config,
             renewal_cache: Arc::new(Mutex::new(RenewalCache::default())),
         }
     }
 
-    pub fn from_env(production_like: bool) -> Result<Self, String> {
-        Ok(Self::new(WebsiteProviderEventDeliveryConfig::from_env(
-            production_like,
-        )?))
-    }
-
-    fn drive_internal_client(&self) -> DeployServiceResult<DriveInternalClient> {
-        // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
-        let base_url = registry_base_url_or("sdkwork-drive", &self.config.drive_internal_url);
-        let client = DriveInternalClient::new_with_base_url(&base_url)
-            .map_err(|_| provider_unavailable("Drive Internal API"))?;
-        client.set_api_key(read_secret_file(
-            &self.config.drive_internal_token_file,
-            "Drive",
-        )?);
-        Ok(client)
+    pub fn from_env(pool: PgPool, production_like: bool) -> Result<Self, String> {
+        Ok(Self::new(
+            pool,
+            WebsiteProviderEventDeliveryConfig::from_env(production_like)?,
+        ))
     }
 }
 
 #[async_trait]
-impl WebsiteProviderEventDeliveryPort for SdkWebsiteProviderEventDeliveryPort {
+impl WebsiteProviderEventDeliveryPort for InProcessWebsiteProviderEventDeliveryPort {
     async fn ensure_runtime_set(
         &self,
+        tenant_id: i64,
         node_uuid: &str,
         runtime_set: &Value,
     ) -> DeployServiceResult<WebsiteProviderEventDeliveryResult> {
@@ -288,7 +282,6 @@ impl WebsiteProviderEventDeliveryPort for SdkWebsiteProviderEventDeliveryPort {
                 skipped,
             });
         }
-        let client = self.drive_internal_client()?;
         let address = callback_address(&self.config.callback_base_url, node_uuid)?;
         let expiration_epoch_ms = now_epoch_ms
             .checked_add(
@@ -308,7 +301,8 @@ impl WebsiteProviderEventDeliveryPort for SdkWebsiteProviderEventDeliveryPort {
             if let Some(root) = pending.next() {
                 spawn_registration(
                     &mut tasks,
-                    client.clone(),
+                    self.pool.clone(),
+                    tenant_id,
                     node_uuid.to_owned(),
                     root,
                     address.clone(),
@@ -332,7 +326,8 @@ impl WebsiteProviderEventDeliveryPort for SdkWebsiteProviderEventDeliveryPort {
             if let Some(root) = pending.next() {
                 spawn_registration(
                     &mut tasks,
-                    client.clone(),
+                    self.pool.clone(),
+                    tenant_id,
                     node_uuid.to_owned(),
                     root,
                     address.clone(),
@@ -350,7 +345,8 @@ impl WebsiteProviderEventDeliveryPort for SdkWebsiteProviderEventDeliveryPort {
 #[allow(clippy::too_many_arguments)]
 fn spawn_registration(
     tasks: &mut JoinSet<DeployServiceResult<(DeliveryCacheKey, i64, String)>>,
-    client: DriveInternalClient,
+    pool: PgPool,
+    tenant_id: i64,
     node_uuid: String,
     website_root_uuid: String,
     address: String,
@@ -361,21 +357,25 @@ fn spawn_registration(
 ) {
     tasks.spawn(async move {
         let channel_id = derive_website_event_channel_id(&node_uuid, &website_root_uuid);
-        let verification_token =
+        let mut verification_token =
             derive_website_event_verification_token(&channel_id, secret.as_slice());
-        let mut request = EnsureWebsiteRootEventDeliveryRequest {
+        let command = EnsureWebsiteRootEventDeliveryCommand {
+            tenant_id: tenant_id.to_string(),
+            website_root_uuid: website_root_uuid.clone(),
+            channel_id: channel_id.clone(),
             address: address.clone(),
-            verification_token,
-            expiration_epoch_ms: expiration_epoch_ms.to_string(),
+            verification_token: verification_token.clone(),
+            expiration_epoch_ms,
+            operator_id: "sdkwork-deploy".to_owned(),
         };
-        let response = client
-            .drive_internal_publishing()
-            .website_root_event_deliveries_replace(&website_root_uuid, &channel_id, &request)
-            .await;
-        request.verification_token.zeroize();
-        let response = response.map_err(|error| map_provider_error("Drive", &error.to_string()))?;
+        verification_token.zeroize();
+        let ensured =
+            DriveWebsiteRootEventDeliveryService::new(SqlProviderEventDeliveryStore::new(pool))
+                .ensure_delivery(command)
+                .await
+                .map_err(map_drive_event_error)?;
         validate_delivery_receipt(
-            &response,
+            &ensured.delivery,
             &channel_id,
             &website_root_uuid,
             &address,
@@ -392,11 +392,23 @@ fn spawn_registration(
     });
 }
 
+fn map_drive_event_error(error: DriveServiceError) -> DeployServiceError {
+    match error {
+        DriveServiceError::Validation(_) | DriveServiceError::NotFound(_) => {
+            DeployServiceError::validation("Drive WebsiteRoot event delivery was rejected")
+        }
+        DriveServiceError::Conflict(_) | DriveServiceError::PermissionDenied(_) => {
+            DeployServiceError::forbidden("Drive WebsiteRoot event delivery was rejected")
+        }
+        DriveServiceError::Internal(_) => provider_unavailable("Drive WebsiteRoot event delivery"),
+    }
+}
+
 fn drive_website_root_uuids(
     expected_node_uuid: &str,
     runtime_set: &Value,
 ) -> DeployServiceResult<BTreeSet<String>> {
-    if !valid_opaque_id(expected_node_uuid) {
+    if !crate::support::valid_opaque_id(expected_node_uuid) {
         return Err(DeployServiceError::validation(
             "runtime assignment nodeUuid is invalid",
         ));
@@ -463,7 +475,7 @@ fn drive_website_root_uuids(
                         ));
                     }
                 }
-                "KNOWLEDGEBASE" if valid_opaque_id(provider_resource_uuid) => {}
+                "KNOWLEDGEBASE" if crate::support::valid_opaque_id(provider_resource_uuid) => {}
                 "KNOWLEDGEBASE" => {
                     return Err(DeployServiceError::validation(
                         "Knowledgebase providerResourceUuid is invalid",
@@ -545,22 +557,18 @@ fn read_node_derivation_secret(
 }
 
 fn validate_delivery_receipt(
-    delivery: &WebsiteRootEventDelivery,
+    delivery: &DriveProviderEventDelivery,
     channel_id: &str,
     website_root_uuid: &str,
     address: &str,
     expiration_epoch_ms: i64,
 ) -> DeployServiceResult<()> {
-    let valid_version = delivery
-        .version
-        .parse::<u64>()
-        .is_ok_and(|version| version > 0);
     if delivery.channel_id != channel_id
-        || delivery.website_root_uuid != website_root_uuid
+        || delivery.provider_resource_uuid != website_root_uuid
         || delivery.address != address
-        || delivery.expiration_epoch_ms != expiration_epoch_ms.to_string()
+        || delivery.expiration_epoch_ms != expiration_epoch_ms
         || delivery.lifecycle_status != "ACTIVE"
-        || !valid_version
+        || delivery.version <= 0
     {
         return Err(provider_unavailable("Drive WebsiteRoot event delivery"));
     }
@@ -588,89 +596,6 @@ fn epoch_millis() -> DeployServiceResult<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    use axum::{
-        extract::{Path as AxumPath, State},
-        http::{HeaderMap, StatusCode},
-        routing::put,
-        Json, Router,
-    };
-
-    #[derive(Clone)]
-    struct MockDriveState {
-        calls: Arc<AtomicUsize>,
-        api_key: String,
-        node_uuid: String,
-        node_secret: Arc<Mutex<Vec<u8>>>,
-    }
-
-    struct TestDirectory(PathBuf);
-
-    impl TestDirectory {
-        fn new() -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "sdkwork-deploy-provider-events-{}",
-                uuid::Uuid::new_v4()
-            ));
-            fs::create_dir_all(&path).expect("create provider event test directory");
-            Self(path)
-        }
-    }
-
-    impl Drop for TestDirectory {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    async fn ensure_delivery(
-        State(state): State<MockDriveState>,
-        AxumPath((website_root_uuid, channel_id)): AxumPath<(String, String)>,
-        headers: HeaderMap,
-        Json(request): Json<EnsureWebsiteRootEventDeliveryRequest>,
-    ) -> Result<Json<Value>, StatusCode> {
-        if headers
-            .get("x-api-key")
-            .and_then(|value| value.to_str().ok())
-            != Some(state.api_key.as_str())
-        {
-            return Err(StatusCode::UNAUTHORIZED);
-        }
-        let expected_channel =
-            derive_website_event_channel_id(&state.node_uuid, &website_root_uuid);
-        let expected_token = derive_website_event_verification_token(
-            &channel_id,
-            &state.node_secret.lock().unwrap(),
-        );
-        let expected_address = format!(
-            "https://provider-events.sdkwork.test/nodes/{}/provider-events/drive-website-events",
-            state.node_uuid
-        );
-        if channel_id != expected_channel
-            || request.verification_token != expected_token
-            || request.address != expected_address
-        {
-            return Err(StatusCode::BAD_REQUEST);
-        }
-        state.calls.fetch_add(1, Ordering::SeqCst);
-        Ok(Json(serde_json::json!({
-            "code": 0,
-            "traceId": "trace-provider-event-1",
-            "data": {
-                "item": {
-                    "channelId": channel_id,
-                    "websiteRootUuid": website_root_uuid,
-                    "address": request.address,
-                    "expirationEpochMs": request.expiration_epoch_ms,
-                    "lifecycleStatus": "ACTIVE",
-                    "version": "1",
-                    "createdAt": "2026-07-23T00:00:00Z",
-                    "updatedAt": "2026-07-23T00:00:00Z"
-                }
-            }
-        })))
-    }
 
     #[test]
     fn drive_roots_are_deduplicated_and_node_bound() {
@@ -711,136 +636,35 @@ mod tests {
 
     #[test]
     fn delivery_receipt_requires_exact_identity() {
-        let delivery = WebsiteRootEventDelivery {
+        let delivery = DriveProviderEventDelivery {
             channel_id: "web:channel".to_owned(),
-            website_root_uuid: "01900000-0000-7000-8000-000000000001".to_owned(),
+            provider_resource_uuid: "01900000-0000-7000-8000-000000000001".to_owned(),
             address: "https://events.sdkwork.com/nodes/node-1/provider-events/drive-website-events"
                 .to_owned(),
-            expiration_epoch_ms: "1000".to_owned(),
+            expiration_epoch_ms: 1_000,
             lifecycle_status: "ACTIVE".to_owned(),
-            version: "1".to_owned(),
-            ..Default::default()
+            version: 1,
+            created_at: "2026-07-23T00:00:00Z".to_owned(),
+            updated_at: "2026-07-23T00:00:00Z".to_owned(),
         };
         assert!(validate_delivery_receipt(
             &delivery,
             "web:channel",
             "01900000-0000-7000-8000-000000000001",
             &delivery.address,
-            1000,
+            1_000,
         )
         .is_ok());
         assert!(validate_delivery_receipt(
-            &WebsiteRootEventDelivery {
+            &DriveProviderEventDelivery {
                 lifecycle_status: "STOPPED".to_owned(),
                 ..delivery.clone()
             },
             "web:channel",
             "01900000-0000-7000-8000-000000000001",
             &delivery.address,
-            1000,
+            1_000,
         )
         .is_err());
-    }
-
-    #[tokio::test]
-    async fn generated_sdk_registration_is_node_bound_and_cached() {
-        let node_uuid = "node-1";
-        let website_root_uuid = "01900000-0000-7000-8000-000000000001";
-        let api_key = "drive-internal-test-token";
-        let node_secret = b"node-1-derivation-secret-with-at-least-32-bytes".to_vec();
-        let server_node_secret = Arc::new(Mutex::new(node_secret.clone()));
-        let calls = Arc::new(AtomicUsize::new(0));
-        let app = Router::new()
-            .route(
-                "/internal/v3/api/drive/website_roots/{website_root_uuid}/event_deliveries/{channel_id}",
-                put(ensure_delivery),
-            )
-            .with_state(MockDriveState {
-                calls: calls.clone(),
-                api_key: api_key.to_owned(),
-                node_uuid: node_uuid.to_owned(),
-                node_secret: server_node_secret.clone(),
-            });
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind mock Drive Internal API");
-        let address = listener.local_addr().expect("mock server address");
-        let server = tokio::spawn(async move {
-            axum::serve(listener, app)
-                .await
-                .expect("serve mock Drive Internal API");
-        });
-
-        let directory = TestDirectory::new();
-        let ingress_token_file = directory.0.join("drive-internal-token");
-        fs::write(&ingress_token_file, api_key).expect("write Drive ingress token");
-        fs::write(node_secret_path(&directory.0, node_uuid), &node_secret)
-            .expect("write node derivation secret");
-        let port = SdkWebsiteProviderEventDeliveryPort::new(
-            WebsiteProviderEventDeliveryConfig::new(
-                format!("http://{address}"),
-                ingress_token_file,
-                "https://provider-events.sdkwork.test".to_owned(),
-                directory.0.clone(),
-                3_600,
-                600,
-                false,
-            )
-            .expect("valid provider event config"),
-        );
-        let runtime_set = serde_json::json!({
-            "nodeUuid": node_uuid,
-            "descriptors": [{
-                "resources": [
-                    {"provider": {"providerType": "DRIVE", "providerResourceUuid": website_root_uuid}},
-                    {"provider": {"providerType": "DRIVE", "providerResourceUuid": website_root_uuid}}
-                ]
-            }]
-        });
-
-        let first = port
-            .ensure_runtime_set(node_uuid, &runtime_set)
-            .await
-            .expect("register WebsiteRoot delivery");
-        assert_eq!(first.ensured, 1);
-        assert_eq!(first.skipped, 0);
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-
-        let replay = port
-            .ensure_runtime_set(node_uuid, &runtime_set)
-            .await
-            .expect("reuse fresh WebsiteRoot delivery");
-        assert_eq!(replay.ensured, 0);
-        assert_eq!(replay.skipped, 1);
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-
-        let rotated_secret = b"node-1-rotated-derivation-secret-at-least-32-bytes".to_vec();
-        fs::write(node_secret_path(&directory.0, node_uuid), &rotated_secret)
-            .expect("rotate node derivation secret");
-        *server_node_secret.lock().unwrap() = rotated_secret;
-        let rotation = port
-            .ensure_runtime_set(node_uuid, &runtime_set)
-            .await
-            .expect("replace delivery after node secret rotation");
-        assert_eq!(rotation.ensured, 1);
-        assert_eq!(rotation.skipped, 0);
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-
-        let other_node_runtime_set = serde_json::json!({
-            "nodeUuid": "node-2",
-            "descriptors": [{
-                "resources": [{"provider": {
-                    "providerType": "DRIVE",
-                    "providerResourceUuid": website_root_uuid
-                }}]
-            }]
-        });
-        assert!(port
-            .ensure_runtime_set("node-2", &other_node_runtime_set)
-            .await
-            .is_err());
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-
-        server.abort();
     }
 }

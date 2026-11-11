@@ -51,10 +51,16 @@ spec:
                   fieldPath: metadata.uid
             - name: SDKWORK_DEPLOY_USE_MEMORY_DRIVE
               value: "false"
-            - name: SDKWORK_DRIVE_FACADE_URL
-              value: https://api.sdkwork.com
+            # Drive upload sessions run in-process on the shared PostgreSQL pool
+            # (MODULE_SPEC.md §4.2), so no Drive endpoint is configured here. A
+            # real split deployment would instead set SDKWORK_DEPLOY_DRIVE_MODE=http
+            # plus SDKWORK_DRIVE_FACADE_URL.
             - name: SDKWORK_DEPLOY_USE_MEMORY_CONTENT_PROVIDER
               value: "false"
+            # Content validation and Drive provider-event registration run
+            # in-process on the shared PostgreSQL pool (MODULE_SPEC.md §4.2).
+            - name: SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE
+              value: "in_process"
             # DNS provider credentials come from the IAM cloud account center, which
             # this process reaches through its own PostgreSQL pool. The `USE_MEMORY_*`
             # convention above does not apply: memory is the exception here, and

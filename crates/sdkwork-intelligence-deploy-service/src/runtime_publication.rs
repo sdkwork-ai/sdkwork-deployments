@@ -360,7 +360,11 @@ impl RuntimePublicationService {
         };
         let provider_events = match self
             .provider_event_delivery
-            .ensure_runtime_set(&assignment.node_uuid, &compiled.snapshot)
+            .ensure_runtime_set(
+                assignment.tenant_id,
+                &assignment.node_uuid,
+                &compiled.snapshot,
+            )
             .await
         {
             Ok(result) => result,
@@ -521,7 +525,11 @@ impl RuntimePublicationService {
         for assignment in &assignments {
             match self
                 .provider_event_delivery
-                .ensure_runtime_set(&assignment.node_uuid, &assignment.runtime_set)
+                .ensure_runtime_set(
+                    assignment.tenant_id,
+                    &assignment.node_uuid,
+                    &assignment.runtime_set,
+                )
                 .await
             {
                 Ok(deliveries) => {
