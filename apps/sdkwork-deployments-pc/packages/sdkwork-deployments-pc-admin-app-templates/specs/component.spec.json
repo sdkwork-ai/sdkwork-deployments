@@ -3,12 +3,12 @@
   "kind": "sdkwork.component.spec",
   "component": {
     "name": "@sdkwork/deployments-pc-admin-app-templates",
-    "displayName": "SDKWork Deployments PC app-templates",
+    "displayName": "SDKWork Deployments PC app center",
     "version": "0.1.0",
     "type": "node-package",
     "root": "sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-app-templates",
     "domain": "deployment",
-    "capability": "app-templates",
+    "capability": "app-center",
     "surface": "backend-admin",
     "languages": [
       "typescript"
@@ -33,9 +33,24 @@
       "purpose": "PC package boundaries."
     },
     {
+      "file": "BACKEND_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/BACKEND_UI_SPEC.md",
+      "purpose": "Backend/admin package boundary and backend SDK rule."
+    },
+    {
       "file": "APP_SDK_INTEGRATION_SPEC.md",
       "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
       "purpose": "SDK integration."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source style."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Package and capability naming."
     },
     {
       "file": "DRIVE_SPEC.md",
@@ -73,6 +88,8 @@
     "events": [],
     "configKeys": [],
     "permissions": [
+      "deploy.apps.read",
+      "deploy.apps.write",
       "deploy.templateCategories.read",
       "deploy.templateCategories.write",
       "deploy.appTemplates.read",

@@ -58,6 +58,11 @@
     "sdkClients": [],
     "sdkDependencies": [
       {
+        "workspace": "sdkwork-deployments-app-sdk",
+        "surface": "app-api",
+        "credentialMode": "authenticated-app-api"
+      },
+      {
         "workspace": "sdkwork-deployments-backend-sdk",
         "surface": "backend-api",
         "credentialMode": "authenticated-backend-admin"
@@ -101,7 +106,7 @@
   "integration": {
     "authority": "Root SDKWork specs remain authoritative.",
     "dependencyPolicy": "Consume sibling packages through public exports only.",
-    "sdkPolicy": "Backend SDK access is isolated behind admin-core."
+    "sdkPolicy": "Backend SDK access is isolated behind admin-core. App-template authoring (create/edit) uses the app SDK because the backend-admin contract has no create or editable-copy update; moderation stays on the backend SDK."
   },
   "verification": {
     "commands": [

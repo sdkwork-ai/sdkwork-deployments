@@ -17,7 +17,7 @@
   "sdkwork": {
     "applicationCode": "deployments",
     "architecture": "pc-react",
-    "capability": "app-templates",
+    "capability": "app-center",
     "surface": "backend-admin",
     "managedBy": "tools/materialize_deployments_pc.mjs"
   }

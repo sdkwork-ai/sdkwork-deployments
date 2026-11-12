@@ -1,4 +1,4 @@
-import { deploymentsModule as adminAppTemplates } from "@sdkwork/deployments-pc-admin-app-templates";
+import { deploymentsModule as adminAppCenter } from "@sdkwork/deployments-pc-admin-app-templates";
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { sourceSpecsModule, SourceSpecsAdminPage } from "@sdkwork/deployments-pc-admin-core";
 import { deploymentsModule as adminAudit } from "@sdkwork/deployments-pc-admin-audit";
@@ -12,7 +12,7 @@ import {
   LocalProjectsPage,
 } from "@sdkwork/deployments-pc-admin-local-projects";
 import { deploymentsModule as adminNodes } from "@sdkwork/deployments-pc-admin-nodes";
-import type { DeploymentsLocale, DeploymentsPcModuleDefinition } from "@sdkwork/deployments-pc-commons";
+import type { DeploymentsLocale, DeploymentsPcModuleDefinition, DeploymentsResourcePageProps } from "@sdkwork/deployments-pc-commons";
 import { createDeploymentsConsoleRegistry, DeploymentsConsoleProvider, useDeploymentsConsoleClients } from "@sdkwork/deployments-pc-console-core";
 import { deploymentsModule as delivery } from "@sdkwork/deployments-pc-console-delivery";
 import { deploymentsModule as marketplace, MarketplacePage, MyTemplatesPage } from "@sdkwork/deployments-pc-console-marketplace";
@@ -53,14 +53,28 @@ function MyTemplatesBridge({ locale }: { locale: DeploymentsLocale }) {
   return <MyTemplatesPage deployClient={deploy} locale={locale} />;
 }
 
+/**
+ * Admin bridge for the applications ledger.
+ *
+ * The canonical page is shared with the console and takes its clients as props;
+ * the admin surface reuses it with `surface="admin"` instead of re-implementing
+ * the ledger. `deploy_app` application authoring is an app-plane capability
+ * (there is no backend-admin apps ledger), so the page keeps its injected
+ * app-plane clients while mounting behind the admin boundary.
+ */
+function AdminAppsBridge({ locale }: DeploymentsResourcePageProps) {
+  const { deploy, drive } = useDeploymentsConsoleClients();
+  return <PublishingAppsPage deployClient={deploy} driveClient={drive} locale={locale} surface="admin" />;
+}
+
 const consoleResourcePages = { apps: PublishingAppsBridge, marketplace: MarketplaceBridge, myTemplates: MyTemplatesBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
-const adminModules = [localProjects, infrastructure, adminNodes, adminAppTemplates, adminAudit, adminDownloads, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
+const adminModules = [localProjects, infrastructure, adminNodes, adminAppCenter, adminAudit, adminDownloads, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
 /**
  * The source-specs ledger mounts straight from the capability that owns the
  * vocabulary: unlike `PublishingAppsBridge`, it needs no clients injected —
  * it reads through its port from context. So the component goes in as-is.
  */
-const adminResourcePages = { localProjects: LocalProjectsPage, sourceSpecs: SourceSpecsAdminPage, downloadCatalog: DownloadCatalogPage } as const;
+const adminResourcePages = { applications: AdminAppsBridge, localProjects: LocalProjectsPage, sourceSpecs: SourceSpecsAdminPage, downloadCatalog: DownloadCatalogPage } as const;
 const LazyAuth = lazy(() => import("./auth/DeploymentsAuthRoutes.tsx").then((module) => ({ default: module.DeploymentsAuthRoutes })));
 const LazyAdmin = lazy(() => import("./surfaces/DeploymentsAdminSurface.tsx").then((module) => ({ default: module.DeploymentsAdminSurface })));
 
@@ -121,6 +135,7 @@ function Authenticated({ runtime }: { runtime: BootstrappedDeploymentsRuntime })
             element={
               <Suspense fallback={<div className="bootstrap-state">SDKWork Deployments</div>}>
                 <LazyAdmin
+                  appApiBaseUrl={runtime.config.appApiBaseUrl}
                   backendApiBaseUrl={runtime.config.backendApiBaseUrl}
                   locale={runtime.locale}
                   modules={adminModules}

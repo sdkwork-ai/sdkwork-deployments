@@ -1,3 +1,9 @@
+import {
+  createClient as createDeployClient,
+  type CreateAppTemplateRequest,
+  type SdkworkDeployAppClient,
+  type UpdateAppTemplateRequest,
+} from "@sdkwork/deployments-app-sdk";
 import { createClient, type SdkworkDeployBackendClient } from "@sdkwork/deployments-backend-sdk";
 import {
   normalizeDeploymentsPage,
@@ -11,13 +17,32 @@ import { uuid } from "@sdkwork/utils/id";
 import { createContext, useContext, type ReactNode } from "react";
 
 const Context = createContext<SdkworkDeployBackendClient | null>(null);
+const AppClientContext = createContext<SdkworkDeployAppClient | null>(null);
 
 export function createDeploymentsAdminClient(baseUrl: string, tokenManager: AuthTokenManager) {
   return createClient({ baseUrl, authMode: "dual-token", platform: "pc", tokenManager });
 }
 
-export function DeploymentsAdminProvider({ children, client }: { children: ReactNode; client: SdkworkDeployBackendClient }) {
-  return <Context.Provider value={client}>{children}</Context.Provider>;
+/**
+ * App-plane client hosted by the admin surface.
+ *
+ * `deploy_app` application authoring and app-template listing create/edit exist
+ * on the app API only: the backend-admin contract moderates a listing but has
+ * no create command and no editable-copy patch. The admin surface therefore
+ * keeps the app-plane client behind its `backend-admin` boundary — the same
+ * split `sourceSpecsPort` already uses — and routes only those commands through
+ * it (see `createDeploymentsAdminRegistry`).
+ */
+export function createDeploymentsAppClient(appApiBaseUrl: string, tokenManager: AuthTokenManager) {
+  return createDeployClient({ baseUrl: appApiBaseUrl, authMode: "dual-token", platform: "pc", tokenManager });
+}
+
+export function DeploymentsAdminProvider({ appClient, children, client }: { appClient: SdkworkDeployAppClient; children: ReactNode; client: SdkworkDeployBackendClient }) {
+  return (
+    <Context.Provider value={client}>
+      <AppClientContext.Provider value={appClient}>{children}</AppClientContext.Provider>
+    </Context.Provider>
+  );
 }
 
 export function useDeploymentsAdminClient() {
@@ -26,7 +51,22 @@ export function useDeploymentsAdminClient() {
   return value;
 }
 
-export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClient): DeploymentsRegistry {
+export function useDeploymentsAdminAppClient() {
+  const value = useContext(AppClientContext);
+  if (!value) throw new Error("DeploymentsAdminProvider is required");
+  return value;
+}
+
+/**
+ * Builds the admin registry.
+ *
+ * `appClient` is optional on purpose: a host that only bridges the catalog
+ * through the backend-admin client (the Web Server admin surface does) must keep
+ * compiling and get the moderation-only action set, while this application's
+ * admin surface injects the app-plane client to expose listing create/edit.
+ */
+export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClient, appClient?: SdkworkDeployAppClient): DeploymentsRegistry {
+  const app = appClient;
   return {
     nginx: source(
       (query) => client.nginx.configs.list({ page: query.page, pageSize: query.pageSize }),
@@ -102,6 +142,41 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
     appTemplates: source(
       (query) => client.template.appTemplates.list({ page: query.page, pageSize: query.pageSize }),
       [
+        // Authoring has no backend-admin counterpart: creating a listing and
+        // patching its editable copy are app-plane commands
+        // (`template.appTemplates.*`), so they use the injected app client while
+        // every moderation transition below stays on the backend-admin client.
+        // A host that does not inject the app client keeps the moderation-only
+        // action set instead of failing to compose the registry.
+        // The payload construction mirrors `createMyTemplatesService()` in
+        // `@sdkwork/deployments-pc-console-marketplace`.
+        ...(app === undefined ? [] : [
+          action("create", "Create listing", {
+            appUuid: "",
+            templateType: "APP",
+            categoryUuid: "",
+            templateKey: "",
+            displayName: "",
+            summary: "",
+            description: "",
+            visibility: "PUBLIC",
+            pricingModel: "FREE",
+            priceMinor: "",
+            currency: "",
+          }, (context) =>
+            app.template.appTemplates.create(appTemplateCreateBody(context.body), idempotencyParams())),
+          action("update", "Update listing", {
+            displayName: "",
+            summary: "",
+            description: "",
+            categoryUuid: "",
+            visibility: "",
+            pricingModel: "",
+            priceMinor: "",
+            currency: "",
+          }, (context) =>
+            app.template.appTemplates.update(selected(context, "id"), appTemplateUpdateBody(context.body), idempotencyParams()), { selection: true }),
+        ]),
         // Moderation moves status only; the author owns the listing copy. An
         // approval publishes the newest draft versions server-side.
         action("publish", "Approve listing", { status: "PUBLISHED" }, (context) =>
@@ -193,6 +268,86 @@ function cleanBody(body: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(body).filter(([, value]) => !(typeof value === "string" && value.trim() === "")),
   );
+}
+
+/**
+ * The create command's required members, assembled from the generic dialog's
+ * flat body. Required fields fail loudly rather than sending `""` for a
+ * uuid- or enum-typed member the server would reject; optional members are
+ * omitted instead of being sent as `undefined` (`exactOptionalPropertyTypes`).
+ */
+function appTemplateCreateBody(body: Record<string, unknown>): CreateAppTemplateRequest {
+  const cleaned = cleanBody(body);
+  const description = optionalText(cleaned.description, false);
+  const currency = optionalText(cleaned.currency, true);
+  const priceMinor = optionalText(cleaned.priceMinor, true);
+  const kind = templateType(cleaned.templateType);
+  const access = visibility(cleaned.visibility);
+  const pricing = pricingModel(cleaned.pricingModel);
+  return {
+    appUuid: requiredText(cleaned, "appUuid"),
+    categoryUuid: requiredText(cleaned, "categoryUuid"),
+    templateKey: requiredText(cleaned, "templateKey"),
+    displayName: requiredText(cleaned, "displayName"),
+    summary: requiredText(cleaned, "summary"),
+    ...(kind === undefined ? {} : { templateType: kind }),
+    ...(access === undefined ? {} : { visibility: access }),
+    ...(pricing === undefined ? {} : { pricingModel: pricing }),
+    ...(description === undefined ? {} : { description }),
+    // A PAID listing is the only one that may carry a price; the author command
+    // keeps the member absent otherwise (mirrors `createMyTemplatesService`).
+    ...(pricing === "PAID" && priceMinor !== undefined ? { priceMinor } : {}),
+    ...(currency === undefined ? {} : { currency: currency.toUpperCase() }),
+  };
+}
+
+/**
+ * The editable-copy patch: an omitted field keeps its stored value server-side,
+ * so only the members the operator filled in are sent.
+ */
+function appTemplateUpdateBody(body: Record<string, unknown>): UpdateAppTemplateRequest {
+  const cleaned = cleanBody(body);
+  const displayName = optionalText(cleaned.displayName, true);
+  const summary = optionalText(cleaned.summary, true);
+  const description = optionalText(cleaned.description, false);
+  const categoryUuid = optionalText(cleaned.categoryUuid, true);
+  const visibilityValue = visibility(cleaned.visibility);
+  const pricing = pricingModel(cleaned.pricingModel);
+  const priceMinor = optionalText(cleaned.priceMinor, true);
+  const currency = optionalText(cleaned.currency, true);
+  return {
+    ...(displayName === undefined ? {} : { displayName }),
+    ...(summary === undefined ? {} : { summary }),
+    ...(description === undefined ? {} : { description }),
+    ...(categoryUuid === undefined ? {} : { categoryUuid }),
+    ...(visibilityValue === undefined ? {} : { visibility: visibilityValue }),
+    ...(pricing === undefined ? {} : { pricingModel: pricing }),
+    ...(priceMinor === undefined ? {} : { priceMinor }),
+    ...(currency === undefined ? {} : { currency: currency.toUpperCase() }),
+  };
+}
+
+function requiredText(body: Record<string, unknown>, field: string): string {
+  const value = body[field];
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} is required`);
+  return value.trim();
+}
+
+function optionalText(value: unknown, trim: boolean): string | undefined {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  return trim ? value.trim() : value;
+}
+
+function templateType(value: unknown): CreateAppTemplateRequest["templateType"] {
+  return value === "APP" || value === "PPT" || value === "VIDEO" ? value : undefined;
+}
+
+function visibility(value: unknown): UpdateAppTemplateRequest["visibility"] {
+  return value === "PUBLIC" || value === "PRIVATE" ? value : undefined;
+}
+
+function pricingModel(value: unknown): UpdateAppTemplateRequest["pricingModel"] {
+  return value === "FREE" || value === "PAID" ? value : undefined;
 }
 
 function idempotencyParams(): { idempotencyKey: string } {

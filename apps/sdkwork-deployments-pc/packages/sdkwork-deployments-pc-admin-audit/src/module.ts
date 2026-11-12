@@ -1,4 +1,4 @@
 import type { DeploymentsPcModuleDefinition } from "@sdkwork/deployments-pc-commons";
 export const deploymentsModule = { id: "audit", label: "audit", surface: "backend-admin", entries: [
-    { resource: "audit", label: "Audit", description: "Publishing operator evidence", permission: "deploy.auditLogs.read", order: 1 }
+    { resource: "audit", label: "Audit", description: "Publishing operator evidence", permission: "deploy.auditLogs.read", order: 14 }
 ] } as const satisfies DeploymentsPcModuleDefinition;

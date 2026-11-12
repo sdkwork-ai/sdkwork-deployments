@@ -9,9 +9,10 @@ import type { DeploymentsPcModuleDefinition } from "@sdkwork/deployments-pc-comm
  * second key for one capability, and the two would then have to be granted
  * together forever.
  *
- * `order: 6` slots it after the infrastructure group (nginx 1 … audit 4 in their
- * own modules, `localProjects` 5) so the operations resources keep their order
- * when the menu is assembled from several modules.
+ * `order: 16` slots it after the operations group: the application center owns
+ * 1-4, infrastructure 11-14 (nginx, clusters, nodes, audit in their own modules),
+ * `localProjects` 15, and the download catalog 19, so the menu keeps one stable
+ * order when it is assembled from several modules.
  */
 export const sourceSpecsModule = {
   id: "source-specs",
@@ -23,7 +24,7 @@ export const sourceSpecsModule = {
       label: "Source specs",
       description: "Which uploaded source serves each kind of client, per application",
       permission: "deploy.apps.read",
-      order: 6,
+      order: 16,
     },
   ],
 } as const satisfies DeploymentsPcModuleDefinition;

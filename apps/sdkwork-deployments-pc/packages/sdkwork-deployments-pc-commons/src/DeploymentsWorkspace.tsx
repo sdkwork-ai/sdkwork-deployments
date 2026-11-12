@@ -194,6 +194,11 @@ function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
     domains: Globe2,
     certificates: FileKey2,
     apps: AppWindow,
+    // The admin application center's ledger. It is deliberately a separate
+    // resource id from the console's `apps`: the two surfaces share the page but
+    // not the copy or the route, and a shared id would force one nav label on
+    // both ("应用发布" on the console, "应用管理" in the operator console).
+    applications: AppWindow,
     artifacts: Package,
     releases: Tags,
     deployments: Rocket,

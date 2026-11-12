@@ -1,4 +1,4 @@
-import { createDeploymentsAdminClient, createDeploymentsAdminRegistry, DeploymentsAdminProvider, SourceSpecsAdminPortProvider, type SourceSpecsAdminPort } from "@sdkwork/deployments-pc-admin-core";
+import { createDeploymentsAdminClient, createDeploymentsAdminRegistry, createDeploymentsAppClient, DeploymentsAdminProvider, SourceSpecsAdminPortProvider, type SourceSpecsAdminPort } from "@sdkwork/deployments-pc-admin-core";
 import { LocalProjectsExplorerPortProvider } from "@sdkwork/deployments-pc-admin-local-projects";
 import { DeploymentsAdminShell } from "@sdkwork/deployments-pc-admin-shell";
 import type {
@@ -11,6 +11,13 @@ import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { useMemo } from "react";
 
 export interface DeploymentsAdminSurfaceProps {
+  /**
+   * App API base URL, used only for the app-plane client the admin surface
+   * hosts: app-template create/edit has no backend-admin counterpart, so the
+   * admin boundary injects the app client next to the backend one (the same
+   * split `sourceSpecsPort` uses).
+   */
+  appApiBaseUrl: string;
   backendApiBaseUrl: string;
   locale: DeploymentsLocale;
   modules: readonly DeploymentsPcModuleDefinition[];
@@ -33,6 +40,7 @@ export interface DeploymentsAdminSurfaceProps {
 }
 
 export function DeploymentsAdminSurface({
+  appApiBaseUrl,
   backendApiBaseUrl,
   locale,
   modules,
@@ -45,11 +53,12 @@ export function DeploymentsAdminSurface({
   userLabel,
 }: DeploymentsAdminSurfaceProps) {
   const client = useMemo(() => createDeploymentsAdminClient(backendApiBaseUrl, tokenManager), [backendApiBaseUrl, tokenManager]);
-  const registry = useMemo(() => createDeploymentsAdminRegistry(client), [client]);
+  const appClient = useMemo(() => createDeploymentsAppClient(appApiBaseUrl, tokenManager), [appApiBaseUrl, tokenManager]);
+  const registry = useMemo(() => createDeploymentsAdminRegistry(client, appClient), [client, appClient]);
   return (
     <LocalProjectsExplorerPortProvider port={sandboxExplorerPort}>
       <SourceSpecsAdminPortProvider port={sourceSpecsPort}>
-        <DeploymentsAdminProvider client={client}>
+        <DeploymentsAdminProvider appClient={appClient} client={client}>
           <DeploymentsAdminShell
             locale={locale}
             modules={modules}

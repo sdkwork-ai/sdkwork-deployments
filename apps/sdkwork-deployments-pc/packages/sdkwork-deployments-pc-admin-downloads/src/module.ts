@@ -5,5 +5,5 @@ export const deploymentsModule = { id: "downloads", label: "downloads", surface:
   // contains installers, and every installer owns one update configuration, which
   // is three nesting levels the generic table does not model.
 entries: [
-    { resource: "downloadCatalog", label: "Download catalog", description: "Download page cards, installers and per-installer update feeds", permission: "deploy.downloads.read", order: 9 }
+    { resource: "downloadCatalog", label: "Download catalog", description: "Download page cards, installers and per-installer update feeds", permission: "deploy.downloads.read", order: 19 }
 ] } as const satisfies DeploymentsPcModuleDefinition;

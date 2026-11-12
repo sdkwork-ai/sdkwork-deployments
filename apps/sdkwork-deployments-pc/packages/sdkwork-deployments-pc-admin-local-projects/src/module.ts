@@ -10,7 +10,7 @@ export const deploymentsModule = {
       label: "Local Projects",
       description: "Browse Docker deploy modules and local runtime nodes under the Drive deploy sandbox",
       permission: "deploy.local_projects.read",
-      order: 5,
+      order: 15,
     },
   ],
 } as const satisfies DeploymentsPcModuleDefinition;
