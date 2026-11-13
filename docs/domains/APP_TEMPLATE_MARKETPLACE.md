@@ -29,6 +29,27 @@ greenfield: three tables, two API operation families per surface.
 | App template | `deploy_app_template` | author user | The listing: display copy, media refs, category, visibility, pricing, moderation state. Points at the source `deploy_app` via `app_uuid` (a reference, not an FK — the template outlives optional app deletion semantics). |
 | Template version | `deploy_app_template_version` | author user | An immutable published snapshot: `version`, changelog, packaged artifact reference (`artifact_uuid` → `deploy_artifact`), platform-target snapshot, size/checksum. |
 
+### 1b. Store assets
+
+The listing carries the App Store-style presentation assets authors expect:
+
+| Asset | Storage | Wire field |
+| --- | --- | --- |
+| Logo | `deploy_app_template.icon_media_ref` | `iconMediaRef` |
+| Cover image | `deploy_app_template.cover_media_ref` | `coverMediaRef` |
+| Sample pages | `deploy_app_template.metadata.screenshots` (JSONB array) | `screenshots` |
+
+Each screenshot is `{ mediaRef, caption?, sortOrder }`; the current application
+surface caps the list at eight and preserves the author's order. Media refs are
+Drive-backed stable references (`drive://spaces/{space}/nodes/{node}`), never
+signed URLs — the same rule as `deploy_app.metadata.media`. Screenshots live in
+`metadata` rather than a fourth table because they are bounded listing-level
+presentation data with no independent lifecycle; a future query that needs to
+filter on individual pages can promote them without changing the listing
+identity. The publish dialog uploads the selected files after the platform app
+exists (Drive anchors uploads to that app), then sends the refs with the
+listing create/update.
+
 There is **no purchase, order or entitlement table in this module**. A settled
 `commerce_order` with `subject = 'app_template'` in the order center *is* the
 entitlement; `deploy_app_template.install_count` is a counter that center
@@ -136,7 +157,21 @@ There is no HarmonyOS client root in this repository; a HarmonyOS surface needs
 its own application root and `agent.app.config.json` declaration before any
 page can be authored.
 
-### 6b. Bootstrap: the baseline taxonomy
+### 6a. Packaging component
+
+`crates/sdkwork-deploy-archive` is the reusable directory packager for this
+module. `pack_directory` honors nested `.gitignore` files with git's cascade,
+negation, anchored/directory-only and `**` rules, prunes ignored subtrees,
+excludes VCS metadata and machine-local secret carriers by default, and emits a
+deterministic ZIP (sorted paths, fixed timestamp) with a SHA-256. `unpack_archive`
+refuses absolute/traversal paths, symlink entries, overwrite unless requested,
+and declared or actual sizes beyond its bounds. The crate has no dependency on
+the deploy service, database, Drive, or HTTP layers, so Host and server-side
+callers can share it without importing the catalog. The publish surface still
+packs in the browser because directory access is a Host capability; this crate
+is the canonical implementation for server-side and future Host consumers.
+
+## 6b. Bootstrap: the baseline taxonomy
 
 Categories are tenant-scoped and platform-admin maintained, and
 `appTemplates.create` requires a `categoryUuid`, so a tenant with an empty

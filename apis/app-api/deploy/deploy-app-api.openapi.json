@@ -9990,6 +9990,28 @@
           }
         }
       },
+      "AppTemplateScreenshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mediaRef"
+        ],
+        "properties": {
+          "mediaRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
       "AppTemplateSummaryResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -10047,6 +10069,13 @@
           "coverMediaRef": {
             "type": "string",
             "maxLength": 512
+          },
+          "screenshots": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/AppTemplateScreenshot"
+            }
           },
           "visibility": {
             "type": "string",
@@ -10186,6 +10215,13 @@
           "coverMediaRef": {
             "type": "string",
             "maxLength": 512
+          },
+          "screenshots": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/AppTemplateScreenshot"
+            }
           },
           "visibility": {
             "type": "string",
@@ -10421,6 +10457,13 @@
             "type": "string",
             "maxLength": 512
           },
+          "screenshots": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/AppTemplateScreenshot"
+            }
+          },
           "initialVersion": {
             "$ref": "#/components/schemas/CreateAppTemplateVersionRequest"
           }
@@ -10479,6 +10522,13 @@
           "coverMediaRef": {
             "type": "string",
             "maxLength": 512
+          },
+          "screenshots": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/AppTemplateScreenshot"
+            }
           }
         }
       },

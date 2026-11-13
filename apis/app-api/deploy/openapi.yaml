@@ -5598,6 +5598,22 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
+    AppTemplateScreenshot:
+      type: object
+      additionalProperties: false
+      required:
+      - mediaRef
+      properties:
+        mediaRef:
+          type: string
+          minLength: 1
+          maxLength: 512
+        caption:
+          type: string
+          maxLength: 160
+        sortOrder:
+          type: integer
+          minimum: 0
     AppTemplateSummaryResponse:
       type: object
       additionalProperties: false
@@ -5646,6 +5662,11 @@ components:
         coverMediaRef:
           type: string
           maxLength: 512
+        screenshots:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/AppTemplateScreenshot'
         visibility:
           type: string
           enum:
@@ -5756,6 +5777,11 @@ components:
         coverMediaRef:
           type: string
           maxLength: 512
+        screenshots:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/AppTemplateScreenshot'
         visibility:
           type: string
           enum:
@@ -5936,6 +5962,11 @@ components:
         coverMediaRef:
           type: string
           maxLength: 512
+        screenshots:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/AppTemplateScreenshot'
         initialVersion:
           $ref: '#/components/schemas/CreateAppTemplateVersionRequest'
     UpdateAppTemplateRequest:
@@ -5980,6 +6011,11 @@ components:
         coverMediaRef:
           type: string
           maxLength: 512
+        screenshots:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/AppTemplateScreenshot'
     CreateAppTemplateVersionRequest:
       type: object
       additionalProperties: false

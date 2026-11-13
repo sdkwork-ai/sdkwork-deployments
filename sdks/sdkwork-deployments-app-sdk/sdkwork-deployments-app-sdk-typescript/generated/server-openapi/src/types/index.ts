@@ -1,5 +1,6 @@
 export * from './common';
 export type { TemplateCategoryResponse } from './template-category-response';
+export type { AppTemplateScreenshot } from './app-template-screenshot';
 export type { AppTemplateSummaryResponse } from './app-template-summary-response';
 export type { AppTemplateResponse } from './app-template-response';
 export type { AppTemplateVersionResponse } from './app-template-version-response';

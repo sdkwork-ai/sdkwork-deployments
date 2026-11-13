@@ -1,3 +1,5 @@
+import type { AppTemplateScreenshot } from './app-template-screenshot';
+
 export interface UpdateAppTemplateRequest {
   displayName?: string;
   summary?: string;
@@ -9,4 +11,5 @@ export interface UpdateAppTemplateRequest {
   currency?: string;
   iconMediaRef?: string;
   coverMediaRef?: string;
+  screenshots?: AppTemplateScreenshot[];
 }

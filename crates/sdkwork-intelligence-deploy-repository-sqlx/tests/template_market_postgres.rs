@@ -13,9 +13,10 @@ mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    CreateAppTemplateRequest, CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest,
-    DeployAppApi, DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
-    ListMarketplaceTemplatesQuery, UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest,
+    AppTemplateScreenshot, CreateAppTemplateRequest, CreateAppTemplateVersionRequest,
+    CreateTemplateCategoryRequest, DeployAppApi, DeployAppRequestContext, DeployBackendApi,
+    DeployBackendRequestContext, ListMarketplaceTemplatesQuery, UpdateAppTemplateAdminRequest,
+    UpdateAppTemplateRequest,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
@@ -75,6 +76,7 @@ fn template_request(
         currency: None,
         icon_media_ref: None,
         cover_media_ref: None,
+        screenshots: Vec::new(),
         initial_version: Some(CreateAppTemplateVersionRequest {
             version: "1.0.0".to_owned(),
             changelog: None,
@@ -163,12 +165,38 @@ async fn postgres_marketplace_catalog_flow_publishes_and_stays_tenant_bounded() 
         &UpdateAppTemplateRequest {
             display_name: Some(format!("Template free{suffix} v2")),
             summary: Some("An edited catalog listing".to_owned()),
+            description: Some("The long listing description".to_owned()),
+            icon_media_ref: Some("drive://spaces/s/nodes/icon".to_owned()),
+            cover_media_ref: Some("drive://spaces/s/nodes/cover".to_owned()),
+            screenshots: Some(vec![
+                AppTemplateScreenshot {
+                    media_ref: "drive://spaces/s/nodes/page-1".to_owned(),
+                    caption: Some("Overview".to_owned()),
+                    sort_order: 0,
+                },
+                AppTemplateScreenshot {
+                    media_ref: "drive://spaces/s/nodes/page-2".to_owned(),
+                    caption: None,
+                    sort_order: 1,
+                },
+            ]),
             ..UpdateAppTemplateRequest::default()
         },
     )
     .await
     .expect("edit draft template");
     assert_eq!(edited.display_name, format!("Template free{suffix} v2"));
+    assert_eq!(edited.description, "The long listing description");
+    assert_eq!(
+        edited.icon_media_ref.as_deref(),
+        Some("drive://spaces/s/nodes/icon")
+    );
+    assert_eq!(
+        edited.cover_media_ref.as_deref(),
+        Some("drive://spaces/s/nodes/cover")
+    );
+    assert_eq!(edited.screenshots.len(), 2);
+    assert_eq!(edited.screenshots[0].caption.as_deref(), Some("Overview"));
     assert_eq!(edited.status, "DRAFT");
 
     // 4. Submit refuses nothing less than a version; approval publishes both.

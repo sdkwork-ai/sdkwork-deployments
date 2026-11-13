@@ -17,10 +17,10 @@
 //! reads it for marketplace ranking and response mapping.
 
 use sdkwork_deploy_contract::{
-    AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage, AppTemplateSummaryResponse,
-    AppTemplateVersionPage, AppTemplateVersionResponse, CreateAppTemplateRequest,
-    CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest, DeployServiceError,
-    DeployServiceResult, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
+    AppTemplatePage, AppTemplateResponse, AppTemplateScreenshot, AppTemplateSummaryPage,
+    AppTemplateSummaryResponse, AppTemplateVersionPage, AppTemplateVersionResponse,
+    CreateAppTemplateRequest, CreateAppTemplateVersionRequest, CreateTemplateCategoryRequest,
+    DeployServiceError, DeployServiceResult, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
     ListMarketplaceTemplatesQuery, TemplateCategoryPage, TemplateCategoryResponse,
     UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest, UpdateTemplateCategoryRequest,
     MARKETPLACE_SORT_NEWEST, MARKETPLACE_SORT_POPULAR, TEMPLATE_CATEGORY_STATUS_ACTIVE,
@@ -28,6 +28,8 @@ use sdkwork_deploy_contract::{
     TEMPLATE_STATUS_PUBLISHED, TEMPLATE_TYPE_APP, TEMPLATE_TYPE_PPT, TEMPLATE_TYPE_VIDEO,
     TEMPLATE_VERSION_STATUS_DRAFT, TEMPLATE_VERSION_STATUS_PUBLISHED,
 };
+use std::collections::HashSet;
+
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
 use crate::support::{
@@ -43,14 +45,14 @@ const TEMPLATE_SELECT: &str =
     "t.uuid, t.template_type, t.template_key, t.display_name, t.summary, t.description,
     t.app_uuid, c.uuid AS category_uuid, t.author_user_id, t.icon_media_ref, t.cover_media_ref,
     t.visibility, t.pricing_model, t.price_minor, t.currency, t.status, t.review_note,
-    t.is_featured, t.install_count, t.view_count, t.latest_version_uuid,
+    t.is_featured, t.install_count, t.view_count, t.latest_version_uuid, t.metadata,
     t.created_at, t.updated_at, t.version";
 
 const TEMPLATE_SUMMARY_SELECT: &str =
     "t.uuid, t.template_type, t.template_key, t.display_name, t.summary,
     c.uuid AS category_uuid, t.icon_media_ref, t.cover_media_ref, t.visibility, t.pricing_model,
     t.price_minor, t.currency, t.status, t.is_featured, t.install_count, t.view_count,
-    t.latest_version_uuid, t.updated_at, t.version";
+    t.latest_version_uuid, t.metadata, t.updated_at, t.version";
 
 const VERSION_SELECT: &str = "v.uuid, t.uuid AS template_uuid, v.template_version, v.changelog,
     v.artifact_uuid, v.source_app_version, v.platform_targets_json, v.package_size_bytes,
@@ -78,7 +80,95 @@ fn map_category_row(row: &PgRow) -> Result<TemplateCategoryResponse, sqlx::Error
     })
 }
 
+const MAX_TEMPLATE_SCREENSHOTS: usize = 8;
+
+/// Normalize and validate the author-provided sample pages before they reach
+/// JSONB. Empty media references and duplicate pages are refused because the
+/// marketplace would otherwise render broken or repeated cards.
+fn normalize_screenshots(
+    screenshots: &[AppTemplateScreenshot],
+) -> DeployServiceResult<Vec<AppTemplateScreenshot>> {
+    if screenshots.len() > MAX_TEMPLATE_SCREENSHOTS {
+        return Err(DeployServiceError::validation(format!(
+            "at most {MAX_TEMPLATE_SCREENSHOTS} screenshots are allowed"
+        )));
+    }
+    let mut seen = HashSet::new();
+    let mut normalized = Vec::with_capacity(screenshots.len());
+    for (index, screenshot) in screenshots.iter().enumerate() {
+        let media_ref = screenshot.media_ref.trim();
+        if media_ref.is_empty() || media_ref.len() > 512 {
+            return Err(DeployServiceError::validation(
+                "screenshot mediaRef must be between 1 and 512 characters",
+            ));
+        }
+        if !seen.insert(media_ref.to_owned()) {
+            return Err(DeployServiceError::validation(
+                "a screenshot mediaRef is repeated",
+            ));
+        }
+        let caption = screenshot
+            .caption
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        if caption
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 160)
+        {
+            return Err(DeployServiceError::validation(
+                "screenshot caption must be at most 160 characters",
+            ));
+        }
+        normalized.push(AppTemplateScreenshot {
+            media_ref: media_ref.to_owned(),
+            caption,
+            sort_order: if screenshot.sort_order >= 0 {
+                screenshot.sort_order
+            } else {
+                i32::try_from(index).unwrap_or(0)
+            },
+        });
+    }
+    normalized.sort_by_key(|screenshot| screenshot.sort_order);
+    Ok(normalized)
+}
+
+fn metadata_with_screenshots(
+    mut metadata: serde_json::Value,
+    screenshots: &[AppTemplateScreenshot],
+) -> DeployServiceResult<serde_json::Value> {
+    let object = metadata.as_object_mut().ok_or_else(|| {
+        DeployServiceError::Internal("deploy_app_template.metadata is not a JSON object".to_owned())
+    })?;
+    object.insert(
+        "screenshots".to_owned(),
+        serde_json::to_value(screenshots).map_err(|error| {
+            DeployServiceError::Internal(format!("encode template screenshots: {error}"))
+        })?,
+    );
+    Ok(metadata)
+}
+
+fn screenshots_from_metadata(
+    metadata: &serde_json::Value,
+) -> Result<Vec<AppTemplateScreenshot>, sqlx::Error> {
+    let Some(value) = metadata.get("screenshots") else {
+        return Ok(Vec::new());
+    };
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_value(value.clone()).map_err(|error| {
+        sqlx::Error::Decode(
+            format!("deploy_app_template.metadata.screenshots is malformed: {error}").into(),
+        )
+    })
+}
+
 fn map_template_row(row: &PgRow) -> Result<AppTemplateResponse, sqlx::Error> {
+    let metadata: serde_json::Value = row.try_get("metadata")?;
     Ok(AppTemplateResponse {
         id: row.try_get("uuid")?,
         template_type: row.try_get("template_type")?,
@@ -91,6 +181,7 @@ fn map_template_row(row: &PgRow) -> Result<AppTemplateResponse, sqlx::Error> {
         author_user_id: row.try_get::<i64, _>("author_user_id")?.to_string(),
         icon_media_ref: row.try_get::<Option<String>, _>("icon_media_ref")?,
         cover_media_ref: row.try_get::<Option<String>, _>("cover_media_ref")?,
+        screenshots: screenshots_from_metadata(&metadata)?,
         visibility: row.try_get("visibility")?,
         pricing_model: row.try_get("pricing_model")?,
         price_minor: row.try_get::<i64, _>("price_minor")?.to_string(),
@@ -108,6 +199,7 @@ fn map_template_row(row: &PgRow) -> Result<AppTemplateResponse, sqlx::Error> {
 }
 
 fn map_template_summary_row(row: &PgRow) -> Result<AppTemplateSummaryResponse, sqlx::Error> {
+    let metadata: serde_json::Value = row.try_get("metadata")?;
     Ok(AppTemplateSummaryResponse {
         id: row.try_get("uuid")?,
         template_type: row.try_get("template_type")?,
@@ -117,6 +209,7 @@ fn map_template_summary_row(row: &PgRow) -> Result<AppTemplateSummaryResponse, s
         category_uuid: row.try_get("category_uuid")?,
         icon_media_ref: row.try_get::<Option<String>, _>("icon_media_ref")?,
         cover_media_ref: row.try_get::<Option<String>, _>("cover_media_ref")?,
+        screenshots: screenshots_from_metadata(&metadata)?,
         visibility: row.try_get("visibility")?,
         pricing_model: row.try_get("pricing_model")?,
         price_minor: row.try_get::<i64, _>("price_minor")?.to_string(),
@@ -769,6 +862,8 @@ impl DeployRepository {
         let author_user_id = actor_id.filter(|id| *id > 0).ok_or_else(|| {
             DeployServiceError::forbidden("author identity is required to publish a template")
         })?;
+        let screenshots = normalize_screenshots(&request.screenshots)?;
+        let metadata = metadata_with_screenshots(serde_json::json!({}), &screenshots)?;
 
         let template_id = next_id(self.id_generator())?;
         let template_uuid = new_uuid();
@@ -782,9 +877,9 @@ impl DeployRepository {
                 id, uuid, tenant_id, organization_id, category_id, author_user_id, app_uuid,
                 template_type, template_key, display_name, summary, description, icon_media_ref,
                 cover_media_ref, visibility, pricing_model, price_minor, currency, status,
-                created_by, updated_by
+                metadata, created_by, updated_by
             ) VALUES ($1, $2, $3, COALESCE($4, 0), $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                $14, $15, $16, $17, $18, 'DRAFT', $19, $19)",
+                $14, $15, $16, $17, $18, 'DRAFT', $20, $19, $19)",
         )
         .bind(template_id)
         .bind(&template_uuid)
@@ -805,6 +900,7 @@ impl DeployRepository {
         .bind(price_minor)
         .bind(&currency)
         .bind(actor_id)
+        .bind(metadata)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("insert deploy_app_template", error))?;
@@ -841,7 +937,7 @@ impl DeployRepository {
             .await
             .map_err(|error| store_error("begin update deploy_app_template", error))?;
         let row = sqlx::query(
-            "SELECT status, pricing_model, price_minor FROM deploy_app_template
+            "SELECT status, pricing_model, price_minor, metadata FROM deploy_app_template
              WHERE tenant_id = $1 AND uuid = $2 AND author_user_id = $3 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -899,6 +995,18 @@ impl DeployRepository {
                 return Err(DeployServiceError::validation("visibility is invalid"));
             }
         }
+        let metadata = match request.screenshots.as_ref() {
+            None => None,
+            Some(screenshots) => {
+                let current: serde_json::Value = row.try_get("metadata").map_err(|error| {
+                    DeployServiceError::Internal(format!("read template metadata: {error}"))
+                })?;
+                Some(metadata_with_screenshots(
+                    current,
+                    &normalize_screenshots(screenshots)?,
+                )?)
+            }
+        };
         sqlx::query(
             "UPDATE deploy_app_template SET
                 display_name = COALESCE($4, display_name),
@@ -911,6 +1019,7 @@ impl DeployRepository {
                 currency = COALESCE($11, currency),
                 icon_media_ref = COALESCE($12, icon_media_ref),
                 cover_media_ref = COALESCE($13, cover_media_ref),
+                metadata = COALESCE($15, metadata),
                 updated_by = $14,
                 updated_at = NOW(),
                 version = version + 1
@@ -948,6 +1057,7 @@ impl DeployRepository {
         .bind(request.icon_media_ref.as_deref())
         .bind(request.cover_media_ref.as_deref())
         .bind(author_user_id)
+        .bind(metadata)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("update deploy_app_template", error))?;

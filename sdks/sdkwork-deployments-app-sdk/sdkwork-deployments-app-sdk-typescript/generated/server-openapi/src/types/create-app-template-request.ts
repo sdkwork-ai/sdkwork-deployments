@@ -1,3 +1,4 @@
+import type { AppTemplateScreenshot } from './app-template-screenshot';
 import type { CreateAppTemplateVersionRequest } from './create-app-template-version-request';
 
 export interface CreateAppTemplateRequest {
@@ -14,5 +15,6 @@ export interface CreateAppTemplateRequest {
   currency?: string;
   iconMediaRef?: string;
   coverMediaRef?: string;
+  screenshots?: AppTemplateScreenshot[];
   initialVersion?: CreateAppTemplateVersionRequest;
 }

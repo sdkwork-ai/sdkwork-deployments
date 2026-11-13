@@ -2419,6 +2419,22 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
+    AppTemplateScreenshot:
+      type: object
+      additionalProperties: false
+      required:
+      - mediaRef
+      properties:
+        mediaRef:
+          type: string
+          minLength: 1
+          maxLength: 512
+        caption:
+          type: string
+          maxLength: 160
+        sortOrder:
+          type: integer
+          minimum: 0
     AppTemplateResponse:
       type: object
       additionalProperties: false
@@ -2481,6 +2497,11 @@ components:
         coverMediaRef:
           type: string
           maxLength: 512
+        screenshots:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/AppTemplateScreenshot'
         visibility:
           type: string
           enum:

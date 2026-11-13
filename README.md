@@ -35,6 +35,8 @@ This repository follows `../sdkwork-specs/SDKWORK_WORKSPACE_SPEC.md`. Applicatio
 | `apps/` | active | `sdkwork-deployments-pc` Console and backend-admin publishing control plane |
 | `jobs/`, `plugins/`, `examples/` | reserved | Future capability directories |
 
+`crates/sdkwork-deploy-archive` is the reusable packaging component: `.gitignore`-aware deterministic directory ZIP creation, plus guarded extraction, with no service/database/HTTP coupling.
+
 ## Development
 
 ```powershell

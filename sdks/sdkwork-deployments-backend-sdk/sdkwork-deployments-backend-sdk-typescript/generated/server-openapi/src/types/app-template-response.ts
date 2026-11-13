@@ -1,3 +1,5 @@
+import type { AppTemplateScreenshot } from './app-template-screenshot';
+
 export interface AppTemplateResponse {
   id: string;
   templateKey: string;
@@ -10,6 +12,7 @@ export interface AppTemplateResponse {
   authorUserId: string;
   iconMediaRef?: string;
   coverMediaRef?: string;
+  screenshots?: AppTemplateScreenshot[];
   visibility: 'PUBLIC' | 'PRIVATE';
   pricingModel: 'FREE' | 'PAID';
   priceMinor: string;

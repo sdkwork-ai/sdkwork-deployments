@@ -22,6 +22,7 @@ members = [
   "crates/sdkwork-api-deployments-standalone-gateway",
   "crates/sdkwork-deploy-build-runner",
   "crates/sdkwork-deploy-package-validator",
+  "crates/sdkwork-deploy-archive",
   "crates/sdkwork-deploy-certificate-material",
   "crates/sdkwork-deploy-certificate-renewal-worker",
   "crates/sdkwork-deploy-certificate-worker",
@@ -82,6 +83,7 @@ rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem
 rustls-pki-types = "1.14"
 
 sdkwork-deploy-contract = { path = "crates/sdkwork-deploy-contract" }
+sdkwork-deploy-archive = { path = "crates/sdkwork-deploy-archive" }
 sdkwork-deploy-feed = { path = "crates/sdkwork-deploy-feed" }
 sdkwork-deploy-core = { path = "crates/sdkwork-deploy-core" }
 sdkwork-deploy-drive-port = { path = "crates/sdkwork-deploy-drive-port" }

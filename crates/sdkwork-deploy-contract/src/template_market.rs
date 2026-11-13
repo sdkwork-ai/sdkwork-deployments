@@ -75,6 +75,19 @@ pub struct TemplateCategoryPage {
     pub page_size: i32,
 }
 
+/// One marketplace sample page. The media reference points at a Drive-backed
+/// image; `sortOrder` preserves the author's page order independently of the
+/// JSON array order.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct AppTemplateScreenshot {
+    #[serde(rename = "mediaRef")]
+    pub media_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    #[serde(rename = "sortOrder", default)]
+    pub sort_order: i32,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AppTemplateSummaryResponse {
     pub id: String,
@@ -91,6 +104,8 @@ pub struct AppTemplateSummaryResponse {
     pub icon_media_ref: Option<String>,
     #[serde(rename = "coverMediaRef", skip_serializing_if = "Option::is_none")]
     pub cover_media_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub screenshots: Vec<AppTemplateScreenshot>,
     pub visibility: String,
     #[serde(rename = "pricingModel")]
     pub pricing_model: String,
@@ -143,6 +158,8 @@ pub struct AppTemplateResponse {
     pub icon_media_ref: Option<String>,
     #[serde(rename = "coverMediaRef", skip_serializing_if = "Option::is_none")]
     pub cover_media_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub screenshots: Vec<AppTemplateScreenshot>,
     pub visibility: String,
     #[serde(rename = "pricingModel")]
     pub pricing_model: String,
@@ -242,6 +259,8 @@ pub struct CreateAppTemplateRequest {
     pub icon_media_ref: Option<String>,
     #[serde(rename = "coverMediaRef", default)]
     pub cover_media_ref: Option<String>,
+    #[serde(default)]
+    pub screenshots: Vec<AppTemplateScreenshot>,
     #[serde(rename = "initialVersion", default)]
     pub initial_version: Option<CreateAppTemplateVersionRequest>,
 }
@@ -268,6 +287,9 @@ pub struct UpdateAppTemplateRequest {
     pub icon_media_ref: Option<String>,
     #[serde(rename = "coverMediaRef", default)]
     pub cover_media_ref: Option<String>,
+    /// `None` preserves the current screenshots; `Some([])` clears them.
+    #[serde(default)]
+    pub screenshots: Option<Vec<AppTemplateScreenshot>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

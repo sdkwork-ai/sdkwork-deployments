@@ -116,6 +116,40 @@ class TemplateCategoryResponse {
   }
 }
 
+class AppTemplateScreenshot {
+  final String mediaRef;
+  final String? caption;
+  final int? sortOrder;
+
+  AppTemplateScreenshot({
+    required this.mediaRef,
+    this.caption,
+    this.sortOrder
+  });
+
+  factory AppTemplateScreenshot.fromJson(Map<String, dynamic> json) {
+    return AppTemplateScreenshot(
+      mediaRef: (() {
+        final value = json['mediaRef']?.toString();
+        if (value == null) {
+          throw FormatException('AppTemplateScreenshot.mediaRef is required');
+        }
+        return value;
+      })(),
+      caption: json['caption']?.toString(),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'mediaRef': mediaRef,
+      'caption': caption,
+      'sortOrder': sortOrder,
+    };
+  }
+}
+
 class AppTemplateSummaryResponse {
   final String id;
   final String templateType;
@@ -125,6 +159,7 @@ class AppTemplateSummaryResponse {
   final String categoryUuid;
   final String? iconMediaRef;
   final String? coverMediaRef;
+  final List<AppTemplateScreenshot>? screenshots;
   final String visibility;
   final String pricingModel;
   final String priceMinor;
@@ -146,6 +181,7 @@ class AppTemplateSummaryResponse {
     required this.categoryUuid,
     this.iconMediaRef,
     this.coverMediaRef,
+    this.screenshots,
     required this.visibility,
     required this.pricingModel,
     required this.priceMinor,
@@ -205,6 +241,19 @@ class AppTemplateSummaryResponse {
       })(),
       iconMediaRef: json['iconMediaRef']?.toString(),
       coverMediaRef: json['coverMediaRef']?.toString(),
+      screenshots: (() {
+        final list = _sdkworkAsList(json['screenshots']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+      })())
+            .whereType<AppTemplateScreenshot>()
+            .toList();
+      })(),
       visibility: (() {
         final value = json['visibility']?.toString();
         if (value == null) {
@@ -289,6 +338,7 @@ class AppTemplateSummaryResponse {
       'categoryUuid': categoryUuid,
       'iconMediaRef': iconMediaRef,
       'coverMediaRef': coverMediaRef,
+      'screenshots': screenshots?.map((item) => item.toJson()).toList(),
       'visibility': visibility,
       'pricingModel': pricingModel,
       'priceMinor': priceMinor,
@@ -316,6 +366,7 @@ class AppTemplateResponse {
   final String authorUserId;
   final String? iconMediaRef;
   final String? coverMediaRef;
+  final List<AppTemplateScreenshot>? screenshots;
   final String visibility;
   final String pricingModel;
   final String priceMinor;
@@ -342,6 +393,7 @@ class AppTemplateResponse {
     required this.authorUserId,
     this.iconMediaRef,
     this.coverMediaRef,
+    this.screenshots,
     required this.visibility,
     required this.pricingModel,
     required this.priceMinor,
@@ -424,6 +476,19 @@ class AppTemplateResponse {
       })(),
       iconMediaRef: json['iconMediaRef']?.toString(),
       coverMediaRef: json['coverMediaRef']?.toString(),
+      screenshots: (() {
+        final list = _sdkworkAsList(json['screenshots']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+      })())
+            .whereType<AppTemplateScreenshot>()
+            .toList();
+      })(),
       visibility: (() {
         final value = json['visibility']?.toString();
         if (value == null) {
@@ -519,6 +584,7 @@ class AppTemplateResponse {
       'authorUserId': authorUserId,
       'iconMediaRef': iconMediaRef,
       'coverMediaRef': coverMediaRef,
+      'screenshots': screenshots?.map((item) => item.toJson()).toList(),
       'visibility': visibility,
       'pricingModel': pricingModel,
       'priceMinor': priceMinor,
@@ -685,6 +751,7 @@ class CreateAppTemplateRequest {
   final String? currency;
   final String? iconMediaRef;
   final String? coverMediaRef;
+  final List<AppTemplateScreenshot>? screenshots;
   final CreateAppTemplateVersionRequest? initialVersion;
 
   CreateAppTemplateRequest({
@@ -701,6 +768,7 @@ class CreateAppTemplateRequest {
     this.currency,
     this.iconMediaRef,
     this.coverMediaRef,
+    this.screenshots,
     this.initialVersion
   });
 
@@ -749,6 +817,19 @@ class CreateAppTemplateRequest {
       currency: json['currency']?.toString(),
       iconMediaRef: json['iconMediaRef']?.toString(),
       coverMediaRef: json['coverMediaRef']?.toString(),
+      screenshots: (() {
+        final list = _sdkworkAsList(json['screenshots']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+      })())
+            .whereType<AppTemplateScreenshot>()
+            .toList();
+      })(),
       initialVersion: (() {
         final map = _sdkworkAsMap(json['initialVersion']);
         return map == null ? null : CreateAppTemplateVersionRequest.fromJson(map);
@@ -771,6 +852,7 @@ class CreateAppTemplateRequest {
       'currency': currency,
       'iconMediaRef': iconMediaRef,
       'coverMediaRef': coverMediaRef,
+      'screenshots': screenshots?.map((item) => item.toJson()).toList(),
       'initialVersion': initialVersion?.toJson(),
     };
   }
@@ -787,6 +869,7 @@ class UpdateAppTemplateRequest {
   final String? currency;
   final String? iconMediaRef;
   final String? coverMediaRef;
+  final List<AppTemplateScreenshot>? screenshots;
 
   UpdateAppTemplateRequest({
     this.displayName,
@@ -798,7 +881,8 @@ class UpdateAppTemplateRequest {
     this.priceMinor,
     this.currency,
     this.iconMediaRef,
-    this.coverMediaRef
+    this.coverMediaRef,
+    this.screenshots
   });
 
   factory UpdateAppTemplateRequest.fromJson(Map<String, dynamic> json) {
@@ -812,7 +896,20 @@ class UpdateAppTemplateRequest {
       priceMinor: json['priceMinor']?.toString(),
       currency: json['currency']?.toString(),
       iconMediaRef: json['iconMediaRef']?.toString(),
-      coverMediaRef: json['coverMediaRef']?.toString()
+      coverMediaRef: json['coverMediaRef']?.toString(),
+      screenshots: (() {
+        final list = _sdkworkAsList(json['screenshots']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+      })())
+            .whereType<AppTemplateScreenshot>()
+            .toList();
+      })()
     );
   }
 
@@ -828,6 +925,7 @@ class UpdateAppTemplateRequest {
       'currency': currency,
       'iconMediaRef': iconMediaRef,
       'coverMediaRef': coverMediaRef,
+      'screenshots': screenshots?.map((item) => item.toJson()).toList(),
     };
   }
 }
