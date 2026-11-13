@@ -3,6 +3,8 @@ export const deploymentsWorkspaceZhCn = {
   "surface.app-console": "控制台",
   "surface.backend-admin": "运维管理",
   "nav.primary": "主导航",
+  "nav.headerMenu": "页面导航",
+  "nav.appCenter": "应用中心",
   "auth.user": "已登录用户",
   "auth.signOut": "退出登录",
   "access.title": "暂无授权模块",

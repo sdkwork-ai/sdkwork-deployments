@@ -1,5 +1,6 @@
 import {
   createClient as createDeployClient,
+  type AppTemplateScreenshot,
   type CreateAppTemplateRequest,
   type SdkworkDeployAppClient,
   type UpdateAppTemplateRequest,
@@ -163,7 +164,10 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
             pricingModel: "FREE",
             priceMinor: "",
             currency: "",
-          }, (context) =>
+            iconMediaRef: "",
+            coverMediaRef: "",
+            screenshots: "",
+          }, async (context) =>
             app.template.appTemplates.create(appTemplateCreateBody(context.body), idempotencyParams())),
           action("update", "Update listing", {
             displayName: "",
@@ -174,7 +178,10 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
             pricingModel: "",
             priceMinor: "",
             currency: "",
-          }, (context) =>
+            iconMediaRef: "",
+            coverMediaRef: "",
+            screenshots: "",
+          }, async (context) =>
             app.template.appTemplates.update(selected(context, "id"), appTemplateUpdateBody(context.body), idempotencyParams()), { selection: true }),
         ]),
         // Moderation moves status only; the author owns the listing copy. An
@@ -298,6 +305,7 @@ function appTemplateCreateBody(body: Record<string, unknown>): CreateAppTemplate
     // keeps the member absent otherwise (mirrors `createMyTemplatesService`).
     ...(pricing === "PAID" && priceMinor !== undefined ? { priceMinor } : {}),
     ...(currency === undefined ? {} : { currency: currency.toUpperCase() }),
+    ...appTemplateMedia(cleaned),
   };
 }
 
@@ -324,7 +332,65 @@ function appTemplateUpdateBody(body: Record<string, unknown>): UpdateAppTemplate
     ...(pricing === undefined ? {} : { pricingModel: pricing }),
     ...(priceMinor === undefined ? {} : { priceMinor }),
     ...(currency === undefined ? {} : { currency: currency.toUpperCase() }),
+    ...appTemplateMedia(cleaned),
   };
+}
+
+/**
+ * Presentation media shared by the create and update commands: the icon, the
+ * cover, and the screenshot gallery. The gallery is authored as a JSON array in
+ * the generic dialog (`screenshots`) because this registry table is field-driven
+ * and has no array editor; it is validated here so a malformed value fails with
+ * a clear field error instead of reaching the API as an opaque string.
+ */
+function appTemplateMedia(
+  body: Record<string, unknown>,
+): Pick<UpdateAppTemplateRequest, "iconMediaRef" | "coverMediaRef" | "screenshots"> {
+  const iconMediaRef = optionalText(body.iconMediaRef, true);
+  const coverMediaRef = optionalText(body.coverMediaRef, true);
+  const screenshots = parseScreenshots(body.screenshots);
+  return {
+    ...(iconMediaRef === undefined ? {} : { iconMediaRef }),
+    ...(coverMediaRef === undefined ? {} : { coverMediaRef }),
+    ...(screenshots === undefined ? {} : { screenshots }),
+  };
+}
+
+function parseScreenshots(value: unknown): AppTemplateScreenshot[] | undefined {
+  const text = optionalText(value, false);
+  if (text === undefined) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("screenshots must be a JSON array");
+  }
+  if (!Array.isArray(parsed) || parsed.length > 8) {
+    throw new Error("screenshots must be a JSON array of at most 8 entries");
+  }
+  return parsed.map((entry, index) => {
+    const record = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : undefined;
+    if (record === undefined) {
+      throw new Error(`screenshots[${index}] must be an object`);
+    }
+    const mediaRef = optionalText(record.mediaRef, true);
+    if (mediaRef === undefined) {
+      throw new Error(`screenshots[${index}].mediaRef is required`);
+    }
+    const device = optionalText(record.device, true);
+    const caption = optionalText(record.caption, false);
+    const sortOrder = typeof record.sortOrder === "number" && Number.isInteger(record.sortOrder) && record.sortOrder >= 0
+      ? record.sortOrder
+      : undefined;
+    return {
+      mediaRef,
+      ...(device === undefined ? {} : { device }),
+      ...(caption === undefined ? {} : { caption }),
+      ...(sortOrder === undefined ? {} : { sortOrder }),
+    };
+  });
 }
 
 function requiredText(body: Record<string, unknown>, field: string): string {

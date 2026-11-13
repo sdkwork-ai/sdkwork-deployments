@@ -3,6 +3,8 @@ export const deploymentsWorkspaceEnUs = {
   "surface.app-console": "Console",
   "surface.backend-admin": "Operations",
   "nav.primary": "Primary navigation",
+  "nav.headerMenu": "Page navigation",
+  "nav.appCenter": "Application center",
   "auth.user": "Authenticated user",
   "auth.signOut": "Sign out",
   "access.title": "No authorized modules",

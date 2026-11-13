@@ -31,9 +31,20 @@ export function DeploymentsWorkspace({ locale, modules, onSignOut, permissionSco
   const [firstEntry] = entries;
   const base = surface === "backend-admin" ? "/admin" : "/console";
   if (!firstEntry) return <main className="empty-access" role="alert"><Shield size={22} /><h1>{t("access.title")}</h1><p>{t("access.description")}</p></main>;
+  /**
+   * Header menu for the operator surface.
+   *
+   * The admin workspace is reached from a flat sidebar, so the application
+   * center also gets a persistent top-level entry in the page header: an
+   * operator who is deep in an infrastructure page can return to application
+   * management without hunting the sidebar. The console surface keeps its
+   * existing chrome (no header) because its sidebar already groups the user
+   * workflows.
+   */
+  const showsAppCenterHeader = surface === "backend-admin" && entries.some((entry) => entry.resource === "applications");
   return <div className="app-layout">
     <aside className="sidebar"><div className="brand"><span className="brand-mark"><Boxes size={19} /></span><div><strong>{t("brand.name")}</strong><small>{t(`surface.${surface}`)}</small></div></div><nav aria-label={t("nav.primary")}>{entries.map((entry) => <NavLink key={entry.resource} to={`${base}/${entry.resource}`} title={resourceText(t, entry.resource, "label")}><span className="nav-icon">{resourceIcon(entry.resource)}</span><span className="nav-label">{resourceText(t, entry.resource, "label")}</span></NavLink>)}</nav><div className="sidebar-footer"><span title={userLabel}>{userLabel ?? t("auth.user")}</span>{onSignOut && <button className="icon-button" type="button" title={t("auth.signOut")} onClick={onSignOut}><LogOut size={17} /></button>}</div></aside>
-    <main className="workspace"><Routes>{entries.map((entry) => {
+    <main className="workspace">{showsAppCenterHeader && <header className="workspace-header"><span className="workspace-header-brand">{t("surface.backend-admin")}</span><nav aria-label={t("nav.headerMenu")}><NavLink to={`${base}/applications`}>{t("nav.appCenter")}</NavLink></nav></header>}<Routes>{entries.map((entry) => {
       const ResourcePage = resourcePages?.[entry.resource];
       return <Route key={entry.resource} path={`${entry.resource}/*`} element={ResourcePage ? <Suspense fallback={<div className="resource-loading" aria-busy="true"><RefreshCw size={20} /></div>}><ResourcePage locale={locale} /></Suspense> : <DeploymentsResourceTable entry={entry} locale={locale} source={registry[entry.resource]} />} />;
     })}<Route path="*" element={<Navigate to={`${base}/${firstEntry.resource}`} replace />} /></Routes></main>
