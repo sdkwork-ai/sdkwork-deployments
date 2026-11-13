@@ -171,11 +171,13 @@ async fn postgres_marketplace_catalog_flow_publishes_and_stays_tenant_bounded() 
             screenshots: Some(vec![
                 AppTemplateScreenshot {
                     media_ref: "drive://spaces/s/nodes/page-1".to_owned(),
+                    device: Some("iphone-69".to_owned()),
                     caption: Some("Overview".to_owned()),
                     sort_order: 0,
                 },
                 AppTemplateScreenshot {
                     media_ref: "drive://spaces/s/nodes/page-2".to_owned(),
+                    device: Some("android-phone".to_owned()),
                     caption: None,
                     sort_order: 1,
                 },

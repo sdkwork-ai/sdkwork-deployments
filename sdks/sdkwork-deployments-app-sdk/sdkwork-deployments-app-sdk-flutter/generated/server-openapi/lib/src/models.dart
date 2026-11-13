@@ -118,11 +118,13 @@ class TemplateCategoryResponse {
 
 class AppTemplateScreenshot {
   final String mediaRef;
+  final String? device;
   final String? caption;
   final int? sortOrder;
 
   AppTemplateScreenshot({
     required this.mediaRef,
+    this.device,
     this.caption,
     this.sortOrder
   });
@@ -136,6 +138,7 @@ class AppTemplateScreenshot {
         }
         return value;
       })(),
+      device: json['device']?.toString(),
       caption: json['caption']?.toString(),
       sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null
     );
@@ -144,6 +147,7 @@ class AppTemplateScreenshot {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'mediaRef': mediaRef,
+      'device': device,
       'caption': caption,
       'sortOrder': sortOrder,
     };

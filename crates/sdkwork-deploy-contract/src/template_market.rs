@@ -82,6 +82,10 @@ pub struct TemplateCategoryPage {
 pub struct AppTemplateScreenshot {
     #[serde(rename = "mediaRef")]
     pub media_ref: String,
+    /// Store shelf the page documents (for example `iphone-69` or
+    /// `android-phone`). Optional for older rows and non-device listings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caption: Option<String>,
     #[serde(rename = "sortOrder", default)]

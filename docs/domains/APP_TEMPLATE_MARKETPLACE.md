@@ -39,8 +39,11 @@ The listing carries the App Store-style presentation assets authors expect:
 | Cover image | `deploy_app_template.cover_media_ref` | `coverMediaRef` |
 | Sample pages | `deploy_app_template.metadata.screenshots` (JSONB array) | `screenshots` |
 
-Each screenshot is `{ mediaRef, caption?, sortOrder }`; the current application
-surface caps the list at eight and preserves the author's order. Media refs are
+Each screenshot is `{ mediaRef, device?, caption?, sortOrder }`; `device` is the
+store shelf the page documents (for example `iphone-69` or `android-phone`), so
+the marketplace can group pages by device instead of treating them as one
+undifferentiated carousel. The current application surface caps the total at
+the app type's store limit and preserves the author's order. Media refs are
 Drive-backed stable references (`drive://spaces/{space}/nodes/{node}`), never
 signed URLs — the same rule as `deploy_app.metadata.media`. Screenshots live in
 `metadata` rather than a fourth table because they are bounded listing-level

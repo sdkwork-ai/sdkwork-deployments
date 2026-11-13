@@ -80,7 +80,9 @@ fn map_category_row(row: &PgRow) -> Result<TemplateCategoryResponse, sqlx::Error
     })
 }
 
-const MAX_TEMPLATE_SCREENSHOTS: usize = 8;
+/// Broadest store total (App Store). The client applies the narrower
+/// per-app-type shelf limits; the repository keeps one safe upper bound.
+const MAX_TEMPLATE_SCREENSHOTS: usize = 30;
 
 /// Normalize and validate the author-provided sample pages before they reach
 /// JSONB. Empty media references and duplicate pages are refused because the
@@ -107,6 +109,20 @@ fn normalize_screenshots(
                 "a screenshot mediaRef is repeated",
             ));
         }
+        let device = screenshot
+            .device
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        if device
+            .as_ref()
+            .is_some_and(|value| value.chars().count() > 32)
+        {
+            return Err(DeployServiceError::validation(
+                "screenshot device must be at most 32 characters",
+            ));
+        }
         let caption = screenshot
             .caption
             .as_deref()
@@ -123,6 +139,7 @@ fn normalize_screenshots(
         }
         normalized.push(AppTemplateScreenshot {
             media_ref: media_ref.to_owned(),
+            device,
             caption,
             sort_order: if screenshot.sort_order >= 0 {
                 screenshot.sort_order

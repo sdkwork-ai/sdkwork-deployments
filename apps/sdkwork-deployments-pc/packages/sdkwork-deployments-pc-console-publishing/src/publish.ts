@@ -153,6 +153,7 @@ export type {
   DeployAppCategorySelection,
   DeployAppMediaGroup,
   DeployAppMediaRef,
+  DeployAppKind,
   DeployAppMediaUpload,
   DeployAppPublishingService,
   DeployAppPublishingServiceOptions,

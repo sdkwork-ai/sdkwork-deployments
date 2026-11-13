@@ -4322,6 +4322,10 @@
             "minLength": 1,
             "maxLength": 512
           },
+          "device": {
+            "type": "string",
+            "maxLength": 32
+          },
           "caption": {
             "type": "string",
             "maxLength": 160
@@ -4409,7 +4413,7 @@
           },
           "screenshots": {
             "type": "array",
-            "maxItems": 8,
+            "maxItems": 30,
             "items": {
               "$ref": "#/components/schemas/AppTemplateScreenshot"
             }
