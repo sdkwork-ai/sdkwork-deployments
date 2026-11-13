@@ -118,8 +118,10 @@ const en = {
 
   // Step 2 — project directory & auto-detection (v3 dual paths; v3.4 env-aware)
   buildOutputPath: "Build output directory",
-  buildOutputPathHint: "Path of the built resource files, relative to the application root. Browser apps follow sdkwork-specs: dist/<deploymentProfile>/<environment> (e.g. dist/standalone/dev, dist/cloud/prod). Prefilled from the selected environment and framework.",
+  buildOutputPathHint: "Path of the built resource files, relative to the application root. Choose the folder with the directory picker or edit the relative path. Browser apps follow sdkwork-specs: dist/<deploymentProfile>/<environment> (e.g. dist/standalone/dev, dist/cloud/prod). Prefilled from the selected environment and framework.",
   buildOutputPathPlaceholder: "e.g. dist/standalone/dev",
+  buildOutputPick: "Choose directory",
+  buildOutputOutsideRoot: "Choose a build-output directory inside the application root.",
   buildOutputDetected: "Detected",
   buildOutputNotDetected: "Not found in listing",
 
@@ -1096,8 +1098,10 @@ const zh: Record<keyof typeof en, string> = {
 
   // 第 2 步 — 项目目录与自动检测（v3 双路径；v3.4 产物目录随环境/形态联动）
   buildOutputPath: "构建产物目录",
-  buildOutputPathHint: "构建后资源文件所在目录，相对应用根路径。浏览器类应用遵循 sdkwork-specs 规范：dist/<部署形态>/<环境>（如 dist/standalone/dev、dist/cloud/prod），已按所选环境与框架预填。",
+  buildOutputPathHint: "构建后资源文件所在目录，相对应用根路径。可点击「选择目录」浏览文件夹，也可直接编辑相对路径。浏览器类应用遵循 sdkwork-specs 规范：dist/<部署形态>/<环境>（如 dist/standalone/dev、dist/cloud/prod），已按所选环境与框架预填。",
   buildOutputPathPlaceholder: "例如：dist/standalone/dev",
+  buildOutputPick: "选择目录",
+  buildOutputOutsideRoot: "请选择应用根目录内的构建产物目录。",
   buildOutputDetected: "已检测到",
   buildOutputNotDetected: "列举中未发现",
 

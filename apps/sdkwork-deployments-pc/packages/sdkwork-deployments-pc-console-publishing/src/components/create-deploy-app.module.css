@@ -98,6 +98,121 @@
   overflow: hidden;
 }
 
+/* Publish-project modal shares the 90% frame used by the template dialogs.
+   The form body keeps a readable centered column inside the larger frame. */
+.publishDialogEmbedded {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.publishDialogEmbedded .deployPublishDialog {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.deployPublishDialog {
+  width: clamp(880px, 92vw, 1440px);
+  height: max(640px, 90vh);
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+}
+
+.deployPublishDialog .body {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.deployPublishDialog .body[data-step="1"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.sourceSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--pda-border);
+  border-radius: 10px;
+  background: var(--pda-surface);
+}
+
+.sourceSummaryMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sourceSummaryLabel {
+  color: var(--pda-text-muted);
+  font-size: 10px;
+}
+
+.sourceSummaryName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sourceSummaryPath {
+  overflow: hidden;
+  color: var(--pda-text-muted);
+  font-family: var(--dsw-font-family-mono, ui-monospace, monospace);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep the header, step rail, path strip and footer content aligned with the
+   centered 980px form column while their backgrounds/borders still span the
+   full modal width. */
+.deployPublishDialog .header,
+.deployPublishDialog .steps,
+.deployPublishDialog .projectPathBar,
+.deployPublishDialog .footer {
+  padding-inline: max(20px, calc((100% - 1360px) / 2 + 20px));
+}
+
+/* The title column follows the form rail, but the close affordance belongs to
+   the window frame itself: pin it to the modal's top-right corner. */
+.deployPublishDialog .header {
+  position: relative;
+  padding-right: max(56px, calc((100% - 1360px) / 2 + 20px));
+}
+
+.deployPublishDialog .closeButton {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 1;
+  margin-left: 0;
+}
+
+@media (max-width: 760px) {
+  .deployPublishDialog {
+    width: calc(100vw - 16px);
+    height: 94vh;
+    max-height: 94vh;
+  }
+}
+
 /* --- 抽屉形态（新增应用）：区别于居中模态，从右侧滑入 ---
    高内聚：与 .publishDialog 共用同一套 --pda-* 令牌与 data-theme 翻转，
    但根/面板是独立类名 —— 同一个对话框组件既可作为居中模态
@@ -192,6 +307,22 @@
   gap: 12px;
   padding: 16px 20px 12px;
   border-bottom: 1px solid var(--pda-border);
+}
+
+.headerGlyph {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--pda-border);
+  border-radius: 8px;
+  color: var(--pda-accent);
+}
+
+.headerGlyph svg {
+  width: 16px;
+  height: 16px;
 }
 
 .headerText h2 {
@@ -371,6 +502,11 @@
 
 .directoryInput {
   flex: 1;
+}
+
+.directoryRow .secondaryButton {
+  height: 34px;
+  box-sizing: border-box;
 }
 
 .directoryInput[data-empty="true"] {
@@ -1522,11 +1658,22 @@
 }
 
 .detectBadge {
+  flex: 0 0 auto;
   padding: 2px 9px;
   border-radius: 999px;
   font-weight: 600;
+  white-space: nowrap;
   background: var(--pda-accent-soft);
   color: var(--pda-accent);
+}
+
+/* In the directory row the badge sits beside a 34px input/action; match that
+   control height instead of letting its text metrics decide the height. */
+.directoryRow .detectBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  box-sizing: border-box;
 }
 
 .detectBadge[data-conformance="partial"] {

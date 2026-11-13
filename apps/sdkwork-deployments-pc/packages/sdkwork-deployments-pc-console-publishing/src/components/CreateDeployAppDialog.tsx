@@ -101,6 +101,12 @@ export interface CreateDeployAppDialogProps {
   readonly publishAppId?: string | undefined
   /** v5: 目标应用名称（展示用，缺省时取列表里的名称）。 */
   readonly publishApp?: AppResponse | undefined
+  /** 宿主已从源目录解析出的表面卡片，避免多卡片 appKind 丢失表面。 */
+  readonly initialCardId?: string | undefined
+  /** Hide the advanced standalone/cloud deployment switch. */
+  readonly hideDeploymentMode?: boolean | undefined
+  /** Deployment mode resolved from the manifest default profile. */
+  readonly initialDeploymentMode?: DeployDeploymentMode | undefined
   /** v2: 显式初始目录（deployments 控制台直传）。 */
   readonly initialDirectory?: string | undefined
   /** v2: 当前会话/项目的默认目录（宿主下发，自动检测的第一候选）。 */
@@ -113,6 +119,12 @@ export interface CreateDeployAppDialogProps {
   readonly pickDirectory?: ((current: string | undefined) => Promise<string | undefined>) | undefined
   /** v3.5: 一键打包端口（宿主 sdkwork-app-build 插件；缺省时隐藏打包入口）。 */
   readonly buildPort?: DeployDialogBuildPort | undefined
+  /** 嵌入宿主弹窗时去掉自身的全屏遮罩与窗口阴影。 */
+  readonly embedded?: boolean | undefined
+  /** Step 1 back action (the host app-source picker). */
+  readonly onSourceBack?: (() => void) | undefined
+  /** Skip the type-confirmation step when the host already chose the app. */
+  readonly skipTypeStep?: boolean | undefined
   /** 主题（驱动组件内建 CSS 变量切换；缺省浅色）。 */
   readonly theme?: ("light" | "dark") | undefined
   readonly onClose: () => void
@@ -134,12 +146,18 @@ export function CreateDeployAppDialog({
   locale,
   publishAppId,
   publishApp,
+  initialCardId,
+  hideDeploymentMode,
+  initialDeploymentMode,
   initialDirectory,
   defaultDirectory,
   inspectDirectory,
   currentUser,
   pickDirectory,
   buildPort,
+  embedded = false,
+  onSourceBack,
+  skipTypeStep = false,
   theme = "light",
   onClose,
   onPublished,
@@ -155,15 +173,42 @@ export function CreateDeployAppDialog({
   // 契约分不清，因此在多于一个候选时保留一个「指明表面」的选择。
   const lockedCards = useMemo(() => cardsOfAppKind(publishApp?.appKind), [publishApp?.appKind])
 
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(skipTypeStep ? 2 : 1)
+  const visibleStepCount = skipTypeStep ? STEP_COUNT - 1 : STEP_COUNT
+  const visibleStep = skipTypeStep ? step - 1 : step
   const [directory, setDirectory] = useState<string | undefined>(initialDirectory ?? defaultDirectory)
   // v6: 唯一候选时直接锁定；多候选时留空，由只读区里的表面选择补齐；
   // 无候选（未识别的契约枚举）时留空 —— 此时发布会在 submit 处被挡下。
-  const [cardId, setCardId] = useState<string | undefined>(
-    () => (lockedCards.length === 1 ? lockedCards[0]?.id : undefined),
-  )
+  const resolveInitialCard = (): string | undefined => {
+    if (initialCardId !== undefined && lockedCards.some(card => card.id === initialCardId)) {
+      return initialCardId
+    }
+    const metadata = publishApp?.metadata as Record<string, unknown> | undefined
+    const surface = typeof metadata?.["surface"] === "string" ? metadata["surface"] : undefined
+    const surfaceCard = surface === undefined
+      ? undefined
+      : lockedCards.find(card => card.surface === surface)
+    if (surfaceCard !== undefined) return surfaceCard.id
+    const surfaces = new Set(lockedCards.map(card => card.surface))
+    return lockedCards.length > 0 && surfaces.size === 1 ? lockedCards[0]?.id : undefined
+  }
+  const [cardId, setCardId] = useState<string | undefined>(resolveInitialCard)
+  useEffect(() => {
+    setCardId(resolveInitialCard())
+    // Re-resolve only when the host swaps the target app/source card.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishApp?.id, initialCardId])
+
+  useEffect(() => {
+    if (initialDeploymentMode !== undefined) setDeploymentMode(initialDeploymentMode)
+  }, [initialDeploymentMode, publishApp?.id])
+
+  useEffect(() => {
+    setBuildOutputPickError(undefined)
+  }, [directory])
   const [frameworkId, setFrameworkId] = useState<string>()
   const [buildOutputPath, setBuildOutputPath] = useState("")
+  const [buildOutputPickError, setBuildOutputPickError] = useState<string>()
   const [detection, setDetection] = useState<DeployProjectDetection>()
   const [detectionRoot, setDetectionRoot] = useState<string>()
   const [inspecting, setInspecting] = useState(false)
@@ -179,7 +224,9 @@ export function CreateDeployAppDialog({
   const [description, setDescription] = useState("")
   const [releaseNotes, setReleaseNotes] = useState("")
   const [environment, setEnvironment] = useState<DeployEnvironmentId>("development")
-  const [deploymentMode, setDeploymentMode] = useState<DeployDeploymentMode>("standalone")
+  const [deploymentMode, setDeploymentMode] = useState<DeployDeploymentMode>(
+    initialDeploymentMode ?? "standalone",
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const [uploadingLabel, setUploadingLabel] = useState<string>()
@@ -208,6 +255,27 @@ export function CreateDeployAppDialog({
       : deriveSurfaceDirectory(directory, type.surface)),
     [directory, type],
   )
+
+  const pickBuildOutputDirectory = async (): Promise<void> => {
+    if (pickDirectory === undefined) return
+    const base = matchedSurfacePath ?? specSurfacePath ?? directory
+    if (base === undefined || base.trim() === "") return
+    const current = buildOutputPath.trim()
+    const currentAbsolute = current === "" || current === "."
+      ? base
+      : isAbsolutePath(current)
+        ? current
+        : joinFsPath(base, current)
+    const picked = await pickDirectory(currentAbsolute)
+    if (picked === undefined || picked === "") return
+    const relative = relativeInside(base, picked)
+    if (relative === undefined) {
+      setBuildOutputPickError(t("buildOutputOutsideRoot"))
+      return
+    }
+    setBuildOutputPickError(undefined)
+    setBuildOutputPath(relative)
+  }
   // v3: 构建产物路径验证与候选 —— 依据选中表面目录的子目录列举。v4：
   // 无表面的类型（API 服务 / 静态资源）发布仓库根目录，改用根目录列举，
   // 使其框架与产物检测同样可用。
@@ -362,6 +430,10 @@ export function CreateDeployAppDialog({
   useEffect(() => {
     const target = matchedSurfacePath ?? specSurfacePath
     if (target === undefined || target === directory) return
+    // A manifest `config.workspaceRoot` (or another explicit caller root) is
+    // authoritative. Do not replace it with a detected sibling surface until
+    // the operator changes the path themselves.
+    if (initialDirectory !== undefined && directory === initialDirectory) return
     if (specSurfacePath === undefined) {
       const autoFillable =
         directory === undefined
@@ -372,7 +444,7 @@ export function CreateDeployAppDialog({
     }
     lastAutoDirectoryRef.current = target
     setDirectory(target)
-  }, [matchedSurfacePath, specSurfacePath, detectionRoot, directory])
+  }, [matchedSurfacePath, specSurfacePath, detectionRoot, directory, initialDirectory])
 
   // v3.4: 产物目录跟随环境/部署形态切换（仅浏览器类表面）—— 当前值仍是框架
   // 默认值或上次自动值（未被手动修改）时应用新的 dist/<mode>/<envAlias>，
@@ -392,6 +464,7 @@ export function CreateDeployAppDialog({
   // dist/ 不是有效产物目录（APP_CLIENT_ARCHITECTURE_ALIGNMENT_SPEC §2.2），
   // 改落当前环境/形态对应的 dist/<mode>/<envAlias>；其余值原样透传。
   const handleBuildOutputChange = (value: string) => {
+    setBuildOutputPickError(undefined);
     if (envBuildOutput !== undefined && value.trim() === "dist") {
       lastEnvBuildOutputRef.current = envBuildOutput
       setBuildOutputPath(envBuildOutput)
@@ -565,9 +638,15 @@ export function CreateDeployAppDialog({
   }
 
   return (
-    <div className={css.publishDialog} data-theme={theme} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
-      <div className={css.dialog} role="dialog" aria-modal="true" aria-label={t("publishApp")}>
+    <div className={`${css.publishDialog}${embedded ? ` ${css.publishDialogEmbedded}` : ""}`} data-theme={theme} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+      <div className={`${css.dialog} ${css.deployPublishDialog}`} role="dialog" aria-modal="true" aria-label={t("publishApp")}>
         <header className={css.header}>
+          <span className={css.headerGlyph} aria-hidden="true">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13.8 2.2 2.8 6.9l3.9 1.9 1.9 3.9 5.2-10.5Z" />
+              <path d="m6.7 8.8 3.2-3.2" />
+            </svg>
+          </span>
           <div className={css.headerText}>
             <h2>{t("publishApp")}</h2>
             <p>{t("publishAppDescription")}</p>
@@ -577,9 +656,9 @@ export function CreateDeployAppDialog({
           </button>
         </header>
 
-        <div className={css.steps} aria-label={t("step", { step: String(step), total: String(STEP_COUNT) })}>
-          {Array.from({ length: STEP_COUNT }, (_, index) => (
-            <span key={index} className={css.stepDot} data-active={index < step} />
+        <div className={css.steps} aria-label={t("step", { step: String(visibleStep), total: String(visibleStepCount) })}>
+          {Array.from({ length: visibleStepCount }, (_, index) => (
+            <span key={index} className={css.stepDot} data-active={index < visibleStep} />
           ))}
         </div>
 
@@ -594,18 +673,34 @@ export function CreateDeployAppDialog({
           onChangeDirectory={() => { void changeDirectory() }}
         />
 
-        <div className={css.body}>
+        <div className={css.body} data-step={step}>
           {step === 1 && (
-            /* v6: 应用类型只读确认 —— 类型在 CreateAppDialog 已落库，发布阶段
-               不允许修改（改它等于改写应用身份）。多候选（SPA_WEB ⊃ h5/pc-web）
-               时由只读区内的表面选择补齐 metadata.surface。 */
-            <LockedAppTypeField
-              cards={lockedCards}
-              appKind={publishApp?.appKind}
-              cardId={cardId}
-              onSelectCard={lockedCards.length > 1 ? selectCard : undefined}
-              t={t}
-            />
+            <>
+              <div className={css.sourceSummary}>
+                <div className={css.sourceSummaryMain}>
+                  <span className={css.sourceSummaryLabel}>{t("sourceDirectory")}</span>
+                  <strong className={css.sourceSummaryName}>
+                    {publishApp?.name ?? targetAppName ?? t("userUnknown")}
+                  </strong>
+                  <span className={css.sourceSummaryPath} title={directory}>{directory ?? t("noDirectory")}</span>
+                </div>
+                {onSourceBack !== undefined && (
+                  <button type="button" className={css.secondaryButton} onClick={onSourceBack}>
+                    {t("changeDirectory")}
+                  </button>
+                )}
+              </div>
+              {/* v6: 应用类型只读确认 —— 类型在 CreateAppDialog 已落库，发布阶段
+                  不允许修改（改它等于改写应用身份）。多候选（SPA_WEB ⊃ h5/pc-web）
+                  时由只读区内的表面选择补齐 metadata.surface。 */}
+              <LockedAppTypeField
+                cards={lockedCards}
+                appKind={publishApp?.appKind}
+                cardId={cardId}
+                onSelectCard={lockedCards.length > 1 ? selectCard : undefined}
+                t={t}
+              />
+            </>
           )}
 
           {step === 2 && (
@@ -619,6 +714,7 @@ export function CreateDeployAppDialog({
                 deploymentMode={deploymentMode}
                 onEnvironmentChange={setEnvironment}
                 onDeploymentModeChange={setDeploymentMode}
+                showDeploymentMode={!hideDeploymentMode}
                 t={t}
               />
               <DeployProjectDirectoryFields
@@ -630,6 +726,10 @@ export function CreateDeployAppDialog({
                 matchedSurfacePath={matchedSurfacePath}
                 buildOutputDetected={buildOutputDetected}
                 buildCandidates={buildCandidates}
+                {...(pickDirectory === undefined ? {} : {
+                  onPickBuildOutput: () => { void pickBuildOutputDirectory() },
+                })}
+                {...(buildOutputPickError === undefined ? {} : { buildOutputPickError })}
                 t={t}
                 onDirectoryChange={setDirectory}
                 onBuildOutputChange={handleBuildOutputChange}
@@ -760,8 +860,17 @@ export function CreateDeployAppDialog({
               同为 flex:1 会各分一半自由宽度，提示文案被挤压换行（用户可见回归）。
               uploadingText 无 flex:1，单独出现时仍需 spacer 维持按钮靠右。 */}
           {!error && <div className={css.footerSpacer} />}
-          {step > 1 && (
-            <button type="button" className={css.secondaryButton} disabled={busy} onClick={previous}>
+          {(step > 1 || onSourceBack !== undefined) && (
+            <button
+              type="button"
+              className={css.secondaryButton}
+              disabled={busy}
+              onClick={() => {
+                if (skipTypeStep && step === 2) onSourceBack?.()
+                else if (step > 1) previous()
+                else onSourceBack?.()
+              }}
+            >
               {t("previous")}
             </button>
           )}
@@ -897,6 +1006,25 @@ function errorText(cause: unknown, t: PublishingTranslator): string {
  * deploy_app.app_kind 枚举的本地化展示；服务端出现映射表未覆盖的新枚举值时
  * 回退原文，保证列表不因枚举演进而空白。
  */
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith("/") || path.startsWith("\\\\") || /^[a-zA-Z]:[\\/]/.test(path)
+}
+
+function joinFsPath(base: string, relative: string): string {
+  const separator = base.includes("\\") ? "\\" : "/";
+  return `${base.replace(/[\\/]+$/u, "")}${separator}${relative.replace(/^[\\/]+/u, "").replace(/\//gu, separator)}`;
+}
+
+/** Convert a picked absolute folder into a path relative to the app root. */
+function relativeInside(base: string, target: string): string | undefined {
+  const normalizedBase = base.replace(/\\/gu, "/").replace(/\/+$/u, "");
+  const normalizedTarget = target.replace(/\\/gu, "/").replace(/\/+$/u, "");
+  if (normalizedTarget.toLowerCase() === normalizedBase.toLowerCase()) return ".";
+  const prefix = `${normalizedBase.toLowerCase()}/`;
+  if (!normalizedTarget.toLowerCase().startsWith(prefix)) return undefined;
+  return normalizedTarget.slice(normalizedBase.length + 1);
+}
+
 function appKindLabel(appKind: AppKind, t: PublishingTranslator): string {
   const key: PublishingMessageKey | undefined = APP_KIND_LABEL_KEYS[appKind];
   return key !== undefined ? t(key) : appKind;

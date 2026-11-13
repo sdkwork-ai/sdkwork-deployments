@@ -42,6 +42,9 @@ export interface DeployProjectDirectoryFieldsProps {
    * true = detected, false = listed but missing, undefined = not listable.
    */
   readonly buildOutputDetected: boolean | undefined
+  /** Browse for the build-output folder; fills the relative field. */
+  readonly onPickBuildOutput?: (() => void) | undefined
+  readonly buildOutputPickError?: string | undefined
   /** Generic build-output directory names observed in the surface root. */
   readonly buildCandidates: readonly string[]
   readonly t: PublishingTranslator
@@ -59,6 +62,8 @@ export function DeployProjectDirectoryFields({
   selectedSurface,
   matchedSurfacePath,
   buildOutputDetected,
+  onPickBuildOutput,
+  buildOutputPickError,
   buildCandidates,
   t,
   onDirectoryChange,
@@ -115,9 +120,17 @@ export function DeployProjectDirectoryFields({
             placeholder={t("buildOutputPathPlaceholder")}
             onChange={(event) => { onBuildOutputChange(event.target.value) }}
           />
+          {onPickBuildOutput !== undefined && (
+            <button type="button" className={css.secondaryButton} onClick={onPickBuildOutput}>
+              {t("buildOutputPick")}
+            </button>
+          )}
           {buildOutputDetected === true && <span className={css.detectBadge} data-conformance="conformant">{t("buildOutputDetected")}</span>}
           {buildOutputDetected === false && <span className={css.detectBadge} data-conformance="partial">{t("buildOutputNotDetected")}</span>}
         </div>
+        {buildOutputPickError !== undefined && (
+          <span className={css.fieldError} role="alert">{buildOutputPickError}</span>
+        )}
         {buildCandidates.length > 0 && (
           <div className={css.buildCandidates}>
             {buildCandidates.map((candidate) => (

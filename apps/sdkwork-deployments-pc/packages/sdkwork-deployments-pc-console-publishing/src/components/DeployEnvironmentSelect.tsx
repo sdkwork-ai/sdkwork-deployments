@@ -22,6 +22,8 @@ export interface DeployEnvironmentSelectProps {
   readonly deploymentMode: DeployDeploymentMode
   readonly onEnvironmentChange: (environment: DeployEnvironmentId) => void
   readonly onDeploymentModeChange: (mode: DeployDeploymentMode) => void
+  /** Host can hide the advanced standalone/cloud switch. */
+  readonly showDeploymentMode?: boolean | undefined
   readonly t: PublishingTranslator
 }
 
@@ -38,6 +40,7 @@ export function DeployEnvironmentSelect({
   deploymentMode,
   onEnvironmentChange,
   onDeploymentModeChange,
+  showDeploymentMode = true,
   t,
 }: DeployEnvironmentSelectProps) {
   return (
@@ -65,29 +68,31 @@ export function DeployEnvironmentSelect({
         </div>
       </div>
 
-      <div className={css.field}>
-        <span className={css.fieldLabel}>{t("deploymentMode")}</span>
-        <div className={css.subSelector} role="radiogroup" aria-label={t("deploymentMode")}>
-          {DEPLOY_DEPLOYMENT_MODES.map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              role="radio"
-              aria-checked={deploymentMode === mode}
-              data-selected={deploymentMode === mode}
-              className={css.subOption}
-              onClick={() => { onDeploymentModeChange(mode) }}
-            >
-              {t(mode === "standalone" ? "modeStandalone" : "modeCloud")}
-            </button>
-          ))}
+      {showDeploymentMode && (
+        <div className={css.field}>
+          <span className={css.fieldLabel}>{t("deploymentMode")}</span>
+          <div className={css.subSelector} role="radiogroup" aria-label={t("deploymentMode")}>
+            {DEPLOY_DEPLOYMENT_MODES.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={deploymentMode === mode}
+                data-selected={deploymentMode === mode}
+                className={css.subOption}
+                onClick={() => { onDeploymentModeChange(mode) }}
+              >
+                {t(mode === "standalone" ? "modeStandalone" : "modeCloud")}
+              </button>
+            ))}
+          </div>
+          {environment !== undefined && (
+            <span className={css.profilePreview}>
+              {t("profileIdPreview", { id: deployProfileId(deploymentMode, environment) })}
+            </span>
+          )}
         </div>
-        {environment !== undefined && (
-          <span className={css.profilePreview}>
-            {t("profileIdPreview", { id: deployProfileId(deploymentMode, environment) })}
-          </span>
-        )}
-      </div>
+      )}
     </>
   );
 }
