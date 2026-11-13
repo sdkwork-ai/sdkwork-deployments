@@ -136,14 +136,23 @@ There is no HarmonyOS client root in this repository; a HarmonyOS surface needs
 its own application root and `agent.app.config.json` declaration before any
 page can be authored.
 
-### 6b. Bootstrap: the first category
+### 6b. Bootstrap: the baseline taxonomy
 
-Categories are tenant-scoped and platform-admin maintained, so a freshly
-provisioned tenant has an empty taxonomy, and `appTemplates.create` requires a
-`categoryUuid`. Until the tenant's first category exists, publishing is
-impossible. The only path that creates one is the backend surface
-(`POST /backend/v3/api/template_categories`, permission
-`deploy.templateCategories.write`), driven from the PC admin console's
-`templateCategories` resource; the app-api exposes `templateCategories.list`
-only. Provision the taxonomy once per tenant before opening the marketplace to
-authors.
+Categories are tenant-scoped and platform-admin maintained, and
+`appTemplates.create` requires a `categoryUuid`, so a tenant with an empty
+taxonomy cannot publish anything. The database module therefore seeds a
+baseline taxonomy, not just schema: every seed profile includes
+`database/seeds/common/015_deploy_app_template_categories.sql`, which upserts
+ten `ACTIVE` categories for the platform tenant (`100001`): Web/H5, PC/desktop,
+mobile native, cross-platform, mini program, API/server, full-stack, AI/agent,
+developer tooling, and other.
+
+The seed is idempotent by `(tenant_id, category_key)`, keeps reserved ids
+`910001300001..010`, and updates display copy/sort order without replacing an
+existing administrator-created row. `db:init` plus `db:seed` (the standard
+profile) therefore leaves a fresh database ready for the first
+`appTemplates.create` without a manual console step. The PC admin console's
+`templateCategories` resource remains the path to extend, rename, disable or
+reorder the taxonomy; the app-api still exposes `templateCategories.list`
+only. A tenant provisioned with a different id receives its taxonomy during
+that tenant's own bootstrap.
