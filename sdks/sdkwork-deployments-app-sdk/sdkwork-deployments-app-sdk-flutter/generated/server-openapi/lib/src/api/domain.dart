@@ -68,36 +68,42 @@ class DomainApi {
     await _client.delete(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}'));
   }
 
-  /// Read the Zone's WeChat MP domain-ownership verification file
-  Future<DomainZonesWechatVerificationRetrieveResponse?> zonesWechatVerificationRetrieve(String zoneId) async {
-    final response = await _client.get(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification'));
+  /// List the Zone's domain-ownership verification files
+  Future<DomainZonesVerificationFilesListResponse?> zonesVerificationFilesList(String zoneId) async {
+    final response = await _client.get(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/verification_files'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : DomainZonesWechatVerificationRetrieveResponse.fromJson(map);
+      return map == null ? null : DomainZonesVerificationFilesListResponse.fromJson(map);
     })();
   }
 
-  /// Upload (or wholly replace) the Zone's WeChat verification file
-  Future<DomainZonesWechatVerificationUpsertResponse?> zonesWechatVerificationUpsert(String zoneId, UpsertDomainWechatVerificationRequest body) async {
+  /// Register (or replace) a verification file on the Zone
+  Future<DomainZonesVerificationFilesCreateResponse201?> zonesVerificationFilesCreate(String zoneId, CreateDomainVerificationFileRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
     final payload = body.toJson();
-    final response = await _client.put(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification'), body: payload, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/verification_files'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : DomainZonesWechatVerificationUpsertResponse.fromJson(map);
+      return map == null ? null : DomainZonesVerificationFilesCreateResponse201.fromJson(map);
     })();
   }
 
-  /// Delete the Zone's WeChat verification file
-  Future<void> zonesWechatVerificationDelete(String zoneId) async {
-    await _client.delete(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification'));
+  /// Delete one verification file from the Zone
+  Future<void> zonesVerificationFilesDelete(String zoneId, String fileId) async {
+    await _client.delete(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/verification_files/${serializePathParameter(fileId, const PathParameterSpec('fileId', 'simple', false))}'));
   }
 
-  /// Self-check the Zone's WeChat verification file
-  Future<DomainZonesWechatVerificationCheckResponse?> zonesWechatVerificationCheck(String zoneId) async {
-    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/wechat_verification/check'));
+  /// Self-check one verification file
+  Future<DomainZonesVerificationFilesCheckResponse?> zonesVerificationFilesCheck(String zoneId, String fileId) async {
+    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/verification_files/${serializePathParameter(fileId, const PathParameterSpec('fileId', 'simple', false))}/check'));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : DomainZonesWechatVerificationCheckResponse.fromJson(map);
+      return map == null ? null : DomainZonesVerificationFilesCheckResponse.fromJson(map);
     })();
   }
 

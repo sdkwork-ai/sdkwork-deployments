@@ -6,6 +6,7 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_intelligence_deploy_service::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, DomainVerificationChallenge,
+    VerificationFileRecord,
 };
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
@@ -49,6 +50,24 @@ const HOSTNAME_SELECT: &str =
 /// platform zones.
 fn zone_owner_gate(parameter: usize) -> String {
     format!("(z.user_id IS NULL OR z.user_id = ${parameter})")
+}
+
+/// Maps one `deploy_dns_zone_verification_file` row to the service record.
+fn verification_file_from_row(row: &PgRow) -> DeployServiceResult<VerificationFileRecord> {
+    let text = |column: &str| -> DeployServiceResult<String> {
+        row.try_get(column)
+            .map_err(|error| DeployServiceError::Internal(format!("map {column}: {error}")))
+    };
+    Ok(VerificationFileRecord {
+        id: text("uuid")?,
+        platform: text("platform")?,
+        file_name: text("file_name")?,
+        content: text("content")?,
+        created_at: datetime_from_row(row, "created_at")
+            .map_err(|error| DeployServiceError::Internal(format!("map created_at: {error}")))?,
+        updated_at: datetime_from_row(row, "updated_at")
+            .map_err(|error| DeployServiceError::Internal(format!("map updated_at: {error}")))?,
+    })
 }
 
 impl DeployRepository {
@@ -372,16 +391,44 @@ impl DeployRepository {
         ))
     }
 
-    /// Uploads (or wholly replaces) the Zone's WeChat verification file and
-    /// returns the write's timestamp.
-    pub(super) async fn upsert_dns_zone_wechat_verification_repo(
+    /// Every verification file registered on the zone, platform order first.
+    pub(super) async fn list_dns_zone_verification_files_repo(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
+    ) -> DeployServiceResult<Vec<VerificationFileRecord>> {
+        let rows = sqlx::query(AssertSqlSafe(format!(
+            "SELECT v.uuid, v.platform, v.file_name, v.content, v.created_at, v.updated_at
+             FROM deploy_dns_zone_verification_file v
+             JOIN deploy_dns_zone z ON z.id = v.zone_id
+             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {}
+             ORDER BY v.platform, v.file_name",
+            zone_owner_gate(3)
+        )))
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(owner_user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list deploy_dns_zone_verification_file", error))?;
+        rows.iter().map(verification_file_from_row).collect()
+    }
+
+    /// Registers a verification file, replacing the row with the same
+    /// `(zone, file_name)`: a platform that reissues its file replaces the
+    /// previous one whole, because the old name and content stop being valid
+    /// together.
+    pub(super) async fn upsert_dns_zone_verification_file_repo(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        platform: &str,
         file_name: &str,
         content: &str,
-    ) -> DeployServiceResult<String> {
+    ) -> DeployServiceResult<VerificationFileRecord> {
         let zone = sqlx::query(AssertSqlSafe(format!(
             "SELECT id, organization_id FROM deploy_dns_zone z
              WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
@@ -393,7 +440,7 @@ impl DeployRepository {
         .bind(owner_user_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("resolve deploy_dns_zone for wechat verification", error))?
+        .map_err(|error| store_error("resolve deploy_dns_zone for verification file", error))?
         .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
         let zone_internal_id: i64 = zone
             .try_get("id")
@@ -401,117 +448,88 @@ impl DeployRepository {
         let organization_id: i64 = zone
             .try_get::<i64, _>("organization_id")
             .unwrap_or_default();
-        // 模块基线形态：雪花 id + uuid 镜像 + tenant/organization；zone 唯一
-        // 约束承载"一个 Zone 至多一份"的替换语义。
         let row_id = next_id(self.id_generator())?;
         let row_uuid = new_uuid();
-        let updated_at: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
-            "INSERT INTO deploy_dns_zone_wechat_verification (
-                id, uuid, tenant_id, organization_id, zone_id, file_name, content, user_id, updated_by
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             ON CONFLICT (zone_id) DO UPDATE
-               SET file_name = EXCLUDED.file_name, content = EXCLUDED.content,
-                   user_id = EXCLUDED.user_id, updated_by = EXCLUDED.updated_by,
-                   updated_at = NOW()
-             RETURNING updated_at",
+        let row = sqlx::query(
+            "INSERT INTO deploy_dns_zone_verification_file (
+                id, uuid, tenant_id, organization_id, zone_id, platform, file_name, content,
+                user_id, created_by, updated_by
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+             ON CONFLICT (zone_id, file_name) DO UPDATE
+               SET platform = EXCLUDED.platform,
+                   content = EXCLUDED.content,
+                   user_id = EXCLUDED.user_id,
+                   updated_by = EXCLUDED.updated_by,
+                   updated_at = NOW(),
+                   version = deploy_dns_zone_verification_file.version + 1
+             RETURNING uuid, platform, file_name, content, created_at, updated_at",
         )
         .bind(row_id)
         .bind(&row_uuid)
         .bind(tenant_id)
         .bind(organization_id)
         .bind(zone_internal_id)
+        .bind(platform)
         .bind(file_name)
         .bind(content)
         .bind(owner_user_id)
-        .bind(owner_user_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("upsert deploy_dns_zone_wechat_verification", error))?;
-        Ok(updated_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        .map_err(|error| store_error("upsert deploy_dns_zone_verification_file", error))?;
+        verification_file_from_row(&row)
     }
 
-    /// Reads the Zone's WeChat verification file as
-    /// `(file_name, content, updated_at)`; `None` when none is configured.
-    pub(super) async fn dns_zone_wechat_verification_repo(
+    /// Reads one verification file by its own id, gated to the caller's zones.
+    pub(super) async fn retrieve_dns_zone_verification_file_repo(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
-    ) -> DeployServiceResult<Option<(String, String, String)>> {
-        let zone = sqlx::query(AssertSqlSafe(format!(
-            "SELECT id FROM deploy_dns_zone z
+        file_id: &str,
+    ) -> DeployServiceResult<VerificationFileRecord> {
+        let row = sqlx::query(AssertSqlSafe(format!(
+            "SELECT v.uuid, v.platform, v.file_name, v.content, v.created_at, v.updated_at
+             FROM deploy_dns_zone_verification_file v
+             JOIN deploy_dns_zone z ON z.id = v.zone_id
              WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
-               AND {}",
+               AND {} AND v.uuid = $4",
             zone_owner_gate(3)
         )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(owner_user_id)
+        .bind(file_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("resolve deploy_dns_zone for wechat verification", error))?
-        .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
-        let zone_internal_id: i64 = zone
-            .try_get("id")
-            .map_err(|error| store_error("map deploy_dns_zone id", error))?;
-        let row = sqlx::query(
-            "SELECT file_name, content, updated_at
-             FROM deploy_dns_zone_wechat_verification WHERE zone_id = $1",
-        )
-        .bind(zone_internal_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| store_error("read deploy_dns_zone_wechat_verification", error))?;
-        let Some(row) = row else {
-            return Ok(None);
-        };
-        let file_name: String = row
-            .try_get("file_name")
-            .map_err(|error| store_error("map wechat verification file name", error))?;
-        let content: String = row
-            .try_get("content")
-            .map_err(|error| store_error("map wechat verification content", error))?;
-        let updated_at: chrono::DateTime<chrono::Utc> = row
-            .try_get("updated_at")
-            .map_err(|error| store_error("map wechat verification updated_at", error))?;
-        Ok(Some((
-            file_name,
-            content,
-            updated_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        )))
+        .map_err(|error| store_error("retrieve deploy_dns_zone_verification_file", error))?
+        .ok_or_else(|| DeployServiceError::not_found("verification file not found"))?;
+        verification_file_from_row(&row)
     }
 
-    /// Deletes the Zone's WeChat verification file; `false` when there was
-    /// none.
-    pub(super) async fn delete_dns_zone_wechat_verification_repo(
+    /// Deletes one verification file; `false` when the zone had no such file.
+    pub(super) async fn delete_dns_zone_verification_file_repo(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
+        file_id: &str,
     ) -> DeployServiceResult<bool> {
-        let zone = sqlx::query(AssertSqlSafe(format!(
-            "SELECT id FROM deploy_dns_zone z
-             WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
-               AND {}",
+        let deleted = sqlx::query(AssertSqlSafe(format!(
+            "DELETE FROM deploy_dns_zone_verification_file v
+             USING deploy_dns_zone z
+             WHERE v.zone_id = z.id
+               AND z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
+               AND {} AND v.uuid = $4",
             zone_owner_gate(3)
         )))
         .bind(tenant_id)
         .bind(zone_id)
         .bind(owner_user_id)
-        .fetch_optional(&self.pool)
+        .bind(file_id)
+        .execute(&self.pool)
         .await
-        .map_err(|error| store_error("resolve deploy_dns_zone for wechat verification", error))?
-        .ok_or_else(|| DeployServiceError::not_found("domain zone not found"))?;
-        let zone_internal_id: i64 = zone
-            .try_get("id")
-            .map_err(|error| store_error("map deploy_dns_zone id", error))?;
-        let deleted =
-            sqlx::query("DELETE FROM deploy_dns_zone_wechat_verification WHERE zone_id = $1")
-                .bind(zone_internal_id)
-                .execute(&self.pool)
-                .await
-                .map_err(|error| store_error("delete deploy_dns_zone_wechat_verification", error))?
-                .rows_affected();
+        .map_err(|error| store_error("delete deploy_dns_zone_verification_file", error))?
+        .rows_affected();
         Ok(deleted > 0)
     }
 
@@ -598,6 +616,22 @@ impl DeployRepository {
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("delete deploy_dns_zone apex hostname", error))?;
+        // Verification files are published at this zone's hostnames, so the edge
+        // must stop answering them the moment the zone is gone. The table has no
+        // soft-delete column: the row is the publication, and an orphan would sit
+        // there invisible until the same apex is registered again under a new id.
+        sqlx::query(AssertSqlSafe(format!(
+            "DELETE FROM deploy_dns_zone_verification_file v
+             USING deploy_dns_zone z
+             WHERE v.zone_id = z.id AND z.tenant_id = $1 AND z.uuid = $2 AND {}",
+            zone_owner_gate(3)
+        )))
+        .bind(tenant_id)
+        .bind(zone_id)
+        .bind(owner_user_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| store_error("delete deploy_dns_zone verification files", error))?;
         transaction
             .commit()
             .await
@@ -1504,7 +1538,7 @@ mod tests {
 }
 
 impl DeployRepository {
-    /// Resolves the WeChat domain-verification file published under `hostname`.
+    /// Resolves every verification file published under `hostname`.
     ///
     /// Walks `deploy_domain` rather than suffix-matching `apex_hostname`: a zone's
     /// apex holds its own row there (which is what `create_domain_zone_repo`'s
@@ -1512,38 +1546,44 @@ impl DeployRepository {
     /// under it while still refusing to attribute `notexample.com` to
     /// `example.com`.
     ///
+    /// Returns the zone's whole set, in file-name order. The edge matches the
+    /// request path's exact file name against it: a zone can publish several
+    /// platform files at once, so "the file for this hostname" is not a single
+    /// row any more.
+    ///
     /// No `tenant_id` filter: active `hostname_ascii` values are globally unique
-    /// (`uk_deploy_domain_active_hostname`), and the file is content the operator
-    /// deliberately publishes to the WeChat crawler — it is not anyone's private
-    /// data, so there is no owner predicate to apply and none is invented.
-    pub async fn wechat_verification_by_hostname_lookup(
+    /// (`uk_deploy_domain_active_hostname`), and these files are content the
+    /// operator deliberately publishes to platform crawlers — they are not
+    /// anyone's private data, so there is no owner predicate to apply and none is
+    /// invented.
+    pub async fn verification_files_by_hostname_lookup(
         &self,
         hostname: &str,
-    ) -> DeployServiceResult<Option<(String, String)>> {
+    ) -> DeployServiceResult<Vec<(String, String)>> {
         let normalized = hostname.trim().trim_end_matches('.').to_ascii_lowercase();
-        let row = sqlx::query(
+        let rows = sqlx::query(
             "SELECT v.file_name, v.content
              FROM deploy_domain d
              JOIN deploy_dns_zone z ON z.id = d.zone_id
-             JOIN deploy_dns_zone_wechat_verification v ON v.zone_id = z.id
+             JOIN deploy_dns_zone_verification_file v ON v.zone_id = z.id
              WHERE d.hostname_ascii = $1
                AND d.deleted_at IS NULL AND z.deleted_at IS NULL
-             ORDER BY d.id DESC
-             LIMIT 1",
+             ORDER BY d.id DESC, v.file_name ASC",
         )
         .bind(&normalized)
-        .fetch_optional(&self.pool)
+        .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve deploy_dns_zone_wechat_verification", error))?;
-        let Some(row) = row else {
-            return Ok(None);
-        };
-        let file_name: String = row.try_get("file_name").map_err(|error| {
-            DeployServiceError::Internal(format!("map wechat verification file name: {error}"))
-        })?;
-        let content: String = row.try_get("content").map_err(|error| {
-            DeployServiceError::Internal(format!("map wechat verification content: {error}"))
-        })?;
-        Ok(Some((file_name, content)))
+        .map_err(|error| store_error("retrieve deploy_dns_zone_verification_file", error))?;
+        rows.iter()
+            .map(|row| {
+                let file_name: String = row.try_get("file_name").map_err(|error| {
+                    DeployServiceError::Internal(format!("map verification file name: {error}"))
+                })?;
+                let content: String = row.try_get("content").map_err(|error| {
+                    DeployServiceError::Internal(format!("map verification file content: {error}"))
+                })?;
+                Ok((file_name, content))
+            })
+            .collect()
     }
 }

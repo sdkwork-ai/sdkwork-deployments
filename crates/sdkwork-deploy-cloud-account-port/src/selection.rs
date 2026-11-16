@@ -100,8 +100,7 @@ pub fn cloud_account_port_from_env(
             return Err(format!(
                 "production Deploy requires the IAM cloud account center: unset \
                  {USE_MEMORY_CLOUD_ACCOUNTS_ENV} (or set it to false) and assemble the service host \
-                 against a PostgreSQL pool so DNS provider credentials resolve through IAM rather \
-                 than the deprecated deploy_dns_provider_credential table"
+                 against a PostgreSQL pool so DNS provider credentials resolve through IAM"
             ));
         }
         DeployCloudAccountPortSelection::Unconfigured => {

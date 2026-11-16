@@ -184,16 +184,13 @@ closed, but no gate is currently watching it — the only gate that would have i
 
 ## 3. The DDL is deliberately not part of that
 
-The platform's only `CHECK (provider_kind IN (…))` sits on
-`deploy_dns_provider_credential`, which the baseline itself declares **DEPRECATED** ("no
-code path reads or writes it"). A live family is *not stored* anywhere: accounts live in
-the IAM account center under a free-form `vendor_code`, and the family is derived from it
-by `family_for_vendor_code`.
+The baseline declares no `CHECK (provider_kind IN (…))` at all. A live family is *not
+stored* anywhere: accounts live in the IAM account center under a free-form
+`vendor_code`, and the family is derived from it by `family_for_vendor_code`.
 
-So adding a family needs **no migration** — and the gate exempts that constraint while
-asserting the deprecation note is still there. The day the note is removed, that frozen
-list becomes the live one and the gate fails until it is made equal to
-`dns_provider::ALL`.
+So adding a family needs **no migration**. The gate asserts that no stored-provider
+list reappears in the baseline; one that does must be made equal to
+`dns_provider::ALL` or removed.
 
 ## 4. What "all industry providers" means, and where we stand
 

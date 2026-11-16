@@ -41,30 +41,31 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+        "/app/v3/api/domain_zones/{zoneId}/verification_files",
         "domain",
-        "domainZones.wechatVerification.retrieve",
+        "domainZones.verificationFiles.list",
     )
     .with_required_permission("deploy.domainZones.read"),
     HttpRoute::dual_token(
-        HttpMethod::Put,
-        "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+        HttpMethod::Post,
+        "/app/v3/api/domain_zones/{zoneId}/verification_files",
         "domain",
-        "domainZones.wechatVerification.upsert",
+        "domainZones.verificationFiles.create",
     )
-    .with_required_permission("deploy.domainZones.write"),
+    .with_required_permission("deploy.domainZones.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
-        "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
+        "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}",
         "domain",
-        "domainZones.wechatVerification.delete",
+        "domainZones.verificationFiles.delete",
     )
     .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/domain_zones/{zoneId}/wechat_verification/check",
+        "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}/check",
         "domain",
-        "domainZones.wechatVerification.check",
+        "domainZones.verificationFiles.check",
     )
     .with_required_permission("deploy.domainZones.write"),
     HttpRoute::dual_token(

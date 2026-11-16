@@ -10,8 +10,9 @@ import {
   type DnsRecordTypeFilter,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
+  type DomainVerificationFileCheckResponse,
+  type DomainVerificationFileResponse,
   type DomainVerifyResponse,
-  type DomainWechatVerificationCheckResponse,
   type DomainZoneResponse,
   type PageInfo,
   type UpdateDomainDnsRecordRequest,
@@ -46,6 +47,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -333,7 +335,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
               table for, and neither is guessable from a glyph alone. The literal
               text stays inside the accessible name so the label still matches
               what is read out. */}
-          <button className="table-action table-action-text" type="button" title={t("wechatVerifyTitle")} aria-label={`${t("wechatVerifyFile")} · ${zone.apexHostname}`} onClick={() => setVerifyFileZone(zone)}><FileCheck2 size={15} /><span>{t("wechatVerifyFile")}</span></button>
+          <button className="table-action table-action-text" type="button" title={t("verificationFileTitle")} aria-label={`${t("verificationFile")} · ${zone.apexHostname}`} onClick={() => setVerifyFileZone(zone)}><FileCheck2 size={15} /><span>{t("verificationFile")}</span></button>
           <Link className="table-action table-action-text" to={`${zone.id}/dns`} title={t("dnsResolution")} aria-label={`${t("dnsResolution")} · ${zone.apexHostname}`}><Network size={15} /><span>{t("dnsResolution")}</span></Link>
           <Link className="table-action table-action-text" to={zone.id} title={t("open")} aria-label={`${t("hostnames")} · ${zone.apexHostname}`}><Globe2 size={15} /><span>{t("hostnames")}</span></Link>
           <Link className="table-action table-action-text" to={`/console/certificates?zoneId=${encodeURIComponent(zone.id)}&apex=${encodeURIComponent(zone.apexHostname)}`} title={t("requestCertificate")} aria-label={`${t("certificates")} · ${zone.apexHostname}`}><FileKey2 size={15} /><span>{t("certificates")}</span></Link>
@@ -346,7 +348,7 @@ function DomainZoneList({ locale }: { locale: DeploymentsLocale }) {
       rows={zones}
       stickyHeader
     />
-    {verifyFileZone && <WechatVerifyFileDialog t={t} locale={locale} apex={verifyFileZone.apexHostname} zoneId={verifyFileZone.id} service={service} close={closeAndReload} />}
+    {verifyFileZone && <VerificationFileDialog t={t} locale={locale} apex={verifyFileZone.apexHostname} zoneId={verifyFileZone.id} service={service} close={closeAndReload} />}
     {dialog?.kind === "create" && <ZoneFormDialog t={t} close={() => setDialog(undefined)} submit={async (body) => { await service.createDomainZone(toDomainZoneRequestBody(body)); closeAndReload(); }} />}
     {dialog?.kind === "edit" && <ZoneFormDialog t={t} zone={dialog.zone} close={() => setDialog(undefined)} submit={async (body) => { await service.updateDomainZone(dialog.zone.id, toDomainZoneRequestBody(body)); closeAndReload(); }} />}
     {dialog?.kind === "status" && <ConfirmDialog
@@ -1383,7 +1385,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
         const locks = rowLocks(hostname, zone);
         const renameBlocked = locks.apex || locks.referenced;
         return <div className="row-actions">
-          <button className="table-action" type="button" disabled={busy} title={t("wechatVerifyTitle")} aria-label={`${t("wechatVerifyFile")} ${hostname.hostname}`} onClick={() => setVerifyFileHostname(hostname)}><FileCheck2 size={16} /></button>
+          <button className="table-action" type="button" disabled={busy} title={t("verificationFileTitle")} aria-label={`${t("verificationFile")} ${hostname.hostname}`} onClick={() => setVerifyFileHostname(hostname)}><FileCheck2 size={16} /></button>
                     <button className="table-action" type="button" disabled={hostname.verificationStatus === "VERIFIED"} title={t("verify")} aria-label={`${t("verify")} ${hostname.hostname}`} onClick={() => { setBusy(true); void service.verifyDomainHostname(zoneId, hostname.id).then((result) => { setVerification(result); reload(); }).catch((cause) => setError(errorText(cause))).finally(() => setBusy(false)); }}><ShieldCheck size={16} /></button>
           {/* The record instructions have to be reopenable, not a one-shot dialog.
               Ownership is proven by a record the operator publishes by hand, so
@@ -1402,7 +1404,7 @@ function DomainHostnameList({ locale }: { locale: DeploymentsLocale }) {
       rows={hostnames}
       stickyHeader
     />
-    {verifyFileHostname && <WechatVerifyFileDialog t={t} locale={locale} apex={zone?.apexHostname ?? ""} zoneId={zoneId} service={service} close={() => { setVerifyFileHostname(undefined); reload(); }} />}
+    {verifyFileHostname && <VerificationFileDialog t={t} locale={locale} apex={zone?.apexHostname ?? ""} zoneId={zoneId} service={service} close={() => { setVerifyFileHostname(undefined); reload(); }} />}
     {createOpen && <HostnameFormDialog t={t} close={() => setCreateOpen(false)} submit={async (relativeName) => { await service.createDomainHostname(zoneId, { relativeName }); setCreateOpen(false); reload(); }} />}
     {editTarget && <HostnameFormDialog hostname={editTarget} t={t} close={() => setEditTarget(undefined)} submit={async (relativeName) => { await service.updateDomainHostname(zoneId, editTarget.id, { relativeName }); setEditTarget(undefined); reload(); }} />}
     {deleteTarget && <ConfirmDialog title={t("deleteHostnameTitle")} message={t("deleteHostnameConfirm")} dangerous t={t} close={() => setDeleteTarget(undefined)} submit={async () => { await service.deleteDomainHostname(zoneId, deleteTarget.id); setDeleteTarget(undefined); reload(); }} />}
@@ -1785,66 +1787,104 @@ function ZoneDnsRecordLedger({ backLabel, backTo, hostnameId, locale, title, zon
 }
 
 /**
- * 微信公众号/小程序域名归属认证文件:平台上下载 MP_verify_xxx.txt,把文件名
- * 与内容按原文保存到 Zone;边缘数据面对该 Zone 的每个主机名按请求路径原样
- * 提供这份文件。自检按微信爬虫的视角取回比对,失败也只陈述事实。
+ * 域名归属认证文件:各平台都要求在域名根路径公开取回一个自己签发的文件。
+ *
+ * 微信公众平台(公众号 / 小程序 / 业务域名)、支付宝与抖音小程序、Google
+ * Search Console、Apple 的关联域名等都走这套机制,只有文件形态不同:微信与
+ * Apple 是 `.txt`,Google 是 `.html`,Bing 一类是 `.xml`。一个 Zone 可以同时
+ * 登记多份;边缘数据面对该 Zone 的每个主机名按请求路径原样提供;自检按平台
+ * 爬虫的视角取回比对,失败也只陈述事实。
  */
-function WechatVerifyFileDialog({ apex, close, locale, service, t, zoneId }: { apex: string; close(): void; locale: DeploymentsLocale; service: DeploymentsDeliveryService; t: Translator; zoneId: string }) {
+type VerificationPlatform =
+  | "WECHAT_OFFICIAL_ACCOUNT"
+  | "WECHAT_MINI_PROGRAM"
+  | "ALIPAY"
+  | "BYTEDANCE"
+  | "APPLE"
+  | "GOOGLE"
+  | "CUSTOM";
+
+const VERIFICATION_PLATFORM_LABELS: Record<VerificationPlatform, DeliveryMessageKey> = {
+  WECHAT_OFFICIAL_ACCOUNT: "verificationFilePlatformWECHAT_OFFICIAL_ACCOUNT",
+  WECHAT_MINI_PROGRAM: "verificationFilePlatformWECHAT_MINI_PROGRAM",
+  ALIPAY: "verificationFilePlatformALIPAY",
+  BYTEDANCE: "verificationFilePlatformBYTEDANCE",
+  APPLE: "verificationFilePlatformAPPLE",
+  GOOGLE: "verificationFilePlatformGOOGLE",
+  CUSTOM: "verificationFilePlatformCUSTOM",
+};
+
+const VERIFICATION_PLATFORMS = Object.keys(VERIFICATION_PLATFORM_LABELS) as VerificationPlatform[];
+
+/** 服务端的内容上限(字节);超过它的文件在读入前就被拒绝。 */
+const VERIFICATION_CONTENT_LIMIT = 4096;
+
+/** 未登记过的平台码按"其他"呈现:契约新增平台时控制台先于文案更新也不会崩。 */
+function verificationPlatformLabel(t: Translator, platform: string): string {
+  const key = VERIFICATION_PLATFORM_LABELS[platform as VerificationPlatform];
+  return t(key ?? "verificationFilePlatformCUSTOM");
+}
+
+function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { apex: string; close(): void; locale: DeploymentsLocale; service: DeploymentsDeliveryService; t: Translator; zoneId: string }) {
+  const [files, setFiles] = useState<readonly DomainVerificationFileResponse[]>();
+  const [platform, setPlatform] = useState<VerificationPlatform>("WECHAT_OFFICIAL_ACCOUNT");
   const [fileName, setFileName] = useState("");
   const [content, setContent] = useState("");
-  const [existing, setExisting] = useState(false);
-  const [updatedAt, setUpdatedAt] = useState<string>();
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [checkResult, setCheckResult] = useState<DomainWechatVerificationCheckResponse>();
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
+  const [checks, setChecks] = useState<Record<string, DomainVerificationFileCheckResponse>>({});
+  const [deleteTarget, setDeleteTarget] = useState<DomainVerificationFileResponse>();
+
+  const load = useCallback(async () => {
+    const result = await service.listZoneVerificationFiles(zoneId);
+    setFiles(result.items);
+  }, [service, zoneId]);
 
   useEffect(() => {
     let active = true;
-    void service.retrieveZoneWechatVerification(zoneId).then((result) => {
+    void service.listZoneVerificationFiles(zoneId).then((result) => {
       if (!active) return;
-      setFileName(result.fileName ?? "");
-      setContent(result.content ?? "");
-      setExisting(result.fileName !== undefined);
-      setUpdatedAt(result.updatedAt);
-      setLoading(false);
+      setFiles(result.items);
     }).catch((cause) => {
       if (!active) return;
       setError(errorText(cause));
-      setLoading(false);
+      setFiles([]);
     });
     return () => { active = false; };
   }, [service, zoneId]);
 
+  /**
+   * 选择平台下发的校验文件:填入文件名与内容,两个字段仍可手工粘贴。超过服务端
+   * 上限的文件在读入前就拒绝,避免把二进制内容塞进表单。
+   */
+  async function pickFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // 清空选择器,再次选择同一文件仍会触发 change。
+    event.target.value = "";
+    if (!file) return;
+    setUploaded(false);
+    setError(undefined);
+    if (file.size > VERIFICATION_CONTENT_LIMIT) {
+      setError(t("verificationFileTooLarge"));
+      return;
+    }
+    setFileName(file.name);
+    setContent(await file.text());
+  }
+
   async function save() {
     if (!fileName.trim() || !content) { setError(t("dnsValueRequired")); return; }
-    setBusy(true); setError(undefined);
+    setBusy(true); setError(undefined); setUploaded(false);
     try {
-      await service.upsertZoneWechatVerification(zoneId, { fileName: fileName.trim(), content });
-      close();
-    } catch (cause) {
-      setError(errorText(cause));
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    setBusy(true); setError(undefined);
-    try {
-      await service.deleteZoneWechatVerification(zoneId);
-      close();
-    } catch (cause) {
-      setError(errorText(cause));
-      setBusy(false);
-      setConfirmingDelete(false);
-    }
-  }
-
-  async function runCheck() {
-    setBusy(true); setError(undefined); setCheckResult(undefined);
-    try {
-      setCheckResult(await service.checkZoneWechatVerification(zoneId));
+      // 同名文件是替换而不是新增:平台换发文件后重新保存一次即可。替换后旧的
+      // 自检结论不再代表线上内容,整组清掉,避免把"旧文件通过"显示在新文件上。
+      await service.createZoneVerificationFile(zoneId, { platform, fileName: fileName.trim(), content });
+      setFileName("");
+      setContent("");
+      setChecks({});
+      setUploaded(true);
+      await load();
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -1852,49 +1892,114 @@ function WechatVerifyFileDialog({ apex, close, locale, service, t, zoneId }: { a
     }
   }
 
-  const verdict = checkResult === undefined ? undefined
-    : checkResult.matched ? t("wechatVerifyMatched")
-    : checkResult.reachable ? t("wechatVerifyReachableMismatch")
-    : t("wechatVerifyUnreachable");
+  async function remove(file: DomainVerificationFileResponse) {
+    setBusy(true); setError(undefined);
+    try {
+      await service.deleteZoneVerificationFile(zoneId, file.id);
+      setDeleteTarget(undefined);
+      setChecks({});
+      await load();
+    } catch (cause) {
+      setError(errorText(cause));
+      setDeleteTarget(undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runCheck(file: DomainVerificationFileResponse) {
+    setBusy(true); setError(undefined);
+    try {
+      const result = await service.checkZoneVerificationFile(zoneId, file.id);
+      setChecks((current) => ({ ...current, [file.id]: result }));
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <Modal close={close} closeLabel={t("close")} title={t("wechatVerifyTitle")}>
-      {loading ? (
+    <Modal close={close} closeLabel={t("close")} title={t("verificationFileTitle")}>
+      <p className="form-hint">{t("verificationFileHint")}</p>
+      {apex ? <p className="form-hint">{apex}</p> : null}
+      {files === undefined ? (
         <p className="form-hint">{t("loading")}</p>
+      ) : files.length === 0 ? (
+        <p className="form-hint">{t("verificationFileEmpty")}</p>
       ) : (
-        <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
-          <p className="form-hint">{t("wechatVerifyHint")}</p>
-          {existing && updatedAt ? <p className="form-hint">{formatDate(updatedAt, locale)}</p> : null}
-          {apex ? <p className="form-hint">{apex}</p> : null}
-          <div className="form-grid single-column">
-            <label>
-              <span>{t("wechatVerifyFileName")}</span>
-              <input required value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="MP_verify_xxxxxxxxxx.txt" autoComplete="off" />
-            </label>
-            <label>
-              <span>{t("wechatVerifyContent")}</span>
-              <textarea required rows={4} value={content} onChange={(event) => setContent(event.target.value)} autoComplete="off" />
-            </label>
-          </div>
-          {verdict ? (
-            <div className={checkResult?.matched ? "verification-success" : checkResult?.reachable ? "verification-pending" : "verification-pending"}>
-              <BadgeCheck size={19} />
-              <span>{verdict}{checkResult?.detail ? ` ${checkResult.detail}` : ""}{checkResult?.scheme ? ` (${checkResult.scheme.toUpperCase()})` : ""}</span>
-            </div>
-          ) : null}
-          {error && <ErrorBanner message={error} t={t} />}
-          <footer className="dialog-footer">
-            {existing ? (
-              confirmingDelete ? (
-                <button className="danger-button" disabled={busy} type="button" onClick={() => void remove()}>{t("wechatVerifyDeleteConfirm")}</button>
-              ) : (
-                <button className="danger-button" disabled={busy} type="button" onClick={() => setConfirmingDelete(true)}>{t("wechatVerifyDelete")}</button>
-              )
-            ) : null}
-            <button className="secondary-button" disabled={busy || !existing} type="button" onClick={() => void runCheck()}>{t("wechatVerifyCheck")}</button>
-            <button className="command-button" disabled={busy} type="submit">{t("dnsSaveRecord")}</button>
-          </footer>
-        </form>
+        <div className="form-grid single-column">
+          {files.map((file) => {
+            const check = checks[file.id];
+            const verdict = check === undefined ? undefined
+              : check.matched ? t("verificationFileMatched")
+              : check.reachable ? t("verificationFileReachableMismatch")
+              : t("verificationFileUnreachable");
+            return (
+              <div key={file.id}>
+                <p><strong>{file.fileName}</strong></p>
+                <p className="form-hint">
+                  {verificationPlatformLabel(t, file.platform)}
+                  {file.updatedAt ? ` · ${formatDate(file.updatedAt, locale)}` : ""}
+                </p>
+                {verdict ? (
+                  <div className={check?.matched ? "verification-success" : "verification-pending"}>
+                    <BadgeCheck size={19} />
+                    <span>{verdict}{check?.detail ? ` ${check.detail}` : ""}{check?.scheme ? ` (${check.scheme.toUpperCase()})` : ""}</span>
+                  </div>
+                ) : null}
+                <div className="dialog-footer">
+                  <button className="secondary-button" disabled={busy} type="button" onClick={() => void runCheck(file)}>{t("verificationFileCheck")}</button>
+                  <button className="danger-button" disabled={busy} type="button" onClick={() => setDeleteTarget(file)}>{t("verificationFileDelete")}</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <div className="form-grid single-column">
+          <label>
+            <span>{t("verificationFilePlatform")}</span>
+            <select value={platform} onChange={(event) => setPlatform(event.target.value as VerificationPlatform)}>
+              {VERIFICATION_PLATFORMS.map((value) => (
+                <option key={value} value={value}>{t(VERIFICATION_PLATFORM_LABELS[value])}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t("verificationFilePick")}</span>
+            <input
+              type="file"
+              accept=".txt,.html,.xml"
+              autoComplete="off"
+              onChange={(event) => { void pickFile(event); }}
+            />
+          </label>
+          <label>
+            <span>{t("verificationFileName")}</span>
+            <input required value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="MP_verify_xxxxxxxxxx.txt / google123.html" autoComplete="off" />
+          </label>
+          <label>
+            <span>{t("verificationFileContent")}</span>
+            <textarea required rows={4} value={content} onChange={(event) => setContent(event.target.value)} autoComplete="off" />
+          </label>
+        </div>
+        {uploaded && <p className="form-hint" role="status">{t("verificationFileUploaded")}</p>}
+        {error && <ErrorBanner message={error} t={t} />}
+        <footer className="dialog-footer">
+          <button className="command-button" disabled={busy} type="submit">{t("verificationFileAdd")}</button>
+        </footer>
+      </form>
+      {deleteTarget && (
+        <ConfirmDialog
+          title={t("verificationFileDelete")}
+          message={t("verificationFileDeleteConfirm")}
+          dangerous
+          t={t}
+          close={() => setDeleteTarget(undefined)}
+          submit={async () => { await remove(deleteTarget); }}
+        />
       )}
     </Modal>
   );

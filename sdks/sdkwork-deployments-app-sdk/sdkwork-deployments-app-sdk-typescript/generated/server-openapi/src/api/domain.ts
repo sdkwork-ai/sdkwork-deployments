@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainDnsRecordRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerifyResponse, DomainWechatVerificationCheckResponse, DomainWechatVerificationResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainDnsRecordRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UpsertDomainWechatVerificationRequest } from '../types';
+import type { CloudAccountRegistrationResponse, CloudAccountResponse, CreateCloudAccountRequest, CreateDomainDnsRecordRequest, CreateDomainHostnameRequest, CreateDomainVerificationFileRequest, CreateDomainZoneRequest, DomainDnsRecordResponse, DomainDnsRecordStatusRequest, DomainDnsSyncResponse, DomainHostnameClaimResponse, DomainHostnameResponse, DomainVerificationFileCheckResponse, DomainVerificationFileResponse, DomainVerifyResponse, DomainZoneResponse, EnsureDomainHostnameClaimsRequest, PageInfo, UpdateDomainDnsRecordRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest } from '../types';
 
 
 export interface DomainCloudAccountsListParams {
@@ -257,7 +257,11 @@ export class DomainDomainZonesHostnamesApi {
   }
 }
 
-export class DomainDomainZonesWechatVerificationApi {
+export interface DomainDomainZonesVerificationFilesCreateParams {
+  idempotencyKey: string;
+}
+
+export class DomainDomainZonesVerificationFilesApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -265,24 +269,30 @@ export class DomainDomainZonesWechatVerificationApi {
   }
 
 
-/** Read the Zone's WeChat MP domain-ownership verification file */
-  async retrieve(zoneId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
-    return this.client.request<DomainWechatVerificationResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+/** List the Zone's domain-ownership verification files */
+  async list(zoneId: string, requestOptions?: ApiRequestOptions): Promise<{ items: DomainVerificationFileResponse[]; pageInfo: PageInfo; }> {
+    return this.client.request<{ items: DomainVerificationFileResponse[]; pageInfo: PageInfo; }>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/verification_files`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** Upload (or wholly replace) the Zone's WeChat verification file */
-  async upsert(zoneId: string, body: UpsertDomainWechatVerificationRequest, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationResponse> {
-    return this.client.request<DomainWechatVerificationResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+/** Register (or replace) a verification file on the Zone */
+  async create(zoneId: string, body: CreateDomainVerificationFileRequest, params: DomainDomainZonesVerificationFilesCreateParams, requestOptions?: ApiRequestOptions): Promise<DomainVerificationFileResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<DomainVerificationFileResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/verification_files`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** Delete the Zone's WeChat verification file */
-  async delete(zoneId: string, requestOptions?: ApiRequestOptions): Promise<void> {
-    return this.client.request<void>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+/** Delete one verification file from the Zone */
+  async delete(zoneId: string, fileId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/verification_files/${serializePathParameter(fileId, { name: 'fileId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 
-/** Self-check the Zone's WeChat verification file */
-  async check(zoneId: string, requestOptions?: ApiRequestOptions): Promise<DomainWechatVerificationCheckResponse> {
-    return this.client.request<DomainWechatVerificationCheckResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/wechat_verification/check`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
+/** Self-check one verification file */
+  async check(zoneId: string, fileId: string, requestOptions?: ApiRequestOptions): Promise<DomainVerificationFileCheckResponse> {
+    return this.client.request<DomainVerificationFileCheckResponse>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/verification_files/${serializePathParameter(fileId, { name: 'fileId', style: 'simple', explode: false })}/check`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 
@@ -301,14 +311,14 @@ export interface DomainDomainZonesCreateParams {
 
 export class DomainDomainZonesApi {
   private client: HttpClient;
-  public readonly wechatVerification: DomainDomainZonesWechatVerificationApi;
+  public readonly verificationFiles: DomainDomainZonesVerificationFilesApi;
   public readonly hostnames: DomainDomainZonesHostnamesApi;
   public readonly hostnameClaims: DomainDomainZonesHostnameClaimsApi;
   public readonly dnsRecords: DomainDomainZonesDnsRecordsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
-    this.wechatVerification = new DomainDomainZonesWechatVerificationApi(client);
+    this.verificationFiles = new DomainDomainZonesVerificationFilesApi(client);
     this.hostnames = new DomainDomainZonesHostnamesApi(client);
     this.hostnameClaims = new DomainDomainZonesHostnameClaimsApi(client);
     this.dnsRecords = new DomainDomainZonesDnsRecordsApi(client);

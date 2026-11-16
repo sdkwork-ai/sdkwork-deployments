@@ -13,13 +13,14 @@ use sdkwork_deploy_contract::{
     CertificateRenewalPage, CertificateRenewalResponse, CertificateResponse, ChannelPage,
     ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage,
     CloudAccountResponse, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
-    DomainHostnameResponse, DomainVerifyResponse, DomainZonePage, DomainZoneResponse,
-    EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage, EnvVariableResponse,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
-    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
-    PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage, RunnerHealthResponse, ServerPage,
-    ServerResponse, SigningIdentityHealthPage, SigningIdentityHealthResponse, SigningIdentityPage,
+    DomainHostnameResponse, DomainVerificationFilePage, DomainVerificationFileResponse,
+    DomainVerifyResponse, DomainZonePage, DomainZoneResponse, EntitlementProjectionPage,
+    EntitlementProjectionResponse, EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage,
+    EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse, NginxConfigPage,
+    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
+    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse,
+    SigningIdentityHealthPage, SigningIdentityHealthResponse, SigningIdentityPage,
     SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
     SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse, UsageEventPage,
     UsageEventResponse,
@@ -178,6 +179,18 @@ pub fn domain_dns_record_page(
 }
 
 pub fn env_variable_page(data: EnvVariablePage) -> SdkWorkPageData<EnvVariableResponse> {
+    let page_size = data.items.len().max(1) as i32;
+    offset_page(data.items, 1, page_size, data.total)
+}
+
+/// The zone's verification files, as a single unpaginated page.
+///
+/// The set is bounded by the number of platforms that ask for a root-path proof
+/// file, so it is answered whole; the pagination envelope is kept because that is
+/// the wire shape every list in this API uses.
+pub fn verification_file_page(
+    data: DomainVerificationFilePage,
+) -> SdkWorkPageData<DomainVerificationFileResponse> {
     let page_size = data.items.len().max(1) as i32;
     offset_page(data.items, 1, page_size, data.total)
 }

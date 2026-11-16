@@ -409,44 +409,46 @@ impl DeployAppApi for DeployService {
             .await
     }
 
-    async fn retrieve_domain_zone_wechat_verification(
+    async fn list_domain_zone_verification_files(
         &self,
         context: &DeployAppRequestContext,
         zone_id: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainWechatVerificationResponse> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerificationFilePage> {
         let tenant_id = Self::require_tenant(context)?;
-        self.retrieve_wechat_verification(tenant_id, context.actor_id, zone_id)
+        self.list_verification_files(tenant_id, context.actor_id, zone_id)
             .await
     }
 
-    async fn upsert_domain_zone_wechat_verification(
+    async fn create_domain_zone_verification_file(
         &self,
         context: &DeployAppRequestContext,
         zone_id: &str,
-        request: &sdkwork_deploy_contract::UpsertDomainWechatVerificationRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainWechatVerificationResponse> {
+        request: &sdkwork_deploy_contract::CreateDomainVerificationFileRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerificationFileResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.upsert_wechat_verification(tenant_id, context.actor_id, zone_id, request)
+        self.create_verification_file(tenant_id, context.actor_id, zone_id, request)
             .await
     }
 
-    async fn delete_domain_zone_wechat_verification(
+    async fn delete_domain_zone_verification_file(
         &self,
         context: &DeployAppRequestContext,
         zone_id: &str,
+        file_id: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
-        self.delete_wechat_verification(tenant_id, context.actor_id, zone_id)
+        self.delete_verification_file(tenant_id, context.actor_id, zone_id, file_id)
             .await
     }
 
-    async fn check_domain_zone_wechat_verification(
+    async fn check_domain_zone_verification_file(
         &self,
         context: &DeployAppRequestContext,
         zone_id: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainWechatVerificationCheckResponse> {
+        file_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerificationFileCheckResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.check_wechat_verification(tenant_id, context.actor_id, zone_id)
+        self.check_verification_file(tenant_id, context.actor_id, zone_id, file_id)
             .await
     }
 

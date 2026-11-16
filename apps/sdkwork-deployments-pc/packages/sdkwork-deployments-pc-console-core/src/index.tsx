@@ -8,15 +8,15 @@ import {
   type CreateCloudAccountRequest,
   type CreateDomainDnsRecordRequest,
   type CreateDomainHostnameRequest,
+  type CreateDomainVerificationFileRequest,
   type CreateDomainZoneRequest,
   type DomainDnsRecordResponse,
   type DomainDnsRecordStatusRequest,
   type DomainDnsSyncResponse,
   type DomainHostnameClaimResponse,
   type DomainHostnameResponse,
-  type DomainWechatVerificationCheckResponse,
-  type DomainWechatVerificationResponse,
-  type UpsertDomainWechatVerificationRequest,
+  type DomainVerificationFileCheckResponse,
+  type DomainVerificationFileResponse,
   type DomainVerifyResponse,
   type DomainZoneResponse,
   type EnsureDomainHostnameClaimsRequest,
@@ -49,19 +49,19 @@ export type {
   CreateCloudAccountRequest,
   CreateDomainDnsRecordRequest,
   CreateDomainHostnameRequest,
+  CreateDomainVerificationFileRequest,
   CreateDomainZoneRequest,
   DomainDnsRecordResponse,
   DomainDnsRecordStatusRequest,
   DomainDnsSyncResponse,
   DomainHostnameClaimResponse,
   DomainHostnameResponse,
+  DomainVerificationFileCheckResponse,
+  DomainVerificationFileResponse,
   DomainVerifyResponse,
-  DomainWechatVerificationCheckResponse,
-  DomainWechatVerificationResponse,
   DomainZoneResponse,
   EnsureDomainHostnameClaimsRequest,
   PageInfo,
-  UpsertDomainWechatVerificationRequest,
   UpdateDomainDnsRecordRequest,
   UpdateDomainHostnameRequest,
   UpdateDomainZoneRequest,
@@ -128,11 +128,14 @@ export interface DeploymentsDeliveryService {
    * provider.
    */
   syncZoneDnsRecords(zoneId: string): Promise<DomainDnsSyncResponse>;
-  /** 微信公众号/小程序域名归属验证文件(每 Zone 一份,边缘按主机名原样提供)。 */
-  retrieveZoneWechatVerification(zoneId: string): Promise<DomainWechatVerificationResponse>;
-  upsertZoneWechatVerification(zoneId: string, body: UpsertDomainWechatVerificationRequest): Promise<DomainWechatVerificationResponse>;
-  deleteZoneWechatVerification(zoneId: string): Promise<void>;
-  checkZoneWechatVerification(zoneId: string): Promise<DomainWechatVerificationCheckResponse>;
+  /**
+   * 域名归属验证文件:一个 Zone 可登记多份(微信各端、支付宝、抖音、Google、
+   * Apple 等各一份),边缘按 `<hostname>/<fileName>` 原样提供。
+   */
+  listZoneVerificationFiles(zoneId: string): Promise<{ items: DomainVerificationFileResponse[]; pageInfo: PageInfo }>;
+  createZoneVerificationFile(zoneId: string, body: CreateDomainVerificationFileRequest): Promise<DomainVerificationFileResponse>;
+  deleteZoneVerificationFile(zoneId: string, fileId: string): Promise<void>;
+  checkZoneVerificationFile(zoneId: string, fileId: string): Promise<DomainVerificationFileCheckResponse>;
   createZoneDnsRecord(zoneId: string, body: CreateDomainDnsRecordRequest): Promise<DomainDnsRecordResponse>;
   updateZoneDnsRecord(zoneId: string, recordId: string, body: UpdateDomainDnsRecordRequest): Promise<DomainDnsRecordResponse>;
   deleteZoneDnsRecord(zoneId: string, recordId: string): Promise<void>;
@@ -256,10 +259,11 @@ export function createDeploymentsDeliveryService(client: SdkworkDeployAppClient)
         },
       ),
     syncZoneDnsRecords: (zoneId) => zones.dnsRecords.sync(zoneId, idempotencyParams()),
-    retrieveZoneWechatVerification: (zoneId) => zones.wechatVerification.retrieve(zoneId),
-    upsertZoneWechatVerification: (zoneId, body) => zones.wechatVerification.upsert(zoneId, body),
-    deleteZoneWechatVerification: (zoneId) => zones.wechatVerification.delete(zoneId),
-    checkZoneWechatVerification: (zoneId) => zones.wechatVerification.check(zoneId),
+    listZoneVerificationFiles: (zoneId) => zones.verificationFiles.list(zoneId),
+    createZoneVerificationFile: (zoneId, body) =>
+      zones.verificationFiles.create(zoneId, body, idempotencyParams()),
+    deleteZoneVerificationFile: (zoneId, fileId) => zones.verificationFiles.delete(zoneId, fileId),
+    checkZoneVerificationFile: (zoneId, fileId) => zones.verificationFiles.check(zoneId, fileId),
     createZoneDnsRecord: (zoneId, body) => zones.dnsRecords.create(zoneId, body, idempotencyParams()),
     updateZoneDnsRecord: (zoneId, recordId, body) =>
       zones.dnsRecords.update(zoneId, recordId, body, idempotencyParams()),

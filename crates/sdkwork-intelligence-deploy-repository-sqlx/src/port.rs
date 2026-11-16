@@ -48,6 +48,7 @@ use sdkwork_intelligence_deploy_service::runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,
     RuntimeAssignmentState, RuntimeObservationEvidence, RuntimeObservationPersistenceResult,
 };
+use sdkwork_intelligence_deploy_service::VerificationFileRecord;
 use sdkwork_intelligence_deploy_service::{
     CertificateOrderCaaSubject, CertificateOrderClaim, CertificateRenewalClaim,
     DeployRepositoryPort, DomainVerificationChallenge, ExpiredCertificateSweep,
@@ -126,41 +127,55 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
-    async fn upsert_dns_zone_wechat_verification(
+    async fn list_dns_zone_verification_files(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
+    ) -> DeployServiceResult<Vec<VerificationFileRecord>> {
+        self.list_dns_zone_verification_files_repo(tenant_id, owner_user_id, zone_id)
+            .await
+    }
+
+    async fn upsert_dns_zone_verification_file(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        platform: &str,
         file_name: &str,
         content: &str,
-    ) -> DeployServiceResult<String> {
-        self.upsert_dns_zone_wechat_verification_repo(
+    ) -> DeployServiceResult<VerificationFileRecord> {
+        self.upsert_dns_zone_verification_file_repo(
             tenant_id,
             owner_user_id,
             zone_id,
+            platform,
             file_name,
             content,
         )
         .await
     }
 
-    async fn dns_zone_wechat_verification(
+    async fn retrieve_dns_zone_verification_file(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
-    ) -> DeployServiceResult<Option<(String, String, String)>> {
-        self.dns_zone_wechat_verification_repo(tenant_id, owner_user_id, zone_id)
+        file_id: &str,
+    ) -> DeployServiceResult<VerificationFileRecord> {
+        self.retrieve_dns_zone_verification_file_repo(tenant_id, owner_user_id, zone_id, file_id)
             .await
     }
 
-    async fn delete_dns_zone_wechat_verification(
+    async fn delete_dns_zone_verification_file(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
+        file_id: &str,
     ) -> DeployServiceResult<bool> {
-        self.delete_dns_zone_wechat_verification_repo(tenant_id, owner_user_id, zone_id)
+        self.delete_dns_zone_verification_file_repo(tenant_id, owner_user_id, zone_id, file_id)
             .await
     }
 

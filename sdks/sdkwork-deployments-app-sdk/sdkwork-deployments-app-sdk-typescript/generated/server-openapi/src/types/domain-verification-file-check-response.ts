@@ -1,4 +1,4 @@
-export interface DomainWechatVerificationCheckResponse {
+export interface DomainVerificationFileCheckResponse {
   /** 是否有任一协议取回了 2xx 响应 */
   reachable: boolean;
   /** 取回内容是否与保存的文件逐字节一致 */

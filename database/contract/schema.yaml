@@ -105,9 +105,6 @@ tables:
   - name: deploy_certificate_challenge
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_dns_provider_credential
-    lifecycle_status: deprecated
-    owner: deploy-platform
   - name: deploy_certificate_quota_usage
     lifecycle_status: active
     owner: deploy-platform
@@ -178,9 +175,6 @@ tables:
     lifecycle_status: active
     owner: deploy-platform
   - name: deploy_certificate_renewal
-    lifecycle_status: active
-    owner: deploy-platform
-  - name: deploy_dns_zone_wechat_verification
     lifecycle_status: active
     owner: deploy-platform
   - name: deploy_app_source_spec
@@ -254,5 +248,8 @@ tables:
     lifecycle_status: active
     owner: deploy-platform
   - name: deploy_download_update
+    lifecycle_status: active
+    owner: deploy-platform
+  - name: deploy_dns_zone_verification_file
     lifecycle_status: active
     owner: deploy-platform

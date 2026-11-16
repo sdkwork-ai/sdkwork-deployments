@@ -137,8 +137,8 @@
     },
     {
       "method": "GET",
-      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
-      "operationId": "domainZones.wechatVerification.retrieve",
+      "path": "/app/v3/api/domain_zones/{zoneId}/verification_files",
+      "operationId": "domainZones.verificationFiles.list",
       "tags": [
         "domain"
       ],
@@ -160,9 +160,9 @@
       "idempotent": false
     },
     {
-      "method": "PUT",
-      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
-      "operationId": "domainZones.wechatVerification.upsert",
+      "method": "POST",
+      "path": "/app/v3/api/domain_zones/{zoneId}/verification_files",
+      "operationId": "domainZones.verificationFiles.create",
       "tags": [
         "domain"
       ],
@@ -181,12 +181,12 @@
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
       "permission": "deploy.domainZones.write",
-      "idempotent": false
+      "idempotent": true
     },
     {
       "method": "DELETE",
-      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification",
-      "operationId": "domainZones.wechatVerification.delete",
+      "path": "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}",
+      "operationId": "domainZones.verificationFiles.delete",
       "tags": [
         "domain"
       ],
@@ -209,8 +209,8 @@
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/domain_zones/{zoneId}/wechat_verification/check",
-      "operationId": "domainZones.wechatVerification.check",
+      "path": "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}/check",
+      "operationId": "domainZones.verificationFiles.check",
       "tags": [
         "domain"
       ],

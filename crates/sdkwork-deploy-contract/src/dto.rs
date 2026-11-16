@@ -1279,27 +1279,51 @@ pub struct DeployUploadSessionResponse {
     pub updated_at: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DomainWechatVerificationResponse {
+/// One domain-ownership verification file a Zone publishes.
+///
+/// A zone may carry several at once — one per platform (WeChat official account,
+/// WeChat mini program, Alipay, ByteDance, Google Search Console, Apple, custom) —
+/// so the file is addressed by its own id, not by its zone.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DomainVerificationFileResponse {
+    pub id: String,
     #[serde(rename = "zoneId")]
     pub zone_id: String,
-    #[serde(rename = "fileName", skip_serializing_if = "Option::is_none")]
-    pub file_name: Option<String>,
-    #[serde(rename = "content", skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-    #[serde(rename = "updatedAt", skip_serializing_if = "Option::is_none")]
-    pub updated_at: Option<String>,
+    /// Issuing platform wire code (`WECHAT_OFFICIAL_ACCOUNT`, …).
+    pub platform: String,
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    pub content: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
 }
 
+/// Every verification file registered on one Zone.
+///
+/// Not paginated: the number of platforms that ask for a root-path proof file is
+/// small and bounded, so the zone's whole set is the useful answer.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DomainVerificationFilePage {
+    pub items: Vec<DomainVerificationFileResponse>,
+    pub total: i64,
+    pub page: i32,
+    pub page_size: i32,
+}
+
+/// Register (or replace) one verification file on a Zone.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UpsertDomainWechatVerificationRequest {
+pub struct CreateDomainVerificationFileRequest {
+    /// Issuing platform wire code; the closed set the DDL's `CHECK` admits.
+    pub platform: String,
     #[serde(rename = "fileName")]
     pub file_name: String,
     pub content: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DomainWechatVerificationCheckResponse {
+pub struct DomainVerificationFileCheckResponse {
     #[serde(rename = "reachable")]
     pub reachable: bool,
     #[serde(rename = "matched")]

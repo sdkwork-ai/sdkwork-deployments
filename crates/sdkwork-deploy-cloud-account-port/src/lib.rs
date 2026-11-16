@@ -7,9 +7,7 @@
 //! too, and its custody — envelope encryption, rotation, write-only access — is
 //! IAM's job (`iam_provider_account` + `iam_provider_credential`, with the
 //! `platform` / `tenant` / `user` scope levels). Deploy therefore consumes that
-//! center instead of keeping the credential table it used to declare;
-//! `deploy_dns_provider_credential` is deprecated as of 2026-09-17 and no code
-//! path reads it.
+//! center and declares no credential table of its own.
 //!
 //! # What this crate is
 //!

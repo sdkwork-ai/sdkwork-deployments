@@ -133,23 +133,40 @@ Every provider failure is **logged and swallowed**, never returned to the caller
 `PLAN-2026-0003` §8.3 states the same rule for ACME DNS-01: an adapter failure
 downgrades to manual presentation instead of failing the request.
 
-## 6. 微信公众号域名验证文件
+## 6. 域名归属校验文件（domain ownership verification files）
 
-微信公众号的 JS 接口安全域名 / 网页授权域名 / 业务域名要求在域名根路径可
-访问一个形如 `MP_verify_xxxxx.txt` 的校验文件。这条链路横跨控制面与边缘：
+各平台都要求操作员在域名根路径公开一个自己签发的文件，然后凭这份文件确认
+域名归属。它们只有文件形态不同，机制相同，所以控制面提供的是一份通用能力，
+而不是"微信专用上传口"：
 
-- **控制面**（`/app/v3/api/domain_zones/{zoneId}/wechat_verification`）：
-  操作员把微信生成的 `.txt` 原文上传到 zone 上；内容按字节原样存储于
-  `deploy_dns_zone`，不做任何改写——微信按精确字节比对。
-- **边缘**（sdkwork-webserver 网关）：standalone 形态下边缘与控制面共享
-  进程与数据库，网关按请求主机名进程内读取该 zone 的文件，在**单段 `.txt`
-  根路径**上按窄优先级原样应答（GET/HEAD，`no-store`）；任何不命中都放行
-  给宿主应用，宿主自己的 `/x.txt` 不受影响。读取带主机名级 TTL 缓存
-  （命中 60s / 未命中 10s）：上传后至多等 10 秒即可被爬虫取到。
-- **自检**（`.../wechat_verification/check`）：按微信爬虫的视角取回
-  `https://<apex>/<fileName>`（https 失败再试 http）并与保存内容逐字节
-  比对。`reachable` 与 `matched` 同时为真时，操作员到公众平台点"完成验证"
-  即可。
+| 平台 | 文件 |
+| --- | --- |
+| 微信公众号（JS 接口安全域名 / 网页授权域名 / 业务域名） | `MP_verify_<token>.txt` |
+| 微信小程序（业务域名） | `MP_verify_<token>.txt` |
+| 支付宝小程序 | `<token>.txt` |
+| 抖音小程序 | `<token>.txt` |
+| Google Search Console | `google<token>.html` |
+| Apple（Associated Domains） | `apple-developer-domain-association.txt` |
+| 其他站点验证（Bing 等） | `<token>.xml` |
+
+这条链路横跨控制面与边缘：
+
+- **控制面**（`/app/v3/api/domain_zones/{zoneId}/verification_files`）：列出该
+  Zone 已登记的全部文件、登记一份（同名即替换）、按文件 id 删除、按文件 id
+  自检。内容按字节原样存储于 `deploy_dns_zone_verification_file`，不做任何
+  改写——平台按精确字节比对。一个 Zone 可同时登记多份（不同平台各一份，同一
+  平台换发的新旧两份在删除旧文件前并存）；唯一键是 `(zone_id, file_name)`，
+  同名写入即替换。一个 Zone 至多 32 份：边缘把命中主机名的整组文件缓存在进程
+  内，这份上限首先是内存保护，而它足够任何真实用法。
+- **边缘**（sdkwork-webserver 网关）：standalone 形态下边缘与控制面共享进程与
+  数据库，网关按请求主机名进程内读取该 zone 的文件集合，在**单段
+  `.txt`/`.html`/`.xml` 根路径**上按窄优先级原样应答（GET/HEAD，`no-store`，
+  `Content-Type` 按扩展名推断）；任何不命中都放行给宿主应用，宿主自己的
+  `/x.txt` 不受影响。读取带主机名级 TTL 缓存（命中 60s / 未命中 10s）：上传后
+  至多等 10 秒即可被爬虫取到。
+- **自检**（`.../verification_files/{fileId}/check`）：按平台爬虫的视角取回
+  `https://<apex>/<fileName>`（https 失败再试 http）并与保存内容逐字节比对。
+  `reachable` 与 `matched` 同时为真时，操作员到平台点"完成验证"即可。
 
 ## 7. Where this is verified
 
@@ -158,3 +175,10 @@ downgrades to manual presentation instead of failing the request.
   swapped at the resolver's factory for a recording presenter.
 - `crates/sdkwork-intelligence-deploy-service/src/domain_dns_sync.rs` — the
   ledger's own unit tests, including the refusal of a partial block.
+- `crates/sdkwork-intelligence-deploy-service/src/verification_file.rs` — the
+  verification-file validator's unit tests (platform set, single-segment file
+  names, `.txt`/`.html`/`.xml`, verbatim multi-line content).
+- `crates/sdkwork-intelligence-deploy-repository-sqlx/tests/verification_file_platform_parity.rs`
+  — the gate that keeps the platform set and the file-name pattern identical
+  across the baseline DDL, the service validator and the app-api contract, so a
+  one-sided edit cannot ship a console that offers what the server refuses.

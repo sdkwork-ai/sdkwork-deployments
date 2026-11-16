@@ -195,12 +195,6 @@
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_dns_provider_credential",
-      "owner": "deploy-platform",
-      "compliance_level": "L2",
-      "lifecycle_status": "deprecated"
-    },
-    {
       "table_name": "deploy_certificate_quota_usage",
       "owner": "deploy-platform",
       "compliance_level": "L2",
@@ -345,12 +339,6 @@
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_dns_zone_wechat_verification",
-      "owner": "deploy-platform",
-      "compliance_level": "L2",
-      "lifecycle_status": "active"
-    },
-    {
       "table_name": "deploy_app_source_spec",
       "owner": "deploy-platform",
       "compliance_level": "L2",
@@ -406,6 +394,12 @@
     },
     {
       "table_name": "deploy_download_update",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "deploy_dns_zone_verification_file",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"

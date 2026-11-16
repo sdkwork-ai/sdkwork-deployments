@@ -15,7 +15,7 @@ an `_acme-challenge` TXT record. Every wildcard identifier requires DNS-01, beca
 does not resolve to a host and therefore has no HTTP proof path at all. Until now the only source was
 a deployment-wide credential read from three process environment variables
 (`SDKWORK_DEPLOY_DNS_PROVIDER_KIND` / `_CREDENTIAL` / `SDKWORK_DEPLOY_DNS_ZONE_APEX`), plus a dead
-`deploy_dns_provider_credential` table the resolver never read.
+table the resolver never read (now removed from the baseline).
 
 That design fails the tenancy it runs in:
 
@@ -51,9 +51,9 @@ direction, and public naming.
 
 IAM remains the only writer of `iam_provider_account` and `iam_provider_credential`. Deploy never
 inserts, updates, or deletes a row in either table directly, and adds no table, column, view, or
-materialized projection that duplicates them. `deploy_dns_provider_credential` is retired as
-`deprecated` in the database table registry with its replacement named; the deployment-wide
-environment credential stays, but only as the documented last-resort fallback (§4).
+materialized projection that duplicates them. The obsolete `deploy_dns_provider_credential`
+table is removed from the baseline outright; the deployment-wide environment credential
+stays, but only as the documented last-resort fallback (§4).
 
 Deploy references an account by an opaque identifier it does not interpret:
 `deploy_dns_zone.provider_account_id` and `deploy_certificate.provider_account_id`, both nullable
@@ -225,8 +225,8 @@ one.
 ## Compliance
 
 * `DATABASE_FRAMEWORK_SPEC.md` — cross-module consumption goes through the owner's facade; no
-  duplicated authoritative table; `deploy_dns_provider_credential` marked `deprecated` with its
-  replacement named in the table registry.
+  duplicated authoritative table (the obsolete `deploy_dns_provider_credential` is gone from the
+  baseline).
 * `APPLICATION_LAYERED_ARCHITECTURE_SPEC.md` — the channel is a declared port
   (`deployCloudAccountPort`) with the provider named in `component.spec.json`, plus a runtime
   entrypoint (`cloud_account_port_from_env`).

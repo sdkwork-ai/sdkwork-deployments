@@ -169,12 +169,11 @@ impl DeployDnsProviderCredential {
         }
     }
 
-    /// Parses the JSON payload a `deploy_dns_provider_credential` row's
-    /// `credential_secret_ref` resolves to.
+    /// Parses the JSON payload a cloud account's DNS configuration resolves to.
     ///
     /// Unknown fields are ignored so a provider can add metadata without a
     /// control-plane migration, but an unknown *provider kind* is an error: it
-    /// means the row and this build disagree about the integration.
+    /// means the stored account and this build disagree about the integration.
     pub fn from_secret_payload(provider_kind: &str, payload: &str) -> DeployServiceResult<Self> {
         let kind = DnsProviderKind::parse(provider_kind).ok_or_else(|| {
             DeployServiceError::validation(format!(

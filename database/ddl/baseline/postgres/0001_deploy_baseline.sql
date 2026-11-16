@@ -1645,58 +1645,6 @@ COMMENT ON COLUMN deploy_certificate_renewal.trigger_kind IS 'SCHEDULED for the 
 COMMENT ON COLUMN deploy_certificate_renewal.previous_not_after IS 'Expiry of the version being replaced, captured at claim time so the handover stays auditable after that version is superseded';
 COMMENT ON COLUMN deploy_certificate_renewal.new_not_after IS 'Expiry of the version this attempt produced; NULL until the attempt succeeds';
 
-CREATE TABLE IF NOT EXISTS deploy_dns_provider_credential (
-    id                 BIGINT        NOT NULL,
-    uuid               VARCHAR(36)   NOT NULL,
-    tenant_id          BIGINT        NOT NULL,
-    provider_kind      VARCHAR(24)   NOT NULL,
-    display_name       VARCHAR(200)  NOT NULL,
-    credential_secret_ref VARCHAR(1024) NOT NULL,
-    zone_ref           VARCHAR(512),
-    status             VARCHAR(16)   NOT NULL DEFAULT 'ACTIVE',
-    last_verified_at   TIMESTAMPTZ,
-    last_error_code    VARCHAR(64),
-    created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    version            BIGINT        NOT NULL DEFAULT 1,
-    deleted_at         TIMESTAMPTZ,
-    PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_dns_provider_credential_uuid UNIQUE (uuid),
-    CONSTRAINT uk_deploy_dns_provider_credential_name UNIQUE (tenant_id, provider_kind, display_name),
-    CONSTRAINT chk_deploy_dns_provider_credential_kind CHECK (
-        provider_kind IN ('ALIYUN_DNS', 'DNSPOD', 'CLOUDFLARE')
-    ),
-    CONSTRAINT chk_deploy_dns_provider_credential_status CHECK (
-        status IN ('ACTIVE', 'DISABLED', 'INVALID')
-    ),
-    -- Only a secret-store reference is ever stored. Provider API keys and tokens
-    -- are never a database column, matching the private-key custody rule.
-    CONSTRAINT chk_deploy_dns_provider_credential_secret_ref CHECK (
-        credential_secret_ref LIKE 'secret://%'
-    ),
-    CONSTRAINT chk_deploy_dns_provider_credential_zone_ref CHECK (
-        zone_ref IS NULL OR LENGTH(zone_ref) BETWEEN 1 AND 512
-    )
-);
-
-CREATE INDEX IF NOT EXISTS idx_deploy_dns_provider_credential_active
-    ON deploy_dns_provider_credential (tenant_id, provider_kind, status, updated_at DESC, id DESC)
-    WHERE deleted_at IS NULL;
-
--- DEPRECATED (2026-09-17): superseded by the IAM provider account center.
---
--- A DNS automation credential is a cloud account, not a Deploy-owned resource:
--- the same Aliyun/DNSPod/Cloudflare key is reused across business modules, and
--- credential custody (envelope encryption, rotation, write-only access) belongs
--- to sdkwork-iam (`iam_provider_account` + `iam_provider_credential`).
---
--- The table is kept and marked `lifecycle_status: deprecated` in the database
--- contract; no code path reads or writes it. DNS-01 credentials resolve through
--- `deploy_dns_zone.provider_account_id` or
--- `deploy_certificate.provider_account_id`. Do not add a reader.
-COMMENT ON TABLE deploy_dns_provider_credential IS 'DEPRECATED 2026-09-17: superseded by the IAM provider account center (iam_provider_account). Retained for schema history; no code path reads or writes it. DNS-01 credentials resolve through deploy_dns_zone.provider_account_id or deploy_certificate.provider_account_id';
-COMMENT ON COLUMN deploy_dns_provider_credential.credential_secret_ref IS 'Opaque secret-store reference; never a plaintext API key or token';
-
 CREATE TABLE IF NOT EXISTS deploy_certificate_quota_usage (
     id            BIGINT       NOT NULL,
     uuid          VARCHAR(36)  NOT NULL,
@@ -3009,19 +2957,28 @@ END
 $$;
 
 -- source: initialization state
--- 微信公众号域名校验文件。微信公众平台要求域名根路径可公开取回一个形如
--- `MP_verify_xxxxx.txt` 的文件；控制台上传原文，边缘数据面按域名原样提供，
--- 自检端口按微信爬虫的视角取回比对。一个 DNS Zone 至多一份：微信重新生成
--- 校验文件时整体替换，旧的文件名与内容同时作废。
+-- 域名归属校验文件（domain ownership verification file）。微信公众平台
+-- （公众号 JS 接口安全域名 / 网页授权域名 / 业务域名）、微信小程序业务域名、
+-- 支付宝/抖音小程序、Google Search Console 的 HTML 校验文件、Apple 的
+-- apple-developer-domain-association.txt 等，都要求在域名根路径公开取回一个
+-- 平台签发的文件。控制台上传原文，边缘数据面按域名原样提供，自检端口按平台
+-- 爬虫的视角取回比对。
+--
+-- 一个 DNS Zone 可以同时登记多份文件：不同平台各一份，同一平台换发的新旧两份
+-- 也可以在操作员删除旧文件之前并存。因此唯一键是 (zone_id, file_name)，
+-- 而不是 zone_id —— 边缘按 <hostname>/<fileName> 精确匹配，同名两行会让
+-- "应答哪一份"变成实现细节。
 
-CREATE TABLE IF NOT EXISTS deploy_dns_zone_wechat_verification (
+CREATE TABLE IF NOT EXISTS deploy_dns_zone_verification_file (
     id              BIGINT        NOT NULL,
     uuid            VARCHAR(36)   NOT NULL,
     tenant_id       BIGINT        NOT NULL,
     organization_id BIGINT        NOT NULL DEFAULT 0,
     zone_id         BIGINT        NOT NULL,
-    file_name       VARCHAR(64)   NOT NULL,
-    content         VARCHAR(2048) NOT NULL,
+    -- 文件由哪个平台签发。只用于控制台分组与审计：边缘按文件名应答，不按平台。
+    platform        VARCHAR(32)   NOT NULL,
+    file_name       VARCHAR(128)  NOT NULL,
+    content         VARCHAR(4096) NOT NULL,
     -- 文件归属用户；NULL 表示 tenant 级，与 deploy_dns_zone.user_id 同义。
     user_id         BIGINT,
     created_by      BIGINT,
@@ -3030,19 +2987,30 @@ CREATE TABLE IF NOT EXISTS deploy_dns_zone_wechat_verification (
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     version         BIGINT        NOT NULL DEFAULT 1,
     PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_dns_zone_wechat_verification_uuid UNIQUE (uuid),
-    -- One file per zone: the schema, not the service layer, is what makes the
-    -- replacement semantics true even if a caller races itself.
-    CONSTRAINT uk_deploy_dns_zone_wechat_verification_zone UNIQUE (zone_id),
-    CONSTRAINT fk_deploy_dns_zone_wechat_verification_zone FOREIGN KEY (zone_id) REFERENCES deploy_dns_zone(id),
-    CONSTRAINT chk_deploy_dns_zone_wechat_verification_file_name CHECK (file_name LIKE '%.txt'),
-    CONSTRAINT chk_deploy_dns_zone_wechat_verification_content CHECK (content <> '')
+    CONSTRAINT uk_deploy_dns_zone_verification_file_uuid UNIQUE (uuid),
+    -- 同一 Zone 内文件名唯一：重新上传同名文件是替换，不是新增。
+    CONSTRAINT uk_deploy_dns_zone_verification_file_name UNIQUE (zone_id, file_name),
+    CONSTRAINT fk_deploy_dns_zone_verification_file_zone FOREIGN KEY (zone_id) REFERENCES deploy_dns_zone(id),
+    -- 平台是封闭集合：新增平台要同时改契约枚举、控制台选择项与边缘 Content-Type
+    -- 推断，一次 schema 变更比三处各改一半安全。
+    CONSTRAINT chk_deploy_dns_zone_verification_file_platform CHECK (platform IN (
+        'WECHAT_OFFICIAL_ACCOUNT', 'WECHAT_MINI_PROGRAM', 'ALIPAY',
+        'BYTEDANCE', 'APPLE', 'GOOGLE', 'CUSTOM'
+    )),
+    -- 文件名必须是单段 ASCII（各平台都只签发一层文件名），扩展名限定为域名校验
+    -- 实际使用的那三种：.txt（微信各端、Apple）、.html（Google Search Console）、
+    -- .xml（Bing/IndexNow 等站点验证文件）。
+    CONSTRAINT chk_deploy_dns_zone_verification_file_name CHECK (
+        file_name ~ '^[A-Za-z0-9][A-Za-z0-9._-]*\.(txt|html|xml)$'
+    ),
+    CONSTRAINT chk_deploy_dns_zone_verification_file_content CHECK (content <> '')
 );
 
-COMMENT ON TABLE deploy_dns_zone_wechat_verification IS '微信公众号域名校验文件；一个 DNS Zone 至多一份，按域名公开发布';
-COMMENT ON COLUMN deploy_dns_zone_wechat_verification.file_name IS '微信生成的校验文件名，形如 MP_verify_xxx.txt';
-COMMENT ON COLUMN deploy_dns_zone_wechat_verification.content IS '校验文件原文，逐字节存储与逐字节返回';
-COMMENT ON COLUMN deploy_dns_zone_wechat_verification.user_id IS '文件归属用户；NULL 表示 tenant 级，与 deploy_dns_zone.user_id 同义';
+COMMENT ON TABLE deploy_dns_zone_verification_file IS '域名归属校验文件；一个 DNS Zone 可登记多份（不同平台 / 同一平台换发的多份），按 hostname + 文件名原样公开发布';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.platform IS '签发平台：WECHAT_OFFICIAL_ACCOUNT / WECHAT_MINI_PROGRAM / ALIPAY / BYTEDANCE / APPLE / GOOGLE / CUSTOM';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.file_name IS '平台签发的校验文件名（单段 ASCII，.txt / .html / .xml），按精确名称与原大小写服务';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.content IS '校验文件原文，逐字节存储与逐字节返回';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.user_id IS '文件归属用户；NULL 表示 tenant 级，与 deploy_dns_zone.user_id 同义';
 
 -- source: initialization state
 -- 应用模板市场（app template marketplace）。作者把一个 deploy_app 的源码

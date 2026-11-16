@@ -347,32 +347,44 @@ pub trait DeployRepositoryPort:
         zone_id: &str,
     ) -> DeployServiceResult<()>;
 
-    /// Uploads (or wholly replaces) the Zone's WeChat verification file.
-    async fn upsert_dns_zone_wechat_verification(
+    /// Every verification file registered on the Zone, platform order first.
+    async fn list_dns_zone_verification_files(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
+    ) -> DeployServiceResult<Vec<crate::verification_file::VerificationFileRecord>>;
+
+    /// Registers a verification file, replacing the row with the same
+    /// `(zone, file_name)` — a platform that reissues its file replaces the
+    /// previous one whole.
+    async fn upsert_dns_zone_verification_file(
+        &self,
+        tenant_id: i64,
+        owner_user_id: Option<i64>,
+        zone_id: &str,
+        platform: &str,
         file_name: &str,
         content: &str,
-    ) -> DeployServiceResult<String>;
+    ) -> DeployServiceResult<crate::verification_file::VerificationFileRecord>;
 
-    /// Reads the Zone's WeChat verification file:
-    /// `(file_name, content, updated_at)`, or `None` when none is configured.
-    async fn dns_zone_wechat_verification(
+    /// Reads one verification file by its own id; `not_found` when the zone has
+    /// no such file.
+    async fn retrieve_dns_zone_verification_file(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
-    ) -> DeployServiceResult<Option<(String, String, String)>>;
+        file_id: &str,
+    ) -> DeployServiceResult<crate::verification_file::VerificationFileRecord>;
 
-    /// Deletes the Zone's WeChat verification file; `false` when there was
-    /// none.
-    async fn delete_dns_zone_wechat_verification(
+    /// Deletes one verification file; `false` when the zone had no such file.
+    async fn delete_dns_zone_verification_file(
         &self,
         tenant_id: i64,
         owner_user_id: Option<i64>,
         zone_id: &str,
+        file_id: &str,
     ) -> DeployServiceResult<bool>;
 
     /// `owner_user_id` scopes the read to the caller's own zones; see

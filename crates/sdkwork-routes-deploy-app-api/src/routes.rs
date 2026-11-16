@@ -8,11 +8,11 @@ use axum::{
 use sdkwork_deploy_contract::{
     CompleteDeployUploadSessionRequest, CreateArtifactRequest, CreateCertificateRequest,
     CreateCloudAccountRequest, CreateDeployUploadSessionRequest, CreateDomainDnsRecordRequest,
-    CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, DeployAppApi, DeployAppRequestContext, DomainDnsRecordStatusRequest,
-    EnsureDomainHostnameClaimsRequest, ListCloudAccountsQuery, ListDomainDnsRecordsQuery,
-    ListDomainZonesQuery, UpdateAppCompositionRequest, UpdateDomainDnsRecordRequest,
-    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UpsertDomainWechatVerificationRequest,
+    CreateDomainHostnameRequest, CreateDomainVerificationFileRequest, CreateDomainZoneRequest,
+    CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi, DeployAppRequestContext,
+    DomainDnsRecordStatusRequest, EnsureDomainHostnameClaimsRequest, ListCloudAccountsQuery,
+    ListDomainDnsRecordsQuery, ListDomainZonesQuery, UpdateAppCompositionRequest,
+    UpdateDomainDnsRecordRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -99,14 +99,16 @@ pub fn build_domain_management_router() -> Router<AppState> {
             axum::routing::patch(set_domain_zone_dns_record_status),
         )
         .route(
-            paths::DOMAIN_ZONE_WECHAT_VERIFICATION,
-            get(retrieve_domain_zone_wechat_verification)
-                .put(upsert_domain_zone_wechat_verification)
-                .delete(delete_domain_zone_wechat_verification),
+            paths::DOMAIN_ZONE_VERIFICATION_FILES,
+            get(list_domain_zone_verification_files).post(create_domain_zone_verification_file),
         )
         .route(
-            paths::DOMAIN_ZONE_WECHAT_VERIFICATION_CHECK,
-            post(check_domain_zone_wechat_verification),
+            paths::DOMAIN_ZONE_VERIFICATION_FILE,
+            axum::routing::delete(delete_domain_zone_verification_file),
+        )
+        .route(
+            paths::DOMAIN_ZONE_VERIFICATION_FILE_CHECK,
+            post(check_domain_zone_verification_file),
         )
         .route(
             paths::DOMAIN_ZONE_DNS_RECORDS_SYNC,
@@ -347,7 +349,7 @@ async fn delete_domain_zone(
     )
 }
 
-async fn retrieve_domain_zone_wechat_verification(
+async fn list_domain_zone_verification_files(
     ctx: WebRequestContext,
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
@@ -357,30 +359,30 @@ async fn retrieve_domain_zone_wechat_verification(
         &ctx,
         async {
             let context = require_app_context(context)?;
-            let item = state
+            let page = state
                 .api
-                .retrieve_domain_zone_wechat_verification(&context, &zone_id)
+                .list_domain_zone_verification_files(&context, &zone_id)
                 .await?;
-            ok_json(envelope::resource(item))
+            ok_json(envelope::verification_file_page(page))
         }
         .await,
     )
 }
 
-async fn upsert_domain_zone_wechat_verification(
+async fn create_domain_zone_verification_file(
     ctx: WebRequestContext,
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
     Path(zone_id): Path<String>,
-    Json(request): Json<UpsertDomainWechatVerificationRequest>,
+    Json(request): Json<CreateDomainVerificationFileRequest>,
 ) -> Response {
-    finish_api_json(
+    finish_created_api_json(
         &ctx,
         async {
             let context = require_app_context(context)?;
             let item = state
                 .api
-                .upsert_domain_zone_wechat_verification(&context, &zone_id, &request)
+                .create_domain_zone_verification_file(&context, &zone_id, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -388,11 +390,11 @@ async fn upsert_domain_zone_wechat_verification(
     )
 }
 
-async fn delete_domain_zone_wechat_verification(
+async fn delete_domain_zone_verification_file(
     ctx: WebRequestContext,
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
-    Path(zone_id): Path<String>,
+    Path((zone_id, file_id)): Path<(String, String)>,
 ) -> Response {
     finish_no_content(
         &ctx,
@@ -401,7 +403,7 @@ async fn delete_domain_zone_wechat_verification(
             service_result(
                 state
                     .api
-                    .delete_domain_zone_wechat_verification(&context, &zone_id)
+                    .delete_domain_zone_verification_file(&context, &zone_id, &file_id)
                     .await,
             )
         }
@@ -409,11 +411,11 @@ async fn delete_domain_zone_wechat_verification(
     )
 }
 
-async fn check_domain_zone_wechat_verification(
+async fn check_domain_zone_verification_file(
     ctx: WebRequestContext,
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
-    Path(zone_id): Path<String>,
+    Path((zone_id, file_id)): Path<(String, String)>,
 ) -> Response {
     finish_api_json(
         &ctx,
@@ -421,7 +423,7 @@ async fn check_domain_zone_wechat_verification(
             let context = require_app_context(context)?;
             let item = state
                 .api
-                .check_domain_zone_wechat_verification(&context, &zone_id)
+                .check_domain_zone_verification_file(&context, &zone_id, &file_id)
                 .await?;
             ok_json(envelope::resource(item))
         }

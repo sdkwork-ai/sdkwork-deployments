@@ -20,17 +20,12 @@
 //!
 //! ## Why this gate does not track the DDL
 //!
-//! The one `CHECK (provider_kind IN (…))` in the baseline sits on
-//! `deploy_dns_provider_credential`, which the baseline itself declares
-//! **DEPRECATED** — "no code path reads or writes it". A live DNS family is not
-//! stored anywhere: accounts live in the IAM account center under a free-form
-//! `vendor_code`, and the family is *derived* from it
-//! ([`dns_provider::family_for_vendor_code`]). So there is no applied-DDL surface to
-//! keep in step, and demanding one would ask for a migration that changes nothing.
-//!
-//! What the gate does instead is check the deprecation is still declared and pin the
-//! frozen list: the day that note goes away, the frozen list stops being history and
-//! becomes the live constraint, and the failing test says so.
+//! The baseline declares no `CHECK (provider_kind IN (…))` at all: a live DNS
+//! family is not stored anywhere. Accounts live in the IAM account center under a
+//! free-form `vendor_code`, and the family is *derived* from it
+//! ([`dns_provider::family_for_vendor_code`]). So there is no applied-DDL surface
+//! to keep in step, and demanding one would ask for a migration that changes
+//! nothing — the DDL half of this gate asserts exactly that none reappears.
 //!
 //! They are pure: no database, no network. The integration suites apply the baseline
 //! as SQL separately.
@@ -55,17 +50,13 @@ const POSTGRES_BASELINE: &str =
 const APP_API_CONTRACT: &str =
     include_str!("../../../apis/app-api/deploy/deploy-app-api.openapi.json");
 
-/// The deprecated table whose `CHECK` is the platform's only stored-provider list.
-const DEPRECATED_PROVIDER_TABLE: &str = "deploy_dns_provider_credential";
-const DEPRECATED_PROVIDER_CONSTRAINT: &str = "chk_deploy_dns_provider_credential_kind";
-
-/// The families that constraint admits, frozen at the table's deprecation.
+/// The families the engine drives with their own adapter, frozen here.
 ///
-/// Deliberately *not* [`dns_provider::ALL`]: widening it would be a DDL edit to a
-/// table nothing writes, and keeping it equal is not the invariant anyone needs.
-/// What matters is that it is not quietly treated as live (see
-/// `the_deprecated_table_is_still_declared_deprecated`).
-const DEPRECATED_FAMILIES: &[&str] = &["ALIYUN_DNS", "DNSPOD", "CLOUDFLARE"];
+/// Nothing in the DDL stores them: a DNS family is not a column, accounts live in
+/// the IAM account center under a free-form `vendor_code`, and the family is
+/// derived from it. Widening this list is a deliberate change that must land in
+/// the engine, the contract's closed `dnsProvider` enums and the console together.
+const ENGINE_DEDICATED_FAMILIES: &[&str] = &["ALIYUN_DNS", "DNSPOD", "CLOUDFLARE"];
 
 /// Contract sites whose provider list is **closed**: they are the vocabulary.
 ///
@@ -371,41 +362,18 @@ fn the_zone_declaration_stays_open_text() {
 }
 
 #[test]
-fn the_deprecated_table_is_still_declared_deprecated() {
-    // This is the test that makes the DDL exemption above safe. If the deprecation
-    // note is removed, the frozen constraint below becomes the live one, and this
-    // gate must stop excusing it.
-    let needle = format!("COMMENT ON TABLE {DEPRECATED_PROVIDER_TABLE} IS 'DEPRECATED");
-    assert!(
-        POSTGRES_BASELINE.contains(&needle),
-        "{DEPRECATED_PROVIDER_TABLE} is no longer declared deprecated, so \
-         {DEPRECATED_PROVIDER_CONSTRAINT} is now the live provider list: make it equal \
-         dns_provider::ALL and delete the frozen-list exemption in this file"
-    );
-    assert_eq!(
-        admitted_by(POSTGRES_BASELINE, DEPRECATED_PROVIDER_CONSTRAINT),
-        DEPRECATED_FAMILIES
-            .iter()
-            .map(|family| (*family).to_owned())
-            .collect::<BTreeSet<String>>(),
-        "{DEPRECATED_PROVIDER_CONSTRAINT} admits a different set than the one it was frozen \
-         with; a stored-provider list changed on a table nothing writes"
-    );
-}
-
-#[test]
-fn the_baseline_guards_a_stored_provider_in_exactly_the_table_we_know_about() {
-    // The discovery half of the exemption: a *second* table storing a provider would
-    // show up here rather than slipping past, and finding only the deprecated one is
-    // what proves the parser reads wrapped lists (it once found nothing at all).
-    let expected: BTreeSet<String> = [DEPRECATED_PROVIDER_CONSTRAINT.to_owned()]
-        .into_iter()
-        .collect();
+fn the_baseline_stores_no_provider_list() {
+    // The baseline declares no `CHECK (provider_kind IN (…))` at all any more: a DNS
+    // family is not a stored column, accounts live in the IAM account center under a
+    // free-form `vendor_code`, and the family is *derived* from it
+    // ([`dns_provider::family_for_vendor_code`]). A table that reintroduces a stored
+    // family list must be gated against `dns_provider::ALL` rather than becoming a
+    // second vocabulary, so finding anything here is a failure.
     assert_eq!(
         discovered_constraints(POSTGRES_BASELINE),
-        expected,
-        "the set of stored-provider constraints changed; a new table must be gated against \
-         dns_provider::ALL, and a removed one means this exemption can shrink"
+        BTreeSet::new(),
+        "a stored-provider list reappeared in the baseline; gate it against dns_provider::ALL \
+         or delete it"
     );
 }
 
@@ -491,19 +459,23 @@ fn the_generic_family_is_what_keeps_the_provider_list_open() {
 }
 
 #[test]
-fn the_engine_dedicated_list_is_the_frozen_ddl_list() {
-    // The deprecated constraint is the platform's only stored-provider list, frozen at
-    // the table's deprecation. The engine now carries that same history as a named
-    // constant, so the exemption below can point at something instead of at a comment.
+fn the_engine_dedicated_list_is_the_frozen_one() {
+    // The engine carries the families that have their own adapter as a named
+    // constant. Nothing in the DDL stores them any more, so this test is the only
+    // place that pins the list: a family that gains or loses an adapter must say so
+    // here, and the generic fallback below has to stay the one family without one.
     let dedicated: BTreeSet<String> = DnsProviderKind::DEDICATED
         .iter()
         .map(|kind| kind.as_str().to_owned())
         .collect();
     assert_eq!(
         dedicated,
-        admitted_by(POSTGRES_BASELINE, DEPRECATED_PROVIDER_CONSTRAINT),
-        "the engine's dedicated families and the frozen DDL list disagree; the exemption below \
-         assumes the DDL list is exactly the families that have their own adapter"
+        ENGINE_DEDICATED_FAMILIES
+            .iter()
+            .map(|family| (*family).to_owned())
+            .collect::<BTreeSet<String>>(),
+        "the engine's dedicated families changed; the console, the contract and the generic \
+         fallback all follow this list"
     );
     let families = vocabulary();
     assert!(

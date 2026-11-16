@@ -259,42 +259,44 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
-    async fn retrieve_domain_zone_wechat_verification(
+    async fn list_domain_zone_verification_files(
         &self,
         _context: &DeployAppRequestContext,
         _zone_id: &str,
-    ) -> DeployServiceResult<DomainWechatVerificationResponse> {
+    ) -> DeployServiceResult<DomainVerificationFilePage> {
         Err(crate::DeployServiceError::Internal(
             "domain zone API is not implemented".to_owned(),
         ))
     }
 
-    async fn upsert_domain_zone_wechat_verification(
+    async fn create_domain_zone_verification_file(
         &self,
         _context: &DeployAppRequestContext,
         _zone_id: &str,
-        _request: &UpsertDomainWechatVerificationRequest,
-    ) -> DeployServiceResult<DomainWechatVerificationResponse> {
+        _request: &CreateDomainVerificationFileRequest,
+    ) -> DeployServiceResult<DomainVerificationFileResponse> {
         Err(crate::DeployServiceError::Internal(
             "domain zone API is not implemented".to_owned(),
         ))
     }
 
-    async fn delete_domain_zone_wechat_verification(
+    async fn delete_domain_zone_verification_file(
         &self,
         _context: &DeployAppRequestContext,
         _zone_id: &str,
+        _file_id: &str,
     ) -> DeployServiceResult<()> {
         Err(crate::DeployServiceError::Internal(
             "domain zone API is not implemented".to_owned(),
         ))
     }
 
-    async fn check_domain_zone_wechat_verification(
+    async fn check_domain_zone_verification_file(
         &self,
         _context: &DeployAppRequestContext,
         _zone_id: &str,
-    ) -> DeployServiceResult<DomainWechatVerificationCheckResponse> {
+        _file_id: &str,
+    ) -> DeployServiceResult<DomainVerificationFileCheckResponse> {
         Err(crate::DeployServiceError::Internal(
             "domain zone API is not implemented".to_owned(),
         ))

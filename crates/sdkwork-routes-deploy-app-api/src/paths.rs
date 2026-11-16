@@ -12,10 +12,18 @@ pub const DOMAIN_ZONE_DNS_RECORD: &str = "/app/v3/api/domain_zones/{zoneId}/dns_
 pub const DOMAIN_ZONE_DNS_RECORD_STATUS: &str =
     "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}/status";
 
-pub const DOMAIN_ZONE_WECHAT_VERIFICATION: &str =
-    "/app/v3/api/domain_zones/{zoneId}/wechat_verification";
-pub const DOMAIN_ZONE_WECHAT_VERIFICATION_CHECK: &str =
-    "/app/v3/api/domain_zones/{zoneId}/wechat_verification/check";
+/// Domain-ownership verification files registered on a zone.
+///
+/// A collection rather than a singleton: a zone publishes one file per platform
+/// that asks for a root-path proof (WeChat official account, WeChat mini program,
+/// Alipay, ByteDance, Google, Apple, custom), and a reissued file is a new
+/// resource until the old one is deleted.
+pub const DOMAIN_ZONE_VERIFICATION_FILES: &str =
+    "/app/v3/api/domain_zones/{zoneId}/verification_files";
+pub const DOMAIN_ZONE_VERIFICATION_FILE: &str =
+    "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}";
+pub const DOMAIN_ZONE_VERIFICATION_FILE_CHECK: &str =
+    "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}/check";
 pub const DOMAIN_ZONE_DNS_RECORDS_SYNC: &str = "/app/v3/api/domain_zones/{zoneId}/dns_records/sync";
 /// Cloud accounts a zone or certificate can be bound to.
 ///
