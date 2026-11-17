@@ -16,6 +16,7 @@ sdkwork-deploy-certificate-material.workspace = true
 sdkwork-deploy-cloud-account-port.workspace = true
 sdkwork-deploy-content-provider-port.workspace = true
 sdkwork-deploy-drive-port.workspace = true
+sdkwork-deploy-identity-provisioning-port.workspace = true
 sdkwork-deploy-runtime-compiler.workspace = true
 sdkwork-deploy-web-port.workspace = true
 sdkwork-database-id.workspace = true

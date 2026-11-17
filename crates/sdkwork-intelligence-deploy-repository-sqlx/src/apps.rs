@@ -20,6 +20,7 @@ use crate::support::{
     resolve_app_internal_id, sha256_hex, store_error, string_list_from_row, string_list_to_json,
 };
 use crate::DeployRepository;
+use sdkwork_intelligence_deploy_service::repository::AppIdentityProvisioningTarget;
 
 const APP_SELECT: &str = "a.uuid, a.name, a.slug, a.app_kind, a.app_status, a.type,
     a.description, a.runtime_config, a.metadata, a.current_revision_id, a.desired_revision_id,
@@ -524,6 +525,108 @@ impl DeployRepository {
             return Err(DeployServiceError::not_found("app not found"));
         };
         map_app_row(&row)
+    }
+
+    // -- IAM identity provisioning (migration 0008) ---------------------------
+
+    /// Claims `deploy_app.identity_provisioning_key` and reads back the row the
+    /// provisioning call describes.
+    ///
+    /// The key is derived from the row's own `id` in the same statement that
+    /// stores it (`COALESCE` keeps an earlier attempt's value), so two concurrent
+    /// attempts for one application always send IAM the same
+    /// `provisioningIdempotencyKey` instead of racing to create two
+    /// installations. `updated_at`/`version` are deliberately untouched: claiming
+    /// the key is bookkeeping, and a client that just created the app must not
+    /// see its row change underneath the response it is about to read.
+    pub(super) async fn begin_app_identity_provisioning_repo(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<AppIdentityProvisioningTarget> {
+        let row = sqlx::query(
+            "UPDATE deploy_app SET
+                identity_provisioning_key =
+                    COALESCE(identity_provisioning_key, 'deploy:' || id::text)
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
+             RETURNING id, uuid, tenant_id, organization_id, name,
+                       default_environment, app_kind,
+                       identity_provisioning_key, identity_status",
+        )
+        .bind(tenant_id)
+        .bind(app_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("claim deploy_app identity provisioning key", error))?;
+
+        let Some(row) = row else {
+            return Err(DeployServiceError::not_found("app not found"));
+        };
+        let internal_id: i64 = row
+            .try_get("id")
+            .map_err(|error| DeployServiceError::Internal(format!("read deploy_app id: {error}")))?;
+        // `organization_id` is `NOT NULL DEFAULT 0`, and IAM spells "no
+        // organization" as the literal "0" (its own platform bootstrap writes
+        // that value), so the column is forwarded as-is instead of being
+        // normalised to absent and then re-invented.
+        let organization_id: i64 = row.try_get("organization_id").unwrap_or_default();
+        let provisioning_key: Option<String> =
+            row.try_get("identity_provisioning_key").ok().flatten();
+        let Some(provisioning_key) = provisioning_key else {
+            // The UPDATE above always writes the key; a NULL here means the
+            // column was altered underneath the repository.
+            return Err(DeployServiceError::Internal(
+                "deploy_app identity provisioning key was not recorded".to_owned(),
+            ));
+        };
+        let app_uuid: String = row
+            .try_get("uuid")
+            .map_err(|error| DeployServiceError::Internal(format!("read deploy_app uuid: {error}")))?;
+
+        Ok(AppIdentityProvisioningTarget {
+            deploy_application_id: internal_id.to_string(),
+            instance_key: app_uuid,
+            tenant_id: row
+                .try_get::<i64, _>("tenant_id")
+                .unwrap_or_default()
+                .to_string(),
+            organization_id: organization_id.to_string(),
+            display_name: row.try_get("name").unwrap_or_default(),
+            environment: row.try_get("default_environment").unwrap_or_default(),
+            app_kind: row.try_get("app_kind").unwrap_or_default(),
+            provisioning_idempotency_key: provisioning_key,
+            identity_status: row.try_get("identity_status").unwrap_or_default(),
+        })
+    }
+
+    /// Writes the outcome of one provisioning attempt.
+    ///
+    /// `version` is not bumped: the identity columns are internal bookkeeping and
+    /// `version` is the application's own revision counter. `updated_at` is
+    /// bumped because `idx_deploy_app_identity_status` orders on it, which is how
+    /// an operator finds applications stuck in `failed`.
+    pub(super) async fn record_app_identity_status_repo(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        status: &str,
+    ) -> DeployServiceResult<()> {
+        let updated = sqlx::query(
+            "UPDATE deploy_app SET identity_status = $3, updated_at = NOW()
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
+             RETURNING uuid",
+        )
+        .bind(tenant_id)
+        .bind(app_id)
+        .bind(status)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("record deploy_app identity status", error))?;
+
+        if updated.is_none() {
+            return Err(DeployServiceError::not_found("app not found"));
+        }
+        Ok(())
     }
 
     pub(super) async fn update_app_repo(

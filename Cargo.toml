@@ -6,6 +6,7 @@ members = [
   "crates/sdkwork-deploy-drive-port",
   "crates/sdkwork-deploy-cloud-account-port",
   "crates/sdkwork-deploy-content-provider-port",
+  "crates/sdkwork-deploy-identity-provisioning-port",
   "crates/sdkwork-deploy-runtime-compiler",
   "crates/sdkwork-deploy-runtime-assignment-worker",
   "crates/sdkwork-deploy-service-host",
@@ -70,6 +71,10 @@ idna = "1"
 psl = "2.1.184"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+# Split-deployment HTTP only: the opt-in IAM provisioning adapter
+# (crates/sdkwork-deploy-identity-provisioning-port/src/http.rs). The default
+# path reaches IAM in-process and never loads this client.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 flate2 = "1"
 tar = "0.4"
 zip = "2"
@@ -89,6 +94,7 @@ sdkwork-deploy-core = { path = "crates/sdkwork-deploy-core" }
 sdkwork-deploy-drive-port = { path = "crates/sdkwork-deploy-drive-port" }
 sdkwork-deploy-cloud-account-port = { path = "crates/sdkwork-deploy-cloud-account-port" }
 sdkwork-deploy-content-provider-port = { path = "crates/sdkwork-deploy-content-provider-port" }
+sdkwork-deploy-identity-provisioning-port = { path = "crates/sdkwork-deploy-identity-provisioning-port" }
 sdkwork-deploy-runtime-compiler = { path = "crates/sdkwork-deploy-runtime-compiler" }
 sdkwork-deploy-service-host = { path = "crates/sdkwork-deploy-service-host" }
 sdkwork-deploy-web-port = { path = "crates/sdkwork-deploy-web-port" }

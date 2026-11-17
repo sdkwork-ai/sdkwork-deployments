@@ -1,0 +1,22 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-identity-provisioning-port"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "sdkwork_deploy_identity_provisioning_port"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+sdkwork-iam-web-adapter.workspace = true
+sdkwork-utils-rust.workspace = true

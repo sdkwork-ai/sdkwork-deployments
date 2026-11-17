@@ -30,6 +30,9 @@ use sdkwork_deploy_core::{
     validate_platform_identity, validate_profile_key, validate_profile_status, validate_sha256_hex,
     RequiredIdentityField, SemanticVersion,
 };
+use sdkwork_deploy_identity_provisioning_port::{
+    DeployApplicationProvisioningCommand, ProvisioningOutcome,
+};
 
 use crate::repository::{InsertAuditLogCommand, InsertUsageEventCommand};
 use crate::DeployService;
@@ -37,6 +40,27 @@ use crate::DeployService;
 const CHANNEL_KEYS: &[&str] = &["stable", "beta", "alpha", "qa"];
 const REPO_PROVIDERS: &[&str] = &["GITHUB", "GITEE", "GITLAB", "SELF_HOSTED"];
 const CLONE_MODES: &[&str] = &["FULL", "SHALLOW"];
+/// `deploy_app.identity_status` values (migration 0008).
+const IDENTITY_STATUS_ACTIVE: &str = "active";
+const IDENTITY_STATUS_FAILED: &str = "failed";
+
+/// IAM's `applicationType` view of a deploy app kind.
+///
+/// IAM's own vocabulary is `api` | `h5` | `pc` | `flutter` | `other`, which is
+/// not the deploy app kind set (`AppKind::as_str`). Kinds with no honest IAM
+/// counterpart are reported as `other` rather than silently mapped onto a web
+/// type; an empty kind is reported as absent so IAM can fall back to the
+/// template's own type.
+fn identity_application_type(app_kind: &str) -> Option<String> {
+    let normalized = app_kind.trim().to_ascii_uppercase();
+    let application_type = match normalized.as_str() {
+        "" => return None,
+        "API_SERVICE" => "api",
+        "STATIC_WEB" | "SPA_WEB" | "DESKTOP_APP" => "pc",
+        _ => "other",
+    };
+    Some(application_type.to_owned())
+}
 
 impl DeployService {
     fn tenant_id(context: &DeployAppRequestContext) -> DeployServiceResult<i64> {
@@ -152,7 +176,125 @@ impl DeployService {
         // exists — not only the app's `defaultEnvironment`.
         self.provision_app_default_domains_all_environments(context, &app.id)
             .await?;
+        // The IAM installation is the last step, after every deploy-owned side
+        // effect has run. It is a cross-module call with its own failure mode:
+        // it never rolls the created application back, it records the outcome on
+        // the row.
+        self.provision_app_identity(context, &app).await;
         Ok(app)
+    }
+
+    /// Provisions the IAM installation that turns a created application into a
+    /// runtime identity (migration 0008).
+    ///
+    /// Deliberately infallible: the `deploy_app` row is already committed and the
+    /// caller's create succeeded. A cross-module failure is recorded on the row
+    /// (`identity_status = failed`) and logged at `warn`, because deleting the
+    /// application because its identity could not be minted would also destroy
+    /// the domains, source specs, and audit trail the operator can still use.
+    ///
+    /// A retry of `apps.create` replays the same `Idempotency-Key` and finds the
+    /// same application (`deploy_app.identity_provisioning_key` is
+    /// `deploy:{id}`), so the replay attaches the installation instead of
+    /// creating a second one.
+    async fn provision_app_identity(&self, context: &DeployAppRequestContext, app: &AppResponse) {
+        // `tenant_id` was validated by `create_app` before the insert.
+        let target = match self
+            .repository
+            .begin_app_identity_provisioning(context.tenant_id, &app.id)
+            .await
+        {
+            Ok(target) => target,
+            Err(error) => {
+                tracing::warn!(
+                    app = %app.id,
+                    %error,
+                    "IAM installation provisioning skipped: application identity row is unavailable"
+                );
+                return;
+            }
+        };
+        // An application whose installation is already active is never
+        // re-provisioned by a replay.
+        if target.identity_status == IDENTITY_STATUS_ACTIVE {
+            return;
+        }
+        let command = DeployApplicationProvisioningCommand {
+            tenant_id: target.tenant_id.clone(),
+            organization_id: target.organization_id.clone(),
+            instance_key: target.instance_key.clone(),
+            display_name: target.display_name.clone(),
+            environment: target.environment.clone(),
+            application_type: identity_application_type(&target.app_kind),
+            deploy_application_id: target.deploy_application_id.clone(),
+            provisioning_idempotency_key: target.provisioning_idempotency_key.clone(),
+        };
+        match self
+            .identity_provisioning
+            .provision_tenant_application(&command)
+            .await
+        {
+            Ok(ProvisioningOutcome::Installed(receipt)) => {
+                if let Err(error) = self
+                    .repository
+                    .record_app_identity_status(
+                        context.tenant_id,
+                        &app.id,
+                        IDENTITY_STATUS_ACTIVE,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        app = %app.id,
+                        %error,
+                        "IAM installation was provisioned but the application still reads as pending"
+                    );
+                    return;
+                }
+                tracing::info!(
+                    app = %app.id,
+                    deploy_application_id = %target.deploy_application_id,
+                    tenant_application_id = receipt.tenant_application_id.as_deref().unwrap_or(""),
+                    runtime_app_id = receipt.runtime_app_id.as_deref().unwrap_or(""),
+                    "IAM installation provisioned"
+                );
+            }
+            Ok(ProvisioningOutcome::Skipped) => {
+                // Not a failure: provisioning is not configured on this
+                // deployment, so the identity stays `pending_identity` until an
+                // operator wires it.
+                tracing::debug!(
+                    app = %app.id,
+                    "IAM installation provisioning is not configured; identity stays pending"
+                );
+            }
+            Err(error) => {
+                // The error is logged in full and recorded on the row; it is not
+                // returned, because the application itself was created.
+                tracing::warn!(
+                    app = %app.id,
+                    deploy_application_id = %target.deploy_application_id,
+                    provisioning_key = %target.provisioning_idempotency_key,
+                    %error,
+                    "IAM installation provisioning failed; application identity marked failed"
+                );
+                if let Err(mark_error) = self
+                    .repository
+                    .record_app_identity_status(
+                        context.tenant_id,
+                        &app.id,
+                        IDENTITY_STATUS_FAILED,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        app = %app.id,
+                        %mark_error,
+                        "record failed IAM installation status failed"
+                    );
+                }
+            }
+        }
     }
 
     pub async fn list_apps(
@@ -1345,5 +1487,46 @@ mod usage_metering_tests {
         // Malformed input behaves like missing input.
         let fallback = period_start(Some("not-a-date"));
         assert_eq!(fallback, period);
+    }
+}
+
+#[cfg(test)]
+mod identity_provisioning_tests {
+    use super::identity_application_type;
+
+    #[test]
+    fn app_kinds_map_onto_the_iam_application_type_vocabulary() {
+        assert_eq!(
+            identity_application_type("API_SERVICE").as_deref(),
+            Some("api")
+        );
+        for web_kind in ["STATIC_WEB", "SPA_WEB", "DESKTOP_APP"] {
+            assert_eq!(
+                identity_application_type(web_kind).as_deref(),
+                Some("pc"),
+                "{web_kind}"
+            );
+        }
+        // Kinds with no honest IAM counterpart are reported as `other` rather
+        // than being mapped onto a web type they are not.
+        for native_kind in [
+            "WECHAT_MINIPROGRAM",
+            "DOUYIN_MINIPROGRAM",
+            "IOS_APP",
+            "ANDROID_APP",
+            "HARMONYOS_APP",
+        ] {
+            assert_eq!(
+                identity_application_type(native_kind).as_deref(),
+                Some("other"),
+                "{native_kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_app_kind_leaves_the_iam_template_type_authoritative() {
+        assert_eq!(identity_application_type(""), None);
+        assert_eq!(identity_application_type("   "), None);
     }
 }

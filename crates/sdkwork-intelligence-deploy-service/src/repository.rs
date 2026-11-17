@@ -61,6 +61,33 @@ pub struct InsertAuditLogCommand {
     pub target_uuid: Option<String>,
 }
 
+/// The deploy-application facts one IAM provisioning call needs, read back from
+/// the committed `deploy_app` row.
+///
+/// `deploy_application_id` is the row's BIGINT `id` (never the uuid): IAM stores
+/// it in `iam_tenant_application.deploy_application_id` under a unique index, and
+/// the deployment access token's subject is that same value.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppIdentityProvisioningTarget {
+    /// `deploy_app.id` as a decimal string.
+    pub deploy_application_id: String,
+    pub tenant_id: String,
+    /// `"0"` when the application carries no organization, matching IAM's own
+    /// "no organization" convention.
+    pub organization_id: String,
+    /// Stable IAM `instance_key`: the application uuid, so a slug rename cannot
+    /// look like a new installation.
+    pub instance_key: String,
+    pub display_name: String,
+    pub environment: String,
+    pub app_kind: String,
+    /// `deploy_app.identity_provisioning_key`, claimed (and persisted) by
+    /// [`DeployRepositoryPort::begin_app_identity_provisioning`].
+    pub provisioning_idempotency_key: String,
+    /// `deploy_app.identity_status` before this attempt.
+    pub identity_status: String,
+}
+
 /// Usage fact emitted by the service layer. The `deduplication_key` scoped to
 /// the tenant makes delivery idempotent (build number, package checksum,
 /// deployment uuid based) so retried flows never double-bill.
@@ -816,6 +843,34 @@ pub trait DeployRepositoryPort:
         app_id: &str,
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse>;
+
+    // -- IAM identity provisioning (migration 0008) ---------------------------
+
+    /// Claims the application's stable IAM provisioning key and reads back the
+    /// fields a provisioning call needs.
+    ///
+    /// The key is `deploy:{deploy_app.id}`: derived from the row's own primary
+    /// key, so it is stable across retries and across processes without a
+    /// read-modify-write race, and `COALESCE` keeps whatever an earlier attempt
+    /// already persisted. `uk_deploy_app_identity_provisioning_key` is what
+    /// makes a second, different key for the same application impossible.
+    async fn begin_app_identity_provisioning(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<AppIdentityProvisioningTarget>;
+
+    /// Records the outcome of one IAM provisioning attempt on `deploy_app`.
+    ///
+    /// `status` must be one of `pending_identity` | `active` | `failed`; the
+    /// column's CHECK constraint rejects anything else, which is the intended
+    /// failure mode of a typo here.
+    async fn record_app_identity_status(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        status: &str,
+    ) -> DeployServiceResult<()>;
 
     async fn list_app_domains(
         &self,

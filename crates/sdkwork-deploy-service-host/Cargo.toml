@@ -21,6 +21,7 @@ sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-database-host.workspace = true
 sdkwork-database-sqlx.workspace = true
 sdkwork-deploy-drive-port.workspace = true
+sdkwork-deploy-identity-provisioning-port.workspace = true
 sdkwork-deploy-content-provider-port.workspace = true
 sdkwork-deploy-web-port.workspace = true
 sdkwork-intelligence-deploy-repository-sqlx.workspace = true

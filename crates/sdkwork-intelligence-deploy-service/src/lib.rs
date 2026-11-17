@@ -59,9 +59,10 @@ pub use domain_verification::{
     UnconfiguredDomainOwnershipVerifier,
 };
 pub use repository::{
-    CertificateOrderClaim, CertificateRenewalClaim, DeployRepositoryPort, DnsChallengeZone,
-    DnsRecordSnapshotRow, DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite,
-    DomainHostnameAsset, ExpiredCertificateSweep, ZoneDnsSyncTarget,
+    AppIdentityProvisioningTarget, CertificateOrderClaim, CertificateRenewalClaim,
+    DeployRepositoryPort, DnsChallengeZone, DnsRecordSnapshotRow, DomainDnsRecordFilter,
+    DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset, ExpiredCertificateSweep,
+    ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,
@@ -81,6 +82,9 @@ use sdkwork_deploy_cloud_account_port::{DeployCloudAccountPort, DeployCloudAccou
 use sdkwork_deploy_content_provider_port::{ContentProviderPort, MemoryContentProviderPort};
 use sdkwork_deploy_contract::DeployServiceResult;
 use sdkwork_deploy_drive_port::DeployDrivePort;
+use sdkwork_deploy_identity_provisioning_port::{
+    DeployIdentityProvisioningPort, UnconfiguredIdentityProvisioningPort,
+};
 
 /// Application service for SDKWork Deploy control plane operations.
 pub struct DeployService {
@@ -121,6 +125,12 @@ pub struct DeployService {
     /// empty inventory: "this tenant has no DNS account" and "nobody wired the
     /// account center" look the same to an operator and mean opposite things.
     pub(crate) cloud_accounts: Arc<dyn DeployCloudAccountPort>,
+    /// The IAM installation writer for created applications (migration 0008).
+    ///
+    /// The default answers "not configured" rather than failing: a deployment
+    /// that hosts no IAM must still be able to create applications, and marking
+    /// every one of them `failed` for a step it never attempted would be a lie.
+    pub(crate) identity_provisioning: Arc<dyn DeployIdentityProvisioningPort>,
     /// Production probe for the verification-file self-check: bounded to what
     /// the platform crawlers themselves can do (timeouts, body caps), because a
     /// self-check with powers the crawler lacks endorses nothing.
@@ -141,6 +151,7 @@ impl DeployService {
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
+            identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
             verification_probe: Arc::new(
                 crate::verification_file::UnconfiguredVerificationFileProbe,
             ),
@@ -166,6 +177,7 @@ impl DeployService {
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
+            identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
             verification_probe: Arc::new(
                 crate::verification_file::UnconfiguredVerificationFileProbe,
             ),
@@ -260,6 +272,20 @@ impl DeployService {
     /// port.
     pub fn with_cloud_accounts(mut self, port: Arc<dyn DeployCloudAccountPort>) -> Self {
         self.cloud_accounts = port;
+        self
+    }
+
+    /// Installs the writer that provisions an IAM installation for every created
+    /// application.
+    ///
+    /// Until it is supplied, `apps.create` leaves `identity_status` at its
+    /// `pending_identity` default and calls nothing: "no IAM here" must not read
+    /// as "IAM failed here".
+    pub fn with_identity_provisioning(
+        mut self,
+        port: Arc<dyn DeployIdentityProvisioningPort>,
+    ) -> Self {
+        self.identity_provisioning = port;
         self
     }
 

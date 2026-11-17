@@ -13,6 +13,11 @@ use sdkwork_deploy_content_provider_port::{
 };
 use sdkwork_deploy_database_host::bootstrap_deploy_database_from_env;
 use sdkwork_deploy_drive_port::deploy_drive_port_from_env;
+use sdkwork_deploy_identity_provisioning_port::{
+    resolve_identity_provisioning_mode, DeployIdentityProvisioningPort,
+    HttpIdentityProvisioningAdapter, IdentityProvisioningMode,
+    InProcessIdentityProvisioningAdapter, UnconfiguredIdentityProvisioningPort,
+};
 use sdkwork_deploy_web_port::{
     DeployWebRuntimePort, SdkWebRuntimeFacade, UnconfiguredWebRuntimePort,
 };
@@ -135,6 +140,56 @@ fn web_runtime_from_env() -> Result<Arc<dyn DeployWebRuntimePort>, String> {
             Err(format!("configure Web runtime publication failed: {error}"))
         }
         Err(_) => Ok(Arc::new(UnconfiguredWebRuntimePort)),
+    }
+}
+
+/// Builds the port that mints an IAM installation for every created application.
+///
+/// Selection is explicit and fail-closed:
+///
+/// - `SDKWORK_DEPLOY_IAM_PROVISIONING_MODE=http` builds the split-deployment HTTP
+///   adapter and aborts the boot when its endpoint, credential file, or template
+///   reference is missing.
+/// - Otherwise the in-process adapter is used, which calls IAM's own
+///   provisioning service on this deployment's PostgreSQL pool.
+/// - When no template reference is configured, the unconfigured port is
+///   installed and applications keep `identity_status = pending_identity`; that
+///   is a standalone installation, not a failure.
+fn identity_provisioning_from_env(
+    pool: &sqlx::PgPool,
+) -> Result<Arc<dyn DeployIdentityProvisioningPort>, String> {
+    let mode = resolve_identity_provisioning_mode()
+        .map_err(|error| format!("configure IAM application provisioning failed: {error}"))?;
+    if mode == IdentityProvisioningMode::Http {
+        let adapter = HttpIdentityProvisioningAdapter::from_env().map_err(|error| {
+            format!("configure IAM application provisioning (split deployment) failed: {error}")
+        })?;
+        tracing::info!(
+            template = adapter.template(),
+            "IAM application provisioning uses the split-deployment HTTP adapter"
+        );
+        return Ok(Arc::new(adapter));
+    }
+    match InProcessIdentityProvisioningAdapter::from_env(pool.clone()) {
+        Ok(Some(adapter)) => {
+            tracing::info!(
+                template = adapter.template(),
+                "IAM application provisioning uses the in-process IAM adapter"
+            );
+            Ok(Arc::new(adapter))
+        }
+        Ok(None) => {
+            tracing::warn!(
+                "IAM application provisioning is not configured \
+                 (set SDKWORK_DEPLOY_IAM_APPLICATION_TEMPLATE_ID or \
+                 SDKWORK_DEPLOY_IAM_APPLICATION_APP_KEY); created applications keep \
+                 identity_status = pending_identity"
+            );
+            Ok(Arc::new(UnconfiguredIdentityProvisioningPort))
+        }
+        Err(error) => Err(format!(
+            "configure IAM application provisioning failed: {error}"
+        )),
     }
 }
 
@@ -286,6 +341,8 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     // The Drive upload port runs in-process on the same pool by default, so the
     // handle is read before `repository_from_pool` consumes it.
     let drive_pool = host_postgres_pool(&pool)?.clone();
+    // The IAM installation port also runs in-process on this pool by default.
+    let identity_pool = host_postgres_pool(&pool)?.clone();
     let repository = repository_from_pool(pool).await?;
     let service_repository = repository.clone() as Arc<dyn DeployRepositoryPort>;
     let runtime_repository = repository as Arc<dyn DeployRuntimeAssignmentRepositoryPort>;
@@ -303,6 +360,12 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     )
     .with_certificate_caa_authorization(certificate_caa_from_env()?)
     .with_cloud_accounts(cloud_accounts.clone());
+    // Creating an application also mints its IAM installation (migration 0008).
+    // The port is built from the environment once, at startup: a split
+    // deployment that names an unusable endpoint or credential must fail here
+    // rather than on the first `apps.create`.
+    let identity_provisioning = identity_provisioning_from_env(&identity_pool)?;
+    service = service.with_identity_provisioning(identity_provisioning);
     // The verification-file self-check shares the crawler's bounds: a probe
     // that could read more than the platform's fetcher would endorse nothing.
     if let Ok(probe) = verification_file_probe::BoundedVerificationFileProbe::new() {

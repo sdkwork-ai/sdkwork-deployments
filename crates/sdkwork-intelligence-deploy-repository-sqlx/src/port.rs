@@ -40,8 +40,9 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_deploy_web_port::RuntimeAssignmentReceipt;
 use sdkwork_intelligence_deploy_service::repository::{
-    DomainDnsRecordFilter, DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset,
-    InsertAuditLogCommand, InsertUsageEventCommand, ZoneDnsSyncTarget,
+    AppIdentityProvisioningTarget, DomainDnsRecordFilter, DomainDnsRecordUpsert,
+    DomainDnsSnapshotWrite, DomainHostnameAsset, InsertAuditLogCommand, InsertUsageEventCommand,
+    ZoneDnsSyncTarget,
 };
 use sdkwork_intelligence_deploy_service::repository::{RepositoryMatch, TriggerTarget};
 use sdkwork_intelligence_deploy_service::runtime_publication::{
@@ -759,6 +760,25 @@ impl DeployRepositoryPort for DeployRepository {
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         self.update_app_repo(tenant_id, actor_id, app_id, request)
+            .await
+    }
+
+    async fn begin_app_identity_provisioning(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<AppIdentityProvisioningTarget> {
+        self.begin_app_identity_provisioning_repo(tenant_id, app_id)
+            .await
+    }
+
+    async fn record_app_identity_status(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        status: &str,
+    ) -> DeployServiceResult<()> {
+        self.record_app_identity_status_repo(tenant_id, app_id, status)
             .await
     }
 
