@@ -111,7 +111,7 @@ impl DeployRepository {
         let template_internal_id = match request.template_id.as_deref() {
             Some(template_id) => Some(
                 sqlx::query(
-                    "SELECT id FROM deploy_build_template
+                    "SELECT id FROM deploy_build_recipe
                      WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
                 )
                 .bind(tenant_id)
@@ -216,7 +216,7 @@ impl DeployRepository {
              FROM deploy_build b
              JOIN deploy_app a ON a.id = b.app_id
              JOIN deploy_app_platform_target t ON t.id = b.platform_target_id
-             LEFT JOIN deploy_build_template bt ON bt.id = b.template_id
+             LEFT JOIN deploy_build_recipe bt ON bt.id = b.template_id
              LEFT JOIN deploy_source_repository r ON r.id = b.source_repository_id
              LEFT JOIN deploy_package p ON p.id = b.produced_package_id
              WHERE b.tenant_id = $1 AND b.idempotency_key = $2 AND b.deleted_at IS NULL
@@ -261,7 +261,7 @@ impl DeployRepository {
              FROM deploy_build b
              JOIN deploy_app a ON a.id = b.app_id
              JOIN deploy_app_platform_target t ON t.id = b.platform_target_id
-             LEFT JOIN deploy_build_template bt ON bt.id = b.template_id
+             LEFT JOIN deploy_build_recipe bt ON bt.id = b.template_id
              LEFT JOIN deploy_source_repository r ON r.id = b.source_repository_id
              LEFT JOIN deploy_package p ON p.id = b.produced_package_id
              WHERE b.tenant_id = $1 AND b.app_id = $2 AND b.deleted_at IS NULL
@@ -303,7 +303,7 @@ impl DeployRepository {
              FROM deploy_build b
              JOIN deploy_app a ON a.id = b.app_id
              JOIN deploy_app_platform_target t ON t.id = b.platform_target_id
-             LEFT JOIN deploy_build_template bt ON bt.id = b.template_id
+             LEFT JOIN deploy_build_recipe bt ON bt.id = b.template_id
              LEFT JOIN deploy_source_repository r ON r.id = b.source_repository_id
              LEFT JOIN deploy_package p ON p.id = b.produced_package_id
              WHERE b.tenant_id = $1 AND b.app_id = $2 AND b.uuid = $3 AND b.deleted_at IS NULL"

@@ -286,7 +286,7 @@ impl DeployRepository {
             "SELECT t.uuid AS target_uuid, bt.uuid AS template_uuid
              FROM deploy_app_platform_target t
              JOIN deploy_app a ON a.id = t.app_id
-             JOIN deploy_build_template bt ON bt.id = t.build_template_id
+             JOIN deploy_build_recipe bt ON bt.id = t.build_template_id
              WHERE a.uuid = $1 AND t.deleted_at IS NULL
                AND t.target_status = 'ACTIVE' AND bt.template_status = 'ACTIVE'",
         )

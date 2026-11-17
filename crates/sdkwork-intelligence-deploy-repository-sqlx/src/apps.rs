@@ -966,7 +966,7 @@ impl DeployRepository {
                     t.created_at, t.updated_at, t.version
              FROM deploy_app_platform_target t
              JOIN deploy_app a ON a.id = t.app_id
-             LEFT JOIN deploy_build_template bt ON bt.id = t.build_template_id
+             LEFT JOIN deploy_build_recipe bt ON bt.id = t.build_template_id
              WHERE t.tenant_id = $1 AND t.app_id = $2 AND t.deleted_at IS NULL
              ORDER BY t.created_at ASC, t.id ASC",
         )
@@ -1003,7 +1003,7 @@ impl DeployRepository {
                     t.created_at, t.updated_at, t.version
              FROM deploy_app_platform_target t
              JOIN deploy_app a ON a.id = t.app_id
-             LEFT JOIN deploy_build_template bt ON bt.id = t.build_template_id
+             LEFT JOIN deploy_build_recipe bt ON bt.id = t.build_template_id
              WHERE t.tenant_id = $1 AND t.app_id = $2 AND t.uuid = $3 AND t.deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -1169,7 +1169,7 @@ impl DeployRepository {
             .unwrap_or_else(|| serde_json::json!({}));
 
         let result = sqlx::query(
-            "INSERT INTO deploy_build_template
+            "INSERT INTO deploy_build_recipe
                 (id, uuid, tenant_id, organization_id, template_name, template_version,
                  platform, tech_stack, toolchain_json, commands_json, artifact_outputs_json,
                  quality_gates_json, template_status, created_by, updated_by,
@@ -1199,7 +1199,7 @@ impl DeployRepository {
         .bind(actor_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("insert deploy_build_template", error))?;
+        .map_err(|error| store_error("insert deploy_build_recipe", error))?;
 
         let Some(row) = result else {
             return Err(DeployServiceError::conflict(format!(
@@ -1222,20 +1222,20 @@ impl DeployRepository {
     ) -> DeployServiceResult<BuildTemplatePage> {
         let (page, page_size, offset) = pagination(page, page_size);
         let count_row = sqlx::query(
-            "SELECT COUNT(*) AS total FROM deploy_build_template
+            "SELECT COUNT(*) AS total FROM deploy_build_recipe
              WHERE tenant_id = $1 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count deploy_build_template", error))?;
+        .map_err(|error| store_error("count deploy_build_recipe", error))?;
         let total: i64 = count_row.try_get("total").unwrap_or(0);
 
         let rows = sqlx::query(
             "SELECT t.uuid, t.template_name, t.template_version, t.platform, t.tech_stack,
                     t.toolchain_json, t.commands_json, t.artifact_outputs_json,
                     t.quality_gates_json, t.template_status, t.created_at, t.updated_at, t.version
-             FROM deploy_build_template t
+             FROM deploy_build_recipe t
              WHERE t.tenant_id = $1 AND t.deleted_at IS NULL
              ORDER BY t.created_at DESC, t.id DESC LIMIT $2 OFFSET $3",
         )
@@ -1244,7 +1244,7 @@ impl DeployRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list deploy_build_template", error))?;
+        .map_err(|error| store_error("list deploy_build_recipe", error))?;
 
         let items = rows
             .iter()
@@ -1267,14 +1267,14 @@ impl DeployRepository {
             "SELECT t.uuid, t.template_name, t.template_version, t.platform, t.tech_stack,
                     t.toolchain_json, t.commands_json, t.artifact_outputs_json,
                     t.quality_gates_json, t.template_status, t.created_at, t.updated_at, t.version
-             FROM deploy_build_template t
+             FROM deploy_build_recipe t
              WHERE t.tenant_id = $1 AND t.uuid = $2 AND t.deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(template_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve deploy_build_template", error))?;
+        .map_err(|error| store_error("retrieve deploy_build_recipe", error))?;
 
         let Some(row) = row else {
             return Err(DeployServiceError::not_found("build template not found"));
