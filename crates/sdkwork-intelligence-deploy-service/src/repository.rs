@@ -883,6 +883,20 @@ pub trait DeployRepositoryPort:
 
     // -- IAM identity provisioning (migration 0008) ---------------------------
 
+    /// Reads `deploy_app.identity_status` without claiming the provisioning key.
+    ///
+    /// [`Self::begin_app_identity_provisioning`] claims the key as a side effect.
+    /// A retry entry point must decide "already active → do nothing" *before*
+    /// that, otherwise a no-op call would write a key onto an `active` row that
+    /// has none — the exact anomaly the reconciliation runbook says to report
+    /// rather than silently normalise. This read is therefore separate and
+    /// side-effect free.
+    async fn retrieve_app_identity_status(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<String>;
+
     /// Claims the application's stable IAM provisioning key and reads back the
     /// fields a provisioning call needs.
     ///

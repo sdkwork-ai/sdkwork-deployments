@@ -789,6 +789,15 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn retrieve_app_identity_status(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<String> {
+        self.retrieve_app_identity_status_repo(tenant_id, app_id)
+            .await
+    }
+
     async fn begin_app_identity_provisioning(
         &self,
         tenant_id: i64,

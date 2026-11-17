@@ -22,6 +22,10 @@ application is not deleted or rolled back. `ProvisioningOutcome::Skipped` (IAM
 provisioning not configured on this deployment) leaves the state
 `pending_identity` until an operator wires the integration.
 
+`apps.identityProvision` re-runs that step for one application; it is the retry
+entry an application stuck in `failed` or `pending_identity` uses (see
+[Retry a failed or pending application](#retry-a-failed-or-pending-application)).
+
 ## Run the report
 
 The SQL is read-only: every data statement is a `SELECT`, and the file wraps
@@ -51,36 +55,50 @@ is not an open reconciliation item. To scope to one tenant, append
 
 ## Retry a failed or pending application
 
-The only provisioning trigger that exists today is `apps.create`
-(`DeployAppService::create_app` → `provision_app_identity`). There is **no**
-update-triggered or rebuild-triggered provisioning path, and there is **no**
-`requeue` command in this repository as of this change. Do not assume either
-exists; a requeue command would be a new entrypoint that must be documented
-when it is implemented.
+`apps.identityProvision` is the supported retry entry:
 
-The supported retry is an idempotent replay of the original create:
+```text
+POST /backend/v3/api/apps/{appId}/identity_provision
+operationId: apps.identityProvision
+permission: deploy.apps.write
+```
 
-1. Read the application row to recover its identity: `uuid` is the application
-   id, and the original `Idempotency-Key` is the one the create command used
-   (`deploy_app.idempotency_key`).
-2. Re-send `apps.create` with the **same** `Idempotency-Key` and an identical
-   request body (the body is hashed into `request_sha256`; a different body with
-   the same key is rejected as a conflict).
-3. The idempotent create returns the existing application instead of inserting a
-   new one, and `create_app` then calls `provision_app_identity` again.
-   `begin_app_identity_provisioning` reuses the stored
-   `identity_provisioning_key` (`COALESCE(identity_provisioning_key,
-   'deploy:' || id::text)`), so the retry cannot create a second IAM
-   installation. The call is skipped only when the status is already `active`.
-4. Watch the row: `active` means the IAM installation was provisioned;
-   `failed` means it was attempted and rejected (the error is logged by the
-   service, and `updated_at` moves); `pending_identity` with a `Skipped`
-   outcome means IAM provisioning is not configured on this deployment.
+It is a backend (operator) command and it runs the *same* provisioning entry as
+`apps.create` (`attempt_app_identity_provisioning`): read the stored status,
+replay the row's `identity_provisioning_key`, record the outcome. There is no
+second copy of the provisioning logic, so the replay key and the status
+transitions cannot drift between the two callers.
 
-Rows created by internal callers (seeds, provisioning, tests) may have
-`idempotency_key IS NULL`. For those rows the create-replay retry is not
-available, and no alternative requeue entrypoint exists as of this change; do
-not fabricate one in an operator procedure.
+1. Resolve `appId` from the report above. It is the application's `uuid`
+   (`deploy_app.uuid`); the BIGINT `id` is internal and is not addressable on
+   this API.
+2. Send the command. There is no request body and no `Idempotency-Key`: the
+   application id is the natural key, and two calls for the same application
+   are the same installation.
+3. Read `data.item` in the response:
+   - `identityStatus = active` — the installation exists. When the row was
+     already `active` the command called IAM **zero** times: that is the
+     intended idempotent short-circuit, not a cached answer. It also does not
+     claim a provisioning key, so the `active` + `NULL` key anomaly stays
+     visible for triage instead of being quietly repaired.
+   - `identityStatus = failed` — the attempt ran and IAM rejected it, timed out,
+     or was unreachable. The status is recorded on the row and `updated_at`
+     moved; the full error is in the service log with the app id and the
+     provisioning key. Fix the cause and retry.
+   - `identityStatus = pending_identity` — no provisioning adapter is wired on
+     this deployment (`ProvisioningOutcome::Skipped`). Nothing was attempted and
+     nothing changed; wire IAM first, then retry. Retrying without wiring it is
+     a no-op.
+4. The command is audited as `app.identityProvision` with the operator identity
+   from the backend token. After a batch of retries, re-run the report to
+   confirm the rows moved.
+
+The previous workaround — replaying `apps.create` with the original
+`Idempotency-Key` and an identical request body — still works for a create call
+that is still reproducible, and it still lands on the same installation because
+both paths share the entry point. It is no longer the only way, and it is not
+needed for rows created by an internal caller (seeds, provisioning, tests) whose
+`idempotency_key IS NULL` cannot be replayed as a create at all.
 
 Do not set `identity_status = 'active'` by hand. That would claim a provisioning
 state the IAM side does not have, and the deployment would still fail closed when
@@ -89,8 +107,10 @@ it tries to resolve its installation.
 ### What to check before retrying
 
 - IAM provisioning is configured for this deployment (`ProvisioningOutcome` is
-  not `Skipped`).
-- The application is not soft-deleted.
+  not `Skipped`). A retry against an unconfigured deployment answers
+  `pending_identity` and changes nothing.
+- The application is not soft-deleted, and the operator's token carries the
+  tenant that owns it.
 - The IAM side is reachable and its `iam_tenant_application` unique indexes are
   satisfied (`deploy_application_id`, `provisioning_idempotency_key`).
 

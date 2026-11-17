@@ -27,7 +27,8 @@ client.setAuthToken('your-auth-token');
 client.setAccessToken('your-access-token');
 
 // Use the SDK
-const result = await client.downloadCatalog.list();
+const appId = '1';
+const result = await client.app.identityProvision(appId);
 ```
 
 ## Authentication
@@ -66,6 +67,7 @@ const client = new SdkworkDeployBackendClient({
 - `client.usage` - usage API
 - `client.signingHealth` - signing_health API
 - `client.sourceEvents` - source_events API
+- `client.app` - app API
 - `client.template` - template API
 - `client.downloadCatalog` - download_catalog API
 
@@ -207,6 +209,14 @@ const params = {
 const result = await client.sourceEvents.list(params);
 ```
 
+### app
+
+```typescript
+// 重试应用身份开通
+const appId = '1';
+const result = await client.app.identityProvision(appId);
+```
+
 ### template
 
 ```typescript
@@ -232,7 +242,8 @@ const result = await client.downloadCatalog.list();
 import { SdkworkDeployBackendClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/deployments-backend-sdk';
 
 try {
-  const result = await client.downloadCatalog.list();
+  const appId = '1';
+  const result = await client.app.identityProvision(appId);
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

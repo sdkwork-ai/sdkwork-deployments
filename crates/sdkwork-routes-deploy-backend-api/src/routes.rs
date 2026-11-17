@@ -83,6 +83,7 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> R
             paths::SIGNING_IDENTITY_HEALTH,
             get(list_signing_identity_health),
         )
+        .route(paths::APP_IDENTITY_PROVISION, post(provision_app_identity))
         .route(
             paths::SOURCE_EVENTS,
             get(list_source_events).post(ingest_source_event),
@@ -776,6 +777,32 @@ async fn list_signing_identity_health(
                 .list_signing_identity_health(&context, query.page, query.page_size)
                 .await?;
             ok_json(envelope::signing_identity_health_page(page))
+        }
+        .await,
+    )
+}
+
+/// Re-runs the IAM installation provisioning for one application
+/// (`apps.identityProvision`).
+///
+/// Answers `200` with the status the attempt left on the row — including
+/// `failed`, which is a durable outcome the operator can read and retry again,
+/// not a reason to hide the stored state behind an error.
+async fn provision_app_identity(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let item = state
+                .api
+                .retry_app_identity_provisioning(&context, &app_id)
+                .await?;
+            ok_json(envelope::resource(item))
         }
         .await,
     )

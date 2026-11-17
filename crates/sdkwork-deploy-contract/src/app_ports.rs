@@ -1779,4 +1779,23 @@ pub trait DeployBackendApi: Send + Sync {
         template_uuid: &str,
         version_uuid: &str,
     ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse>;
+
+    // -- application identity (operator retry entry) ----------------------------
+
+    /// Re-runs the IAM installation provisioning for one application.
+    ///
+    /// `apps.create` is not the only entry any more: an application whose create
+    /// ran while IAM was unreachable stays `pending_identity`/`failed` with no
+    /// way back, because a replay of `apps.create` is only possible while the
+    /// original `Idempotency-Key` and request body are still known. This command
+    /// is that way back. It reads the current status first (`active` is returned
+    /// unchanged and calls nothing), then replays the stored
+    /// `deploy_app.identity_provisioning_key` (`deploy:{id}`) so IAM lands on the
+    /// installation the original attempt would have created, and records the
+    /// resulting status on the row.
+    async fn retry_app_identity_provisioning(
+        &self,
+        context: &DeployBackendRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<crate::app_delivery::AppIdentityProvisionResponse>;
 }

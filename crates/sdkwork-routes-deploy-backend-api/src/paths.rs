@@ -29,6 +29,15 @@ pub const USAGE_RECONCILE: &str = "/backend/v3/api/usage/reconcile";
 pub const SIGNING_IDENTITY_HEALTH: &str = "/backend/v3/api/signing_identity_health";
 pub const SOURCE_EVENTS: &str = "/backend/v3/api/source_events";
 
+// -- application identity (operator retry entry) ------------------------------
+
+/// Re-runs IAM installation provisioning for one application.
+///
+/// `apps.create` is the only path that ever provisions, so an application whose
+/// create ran while IAM was unreachable had no way back. This is that way back;
+/// it is an operator (backend) action, not a tenant-console one.
+pub const APP_IDENTITY_PROVISION: &str = "/backend/v3/api/apps/{appId}/identity_provision";
+
 // -- app template marketplace (admin) ------------------------------------------
 
 pub const TEMPLATE_CATEGORIES: &str = "/backend/v3/api/template_categories";

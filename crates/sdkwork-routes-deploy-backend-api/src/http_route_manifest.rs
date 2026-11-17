@@ -229,6 +229,13 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_idempotent(true),
     HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/backend/v3/api/apps/{appId}/identity_provision",
+        "app",
+        "apps.identityProvision",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/template_categories",
         "template",

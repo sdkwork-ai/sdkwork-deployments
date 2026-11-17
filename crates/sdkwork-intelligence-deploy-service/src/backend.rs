@@ -2,8 +2,8 @@
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
-    next_order_transition, AcmeAccountPage, AcmeAccountResponse, BuildQueuePage,
-    CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse,
+    next_order_transition, AcmeAccountPage, AcmeAccountResponse, AppIdentityProvisionResponse,
+    BuildQueuePage, CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse,
     CreateNginxConfigRequest, CreateNodeClusterRequest, CreateServerRequest, DeployBackendApi,
     DeployBackendRequestContext, DeployServiceError, DeployServiceResult,
     EntitlementProjectionPage, IngestUsageEventsRequest, ListNginxConfigsQuery,
@@ -15,6 +15,7 @@ use sdkwork_deploy_contract::{
 };
 
 use crate::certificate_material::{seal_issued_material, DeclaredCertificateEvidence};
+use crate::repository::InsertAuditLogCommand;
 use crate::DeployService;
 
 impl DeployService {
@@ -808,6 +809,40 @@ impl DeployBackendApi for DeployService {
         self.repository
             .retrieve_app_template_version(tenant_id, None, template_uuid, version_uuid)
             .await
+    }
+
+    async fn retry_app_identity_provisioning(
+        &self,
+        context: &DeployBackendRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppIdentityProvisionResponse> {
+        let tenant_id = Self::backend_write_tenant(context)?;
+        // The application must exist before anything is attempted: an unknown id
+        // answers `not_found`, never `pending_identity`. The read is also the
+        // reachability check — the backend request context carries no
+        // organization/user subject, so this operator surface is tenant-scoped.
+        let app = self.repository.retrieve_app(tenant_id, app_id).await?;
+        let identity_status = self
+            .attempt_app_identity_provisioning(tenant_id, &app.id)
+            .await?;
+        // An operator-triggered cross-module write is recorded with the operator
+        // who asked for it. `app.create`, if it audited this row at all,
+        // describes a different event and a different actor.
+        self.repository
+            .insert_audit_log(InsertAuditLogCommand {
+                tenant_id,
+                organization_id: 0,
+                operator_id: context.operator_id.unwrap_or(0),
+                action: "app.identityProvision".to_owned(),
+                target_type: "app".to_owned(),
+                target_id: None,
+                target_uuid: Some(app.id.clone()),
+            })
+            .await?;
+        Ok(AppIdentityProvisionResponse {
+            app_id: app.id,
+            identity_status,
+        })
     }
 }
 

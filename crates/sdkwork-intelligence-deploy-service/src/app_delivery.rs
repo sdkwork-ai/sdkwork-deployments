@@ -41,8 +41,73 @@ const CHANNEL_KEYS: &[&str] = &["stable", "beta", "alpha", "qa"];
 const REPO_PROVIDERS: &[&str] = &["GITHUB", "GITEE", "GITLAB", "SELF_HOSTED"];
 const CLONE_MODES: &[&str] = &["FULL", "SHALLOW"];
 /// `deploy_app.identity_status` values (migration 0008).
+const IDENTITY_STATUS_PENDING: &str = "pending_identity";
 const IDENTITY_STATUS_ACTIVE: &str = "active";
 const IDENTITY_STATUS_FAILED: &str = "failed";
+
+/// What one provisioning attempt is allowed to do, decided from the status the
+/// row already reports.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IdentityProvisioningAction {
+    /// The IAM installation already exists. The call returns the stored status
+    /// and touches nothing: a second installation for one application is the
+    /// failure this short-circuit exists to make impossible.
+    AlreadyActive,
+    /// Replay the stored idempotency key against IAM.
+    Provision,
+}
+
+/// One provisioning call, reduced to the status it implies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IdentityProvisioningAttempt {
+    /// IAM answered — a fresh installation or the replay of it.
+    Installed,
+    /// No adapter is wired, so nothing was attempted and nothing may change.
+    Skipped,
+    /// IAM rejected the call, timed out, or was unreachable.
+    Failed,
+}
+
+/// Maps a stored status onto the closed set the column's CHECK constraint
+/// accepts, defaulting to `pending_identity`.
+///
+/// The default is deliberately "nothing has happened yet" rather than `failed`:
+/// an unrecognised value must not be turned into a failure accusation by a
+/// read-modify-write, and re-attempting a row whose state this code cannot read
+/// is the safer of the two interpretations.
+fn normalize_identity_status(status: &str) -> &'static str {
+    match status {
+        IDENTITY_STATUS_ACTIVE => IDENTITY_STATUS_ACTIVE,
+        IDENTITY_STATUS_FAILED => IDENTITY_STATUS_FAILED,
+        _ => IDENTITY_STATUS_PENDING,
+    }
+}
+
+/// Whether an attempt may call IAM at all, decided before the provisioning key
+/// is claimed.
+fn identity_provisioning_action(status: &str) -> IdentityProvisioningAction {
+    if normalize_identity_status(status) == IDENTITY_STATUS_ACTIVE {
+        IdentityProvisioningAction::AlreadyActive
+    } else {
+        IdentityProvisioningAction::Provision
+    }
+}
+
+/// The status `deploy_app` must report after one attempt.
+///
+/// A failure always lands on `failed`, including when the row was already
+/// `failed`: the status describes the latest attempt, and re-recording it moves
+/// `updated_at`, which is the operator's evidence that a retry actually ran.
+fn identity_status_after_attempt(
+    status_before: &str,
+    attempt: IdentityProvisioningAttempt,
+) -> &'static str {
+    match attempt {
+        IdentityProvisioningAttempt::Installed => IDENTITY_STATUS_ACTIVE,
+        IdentityProvisioningAttempt::Skipped => normalize_identity_status(status_before),
+        IdentityProvisioningAttempt::Failed => IDENTITY_STATUS_FAILED,
+    }
+}
 
 /// IAM's `applicationType` view of a deploy app kind.
 ///
@@ -192,32 +257,53 @@ impl DeployService {
     /// application because its identity could not be minted would also destroy
     /// the domains, source specs, and audit trail the operator can still use.
     ///
-    /// A retry of `apps.create` replays the same `Idempotency-Key` and finds the
-    /// same application (`deploy_app.identity_provisioning_key` is
-    /// `deploy:{id}`), so the replay attaches the installation instead of
-    /// creating a second one.
+    /// The retry entry (`apps.identityProvision`) shares
+    /// [`Self::attempt_app_identity_provisioning`] with this path, so the replay
+    /// key and the status transitions cannot drift between the two callers.
     async fn provision_app_identity(&self, context: &DeployAppRequestContext, app: &AppResponse) {
-        // `tenant_id` was validated by `create_app` before the insert.
-        let target = match self
-            .repository
-            .begin_app_identity_provisioning(context.tenant_id, &app.id)
+        if let Err(error) = self
+            .attempt_app_identity_provisioning(context.tenant_id, &app.id)
             .await
         {
-            Ok(target) => target,
-            Err(error) => {
-                tracing::warn!(
-                    app = %app.id,
-                    %error,
-                    "IAM installation provisioning skipped: application identity row is unavailable"
-                );
-                return;
-            }
-        };
-        // An application whose installation is already active is never
-        // re-provisioned by a replay.
-        if target.identity_status == IDENTITY_STATUS_ACTIVE {
-            return;
+            // The error is logged in full and never returned, because the
+            // application itself was created.
+            tracing::warn!(
+                app = %app.id,
+                %error,
+                "IAM installation provisioning could not be completed; the application was kept"
+            );
         }
+    }
+
+    /// The single IAM provisioning entry point, shared by `apps.create` and
+    /// `apps.identityProvision`.
+    ///
+    /// It reads the current status first and answers `active` without calling
+    /// IAM or claiming anything — including for the `active` + `NULL` key row
+    /// the reconciliation runbook reports as an anomaly rather than a state to
+    /// repair. Otherwise it claims the row's stable replay key
+    /// (`deploy:{id}`) and calls the port once.
+    ///
+    /// Returns the status the application now reports. A rejected attempt is not
+    /// an error here: the row records `failed`, and the retry caller reads that
+    /// as the outcome of the command it asked for.
+    pub(crate) async fn attempt_app_identity_provisioning(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<String> {
+        let status_before = self
+            .repository
+            .retrieve_app_identity_status(tenant_id, app_id)
+            .await?;
+        if identity_provisioning_action(&status_before) == IdentityProvisioningAction::AlreadyActive
+        {
+            return Ok(IDENTITY_STATUS_ACTIVE.to_owned());
+        }
+        let target = self
+            .repository
+            .begin_app_identity_provisioning(tenant_id, app_id)
+            .await?;
         let command = DeployApplicationProvisioningCommand {
             tenant_id: target.tenant_id.clone(),
             organization_id: target.organization_id.clone(),
@@ -228,72 +314,53 @@ impl DeployService {
             deploy_application_id: target.deploy_application_id.clone(),
             provisioning_idempotency_key: target.provisioning_idempotency_key.clone(),
         };
-        match self
+        let attempt = match self
             .identity_provisioning
             .provision_tenant_application(&command)
             .await
         {
             Ok(ProvisioningOutcome::Installed(receipt)) => {
-                if let Err(error) = self
-                    .repository
-                    .record_app_identity_status(
-                        context.tenant_id,
-                        &app.id,
-                        IDENTITY_STATUS_ACTIVE,
-                    )
-                    .await
-                {
-                    tracing::warn!(
-                        app = %app.id,
-                        %error,
-                        "IAM installation was provisioned but the application still reads as pending"
-                    );
-                    return;
-                }
                 tracing::info!(
-                    app = %app.id,
+                    app = %app_id,
                     deploy_application_id = %target.deploy_application_id,
                     tenant_application_id = receipt.tenant_application_id.as_deref().unwrap_or(""),
                     runtime_app_id = receipt.runtime_app_id.as_deref().unwrap_or(""),
                     "IAM installation provisioned"
                 );
+                IdentityProvisioningAttempt::Installed
             }
             Ok(ProvisioningOutcome::Skipped) => {
                 // Not a failure: provisioning is not configured on this
                 // deployment, so the identity stays `pending_identity` until an
                 // operator wires it.
                 tracing::debug!(
-                    app = %app.id,
+                    app = %app_id,
                     "IAM installation provisioning is not configured; identity stays pending"
                 );
+                IdentityProvisioningAttempt::Skipped
             }
             Err(error) => {
-                // The error is logged in full and recorded on the row; it is not
-                // returned, because the application itself was created.
+                // The error is logged in full and recorded on the row.
                 tracing::warn!(
-                    app = %app.id,
+                    app = %app_id,
                     deploy_application_id = %target.deploy_application_id,
                     provisioning_key = %target.provisioning_idempotency_key,
                     %error,
                     "IAM installation provisioning failed; application identity marked failed"
                 );
-                if let Err(mark_error) = self
-                    .repository
-                    .record_app_identity_status(
-                        context.tenant_id,
-                        &app.id,
-                        IDENTITY_STATUS_FAILED,
-                    )
-                    .await
-                {
-                    tracing::warn!(
-                        app = %app.id,
-                        %mark_error,
-                        "record failed IAM installation status failed"
-                    );
-                }
+                IdentityProvisioningAttempt::Failed
             }
+        };
+        let status_after = identity_status_after_attempt(&status_before, attempt);
+        // A skipped attempt changes nothing, so it writes nothing — not even
+        // `updated_at`. Everything else is persisted, including `failed` over
+        // `failed`: the re-record is what marks the retry as having happened.
+        if attempt != IdentityProvisioningAttempt::Skipped {
+            self.repository
+                .record_app_identity_status(tenant_id, app_id, status_after)
+                .await?;
         }
+        Ok(status_after.to_owned())
     }
 
     pub async fn list_apps(
@@ -1491,7 +1558,10 @@ mod usage_metering_tests {
 
 #[cfg(test)]
 mod identity_provisioning_tests {
-    use super::identity_application_type;
+    use super::{
+        identity_application_type, identity_provisioning_action, identity_status_after_attempt,
+        normalize_identity_status, IdentityProvisioningAction, IdentityProvisioningAttempt,
+    };
 
     #[test]
     fn app_kinds_map_onto_the_iam_application_type_vocabulary() {
@@ -1521,5 +1591,89 @@ mod identity_provisioning_tests {
     fn mapping_is_case_and_padding_insensitive() {
         assert_eq!(identity_application_type(" api_service "), "api");
         assert_eq!(identity_application_type("spa_web"), "pc");
+    }
+
+    #[test]
+    fn active_is_short_circuited_before_the_port_is_consulted() {
+        // The retry entry must answer an already-provisioned application
+        // without calling IAM and without claiming a provisioning key: the
+        // decision is taken from the stored status alone.
+        assert_eq!(
+            identity_provisioning_action("active"),
+            IdentityProvisioningAction::AlreadyActive
+        );
+        for retryable in ["pending_identity", "failed", "", "not-a-status"] {
+            assert_eq!(
+                identity_provisioning_action(retryable),
+                IdentityProvisioningAction::Provision,
+                "{retryable}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_rejected_retry_stays_failed() {
+        // `failed` over `failed` is the persisted outcome of a retry that IAM
+        // rejected again; it must not fall through to `pending_identity`, which
+        // would erase the evidence that anything was attempted.
+        assert_eq!(
+            identity_status_after_attempt("failed", IdentityProvisioningAttempt::Failed),
+            "failed"
+        );
+        assert_eq!(
+            identity_status_after_attempt("pending_identity", IdentityProvisioningAttempt::Failed),
+            "failed"
+        );
+        assert_eq!(
+            identity_status_after_attempt("active", IdentityProvisioningAttempt::Failed),
+            "failed"
+        );
+    }
+
+    #[test]
+    fn a_successful_retry_activates_a_failed_application() {
+        assert_eq!(
+            identity_status_after_attempt("failed", IdentityProvisioningAttempt::Installed),
+            "active"
+        );
+        assert_eq!(
+            identity_status_after_attempt(
+                "pending_identity",
+                IdentityProvisioningAttempt::Installed
+            ),
+            "active"
+        );
+    }
+
+    #[test]
+    fn a_skipped_attempt_preserves_the_previous_status() {
+        // "No adapter is wired" is a fact about the deployment, not a verdict on
+        // the application, so it must not rewrite the row.
+        assert_eq!(
+            identity_status_after_attempt("failed", IdentityProvisioningAttempt::Skipped),
+            "failed"
+        );
+        assert_eq!(
+            identity_status_after_attempt("pending_identity", IdentityProvisioningAttempt::Skipped),
+            "pending_identity"
+        );
+        // An unrecognised stored value normalises to `pending_identity`; it is
+        // never turned into a failure accusation.
+        assert_eq!(
+            identity_status_after_attempt("unexpected", IdentityProvisioningAttempt::Skipped),
+            "pending_identity"
+        );
+    }
+
+    #[test]
+    fn statuses_normalise_onto_the_closed_column_vocabulary() {
+        assert_eq!(normalize_identity_status("active"), "active");
+        assert_eq!(normalize_identity_status("failed"), "failed");
+        assert_eq!(
+            normalize_identity_status("pending_identity"),
+            "pending_identity"
+        );
+        assert_eq!(normalize_identity_status("ACTIVE"), "pending_identity");
+        assert_eq!(normalize_identity_status(""), "pending_identity");
     }
 }

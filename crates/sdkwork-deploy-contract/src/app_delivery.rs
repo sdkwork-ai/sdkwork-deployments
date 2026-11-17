@@ -849,6 +849,23 @@ pub struct AppPage {
     pub page_size: i32,
 }
 
+/// `apps.identityProvision` result: the application whose IAM installation was
+/// (re)provisioned and the identity status the attempt left it in.
+///
+/// `identityStatus` is the persisted `deploy_app.identity_status`, not the
+/// attempt's own verdict. A rejected provisioning attempt still answers the
+/// command successfully with `failed`: the status column is the durable record
+/// of what happened, and folding it into an HTTP error would hide the stored
+/// state from the operator who must retry or escalate.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppIdentityProvisionResponse {
+    #[serde(rename = "appId")]
+    pub app_id: String,
+    /// `pending_identity` | `active` | `failed`.
+    #[serde(rename = "identityStatus")]
+    pub identity_status: String,
+}
+
 // ---------------------------------------------------------------------------
 // App domain (default publishing hostnames + bound custom hostnames)
 // ---------------------------------------------------------------------------

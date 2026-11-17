@@ -529,6 +529,34 @@ impl DeployRepository {
 
     // -- IAM identity provisioning (migration 0008) ---------------------------
 
+    /// Reads `deploy_app.identity_status` without touching the provisioning key.
+    ///
+    /// Retry entry points use this to answer an `active` application without
+    /// calling IAM and without claiming a key it may not have. Keeping the read
+    /// side-effect free is what lets the reconciliation runbook keep treating an
+    /// `active` + `NULL` key row as an anomaly to report instead of one the retry
+    /// path quietly repairs.
+    pub(super) async fn retrieve_app_identity_status_repo(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<String> {
+        let status: Option<String> = sqlx::query_scalar(
+            "SELECT identity_status FROM deploy_app
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(app_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read deploy_app identity status", error))?;
+
+        let Some(status) = status else {
+            return Err(DeployServiceError::not_found("app not found"));
+        };
+        Ok(status)
+    }
+
     /// Claims `deploy_app.identity_provisioning_key` and reads back the row the
     /// provisioning call describes.
     ///

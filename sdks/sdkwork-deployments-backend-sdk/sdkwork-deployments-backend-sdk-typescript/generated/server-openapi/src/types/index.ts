@@ -58,6 +58,7 @@ export type { UsageReconciliationResponse } from './usage-reconciliation-respons
 export type { SigningIdentityHealthResponse } from './signing-identity-health-response';
 export type { SourceEventResponse } from './source-event-response';
 export type { SourceEventIngestResponse } from './source-event-ingest-response';
+export type { AppIdentityProvisionResponse } from './app-identity-provision-response';
 export type { DownloadUpdateResponse } from './download-update-response';
 export type { DownloadUpdateUpsertRequest } from './download-update-upsert-request';
 export type { DownloadItemResponse } from './download-item-response';
@@ -101,6 +102,7 @@ export type { SigningIdentityHealthListResponse } from './signing-identity-healt
 export type { ListGetResponse2 } from './list-get-response2';
 export type { CreateRequest } from './create-request';
 export type { CreatePostResponse2012 } from './create-post-response2012';
+export type { AppsIdentityProvisionResponse } from './apps-identity-provision-response';
 export type { TemplateCategoriesListResponse } from './template-categories-list-response';
 export type { TemplateCategoriesCreateResponse201 } from './template-categories-create-response201';
 export type { TemplateCategoriesRetrieveResponse } from './template-categories-retrieve-response';
