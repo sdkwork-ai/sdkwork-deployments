@@ -35,7 +35,8 @@ deployment values. The app manifest is not runtime configuration authority.
 - `etc/`: source-controlled topology profiles, gateway templates, and safe secret-file references.
 - `agent.workflow.json`: GitHub packaging/release workflow manifest.
 - `.github/workflows/package.yml`: thin reusable workflow call only.
-- `.sdkwork/`: repository/application AI workspace metadata.
+- `.sdkwork/`: repository/application AI workspace metadata (plugins, manifests, local state).
+- `skills/`: agent skills owned by this repository; each skill is a lowercase kebab-case directory with a `SKILL.md` entrypoint per `../sdkwork-specs/AGENT_SKILLS_SPEC.md`.
 - `specs/`: local application/component contracts and topology authority.
 - `apis/`: Deploy-owned API contract sources.
 - `apps/`: reserved client application roots.

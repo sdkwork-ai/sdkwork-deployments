@@ -1,0 +1,1185 @@
+{
+  "app:appDatabaseMigrations.create": {
+    "api": "app",
+    "operationId": "appDatabaseMigrations.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations",
+    "summary": "Add a versioned migration definition to a database profile"
+  },
+  "app:appDatabaseMigrations.list": {
+    "api": "app",
+    "operationId": "appDatabaseMigrations.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations",
+    "summary": "List versioned migration definitions of a database profile"
+  },
+  "app:appDatabaseMigrations.retrieve": {
+    "api": "app",
+    "operationId": "appDatabaseMigrations.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/database_profiles/{profileId}/migrations/{migrationId}",
+    "summary": "Retrieve a versioned migration definition"
+  },
+  "app:appDatabaseProfiles.create": {
+    "api": "app",
+    "operationId": "appDatabaseProfiles.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/database_profiles",
+    "summary": "Declare the database structure contract of an app"
+  },
+  "app:appDatabaseProfiles.list": {
+    "api": "app",
+    "operationId": "appDatabaseProfiles.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/database_profiles",
+    "summary": "List the database structure contracts of an app"
+  },
+  "app:appDatabaseProfiles.retrieve": {
+    "api": "app",
+    "operationId": "appDatabaseProfiles.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/database_profiles/{profileId}",
+    "summary": "Retrieve a database structure contract"
+  },
+  "app:appDatabaseProfiles.update": {
+    "api": "app",
+    "operationId": "appDatabaseProfiles.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/apps/{appId}/database_profiles/{profileId}",
+    "summary": "Update a database structure contract"
+  },
+  "app:appEnvironments.create": {
+    "api": "app",
+    "operationId": "appEnvironments.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
+    "summary": "Promote a release into the environment"
+  },
+  "app:appEnvironments.list": {
+    "api": "app",
+    "operationId": "appEnvironments.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
+    "summary": "List the immutable promotion history of an environment"
+  },
+  "app:appEnvironments.retrieve": {
+    "api": "app",
+    "operationId": "appEnvironments.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}",
+    "summary": "Retrieve an environment"
+  },
+  "app:appEnvironments.update": {
+    "api": "app",
+    "operationId": "appEnvironments.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}",
+    "summary": "Update an environment (name, approval requirement, status)"
+  },
+  "app:apps.activate": {
+    "api": "app",
+    "operationId": "apps.activate",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/activate",
+    "summary": "激活应用"
+  },
+  "app:apps.composition.update": {
+    "api": "app",
+    "operationId": "apps.composition.update",
+    "method": "PUT",
+    "path": "/app/v3/api/apps/{appId}/composition",
+    "summary": "Replace and publish the complete live app composition"
+  },
+  "app:apps.create": {
+    "api": "app",
+    "operationId": "apps.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps",
+    "summary": "Create a tenant app"
+  },
+  "app:apps.domains.list": {
+    "api": "app",
+    "operationId": "apps.domains.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/domains",
+    "summary": "List an app's publishing domains"
+  },
+  "app:apps.envVariables.create": {
+    "api": "app",
+    "operationId": "apps.envVariables.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/env_variables",
+    "summary": "创建环境变量"
+  },
+  "app:apps.envVariables.list": {
+    "api": "app",
+    "operationId": "apps.envVariables.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/env_variables",
+    "summary": "获取环境变量列表"
+  },
+  "app:apps.healthChecks.create": {
+    "api": "app",
+    "operationId": "apps.healthChecks.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/health_checks",
+    "summary": "创建健康检查"
+  },
+  "app:apps.healthChecks.list": {
+    "api": "app",
+    "operationId": "apps.healthChecks.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/health_checks",
+    "summary": "获取健康检查配置"
+  },
+  "app:apps.list": {
+    "api": "app",
+    "operationId": "apps.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps",
+    "summary": "List the apps the caller may reach"
+  },
+  "app:apps.pause": {
+    "api": "app",
+    "operationId": "apps.pause",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/pause",
+    "summary": "暂停应用"
+  },
+  "app:apps.remix.retrieve": {
+    "api": "app",
+    "operationId": "apps.remix.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/remix",
+    "summary": "Retrieve the remix state and download instructions"
+  },
+  "app:apps.remix.update": {
+    "api": "app",
+    "operationId": "apps.remix.update",
+    "method": "PUT",
+    "path": "/app/v3/api/apps/{appId}/remix",
+    "summary": "Enable or disable remix"
+  },
+  "app:apps.resourceLinks.delete": {
+    "api": "app",
+    "operationId": "apps.resourceLinks.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/apps/{appId}/resource_links/{resourceLinkId}",
+    "summary": "Retire an account binding"
+  },
+  "app:apps.resourceLinks.list": {
+    "api": "app",
+    "operationId": "apps.resourceLinks.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/resource_links",
+    "summary": "List an application's account bindings"
+  },
+  "app:apps.resourceLinks.update": {
+    "api": "app",
+    "operationId": "apps.resourceLinks.update",
+    "method": "PUT",
+    "path": "/app/v3/api/apps/{appId}/resource_links",
+    "summary": "Bind or replace an application's account binding"
+  },
+  "app:apps.retrieve": {
+    "api": "app",
+    "operationId": "apps.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}",
+    "summary": "Retrieve a tenant app"
+  },
+  "app:apps.source.delete": {
+    "api": "app",
+    "operationId": "apps.source.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/apps/{appId}/source",
+    "summary": "Retire the application's remix source"
+  },
+  "app:apps.source.retrieve": {
+    "api": "app",
+    "operationId": "apps.source.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/source",
+    "summary": "Retrieve the application's remix source"
+  },
+  "app:apps.source.update": {
+    "api": "app",
+    "operationId": "apps.source.update",
+    "method": "PUT",
+    "path": "/app/v3/api/apps/{appId}/source",
+    "summary": "Replace the application's remix source"
+  },
+  "app:apps.source.validate": {
+    "api": "app",
+    "operationId": "apps.source.validate",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/source/validate",
+    "summary": "Validate the application's Git source repository"
+  },
+  "app:apps.sourceSpecs.bindSource": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.bindSource",
+    "method": "PUT",
+    "path": "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
+    "summary": "Register the uploaded source behind a spec"
+  },
+  "app:apps.sourceSpecs.create": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/source_specs",
+    "summary": "Declare a source spec for an app"
+  },
+  "app:apps.sourceSpecs.delete": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/apps/{appId}/source_specs/{specId}",
+    "summary": "Delete a source spec"
+  },
+  "app:apps.sourceSpecs.list": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/source_specs",
+    "summary": "List an app's source specs"
+  },
+  "app:apps.sourceSpecs.retrieve": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/source_specs/{specId}",
+    "summary": "Retrieve a source spec"
+  },
+  "app:apps.sourceSpecs.update": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/apps/{appId}/source_specs/{specId}",
+    "summary": "Update a source spec"
+  },
+  "app:apps.update": {
+    "api": "app",
+    "operationId": "apps.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/apps/{appId}",
+    "summary": "Update a tenant app"
+  },
+  "app:appTemplates.create": {
+    "api": "app",
+    "operationId": "appTemplates.create",
+    "method": "POST",
+    "path": "/app/v3/api/app_templates",
+    "summary": "Publish an app as a template listing"
+  },
+  "app:appTemplates.delete": {
+    "api": "app",
+    "operationId": "appTemplates.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/app_templates/{templateUuid}",
+    "summary": "Withdraw the caller's app template"
+  },
+  "app:appTemplates.list": {
+    "api": "app",
+    "operationId": "appTemplates.list",
+    "method": "GET",
+    "path": "/app/v3/api/app_templates",
+    "summary": "List the caller's app templates"
+  },
+  "app:appTemplates.retrieve": {
+    "api": "app",
+    "operationId": "appTemplates.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/app_templates/{templateUuid}",
+    "summary": "Retrieve the caller's app template"
+  },
+  "app:appTemplates.submit": {
+    "api": "app",
+    "operationId": "appTemplates.submit",
+    "method": "POST",
+    "path": "/app/v3/api/app_templates/{templateUuid}/submit",
+    "summary": "Submit an app template for review"
+  },
+  "app:appTemplates.update": {
+    "api": "app",
+    "operationId": "appTemplates.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/app_templates/{templateUuid}",
+    "summary": "Update the caller's app template listing"
+  },
+  "app:appTemplateVersions.create": {
+    "api": "app",
+    "operationId": "appTemplateVersions.create",
+    "method": "POST",
+    "path": "/app/v3/api/app_templates/{templateUuid}/versions",
+    "summary": "Add a version to the caller's app template"
+  },
+  "app:appTemplateVersions.list": {
+    "api": "app",
+    "operationId": "appTemplateVersions.list",
+    "method": "GET",
+    "path": "/app/v3/api/app_templates/{templateUuid}/versions",
+    "summary": "List versions of the caller's app template"
+  },
+  "app:artifacts.create": {
+    "api": "app",
+    "operationId": "artifacts.create",
+    "method": "POST",
+    "path": "/app/v3/api/artifacts",
+    "summary": "Register a Drive-backed deployment artifact"
+  },
+  "app:artifacts.delete": {
+    "api": "app",
+    "operationId": "artifacts.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/artifacts/{artifactId}",
+    "summary": "保留并下架制品"
+  },
+  "app:artifacts.list": {
+    "api": "app",
+    "operationId": "artifacts.list",
+    "method": "GET",
+    "path": "/app/v3/api/artifacts",
+    "summary": "获取租户制品列表"
+  },
+  "app:artifacts.retrieve": {
+    "api": "app",
+    "operationId": "artifacts.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/artifacts/{artifactId}",
+    "summary": "获取制品详情"
+  },
+  "app:builds.create": {
+    "api": "app",
+    "operationId": "builds.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/builds",
+    "summary": "Trigger a governed build"
+  },
+  "app:builds.list": {
+    "api": "app",
+    "operationId": "builds.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/builds",
+    "summary": "List builds of an app"
+  },
+  "app:builds.retrieve": {
+    "api": "app",
+    "operationId": "builds.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/builds/{buildId}",
+    "summary": "Retrieve a build"
+  },
+  "app:builds.update": {
+    "api": "app",
+    "operationId": "builds.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/apps/{appId}/builds/{buildId}/state",
+    "summary": "Report a build state transition from the build runner"
+  },
+  "app:buildTemplates.create": {
+    "api": "app",
+    "operationId": "buildTemplates.create",
+    "method": "POST",
+    "path": "/app/v3/api/build_templates",
+    "summary": "Create a governed build template"
+  },
+  "app:buildTemplates.list": {
+    "api": "app",
+    "operationId": "buildTemplates.list",
+    "method": "GET",
+    "path": "/app/v3/api/build_templates",
+    "summary": "List tenant build templates"
+  },
+  "app:buildTemplates.retrieve": {
+    "api": "app",
+    "operationId": "buildTemplates.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/build_templates/{buildTemplateId}",
+    "summary": "Retrieve a build template"
+  },
+  "app:certificates.create": {
+    "api": "app",
+    "operationId": "certificates.create",
+    "method": "POST",
+    "path": "/app/v3/api/certificates",
+    "summary": "申请证书"
+  },
+  "app:certificates.delete": {
+    "api": "app",
+    "operationId": "certificates.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/certificates/{certificateId}",
+    "summary": "撤销证书"
+  },
+  "app:certificates.list": {
+    "api": "app",
+    "operationId": "certificates.list",
+    "method": "GET",
+    "path": "/app/v3/api/certificates",
+    "summary": "获取证书列表"
+  },
+  "app:certificates.renew": {
+    "api": "app",
+    "operationId": "certificates.renew",
+    "method": "POST",
+    "path": "/app/v3/api/certificates/{certificateId}/renew",
+    "summary": "计划托管证书续期"
+  },
+  "app:certificates.renewals.list": {
+    "api": "app",
+    "operationId": "certificates.renewals.list",
+    "method": "GET",
+    "path": "/app/v3/api/certificates/{certificateId}/renewals",
+    "summary": "获取证书续期历史"
+  },
+  "app:certificates.retrieve": {
+    "api": "app",
+    "operationId": "certificates.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/certificates/{certificateId}",
+    "summary": "获取证书详情"
+  },
+  "app:channels.create": {
+    "api": "app",
+    "operationId": "channels.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/channels/{channelId}/promotions",
+    "summary": "Promote a release into a channel with immutable rollout history"
+  },
+  "app:channels.list": {
+    "api": "app",
+    "operationId": "channels.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/channels",
+    "summary": "List release channels of an app"
+  },
+  "app:channels.retrieve": {
+    "api": "app",
+    "operationId": "channels.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/channels/{channelId}",
+    "summary": "Retrieve a release channel"
+  },
+  "app:channels.rollouts.list": {
+    "api": "app",
+    "operationId": "channels.rollouts.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/channels/{channelId}/rollouts",
+    "summary": "List immutable rollout history of a channel"
+  },
+  "app:cloudAccounts.create": {
+    "api": "app",
+    "operationId": "cloudAccounts.create",
+    "method": "POST",
+    "path": "/app/v3/api/cloud_accounts",
+    "summary": "Register a cloud account for DNS automation"
+  },
+  "app:cloudAccounts.list": {
+    "api": "app",
+    "operationId": "cloudAccounts.list",
+    "method": "GET",
+    "path": "/app/v3/api/cloud_accounts",
+    "summary": "List cloud accounts usable for DNS automation"
+  },
+  "app:deployments.create": {
+    "api": "app",
+    "operationId": "deployments.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/deployments",
+    "summary": "Create a deployment against a typed target"
+  },
+  "app:deployments.list": {
+    "api": "app",
+    "operationId": "deployments.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/deployments",
+    "summary": "List deployments of an app"
+  },
+  "app:deployments.retrieve": {
+    "api": "app",
+    "operationId": "deployments.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/deployments/{deploymentId}",
+    "summary": "Retrieve a deployment"
+  },
+  "app:domainZones.create": {
+    "api": "app",
+    "operationId": "domainZones.create",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones",
+    "summary": "Define a root domain zone"
+  },
+  "app:domainZones.delete": {
+    "api": "app",
+    "operationId": "domainZones.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/domain_zones/{zoneId}",
+    "summary": "Delete an empty root domain zone"
+  },
+  "app:domainZones.dnsRecords.create": {
+    "api": "app",
+    "operationId": "domainZones.dnsRecords.create",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/dns_records",
+    "summary": "Create a resolution record through the Zone's cloud account"
+  },
+  "app:domainZones.dnsRecords.delete": {
+    "api": "app",
+    "operationId": "domainZones.dnsRecords.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}",
+    "summary": "Delete a resolution record through the Zone's cloud account"
+  },
+  "app:domainZones.dnsRecords.list": {
+    "api": "app",
+    "operationId": "domainZones.dnsRecords.list",
+    "method": "GET",
+    "path": "/app/v3/api/domain_zones/{zoneId}/dns_records",
+    "summary": "List a Zone's synced DNS resolution records"
+  },
+  "app:domainZones.dnsRecords.status.update": {
+    "api": "app",
+    "operationId": "domainZones.dnsRecords.status.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}/status",
+    "summary": "Pause a resolution record or resume it"
+  },
+  "app:domainZones.dnsRecords.sync": {
+    "api": "app",
+    "operationId": "domainZones.dnsRecords.sync",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/dns_records/sync",
+    "summary": "Sync a Zone's resolution records through its cloud account"
+  },
+  "app:domainZones.dnsRecords.update": {
+    "api": "app",
+    "operationId": "domainZones.dnsRecords.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/domain_zones/{zoneId}/dns_records/{recordId}",
+    "summary": "Replace a resolution record in place through the Zone's cloud account"
+  },
+  "app:domainZones.hostnameClaims.ensure": {
+    "api": "app",
+    "operationId": "domainZones.hostnameClaims.ensure",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostname_claims",
+    "summary": "Ensure ownership of a set of hostnames"
+  },
+  "app:domainZones.hostnames.create": {
+    "api": "app",
+    "operationId": "domainZones.hostnames.create",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostnames",
+    "summary": "Create a hostname in a root domain zone"
+  },
+  "app:domainZones.hostnames.delete": {
+    "api": "app",
+    "operationId": "domainZones.hostnames.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
+    "summary": "Delete an unbound domain hostname"
+  },
+  "app:domainZones.hostnames.list": {
+    "api": "app",
+    "operationId": "domainZones.hostnames.list",
+    "method": "GET",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostnames",
+    "summary": "List hostnames in a root domain zone"
+  },
+  "app:domainZones.hostnames.retrieve": {
+    "api": "app",
+    "operationId": "domainZones.hostnames.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
+    "summary": "Retrieve a domain hostname"
+  },
+  "app:domainZones.hostnames.update": {
+    "api": "app",
+    "operationId": "domainZones.hostnames.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}",
+    "summary": "Rename a domain hostname"
+  },
+  "app:domainZones.hostnames.verify": {
+    "api": "app",
+    "operationId": "domainZones.hostnames.verify",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostnames/{hostnameId}/verify",
+    "summary": "Verify domain hostname ownership"
+  },
+  "app:domainZones.list": {
+    "api": "app",
+    "operationId": "domainZones.list",
+    "method": "GET",
+    "path": "/app/v3/api/domain_zones",
+    "summary": "List root domain zones"
+  },
+  "app:domainZones.retrieve": {
+    "api": "app",
+    "operationId": "domainZones.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/domain_zones/{zoneId}",
+    "summary": "Retrieve a root domain zone"
+  },
+  "app:domainZones.update": {
+    "api": "app",
+    "operationId": "domainZones.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/domain_zones/{zoneId}",
+    "summary": "Update a root domain zone"
+  },
+  "app:domainZones.verificationFiles.check": {
+    "api": "app",
+    "operationId": "domainZones.verificationFiles.check",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}/check",
+    "summary": "Self-check one verification file"
+  },
+  "app:domainZones.verificationFiles.create": {
+    "api": "app",
+    "operationId": "domainZones.verificationFiles.create",
+    "method": "POST",
+    "path": "/app/v3/api/domain_zones/{zoneId}/verification_files",
+    "summary": "Register (or replace) a verification file on the Zone"
+  },
+  "app:domainZones.verificationFiles.delete": {
+    "api": "app",
+    "operationId": "domainZones.verificationFiles.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/domain_zones/{zoneId}/verification_files/{fileId}",
+    "summary": "Delete one verification file from the Zone"
+  },
+  "app:domainZones.verificationFiles.list": {
+    "api": "app",
+    "operationId": "domainZones.verificationFiles.list",
+    "method": "GET",
+    "path": "/app/v3/api/domain_zones/{zoneId}/verification_files",
+    "summary": "List the Zone's domain-ownership verification files"
+  },
+  "app:downloadArtifact.redirect": {
+    "api": "app",
+    "operationId": "downloadArtifact.redirect",
+    "method": "GET",
+    "path": "/app/v3/api/downloads/artifact/{itemUuid}",
+    "summary": "Stable redirect to the installer's current download location"
+  },
+  "app:downloadCatalog.publicRetrieve": {
+    "api": "app",
+    "operationId": "downloadCatalog.publicRetrieve",
+    "method": "GET",
+    "path": "/app/v3/api/downloads/catalog/{catalogKey}",
+    "summary": "Published download catalog rendered by the download page"
+  },
+  "app:downloadConfig.retrieve": {
+    "api": "app",
+    "operationId": "downloadConfig.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/downloads/config",
+    "summary": "Update configuration for one installer, read by desktop clients"
+  },
+  "app:downloadFeed.retrieve": {
+    "api": "app",
+    "operationId": "downloadFeed.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/downloads/feed/{productKey}/{platform}/{architecture}/{channelFile}",
+    "summary": "electron-updater channel file generated from the published release"
+  },
+  "app:marketplaceTemplates.list": {
+    "api": "app",
+    "operationId": "marketplaceTemplates.list",
+    "method": "GET",
+    "path": "/app/v3/api/marketplace/templates",
+    "summary": "Browse the tenant app template marketplace"
+  },
+  "app:marketplaceTemplates.retrieve": {
+    "api": "app",
+    "operationId": "marketplaceTemplates.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/marketplace/templates/{templateUuid}",
+    "summary": "Retrieve a marketplace app template"
+  },
+  "app:packages.create": {
+    "api": "app",
+    "operationId": "packages.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/packages",
+    "summary": "Register an immutable deployment package"
+  },
+  "app:packages.list": {
+    "api": "app",
+    "operationId": "packages.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/packages",
+    "summary": "List deployment packages of an app"
+  },
+  "app:packages.retrieve": {
+    "api": "app",
+    "operationId": "packages.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/packages/{packageId}",
+    "summary": "Retrieve a deployment package"
+  },
+  "app:platformTargets.create": {
+    "api": "app",
+    "operationId": "platformTargets.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/platform_targets",
+    "summary": "Create a platform target"
+  },
+  "app:platformTargets.list": {
+    "api": "app",
+    "operationId": "platformTargets.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/platform_targets",
+    "summary": "List platform targets of an app"
+  },
+  "app:platformTargets.retrieve": {
+    "api": "app",
+    "operationId": "platformTargets.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/platform_targets/{platformTargetId}",
+    "summary": "Retrieve a platform target"
+  },
+  "app:releases.create": {
+    "api": "app",
+    "operationId": "releases.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/releases",
+    "summary": "Create an immutable semantic version release"
+  },
+  "app:releases.list": {
+    "api": "app",
+    "operationId": "releases.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/releases",
+    "summary": "List app releases"
+  },
+  "app:releases.retrieve": {
+    "api": "app",
+    "operationId": "releases.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/releases/{releaseId}",
+    "summary": "Retrieve an app release"
+  },
+  "app:signingIdentities.create": {
+    "api": "app",
+    "operationId": "signingIdentities.create",
+    "method": "POST",
+    "path": "/app/v3/api/signing_identities",
+    "summary": "Create a signing identity (secret reference only)"
+  },
+  "app:signingIdentities.list": {
+    "api": "app",
+    "operationId": "signingIdentities.list",
+    "method": "GET",
+    "path": "/app/v3/api/signing_identities",
+    "summary": "List tenant signing identities"
+  },
+  "app:signingIdentities.retrieve": {
+    "api": "app",
+    "operationId": "signingIdentities.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/signing_identities/{signingIdentityId}",
+    "summary": "Retrieve a signing identity"
+  },
+  "app:sourceRepositories.create": {
+    "api": "app",
+    "operationId": "sourceRepositories.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/source_repositories",
+    "summary": "Bind a Git source repository to an app"
+  },
+  "app:sourceRepositories.list": {
+    "api": "app",
+    "operationId": "sourceRepositories.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/source_repositories",
+    "summary": "List source repositories of an app"
+  },
+  "app:sourceRepositories.retrieve": {
+    "api": "app",
+    "operationId": "sourceRepositories.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/source_repositories/{sourceRepositoryId}",
+    "summary": "Retrieve a source repository"
+  },
+  "app:templateCategories.list": {
+    "api": "app",
+    "operationId": "templateCategories.list",
+    "method": "GET",
+    "path": "/app/v3/api/template_categories",
+    "summary": "List template categories"
+  },
+  "app:uploadSessions.cancel": {
+    "api": "app",
+    "operationId": "uploadSessions.cancel",
+    "method": "POST",
+    "path": "/app/v3/api/upload_sessions/{uploadSessionId}/cancel",
+    "summary": "取消上传会话"
+  },
+  "app:uploadSessions.complete": {
+    "api": "app",
+    "operationId": "uploadSessions.complete",
+    "method": "POST",
+    "path": "/app/v3/api/upload_sessions/{uploadSessionId}/complete",
+    "summary": "完成上传会话"
+  },
+  "app:uploadSessions.create": {
+    "api": "app",
+    "operationId": "uploadSessions.create",
+    "method": "POST",
+    "path": "/app/v3/api/upload_sessions",
+    "summary": "创建 Drive-backed 包上传会话"
+  },
+  "app:uploadSessions.retrieve": {
+    "api": "app",
+    "operationId": "uploadSessions.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/upload_sessions/{uploadSessionId}",
+    "summary": "获取上传会话"
+  },
+  "app:usageEvents.list": {
+    "api": "app",
+    "operationId": "usageEvents.list",
+    "method": "GET",
+    "path": "/app/v3/api/usage_events",
+    "summary": "List tenant usage metering events"
+  },
+  "backend:apps.identityProvision": {
+    "api": "backend",
+    "operationId": "apps.identityProvision",
+    "method": "POST",
+    "path": "/backend/v3/api/apps/{appId}/identity_provision",
+    "summary": "重试应用身份开通"
+  },
+  "backend:appTemplates.delete": {
+    "api": "backend",
+    "operationId": "appTemplates.delete",
+    "method": "DELETE",
+    "path": "/backend/v3/api/app_templates/{templateUuid}",
+    "summary": "删除应用模板"
+  },
+  "backend:appTemplates.list": {
+    "api": "backend",
+    "operationId": "appTemplates.list",
+    "method": "GET",
+    "path": "/backend/v3/api/app_templates",
+    "summary": "获取应用模板列表（全状态）"
+  },
+  "backend:appTemplates.retrieve": {
+    "api": "backend",
+    "operationId": "appTemplates.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/app_templates/{templateUuid}",
+    "summary": "获取应用模板详情"
+  },
+  "backend:appTemplates.update": {
+    "api": "backend",
+    "operationId": "appTemplates.update",
+    "method": "PATCH",
+    "path": "/backend/v3/api/app_templates/{templateUuid}",
+    "summary": "审核或调整应用模板"
+  },
+  "backend:appTemplateVersions.list": {
+    "api": "backend",
+    "operationId": "appTemplateVersions.list",
+    "method": "GET",
+    "path": "/backend/v3/api/app_templates/{templateUuid}/versions",
+    "summary": "获取应用模板版本列表"
+  },
+  "backend:appTemplateVersions.retrieve": {
+    "api": "backend",
+    "operationId": "appTemplateVersions.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}",
+    "summary": "获取应用模板版本详情"
+  },
+  "backend:auditLogs.list": {
+    "api": "backend",
+    "operationId": "auditLogs.list",
+    "method": "GET",
+    "path": "/backend/v3/api/audit_logs",
+    "summary": "获取审计日志列表"
+  },
+  "backend:clusters.create": {
+    "api": "backend",
+    "operationId": "clusters.create",
+    "method": "POST",
+    "path": "/backend/v3/api/node_clusters",
+    "summary": "创建节点集群"
+  },
+  "backend:clusters.list": {
+    "api": "backend",
+    "operationId": "clusters.list",
+    "method": "GET",
+    "path": "/backend/v3/api/node_clusters",
+    "summary": "获取节点集群列表"
+  },
+  "backend:clusters.update": {
+    "api": "backend",
+    "operationId": "clusters.update",
+    "method": "PUT",
+    "path": "/backend/v3/api/node_clusters/{clusterId}",
+    "summary": "更新节点集群"
+  },
+  "backend:configs.create": {
+    "api": "backend",
+    "operationId": "configs.create",
+    "method": "POST",
+    "path": "/backend/v3/api/nginx/configs",
+    "summary": "创建 Nginx 配置"
+  },
+  "backend:configs.deploy": {
+    "api": "backend",
+    "operationId": "configs.deploy",
+    "method": "POST",
+    "path": "/backend/v3/api/nginx/configs/{configId}/deploy",
+    "summary": "部署 Nginx 配置"
+  },
+  "backend:configs.list": {
+    "api": "backend",
+    "operationId": "configs.list",
+    "method": "GET",
+    "path": "/backend/v3/api/nginx/configs",
+    "summary": "获取 Nginx 配置列表"
+  },
+  "backend:configs.retrieve": {
+    "api": "backend",
+    "operationId": "configs.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/nginx/configs/{configId}",
+    "summary": "获取 Nginx 配置详情"
+  },
+  "backend:configs.update": {
+    "api": "backend",
+    "operationId": "configs.update",
+    "method": "PUT",
+    "path": "/backend/v3/api/nginx/configs/{configId}",
+    "summary": "更新 Nginx 配置"
+  },
+  "backend:configs.validate": {
+    "api": "backend",
+    "operationId": "configs.validate",
+    "method": "POST",
+    "path": "/backend/v3/api/nginx/configs/{configId}/validate",
+    "summary": "校验 Nginx 配置"
+  },
+  "backend:create": {
+    "api": "backend",
+    "operationId": "create",
+    "method": "POST",
+    "path": "/backend/v3/api/source_events",
+    "summary": "Ingest a Git webhook push event and trigger builds"
+  },
+  "backend:downloadCard.delete": {
+    "api": "backend",
+    "operationId": "downloadCard.delete",
+    "method": "DELETE",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
+    "summary": "Delete one card and its installers"
+  },
+  "backend:downloadCard.upsert": {
+    "api": "backend",
+    "operationId": "downloadCard.upsert",
+    "method": "PUT",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
+    "summary": "Create or patch one card of a download catalog"
+  },
+  "backend:downloadCatalog.list": {
+    "api": "backend",
+    "operationId": "downloadCatalog.list",
+    "method": "GET",
+    "path": "/backend/v3/api/downloads/catalogs",
+    "summary": "List download catalogs"
+  },
+  "backend:downloadCatalog.publish": {
+    "api": "backend",
+    "operationId": "downloadCatalog.publish",
+    "method": "POST",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/publish",
+    "summary": "Publish a download catalog and bump its revision"
+  },
+  "backend:downloadCatalog.retrieve": {
+    "api": "backend",
+    "operationId": "downloadCatalog.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}",
+    "summary": "Read one download catalog with cards, installers and update configurations"
+  },
+  "backend:downloadCatalog.upsert": {
+    "api": "backend",
+    "operationId": "downloadCatalog.upsert",
+    "method": "PUT",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}",
+    "summary": "Create or patch a download catalog"
+  },
+  "backend:downloadItem.delete": {
+    "api": "backend",
+    "operationId": "downloadItem.delete",
+    "method": "DELETE",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
+    "summary": "Delete one installer and its update configuration"
+  },
+  "backend:downloadItem.upsert": {
+    "api": "backend",
+    "operationId": "downloadItem.upsert",
+    "method": "PUT",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
+    "summary": "Create or patch one installer of a card"
+  },
+  "backend:downloadUpdate.upsert": {
+    "api": "backend",
+    "operationId": "downloadUpdate.upsert",
+    "method": "PUT",
+    "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update",
+    "summary": "Create or replace one installer's update configuration"
+  },
+  "backend:entitlements.list": {
+    "api": "backend",
+    "operationId": "entitlements.list",
+    "method": "GET",
+    "path": "/backend/v3/api/entitlements",
+    "summary": "List Commerce-backed entitlement projections"
+  },
+  "backend:list": {
+    "api": "backend",
+    "operationId": "list",
+    "method": "GET",
+    "path": "/backend/v3/api/source_events",
+    "summary": "List ingested Git webhook events"
+  },
+  "backend:run": {
+    "api": "backend",
+    "operationId": "run",
+    "method": "POST",
+    "path": "/backend/v3/api/retention/run",
+    "summary": "Apply platform retention policies"
+  },
+  "backend:runtime.reload": {
+    "api": "backend",
+    "operationId": "runtime.reload",
+    "method": "POST",
+    "path": "/backend/v3/api/nginx/reload",
+    "summary": "热加载 Nginx"
+  },
+  "backend:runtime.retrieve": {
+    "api": "backend",
+    "operationId": "runtime.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/nginx/status",
+    "summary": "获取 Nginx 状态"
+  },
+  "backend:servers.create": {
+    "api": "backend",
+    "operationId": "servers.create",
+    "method": "POST",
+    "path": "/backend/v3/api/servers",
+    "summary": "注册服务器节点"
+  },
+  "backend:servers.list": {
+    "api": "backend",
+    "operationId": "servers.list",
+    "method": "GET",
+    "path": "/backend/v3/api/servers",
+    "summary": "获取服务器节点列表"
+  },
+  "backend:servers.update": {
+    "api": "backend",
+    "operationId": "servers.update",
+    "method": "PUT",
+    "path": "/backend/v3/api/servers/{serverId}",
+    "summary": "更新服务器节点"
+  },
+  "backend:signingIdentityHealth.list": {
+    "api": "backend",
+    "operationId": "signingIdentityHealth.list",
+    "method": "GET",
+    "path": "/backend/v3/api/signing_identity_health",
+    "summary": "List signing identity expiry health"
+  },
+  "backend:templateCategories.create": {
+    "api": "backend",
+    "operationId": "templateCategories.create",
+    "method": "POST",
+    "path": "/backend/v3/api/template_categories",
+    "summary": "创建模板分类"
+  },
+  "backend:templateCategories.delete": {
+    "api": "backend",
+    "operationId": "templateCategories.delete",
+    "method": "DELETE",
+    "path": "/backend/v3/api/template_categories/{categoryUuid}",
+    "summary": "删除模板分类"
+  },
+  "backend:templateCategories.list": {
+    "api": "backend",
+    "operationId": "templateCategories.list",
+    "method": "GET",
+    "path": "/backend/v3/api/template_categories",
+    "summary": "获取模板分类列表"
+  },
+  "backend:templateCategories.retrieve": {
+    "api": "backend",
+    "operationId": "templateCategories.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/template_categories/{categoryUuid}",
+    "summary": "获取模板分类详情"
+  },
+  "backend:templateCategories.update": {
+    "api": "backend",
+    "operationId": "templateCategories.update",
+    "method": "PATCH",
+    "path": "/backend/v3/api/template_categories/{categoryUuid}",
+    "summary": "更新模板分类"
+  },
+  "backend:tlsAccounts.create": {
+    "api": "backend",
+    "operationId": "tlsAccounts.create",
+    "method": "POST",
+    "path": "/backend/v3/api/tls/accounts",
+    "summary": "Create an ACME account binding"
+  },
+  "backend:tlsAccounts.list": {
+    "api": "backend",
+    "operationId": "tlsAccounts.list",
+    "method": "GET",
+    "path": "/backend/v3/api/tls/accounts",
+    "summary": "List ACME accounts of the tenant"
+  },
+  "backend:tlsOrders.advance": {
+    "api": "backend",
+    "operationId": "tlsOrders.advance",
+    "method": "POST",
+    "path": "/backend/v3/api/tls/orders/{orderId}/advance",
+    "summary": "Advance a certificate order one canonical state machine step"
+  },
+  "backend:tlsOrders.challengeResult": {
+    "api": "backend",
+    "operationId": "tlsOrders.challengeResult",
+    "method": "POST",
+    "path": "/backend/v3/api/tls/orders/{orderId}/challenge_result",
+    "summary": "Record a challenge validation result"
+  },
+  "backend:tlsOrders.create": {
+    "api": "backend",
+    "operationId": "tlsOrders.create",
+    "method": "POST",
+    "path": "/backend/v3/api/tls/orders/{orderId}/versions",
+    "summary": "Store the issued certificate version and complete the order"
+  },
+  "backend:tlsOrders.fail": {
+    "api": "backend",
+    "operationId": "tlsOrders.fail",
+    "method": "POST",
+    "path": "/backend/v3/api/tls/orders/{orderId}/fail",
+    "summary": "Fail a certificate order with a stable error code"
+  },
+  "backend:tlsOrders.list": {
+    "api": "backend",
+    "operationId": "tlsOrders.list",
+    "method": "GET",
+    "path": "/backend/v3/api/certificates/{certificateId}/orders",
+    "summary": "List certificate orders of a certificate"
+  }
+}

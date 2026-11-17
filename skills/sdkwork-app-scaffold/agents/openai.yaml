@@ -1,0 +1,4 @@
+interface:
+  display_name: "SDKWork App Scaffold"
+  short_description: "Manage the SDKWork app scaffold lifecycle"
+  default_prompt: "Use $sdkwork-app-scaffold to create, version, upload, submit, update, or withdraw an SDKWork app scaffold."

@@ -1,4 +1,4 @@
 interface:
-  display_name: "SDKWork App Deployments"
-  short_description: "Upload and deploy SDKWork application releases"
-  default_prompt: "Use $sdkwork-app-deployments to build, upload, release, and deploy the current SDKWork application."
+  display_name: "SDKWork Application Lifecycle"
+  short_description: "Build, upload, source, release, deploy, and roll back SDKWork applications"
+  default_prompt: "Use $sdkwork-app-deployments to build, upload, source, release, deploy, verify, or roll back the current SDKWork application."
