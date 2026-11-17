@@ -300,6 +300,19 @@ pub struct DomainDnsRecordUpsert {
     pub provider_record_ref: Option<String>,
 }
 
+/// Ownership and marketplace state of one listing, for the install-flow
+/// authorization decision.
+///
+/// Deliberately metadata only: a caller that may not read the listing still
+/// receives no listing body, and a draft's existence stays indistinguishable
+/// from a missing row because the service answers both as "not found".
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TemplateReadScope {
+    pub author_user_id: i64,
+    pub visibility: String,
+    pub status: String,
+}
+
 // The trait's methods are grouped by the aggregate they read or write.
 //
 // `AppSourceSpecRepositoryPort` is a supertrait rather than another block of
@@ -1698,6 +1711,40 @@ pub trait DeployRepositoryPort:
         tenant_id: i64,
         template_uuid: &str,
     ) -> DeployServiceResult<AppTemplateResponse>;
+
+    /// Ownership/marketplace state of one tenant listing, used to choose
+    /// between the author read and the marketplace read *before* any body is
+    /// read. `None` when the uuid does not resolve inside the tenant or is
+    /// soft-deleted.
+    async fn template_read_scope(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<Option<TemplateReadScope>>;
+
+    /// Published versions of a marketplace-visible listing, for a consumer
+    /// installing someone else's template.
+    ///
+    /// The listing must be `PUBLIC` + `PUBLISHED` and not deleted (the same
+    /// gate as the marketplace shelf); an invisible listing is refused as not
+    /// found rather than answered with an empty page, and draft/withdrawn
+    /// versions never appear.
+    async fn list_marketplace_template_versions(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<AppTemplateVersionPage>;
+
+    /// Asserts a consumer may read one artifact because a published version of
+    /// a marketplace-visible listing references it. Anything else — a draft
+    /// version, a private or disabled listing — is refused as not found.
+    async fn assert_marketplace_artifact_readable(
+        &self,
+        tenant_id: i64,
+        artifact_uuid: &str,
+    ) -> DeployServiceResult<()>;
 
     async fn list_app_templates(
         &self,

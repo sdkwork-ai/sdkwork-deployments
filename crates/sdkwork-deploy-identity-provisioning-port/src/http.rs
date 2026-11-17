@@ -26,13 +26,13 @@ use async_trait::async_trait;
 use serde_json::{Map, Value};
 
 use crate::settings::{
-    resolve_auth_token, ApplicationTemplateReference, IdentityProvisioningConfigError,
-    IdentityProvisioningSettings, IAM_APPLICATION_TEMPLATE_ID_ENV, IAM_BACKEND_API_URL_ENV,
-    IAM_BACKEND_AUTH_TOKEN_FILE_ENV,
+    resolve_auth_token, IdentityProvisioningConfigError, IdentityProvisioningSettings,
+    IAM_BACKEND_API_URL_ENV, IAM_BACKEND_AUTH_TOKEN_FILE_ENV,
 };
 use crate::{
-    DeployApplicationProvisioningCommand, DeployIdentityProvisioningPort,
-    IdentityProvisioningError, ProvisioningOutcome, TenantApplicationReceipt,
+    normalize_application_type, DeployApplicationProvisioningCommand,
+    DeployIdentityProvisioningPort, IdentityProvisioningError, ProvisioningOutcome,
+    TenantApplicationReceipt,
 };
 
 /// IAM backend route that provisions one tenant application.
@@ -90,9 +90,7 @@ impl HttpIdentityProvisioningAdapter {
     /// asked and is missing a setting fails at startup instead of at the first
     /// application create.
     pub fn from_env() -> Result<Self, IdentityProvisioningConfigError> {
-        let settings = IdentityProvisioningSettings::from_env()?.ok_or(
-            IdentityProvisioningConfigError::MissingHttpSetting(IAM_APPLICATION_TEMPLATE_ID_ENV),
-        )?;
+        let settings = IdentityProvisioningSettings::from_env()?;
         let base_url = std::env::var(IAM_BACKEND_API_URL_ENV).map_err(|_| {
             IdentityProvisioningConfigError::MissingHttpSetting(IAM_BACKEND_API_URL_ENV)
         })?;
@@ -114,12 +112,6 @@ impl HttpIdentityProvisioningAdapter {
             IAM_TENANT_APPLICATIONS_PATH
         )
     }
-
-    /// The configured template reference, for startup logging.
-    #[must_use]
-    pub fn template(&self) -> &str {
-        self.settings.template.describe()
-    }
 }
 
 #[async_trait]
@@ -128,7 +120,7 @@ impl DeployIdentityProvisioningPort for HttpIdentityProvisioningAdapter {
         &self,
         command: &DeployApplicationProvisioningCommand,
     ) -> Result<ProvisioningOutcome, IdentityProvisioningError> {
-        let body = provision_request_body(&self.auth_token, &self.settings.template, command);
+        let body = provision_request_body(&self.auth_token, command);
         let endpoint = self.endpoint();
         let attempt = async {
             let response = self
@@ -168,9 +160,11 @@ impl DeployIdentityProvisioningPort for HttpIdentityProvisioningAdapter {
 
 /// Builds the provisioning body IAM's parser accepts (`application_registry.rs`
 /// accepts the camelCase spelling of every field).
+///
+/// There is no `templateId`/`appKey`: IAM's application templates are retired,
+/// so the installation is derived from this deploy application.
 fn provision_request_body(
     auth_token: &str,
-    template: &ApplicationTemplateReference,
     command: &DeployApplicationProvisioningCommand,
 ) -> Value {
     let mut body = Map::new();
@@ -203,21 +197,15 @@ fn provision_request_body(
         "provisioningIdempotencyKey".to_owned(),
         Value::String(command.provisioning_idempotency_key.clone()),
     );
-    if let Some(template_id) = template.template_id() {
-        body.insert(
-            "templateId".to_owned(),
-            Value::String(template_id.to_owned()),
-        );
-    }
-    if let Some(app_key) = template.app_key() {
-        body.insert("appKey".to_owned(), Value::String(app_key.to_owned()));
-    }
-    if let Some(application_type) = command.application_type.as_deref() {
-        body.insert(
-            "applicationType".to_owned(),
-            Value::String(application_type.to_owned()),
-        );
-    }
+    // IAM requires a type; normalise here so the wire never carries a value IAM
+    // would have to reinterpret as `other`.
+    body.insert(
+        "applicationType".to_owned(),
+        Value::String(normalize_application_type(command.application_type.as_str()).to_owned()),
+    );
+    // Deliberately empty, not an omission: this installation grants no API scope
+    // of its own. IAM now accepts the empty list.
+    body.insert("accessPermissions".to_owned(), Value::Array(Vec::new()));
     Value::Object(body)
 }
 
@@ -263,7 +251,6 @@ mod tests {
 
     fn settings() -> IdentityProvisioningSettings {
         IdentityProvisioningSettings {
-            template: ApplicationTemplateReference::TemplateId("tmpl_platform".to_owned()),
             timeout: crate::settings::DEFAULT_PROVISIONING_TIMEOUT,
         }
     }
@@ -280,7 +267,7 @@ mod tests {
             instance_key: "0f8b7f26-2d7c-4f43-8a4b-0c5a51e1f0aa".to_owned(),
             display_name: "Shop".to_owned(),
             environment: "production".to_owned(),
-            application_type: Some("pc".to_owned()),
+            application_type: "pc".to_owned(),
             deploy_application_id: "1845123456789012345".to_owned(),
             provisioning_idempotency_key: "deploy:1845123456789012345".to_owned(),
         }
@@ -295,29 +282,42 @@ mod tests {
 
     #[test]
     fn request_body_carries_the_deploy_link_and_the_replay_key() {
-        let body = provision_request_body("token-value", &settings().template, &command());
+        let body = provision_request_body("token-value", &command());
         assert_eq!(body["deployApplicationId"], "1845123456789012345");
         assert_eq!(
             body["provisioningIdempotencyKey"],
             "deploy:1845123456789012345"
         );
-        assert_eq!(body["templateId"], "tmpl_platform");
         assert_eq!(body["tenantId"], "7");
         assert_eq!(body["organizationId"], "0");
         assert_eq!(body["instanceKey"], command().instance_key);
         assert_eq!(body["displayName"], "Shop");
         assert_eq!(body["environment"], "production");
-        assert_eq!(body["applicationType"], "pc");
         assert_eq!(body["authToken"], "token-value");
-        assert!(body.get("appKey").is_none());
     }
 
     #[test]
-    fn app_key_reference_sends_app_key_instead_of_template_id() {
-        let reference = ApplicationTemplateReference::AppKey("sdkwork-platform".to_owned());
-        let body = provision_request_body("token-value", &reference, &command());
-        assert_eq!(body["appKey"], "sdkwork-platform");
+    fn request_body_has_no_retired_template_fields_and_no_api_scope() {
+        let body = provision_request_body("token-value", &command());
         assert!(body.get("templateId").is_none());
+        assert!(body.get("appKey").is_none());
+        // Empty on purpose: the installation grants no API scope of its own.
+        assert_eq!(body["accessPermissions"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn request_body_normalises_the_application_type() {
+        let mut unknown = command();
+        unknown.application_type = "WECHAT_MINIPROGRAM".to_owned();
+        let body = provision_request_body("token-value", &unknown);
+        assert_eq!(body["applicationType"], "other");
+
+        let mut api = command();
+        api.application_type = " API ".to_owned();
+        assert_eq!(
+            provision_request_body("token-value", &api)["applicationType"],
+            "api"
+        );
     }
 
     #[test]

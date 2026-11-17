@@ -16,7 +16,7 @@ use sdkwork_deploy_drive_port::deploy_drive_port_from_env;
 use sdkwork_deploy_identity_provisioning_port::{
     resolve_identity_provisioning_mode, DeployIdentityProvisioningPort,
     HttpIdentityProvisioningAdapter, IdentityProvisioningMode,
-    InProcessIdentityProvisioningAdapter, UnconfiguredIdentityProvisioningPort,
+    InProcessIdentityProvisioningAdapter,
 };
 use sdkwork_deploy_web_port::{
     DeployWebRuntimePort, SdkWebRuntimeFacade, UnconfiguredWebRuntimePort,
@@ -148,13 +148,13 @@ fn web_runtime_from_env() -> Result<Arc<dyn DeployWebRuntimePort>, String> {
 /// Selection is explicit and fail-closed:
 ///
 /// - `SDKWORK_DEPLOY_IAM_PROVISIONING_MODE=http` builds the split-deployment HTTP
-///   adapter and aborts the boot when its endpoint, credential file, or template
-///   reference is missing.
+///   adapter and aborts the boot when its endpoint or credential file is missing.
 /// - Otherwise the in-process adapter is used, which calls IAM's own
 ///   provisioning service on this deployment's PostgreSQL pool.
-/// - When no template reference is configured, the unconfigured port is
-///   installed and applications keep `identity_status = pending_identity`; that
-///   is a standalone installation, not a failure.
+///
+/// There is no third, "provisioning is not configured" state: the installation is
+/// derived from the deploy application (IAM's application templates are retired),
+/// so the only remaining configuration is the adapter choice and its endpoint.
 fn identity_provisioning_from_env(
     pool: &sqlx::PgPool,
 ) -> Result<Arc<dyn DeployIdentityProvisioningPort>, String> {
@@ -164,33 +164,13 @@ fn identity_provisioning_from_env(
         let adapter = HttpIdentityProvisioningAdapter::from_env().map_err(|error| {
             format!("configure IAM application provisioning (split deployment) failed: {error}")
         })?;
-        tracing::info!(
-            template = adapter.template(),
-            "IAM application provisioning uses the split-deployment HTTP adapter"
-        );
+        tracing::info!("IAM application provisioning uses the split-deployment HTTP adapter");
         return Ok(Arc::new(adapter));
     }
-    match InProcessIdentityProvisioningAdapter::from_env(pool.clone()) {
-        Ok(Some(adapter)) => {
-            tracing::info!(
-                template = adapter.template(),
-                "IAM application provisioning uses the in-process IAM adapter"
-            );
-            Ok(Arc::new(adapter))
-        }
-        Ok(None) => {
-            tracing::warn!(
-                "IAM application provisioning is not configured \
-                 (set SDKWORK_DEPLOY_IAM_APPLICATION_TEMPLATE_ID or \
-                 SDKWORK_DEPLOY_IAM_APPLICATION_APP_KEY); created applications keep \
-                 identity_status = pending_identity"
-            );
-            Ok(Arc::new(UnconfiguredIdentityProvisioningPort))
-        }
-        Err(error) => Err(format!(
-            "configure IAM application provisioning failed: {error}"
-        )),
-    }
+    let adapter = InProcessIdentityProvisioningAdapter::from_env(pool.clone())
+        .map_err(|error| format!("configure IAM application provisioning failed: {error}"))?;
+    tracing::info!("IAM application provisioning uses the in-process IAM adapter");
+    Ok(Arc::new(adapter))
 }
 
 /// CAA resolver from the host's DNS configuration.

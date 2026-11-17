@@ -8,6 +8,11 @@
 //! service function on its web-adapter crate (`provision_tenant_application`),
 //! which is the same function its own backend route calls, so both adapters
 //! apply identical rules, idempotency included.
+//!
+//! The installation is derived from the deploy application itself. IAM's
+//! application-template tables are retired, so the IAM command carries no
+//! `templateId`/`appKey`: the required identity inputs are the deploy
+//! application id, the instance key, and an application type.
 
 use async_trait::async_trait;
 use sqlx::PgPool;
@@ -16,8 +21,9 @@ use sdkwork_iam_web_adapter::{provision_tenant_application, TenantApplicationPro
 
 use crate::settings::{IdentityProvisioningConfigError, IdentityProvisioningSettings};
 use crate::{
-    DeployApplicationProvisioningCommand, DeployIdentityProvisioningPort,
-    IdentityProvisioningError, ProvisioningOutcome, TenantApplicationReceipt,
+    normalize_application_type, DeployApplicationProvisioningCommand,
+    DeployIdentityProvisioningPort, IdentityProvisioningError, ProvisioningOutcome,
+    TenantApplicationReceipt,
 };
 
 /// Provisions tenant applications through IAM's service layer on the host pool.
@@ -34,17 +40,9 @@ impl InProcessIdentityProvisioningAdapter {
         Self { pool, settings }
     }
 
-    /// Builds the adapter from the environment, or reports that provisioning is
-    /// not configured on this deployment.
-    pub fn from_env(pool: PgPool) -> Result<Option<Self>, IdentityProvisioningConfigError> {
-        Ok(IdentityProvisioningSettings::from_env()?
-            .map(|settings| Self::new(pool.clone(), settings)))
-    }
-
-    /// The configured template reference, for startup logging.
-    #[must_use]
-    pub fn template(&self) -> &str {
-        self.settings.template.describe()
+    /// Builds the adapter from the environment.
+    pub fn from_env(pool: PgPool) -> Result<Self, IdentityProvisioningConfigError> {
+        Ok(Self::new(pool, IdentityProvisioningSettings::from_env()?))
     }
 }
 
@@ -52,24 +50,27 @@ impl InProcessIdentityProvisioningAdapter {
 ///
 /// Kept free-standing so the mapping can be asserted without a database.
 fn provision_command(
-    settings: &IdentityProvisioningSettings,
     command: &DeployApplicationProvisioningCommand,
 ) -> TenantApplicationProvisionCommand {
     TenantApplicationProvisionCommand {
         tenant_id: command.tenant_id.clone(),
         organization_id: command.organization_id.clone(),
-        template_id: settings.template.template_id().map(str::to_owned),
-        app_key: settings.template.app_key().map(str::to_owned),
         // IAM assigns the runtime app id; a deploy application has no
         // pre-allocated one to force.
         app_id: None,
         instance_key: command.instance_key.clone(),
         display_name: command.display_name.clone(),
         environment: command.environment.clone(),
-        application_type: command.application_type.clone(),
+        // IAM requires a type now that templates are gone, so an unrecognised
+        // value is normalised to `other` here instead of being forwarded for IAM
+        // to reinterpret.
+        application_type: Some(
+            normalize_application_type(command.application_type.as_str()).to_owned(),
+        ),
         primary_domain: None,
-        // Empty lists let IAM apply the template's own defaults instead of
-        // Deploy inventing a permission or runtime scope for it.
+        // Deliberately empty, not an omission: this installation grants no API
+        // scope of its own. IAM now accepts an empty list, and a future need for
+        // scoped access has to name its permissions explicitly.
         access_permissions: Vec::new(),
         runtime_config: serde_json::json!({}),
         deploy_application_id: Some(command.deploy_application_id.clone()),
@@ -83,7 +84,7 @@ impl DeployIdentityProvisioningPort for InProcessIdentityProvisioningAdapter {
         &self,
         command: &DeployApplicationProvisioningCommand,
     ) -> Result<ProvisioningOutcome, IdentityProvisioningError> {
-        let provision_command = provision_command(&self.settings, command);
+        let provision_command = provision_command(command);
         // Every external await is bounded, including an in-process one: a pool
         // waiting on a saturated or half-failed database is exactly the shape
         // that turns one stuck request into a stuck request queue.
@@ -106,14 +107,6 @@ impl DeployIdentityProvisioningPort for InProcessIdentityProvisioningAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::ApplicationTemplateReference;
-
-    fn settings() -> IdentityProvisioningSettings {
-        IdentityProvisioningSettings {
-            template: ApplicationTemplateReference::TemplateId("tmpl_platform".to_owned()),
-            timeout: crate::settings::DEFAULT_PROVISIONING_TIMEOUT,
-        }
-    }
 
     fn command() -> DeployApplicationProvisioningCommand {
         DeployApplicationProvisioningCommand {
@@ -122,7 +115,7 @@ mod tests {
             instance_key: "0f8b7f26-2d7c-4f43-8a4b-0c5a51e1f0aa".to_owned(),
             display_name: "Shop".to_owned(),
             environment: "production".to_owned(),
-            application_type: Some("pc".to_owned()),
+            application_type: "pc".to_owned(),
             deploy_application_id: "1845123456789012345".to_owned(),
             provisioning_idempotency_key: "deploy:1845123456789012345".to_owned(),
         }
@@ -130,7 +123,7 @@ mod tests {
 
     #[test]
     fn provision_command_carries_the_deploy_link_and_the_replay_key() {
-        let mapped = provision_command(&settings(), &command());
+        let mapped = provision_command(&command());
         assert_eq!(
             mapped.deploy_application_id.as_deref(),
             Some("1845123456789012345")
@@ -139,20 +132,23 @@ mod tests {
             mapped.provisioning_idempotency_key.as_deref(),
             Some("deploy:1845123456789012345")
         );
-        assert_eq!(mapped.template_id.as_deref(), Some("tmpl_platform"));
-        assert_eq!(mapped.app_key, None);
         assert_eq!(mapped.instance_key, command().instance_key);
-        assert!(mapped.access_permissions.is_empty());
+        assert_eq!(mapped.display_name, "Shop");
+        assert_eq!(mapped.environment, "production");
     }
 
     #[test]
-    fn app_key_reference_reaches_iam_without_a_template_id() {
-        let settings = IdentityProvisioningSettings {
-            template: ApplicationTemplateReference::AppKey("sdkwork-platform".to_owned()),
-            timeout: crate::settings::DEFAULT_PROVISIONING_TIMEOUT,
-        };
-        let mapped = provision_command(&settings, &command());
-        assert_eq!(mapped.template_id, None);
-        assert_eq!(mapped.app_key.as_deref(), Some("sdkwork-platform"));
+    fn provision_command_sends_a_normalised_type_and_no_api_scope() {
+        let mapped = provision_command(&command());
+        assert_eq!(mapped.application_type.as_deref(), Some("pc"));
+        // Empty is intentional: the installation grants no API scope of its own.
+        assert!(mapped.access_permissions.is_empty());
+
+        let mut unknown = command();
+        unknown.application_type = "SPA_WEB".to_owned();
+        assert_eq!(
+            provision_command(&unknown).application_type.as_deref(),
+            Some("other")
+        );
     }
 }

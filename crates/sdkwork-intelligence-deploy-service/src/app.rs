@@ -15,21 +15,23 @@ use sdkwork_deploy_contract::{
     CreateDeployUploadSessionRequest, CreateDomainHostnameRequest, CreateDomainZoneRequest,
     CreateEnvVariableRequest, CreateHealthCheckRequest, CreatePlatformTargetRequest,
     CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DeployAppApi,
-    DeployAppRequestContext, DeployServiceResult, DeployUploadSessionResponse,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, ListAppsQuery, ListDomainZonesQuery,
-    PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest, ReleaseStatus,
-    RequestCertificateOrderRequest, SigningIdentityPage, SigningIdentityResponse,
-    SourceRepositoryPage, SourceRepositoryResponse, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppRequest, UpdateAppSourceSpecRequest,
-    UpdateBuildStateRequest, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage,
-    UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
+    DeployAppRequestContext, DeployServiceError, DeployServiceErrorKind, DeployServiceResult,
+    DeployUploadSessionResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
+    ListAppsQuery, ListDomainZonesQuery, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, SigningIdentityPage,
+    SigningIdentityResponse, SourceRepositoryPage, SourceRepositoryResponse,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
+    UpdateAppSourceSpecRequest, UpdateBuildStateRequest, UpdateDomainHostnameRequest,
+    UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED,
+    UPLOAD_SESSION_STATUS_COMPLETED,
 };
 use sdkwork_deploy_drive_port::{
     DeployDriveActor, DeployDriveScope, DriveRequestCredentials, PrepareDeployUploadCommand,
 };
 
 use crate::app_delivery::assert_app_reachable;
+use crate::template_market_access::{template_read_access, TemplateReadAccess};
 use crate::DeployService;
 
 impl DeployService {
@@ -1147,7 +1149,19 @@ impl DeployAppApi for DeployService {
             .retrieve_artifact(tenant_id, artifact_id)
             .await?;
         if let Some(app_id) = artifact.app_id.as_deref() {
-            self.assert_app_access(context, tenant_id, app_id).await?;
+            // An artifact attached to an app is readable through app scope. A
+            // marketplace install is the other legitimate reader: the caller
+            // does not own the author's app, but the marketplace sells the
+            // published version that references this artifact.
+            match self.assert_app_access(context, tenant_id, app_id).await {
+                Ok(()) => {}
+                Err(denied) if denied.kind() == DeployServiceErrorKind::NotFound => {
+                    self.repository
+                        .assert_marketplace_artifact_readable(tenant_id, artifact_id)
+                        .await?;
+                }
+                Err(other) => return Err(other),
+            }
         }
         Ok(artifact)
     }
@@ -2113,9 +2127,24 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
-        self.repository
-            .retrieve_app_template(Some(tenant_id), Some(author_user_id), template_uuid)
-            .await
+        match self
+            .resolve_template_read_access(tenant_id, author_user_id, template_uuid)
+            .await?
+        {
+            TemplateReadAccess::Author => {
+                self.repository
+                    .retrieve_app_template(Some(tenant_id), Some(author_user_id), template_uuid)
+                    .await
+            }
+            // A consumer installing someone else's template reads the same
+            // listing the marketplace shelf advertises, never the author view.
+            TemplateReadAccess::Marketplace => {
+                self.repository
+                    .retrieve_marketplace_template(tenant_id, template_uuid)
+                    .await
+            }
+            TemplateReadAccess::Denied => Err(DeployServiceError::not_found("template not found")),
+        }
     }
 
     async fn update_app_template(
@@ -2164,15 +2193,30 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
-        self.repository
-            .list_app_template_versions(
-                Some(tenant_id),
-                Some(author_user_id),
-                template_uuid,
-                page,
-                page_size,
-            )
-            .await
+        match self
+            .resolve_template_read_access(tenant_id, author_user_id, template_uuid)
+            .await?
+        {
+            TemplateReadAccess::Author => {
+                self.repository
+                    .list_app_template_versions(
+                        Some(tenant_id),
+                        Some(author_user_id),
+                        template_uuid,
+                        page,
+                        page_size,
+                    )
+                    .await
+            }
+            // The install flow of a marketplace consumer: published versions of
+            // a published, public listing. Drafts stay author-only.
+            TemplateReadAccess::Marketplace => {
+                self.repository
+                    .list_marketplace_template_versions(tenant_id, template_uuid, page, page_size)
+                    .await
+            }
+            TemplateReadAccess::Denied => Err(DeployServiceError::not_found("template not found")),
+        }
     }
 
     async fn create_app_template_version(
@@ -2203,6 +2247,34 @@ impl DeployService {
                     "a user subject is required for template marketplace operations",
                 )
             })
+    }
+
+    /// Resolves which read an install-flow caller may take on one listing.
+    ///
+    /// The lookup carries no listing body, and the answer is chosen before one
+    /// is read: the author keeps the author-scope read (drafts included), a
+    /// consumer is routed to the marketplace-visible published read, and
+    /// everyone else gets the same "not found" a missing listing produces, so a
+    /// draft's existence never leaks.
+    async fn resolve_template_read_access(
+        &self,
+        tenant_id: i64,
+        actor_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<TemplateReadAccess> {
+        let Some(scope) = self
+            .repository
+            .template_read_scope(tenant_id, template_uuid)
+            .await?
+        else {
+            return Ok(TemplateReadAccess::Denied);
+        };
+        Ok(template_read_access(
+            actor_id,
+            scope.author_user_id,
+            &scope.visibility,
+            &scope.status,
+        ))
     }
 }
 

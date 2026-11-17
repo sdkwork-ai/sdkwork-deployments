@@ -19,6 +19,7 @@ pub mod downloads;
 pub mod entitlement;
 pub mod repository;
 pub mod runtime_publication;
+pub mod template_market_access;
 pub mod verification_file;
 
 pub use app_composition::{AppCompositionRepositoryPort, ReplaceAppCompositionCommand};
@@ -62,7 +63,7 @@ pub use repository::{
     AppIdentityProvisioningTarget, CertificateOrderClaim, CertificateRenewalClaim,
     DeployRepositoryPort, DnsChallengeZone, DnsRecordSnapshotRow, DomainDnsRecordFilter,
     DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset, ExpiredCertificateSweep,
-    ZoneDnsSyncTarget,
+    TemplateReadScope, ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,

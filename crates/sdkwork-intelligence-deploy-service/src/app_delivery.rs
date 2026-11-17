@@ -47,19 +47,18 @@ const IDENTITY_STATUS_FAILED: &str = "failed";
 /// IAM's `applicationType` view of a deploy app kind.
 ///
 /// IAM's own vocabulary is `api` | `h5` | `pc` | `flutter` | `other`, which is
-/// not the deploy app kind set (`AppKind::as_str`). Kinds with no honest IAM
-/// counterpart are reported as `other` rather than silently mapped onto a web
-/// type; an empty kind is reported as absent so IAM can fall back to the
-/// template's own type.
-fn identity_application_type(app_kind: &str) -> Option<String> {
-    let normalized = app_kind.trim().to_ascii_uppercase();
-    let application_type = match normalized.as_str() {
-        "" => return None,
+/// not the deploy app kind set (`AppKind::as_str`). IAM now requires the field
+/// (the application templates that used to supply it are retired), so every kind
+/// maps onto a member of that closed set: known web/desktop kinds are `pc`, an
+/// API service is `api`, and everything else — including an unrecognised or empty
+/// kind — is `other` rather than a value IAM would have to reinterpret.
+fn identity_application_type(app_kind: &str) -> String {
+    let application_type = match app_kind.trim().to_ascii_uppercase().as_str() {
         "API_SERVICE" => "api",
         "STATIC_WEB" | "SPA_WEB" | "DESKTOP_APP" => "pc",
         _ => "other",
     };
-    Some(application_type.to_owned())
+    application_type.to_owned()
 }
 
 impl DeployService {
@@ -1496,37 +1495,31 @@ mod identity_provisioning_tests {
 
     #[test]
     fn app_kinds_map_onto_the_iam_application_type_vocabulary() {
-        assert_eq!(
-            identity_application_type("API_SERVICE").as_deref(),
-            Some("api")
-        );
-        for web_kind in ["STATIC_WEB", "SPA_WEB", "DESKTOP_APP"] {
-            assert_eq!(
-                identity_application_type(web_kind).as_deref(),
-                Some("pc"),
-                "{web_kind}"
-            );
-        }
-        // Kinds with no honest IAM counterpart are reported as `other` rather
-        // than being mapped onto a web type they are not.
-        for native_kind in [
-            "WECHAT_MINIPROGRAM",
-            "DOUYIN_MINIPROGRAM",
-            "IOS_APP",
-            "ANDROID_APP",
-            "HARMONYOS_APP",
+        for (kind, expected) in [
+            ("API_SERVICE", "api"),
+            ("STATIC_WEB", "pc"),
+            ("SPA_WEB", "pc"),
+            ("DESKTOP_APP", "pc"),
+            // Kinds with no honest IAM counterpart are reported as `other`
+            // rather than being mapped onto a web type they are not.
+            ("WECHAT_MINIPROGRAM", "other"),
+            ("DOUYIN_MINIPROGRAM", "other"),
+            ("IOS_APP", "other"),
+            ("ANDROID_APP", "other"),
+            ("HARMONYOS_APP", "other"),
+            // IAM requires the field now that templates are retired, so even an
+            // empty kind must resolve to a member of the closed set.
+            ("", "other"),
+            ("   ", "other"),
+            ("NOT_A_KIND", "other"),
         ] {
-            assert_eq!(
-                identity_application_type(native_kind).as_deref(),
-                Some("other"),
-                "{native_kind}"
-            );
+            assert_eq!(identity_application_type(kind), expected, "{kind}");
         }
     }
 
     #[test]
-    fn an_empty_app_kind_leaves_the_iam_template_type_authoritative() {
-        assert_eq!(identity_application_type(""), None);
-        assert_eq!(identity_application_type("   "), None);
+    fn mapping_is_case_and_padding_insensitive() {
+        assert_eq!(identity_application_type(" api_service "), "api");
+        assert_eq!(identity_application_type("spa_web"), "pc");
     }
 }

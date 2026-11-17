@@ -34,12 +34,30 @@ use async_trait::async_trait;
 pub use http::{HttpIdentityProvisioningAdapter, IAM_TENANT_APPLICATIONS_PATH};
 pub use in_process::InProcessIdentityProvisioningAdapter;
 pub use settings::{
-    resolve_identity_provisioning_mode, resolve_timeout, ApplicationTemplateReference,
-    IdentityProvisioningConfigError, IdentityProvisioningMode, IdentityProvisioningSettings,
-    DEFAULT_PROVISIONING_TIMEOUT, IAM_APPLICATION_APP_KEY_ENV, IAM_APPLICATION_TEMPLATE_ID_ENV,
+    resolve_identity_provisioning_mode, resolve_timeout, IdentityProvisioningConfigError,
+    IdentityProvisioningMode, IdentityProvisioningSettings, DEFAULT_PROVISIONING_TIMEOUT,
     IAM_BACKEND_API_URL_ENV, IAM_BACKEND_AUTH_TOKEN_FILE_ENV, IAM_PROVISIONING_MODE_ENV,
     IAM_PROVISIONING_TIMEOUT_MS_ENV,
 };
+
+/// The application types IAM accepts (`api` | `h5` | `pc` | `flutter` | `other`).
+pub const APPLICATION_TYPES: &[&str] = &["api", "h5", "pc", "flutter", "other"];
+
+/// Normalises an application type onto IAM's closed vocabulary.
+///
+/// IAM requires the field and coerces anything it does not recognise to
+/// `other`; doing the same here means the port never sends a value the receiver
+/// would have to reinterpret, and the mapping is testable without IAM.
+#[must_use]
+pub fn normalize_application_type(value: &str) -> &'static str {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "api" => "api",
+        "h5" => "h5",
+        "pc" => "pc",
+        "flutter" => "flutter",
+        _ => "other",
+    }
+}
 
 /// One deploy application, expressed as the inputs IAM's provisioning service
 /// accepts.
@@ -62,9 +80,10 @@ pub struct DeployApplicationProvisioningCommand {
     pub display_name: String,
     /// Lifecycle environment recorded on the installation.
     pub environment: String,
-    /// IAM application type (`api` | `h5` | `pc` | `other`), derived from the
-    /// deploy app kind. Absent lets IAM fall back to the template's own type.
-    pub application_type: Option<String>,
+    /// IAM application type, derived from the deploy app kind and normalised onto
+    /// IAM's closed vocabulary (`api` | `h5` | `pc` | `flutter` | `other`) by the
+    /// adapters. IAM requires the field; there is no template to fall back to.
+    pub application_type: String,
     /// `deploy_app.id` (BIGINT) as a decimal string. IAM stores it in
     /// `iam_tenant_application.deploy_application_id` under a unique index, so
     /// one deploy application can never own two installations.
@@ -99,8 +118,6 @@ pub struct TenantApplicationReceipt {
 /// records it on `deploy_app.identity_status` and logs the error.
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityProvisioningError {
-    #[error("IAM application provisioning is not configured")]
-    NotConfigured,
     #[error("IAM rejected the application provisioning request with status {status} ({code})")]
     Rejected { status: u16, code: String },
     #[error("IAM application provisioning did not answer within {millis} ms")]
@@ -159,10 +176,23 @@ mod tests {
             instance_key: "0f8b7f26-2d7c-4f43-8a4b-0c5a51e1f0aa".to_owned(),
             display_name: "Shop".to_owned(),
             environment: "production".to_owned(),
-            application_type: Some("pc".to_owned()),
+            application_type: "pc".to_owned(),
             deploy_application_id: "1845123456789012345".to_owned(),
             provisioning_idempotency_key: "deploy:1845123456789012345".to_owned(),
         }
+    }
+
+    #[test]
+    fn application_types_are_normalised_onto_iams_closed_vocabulary() {
+        for accepted in APPLICATION_TYPES {
+            assert_eq!(normalize_application_type(accepted), *accepted);
+        }
+        // Case and padding are the only tolerated variation; anything else is
+        // IAM's own `other`, never a value IAM would have to reinterpret.
+        assert_eq!(normalize_application_type("  API_SERVICE "), "other");
+        assert_eq!(normalize_application_type(""), "other");
+        assert_eq!(normalize_application_type("  PC "), "pc");
+        assert_eq!(normalize_application_type("flutter"), "flutter");
     }
 
     #[tokio::test]

@@ -15,8 +15,8 @@ use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     AppTemplateScreenshot, CreateAppTemplateRequest, CreateAppTemplateVersionRequest,
     CreateTemplateCategoryRequest, DeployAppApi, DeployAppRequestContext, DeployBackendApi,
-    DeployBackendRequestContext, ListMarketplaceTemplatesQuery, UpdateAppTemplateAdminRequest,
-    UpdateAppTemplateRequest,
+    DeployBackendRequestContext, DeployServiceError, ListMarketplaceTemplatesQuery,
+    UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
@@ -325,5 +325,114 @@ async fn postgres_marketplace_catalog_flow_publishes_and_stays_tenant_bounded() 
     assert!(
         foreign_read.is_err(),
         "cross-tenant catalog read must be refused"
+    );
+
+    // 7. Install by a consumer: a different user of the same tenant reads
+    //    another author's published listing and its published version through
+    //    the marketplace view — the author scope no longer blanks it.
+    let consumer_versions =
+        DeployAppApi::list_app_template_versions(&*service, &viewer_ctx, &free.id, 1, 20)
+            .await
+            .expect("consumer reads the published versions of a market template");
+    assert_eq!(consumer_versions.items.len(), 1);
+    assert_eq!(consumer_versions.items[0].status, "PUBLISHED");
+    assert!(
+        consumer_versions
+            .items
+            .iter()
+            .all(|version| version.status == "PUBLISHED"),
+        "a consumer never sees a draft version"
+    );
+    let consumer_listing = DeployAppApi::retrieve_app_template(&*service, &viewer_ctx, &free.id)
+        .await
+        .expect("consumer reads the published listing");
+    assert_eq!(consumer_listing.id, free.id);
+    assert_eq!(consumer_listing.author_user_id, "11");
+
+    // 8. The author keeps the author-scope read on their own unpublished work.
+    let draft = service
+        .create_app_template(
+            &author_ctx,
+            "idem-draft",
+            &template_request(&format!("draft{suffix}"), &app.id, &category.id, "FREE"),
+        )
+        .await
+        .expect("create draft template");
+    let author_draft_versions =
+        DeployAppApi::list_app_template_versions(&*service, &author_ctx, &draft.id, 1, 20)
+            .await
+            .expect("author reads their own draft versions");
+    assert_eq!(author_draft_versions.items.len(), 1);
+    assert_eq!(author_draft_versions.items[0].status, "DRAFT");
+    assert_eq!(
+        DeployAppApi::retrieve_app_template(&*service, &author_ctx, &draft.id)
+            .await
+            .expect("author reads their own draft")
+            .status,
+        "DRAFT"
+    );
+
+    // 9. The same draft is indistinguishable from a missing listing to a
+    //    consumer: the answer is the same not-found, never an empty page that
+    //    would confirm the draft exists.
+    let draft_versions_for_consumer =
+        DeployAppApi::list_app_template_versions(&*service, &viewer_ctx, &draft.id, 1, 20).await;
+    assert!(
+        matches!(
+            draft_versions_for_consumer,
+            Err(DeployServiceError::NotFound(_))
+        ),
+        "a draft's versions must not be readable by a consumer"
+    );
+    let draft_for_consumer =
+        DeployAppApi::retrieve_app_template(&*service, &viewer_ctx, &draft.id).await;
+    assert!(
+        matches!(draft_for_consumer, Err(DeployServiceError::NotFound(_))),
+        "a draft listing must not be readable by a consumer"
+    );
+
+    // 10. A published listing that is not public (`PRIVATE`) is still hidden
+    //     from consumers while the author keeps reading it.
+    let mut private_request =
+        template_request(&format!("private{suffix}"), &app.id, &category.id, "FREE");
+    private_request.visibility = Some("PRIVATE".to_owned());
+    let private = service
+        .create_app_template(&author_ctx, "idem-private", &private_request)
+        .await
+        .expect("create private template");
+    DeployAppApi::submit_app_template(&*service, &author_ctx, &private.id)
+        .await
+        .expect("submit private template");
+    let private_published = DeployBackendApi::update_app_template(
+        &*service,
+        &operator(),
+        &private.id,
+        &UpdateAppTemplateAdminRequest {
+            status: Some("PUBLISHED".to_owned()),
+            review_note: None,
+            is_featured: None,
+            visibility: None,
+        },
+    )
+    .await
+    .expect("approve private template");
+    assert_eq!(private_published.visibility, "PRIVATE");
+    let private_author_versions =
+        DeployAppApi::list_app_template_versions(&*service, &author_ctx, &private.id, 1, 20)
+            .await
+            .expect("author reads their own private published listing");
+    assert_eq!(private_author_versions.items.len(), 1);
+    assert_eq!(private_author_versions.items[0].status, "PUBLISHED");
+    assert!(
+        DeployAppApi::list_app_template_versions(&*service, &viewer_ctx, &private.id, 1, 20)
+            .await
+            .is_err(),
+        "a PRIVATE listing is not a marketplace template"
+    );
+    assert!(
+        DeployAppApi::retrieve_app_template(&*service, &viewer_ctx, &private.id)
+            .await
+            .is_err(),
+        "a PRIVATE listing is not readable by a consumer"
     );
 }

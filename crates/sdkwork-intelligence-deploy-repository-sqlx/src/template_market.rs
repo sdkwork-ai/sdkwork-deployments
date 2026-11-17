@@ -28,6 +28,7 @@ use sdkwork_deploy_contract::{
     TEMPLATE_STATUS_PUBLISHED, TEMPLATE_TYPE_APP, TEMPLATE_TYPE_PPT, TEMPLATE_TYPE_VIDEO,
     TEMPLATE_VERSION_STATUS_DRAFT, TEMPLATE_VERSION_STATUS_PUBLISHED,
 };
+use sdkwork_intelligence_deploy_service::TemplateReadScope;
 use std::collections::HashSet;
 
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
@@ -57,6 +58,17 @@ const TEMPLATE_SUMMARY_SELECT: &str =
 const VERSION_SELECT: &str = "v.uuid, t.uuid AS template_uuid, v.template_version, v.changelog,
     v.artifact_uuid, v.source_app_version, v.platform_targets_json, v.package_size_bytes,
     v.checksum_sha256, v.status, v.published_at, v.created_at, v.updated_at, v.version";
+
+/// The marketplace visibility gate, kept in one string so the shelf
+/// (`list_marketplace_templates`), the listing read
+/// (`retrieve_marketplace_template`) and the consumer reads of versions and
+/// artifacts cannot drift apart: a listing is market-visible while it is
+/// `PUBLIC`, approved (`PUBLISHED`) and not soft-deleted.
+///
+/// Every call site aliases the listing table as `t`; the consumer reads add
+/// their own `v.status = 'PUBLISHED'` on top of it.
+const MARKET_VISIBLE_TEMPLATE: &str =
+    "t.visibility = 'PUBLIC' AND t.status = 'PUBLISHED' AND t.deleted_at IS NULL";
 
 /// `($n = 0 OR x.tenant_id = $n)` scoped to one bound parameter: the admin
 /// surface binds `0` for the cross-tenant scope, app-side callers never use
@@ -587,8 +599,7 @@ impl DeployRepository {
         };
         let template_type = query.template_type.as_deref().unwrap_or("");
         let predicate = format!(
-            "t.tenant_id = $1 AND t.visibility = 'PUBLIC' AND t.status = 'PUBLISHED'
-            AND t.deleted_at IS NULL
+            "t.tenant_id = $1 AND {MARKET_VISIBLE_TEMPLATE}
             AND ($2 = '' OR c.uuid = $2)
             AND ($3 = '' OR LOWER(t.display_name) LIKE $3 OR LOWER(t.summary) LIKE $3)
             AND ($4 = '' OR t.pricing_model = $4)
@@ -646,8 +657,7 @@ impl DeployRepository {
         let row = sqlx::query(AssertSqlSafe(format!(
             "SELECT {TEMPLATE_SELECT} FROM deploy_application_scaffold t
              JOIN deploy_application_scaffold_category c ON c.id = t.category_id
-             WHERE t.tenant_id = $1 AND t.uuid = $2 AND t.visibility = 'PUBLIC'
-             AND t.status = 'PUBLISHED' AND t.deleted_at IS NULL"
+             WHERE t.tenant_id = $1 AND t.uuid = $2 AND {MARKET_VISIBLE_TEMPLATE}"
         )))
         .bind(tenant_id)
         .bind(template_uuid)
@@ -659,6 +669,35 @@ impl DeployRepository {
             .transpose()
             .map_err(|error| DeployServiceError::Internal(format!("map template: {error}")))?
             .ok_or_else(|| DeployServiceError::not_found("template not found"))
+    }
+
+    /// Ownership/marketplace state of one listing: the install flow decides
+    /// between the author read and the marketplace read from this, never from
+    /// the listing body. The lookup is tenant-scoped and soft-delete aware, so
+    /// a foreign or deleted uuid answers `None` exactly like a missing one.
+    pub(super) async fn template_read_scope_repo(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<Option<TemplateReadScope>> {
+        let row = sqlx::query(
+            "SELECT author_user_id, visibility, status FROM deploy_application_scaffold
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(template_uuid)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read deploy_application_scaffold read scope", error))?;
+        row.map(|row| {
+            Ok::<_, sqlx::Error>(TemplateReadScope {
+                author_user_id: row.try_get("author_user_id")?,
+                visibility: row.try_get("visibility")?,
+                status: row.try_get("status")?,
+            })
+        })
+        .transpose()
+        .map_err(|error| DeployServiceError::Internal(format!("map template read scope: {error}")))
     }
 
     // -- author templates --------------------------------------------------------
@@ -1255,6 +1294,97 @@ impl DeployRepository {
             .transpose()
             .map_err(|error| DeployServiceError::Internal(format!("map version: {error}")))?
             .ok_or_else(|| DeployServiceError::not_found("template version not found"))
+    }
+
+    /// Published versions of a marketplace-visible listing, for a consumer
+    /// installing someone else's template.
+    ///
+    /// The listing is resolved first under the marketplace gate: an invisible
+    /// listing answers "not found" rather than an empty page, so a draft's
+    /// existence never becomes observable through the shape of the answer. Only
+    /// versions the marketplace published are returned; a draft (an unpublished
+    /// edit) and a withdrawn version stay author-only.
+    pub(super) async fn list_marketplace_template_versions_repo(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<AppTemplateVersionPage> {
+        let (page, page_size, offset) = pagination(page, page_size);
+        let template_id: Option<i64> = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT t.id FROM deploy_application_scaffold t
+             WHERE t.tenant_id = $1 AND t.uuid = $2 AND {MARKET_VISIBLE_TEMPLATE}"
+        )))
+        .bind(tenant_id)
+        .bind(template_uuid)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve marketplace template", error))?;
+        let template_id =
+            template_id.ok_or_else(|| DeployServiceError::not_found("template not found"))?;
+        let predicate = format!(
+            "v.template_id = $1 AND v.deleted_at IS NULL AND v.status = '{}'",
+            TEMPLATE_VERSION_STATUS_PUBLISHED
+        );
+        let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM deploy_application_scaffold_version v WHERE {predicate}"
+        )))
+        .bind(template_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("count marketplace template versions", error))?;
+        let rows = sqlx::query(AssertSqlSafe(format!(
+            "SELECT {VERSION_SELECT} FROM deploy_application_scaffold_version v
+             JOIN deploy_application_scaffold t ON t.id = v.template_id
+             WHERE {predicate}
+             ORDER BY v.created_at DESC, v.id DESC LIMIT $2 OFFSET $3"
+        )))
+        .bind(template_id)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list marketplace template versions", error))?;
+        let items = rows
+            .iter()
+            .map(map_version_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| DeployServiceError::Internal(format!("map version: {error}")))?;
+        Ok(AppTemplateVersionPage {
+            items,
+            total,
+            page,
+            page_size,
+        })
+    }
+
+    /// A consumer reaches an artifact only through the product the marketplace
+    /// sells: a published version of a marketplace-visible listing in the same
+    /// tenant must reference it. Anything else — a draft version, a private or
+    /// disabled listing — is refused as not found.
+    pub(super) async fn assert_marketplace_artifact_readable_repo(
+        &self,
+        tenant_id: i64,
+        artifact_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        let version_id: Option<i64> = sqlx::query_scalar(AssertSqlSafe(format!(
+            "SELECT v.id FROM deploy_application_scaffold_version v
+             JOIN deploy_application_scaffold t ON t.id = v.template_id
+             WHERE v.tenant_id = $1 AND v.artifact_uuid = $2
+             AND v.deleted_at IS NULL AND v.status = '{}'
+             AND {MARKET_VISIBLE_TEMPLATE}
+             LIMIT 1",
+            TEMPLATE_VERSION_STATUS_PUBLISHED
+        )))
+        .bind(tenant_id)
+        .bind(artifact_uuid)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("resolve marketplace artifact", error))?;
+        version_id
+            .map(|_| ())
+            .ok_or_else(|| DeployServiceError::not_found("artifact not found"))
     }
 
     pub(super) async fn create_app_template_version_repo(

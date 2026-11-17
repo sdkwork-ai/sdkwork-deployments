@@ -2,6 +2,11 @@
 //!
 //! Only paths and names are configuration. Secrets stay in a protected file
 //! whose *path* is named here, never in an environment value.
+//!
+//! There is deliberately no template setting: IAM derives an installation from
+//! the deploy application itself (the template tables are retired), so the only
+//! remaining knobs are which adapter to use, where the split-deployment endpoint
+//! is, and how long one attempt may take.
 
 use std::time::Duration;
 
@@ -11,10 +16,6 @@ pub const IAM_PROVISIONING_MODE_ENV: &str = "SDKWORK_DEPLOY_IAM_PROVISIONING_MOD
 pub const IAM_BACKEND_API_URL_ENV: &str = "SDKWORK_DEPLOY_IAM_BACKEND_API_URL";
 /// Path of the protected file holding the IAM bootstrap auth token.
 pub const IAM_BACKEND_AUTH_TOKEN_FILE_ENV: &str = "SDKWORK_DEPLOY_IAM_BACKEND_AUTH_TOKEN_FILE";
-/// Registered IAM application template id the installation is created from.
-pub const IAM_APPLICATION_TEMPLATE_ID_ENV: &str = "SDKWORK_DEPLOY_IAM_APPLICATION_TEMPLATE_ID";
-/// Registered IAM application key, used when no template id is configured.
-pub const IAM_APPLICATION_APP_KEY_ENV: &str = "SDKWORK_DEPLOY_IAM_APPLICATION_APP_KEY";
 /// Overrides the per-attempt budget; bounded to 500 ms ..= 30 s.
 pub const IAM_PROVISIONING_TIMEOUT_MS_ENV: &str = "SDKWORK_DEPLOY_IAM_PROVISIONING_TIMEOUT_MS";
 
@@ -36,89 +37,19 @@ pub enum IdentityProvisioningMode {
     Http,
 }
 
-/// Where the IAM application template comes from.
-///
-/// IAM requires one of these: a tenant application is an *instance* of a
-/// registered `iam_application_template`, and IAM refuses a request that names
-/// neither. The deploy module does not register templates, so the reference is
-/// configuration rather than something derived from a deploy app.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ApplicationTemplateReference {
-    /// `templateId` of a registered template.
-    TemplateId(String),
-    /// `appKey` of a registered template.
-    AppKey(String),
-}
-
-impl ApplicationTemplateReference {
-    /// The `templateId` wire field when this reference names one.
-    #[must_use]
-    pub fn template_id(&self) -> Option<&str> {
-        match self {
-            Self::TemplateId(value) => Some(value.as_str()),
-            Self::AppKey(_) => None,
-        }
-    }
-
-    /// The `appKey` wire field when this reference names one.
-    #[must_use]
-    pub fn app_key(&self) -> Option<&str> {
-        match self {
-            Self::AppKey(value) => Some(value.as_str()),
-            Self::TemplateId(_) => None,
-        }
-    }
-
-    /// The configured value, for logs. Neither value is a secret.
-    #[must_use]
-    pub fn describe(&self) -> &str {
-        match self {
-            Self::TemplateId(value) | Self::AppKey(value) => value.as_str(),
-        }
-    }
-
-    /// Reads the configured reference; `None` means "provisioning is not
-    /// configured on this deployment".
-    #[must_use]
-    pub fn from_env() -> Option<Self> {
-        let template_id = std::env::var(IAM_APPLICATION_TEMPLATE_ID_ENV)
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty());
-        if let Some(template_id) = template_id {
-            return Some(Self::TemplateId(template_id));
-        }
-        std::env::var(IAM_APPLICATION_APP_KEY_ENV)
-            .ok()
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-            .map(Self::AppKey)
-    }
-}
-
 /// Everything one adapter needs besides its transport.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityProvisioningSettings {
-    /// Template the installation is created from.
-    pub template: ApplicationTemplateReference,
     /// Budget for one provisioning attempt.
     pub timeout: Duration,
 }
 
 impl IdentityProvisioningSettings {
-    /// Resolves the template and the timeout from the environment.
-    ///
-    /// Returns `None` when no template is configured: the caller then installs
-    /// the unconfigured port, so applications keep `pending_identity` instead of
-    /// failing a call nobody asked for.
-    pub fn from_env() -> Result<Option<Self>, IdentityProvisioningConfigError> {
-        let Some(template) = ApplicationTemplateReference::from_env() else {
-            return Ok(None);
-        };
-        Ok(Some(Self {
-            template,
+    /// Resolves the per-attempt budget from the environment.
+    pub fn from_env() -> Result<Self, IdentityProvisioningConfigError> {
+        Ok(Self {
             timeout: resolve_timeout()?,
-        }))
+        })
     }
 }
 
@@ -210,13 +141,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn template_reference_prefers_explicit_id_and_exposes_one_wire_field() {
-        let reference = ApplicationTemplateReference::TemplateId("tmpl_platform".to_owned());
-        assert_eq!(reference.template_id(), Some("tmpl_platform"));
-        assert_eq!(reference.app_key(), None);
-
-        let reference = ApplicationTemplateReference::AppKey("sdkwork-platform".to_owned());
-        assert_eq!(reference.template_id(), None);
-        assert_eq!(reference.app_key(), Some("sdkwork-platform"));
+    fn settings_carry_only_the_attempt_budget() {
+        // The retired template reference must not survive as a field: an
+        // installation is derived from the deploy application now, so there is
+        // nothing left to configure per application.
+        let settings = IdentityProvisioningSettings {
+            timeout: DEFAULT_PROVISIONING_TIMEOUT,
+        };
+        assert_eq!(settings.timeout, Duration::from_secs(5));
     }
 }

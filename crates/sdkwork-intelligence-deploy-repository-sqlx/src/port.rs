@@ -1839,6 +1839,38 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn template_read_scope(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        Option<sdkwork_intelligence_deploy_service::TemplateReadScope>,
+    > {
+        self.template_read_scope_repo(tenant_id, template_uuid)
+            .await
+    }
+
+    async fn list_marketplace_template_versions(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+        page: i32,
+        page_size: i32,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage>
+    {
+        self.list_marketplace_template_versions_repo(tenant_id, template_uuid, page, page_size)
+            .await
+    }
+
+    async fn assert_marketplace_artifact_readable(
+        &self,
+        tenant_id: i64,
+        artifact_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
+        self.assert_marketplace_artifact_readable_repo(tenant_id, artifact_uuid)
+            .await
+    }
+
     async fn list_app_templates(
         &self,
         tenant_id: i64,
