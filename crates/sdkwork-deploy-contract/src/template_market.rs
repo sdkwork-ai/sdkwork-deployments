@@ -10,31 +10,31 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Wire vocabulary for `deploy_app_template.visibility`.
+/// Wire vocabulary for `deploy_application_scaffold.visibility`.
 pub const TEMPLATE_VISIBILITY_PUBLIC: &str = "PUBLIC";
 pub const TEMPLATE_VISIBILITY_PRIVATE: &str = "PRIVATE";
 
-/// Wire vocabulary for `deploy_app_template.pricing_model`.
+/// Wire vocabulary for `deploy_application_scaffold.pricing_model`.
 pub const TEMPLATE_PRICING_FREE: &str = "FREE";
 pub const TEMPLATE_PRICING_PAID: &str = "PAID";
 
-/// Wire vocabulary for `deploy_app_template.status`.
+/// Wire vocabulary for `deploy_application_scaffold.status`.
 pub const TEMPLATE_STATUS_DRAFT: &str = "DRAFT";
 pub const TEMPLATE_STATUS_PENDING_REVIEW: &str = "PENDING_REVIEW";
 pub const TEMPLATE_STATUS_PUBLISHED: &str = "PUBLISHED";
 pub const TEMPLATE_STATUS_REJECTED: &str = "REJECTED";
 pub const TEMPLATE_STATUS_DISABLED: &str = "DISABLED";
 
-/// Wire vocabulary for `deploy_app_template_version.status`.
+/// Wire vocabulary for `deploy_application_scaffold_version.status`.
 pub const TEMPLATE_VERSION_STATUS_DRAFT: &str = "DRAFT";
 pub const TEMPLATE_VERSION_STATUS_PUBLISHED: &str = "PUBLISHED";
 pub const TEMPLATE_VERSION_STATUS_WITHDRAWN: &str = "WITHDRAWN";
 
-/// Wire vocabulary for `deploy_app_template_category.status`.
+/// Wire vocabulary for `deploy_application_scaffold_category.status`.
 pub const TEMPLATE_CATEGORY_STATUS_ACTIVE: &str = "ACTIVE";
 pub const TEMPLATE_CATEGORY_STATUS_DISABLED: &str = "DISABLED";
 
-/// Wire vocabulary for `deploy_app_template.template_type`: the artifact
+/// Wire vocabulary for `deploy_application_scaffold.template_type`: the artifact
 /// form a template was conversationally created as (project-file authoring).
 /// Extending the vocabulary is a baseline CHECK + contract enum change.
 pub const TEMPLATE_TYPE_APP: &str = "APP";

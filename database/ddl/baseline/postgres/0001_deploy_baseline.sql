@@ -1977,7 +1977,7 @@ CREATE INDEX IF NOT EXISTS idx_deploy_app_owner_organization
 --
 -- Defined after `deploy_app` on purpose: PostgreSQL validates FK target
 -- relations at table-creation time, so a forward reference to `deploy_app`
--- inside this script would fail (the same constraint the `deploy_build_template`
+-- inside this script would fail (the same constraint the `deploy_build_recipe`
 -- note below records).
 CREATE TABLE IF NOT EXISTS deploy_app_source_spec (
     id                            BIGINT PRIMARY KEY NOT NULL,
@@ -2246,7 +2246,7 @@ CREATE INDEX IF NOT EXISTS idx_deploy_app_source_spec_route_scope
 -- Governed build recipe. Created before deploy_app_platform_target /
 -- deploy_build below: PostgreSQL validates FK target relations at
 -- table-creation time, so forward references inside one script fail.
-CREATE TABLE IF NOT EXISTS deploy_build_template (
+CREATE TABLE IF NOT EXISTS deploy_build_recipe (
     id              BIGINT       NOT NULL,
     uuid            VARCHAR(36)  NOT NULL,
     tenant_id       BIGINT       NOT NULL,
@@ -2266,14 +2266,14 @@ CREATE TABLE IF NOT EXISTS deploy_build_template (
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     deleted_at      TIMESTAMPTZ,
     version         BIGINT       NOT NULL DEFAULT 1,
-    CONSTRAINT pk_deploy_build_template PRIMARY KEY (id)
+    CONSTRAINT pk_deploy_build_recipe PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_build_template_uuid
-    ON deploy_build_template (uuid);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_build_recipe_uuid
+    ON deploy_build_recipe (uuid);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_build_template_name_version
-    ON deploy_build_template (tenant_id, template_name, template_version)
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_build_recipe_name_version
+    ON deploy_build_recipe (tenant_id, template_name, template_version)
     WHERE deleted_at IS NULL;
 
 -- Platform delivery unit inside an App
@@ -2303,7 +2303,7 @@ CREATE TABLE IF NOT EXISTS deploy_app_platform_target (
     CONSTRAINT fk_deploy_app_platform_target_app
         FOREIGN KEY (app_id) REFERENCES deploy_app(id),
     CONSTRAINT fk_deploy_app_platform_target_template
-        FOREIGN KEY (build_template_id) REFERENCES deploy_build_template(id)
+        FOREIGN KEY (build_template_id) REFERENCES deploy_build_recipe(id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_platform_target_uuid
@@ -2387,8 +2387,8 @@ CREATE TABLE IF NOT EXISTS deploy_build (
     CONSTRAINT pk_deploy_build PRIMARY KEY (id),
     CONSTRAINT fk_deploy_build_target
         FOREIGN KEY (platform_target_id) REFERENCES deploy_app_platform_target(id),
-    CONSTRAINT fk_deploy_build_template
-        FOREIGN KEY (template_id) REFERENCES deploy_build_template(id),
+    CONSTRAINT fk_deploy_build_recipe
+        FOREIGN KEY (template_id) REFERENCES deploy_build_recipe(id),
     CONSTRAINT fk_deploy_build_repository
         FOREIGN KEY (source_repository_id) REFERENCES deploy_source_repository(id)
 );
@@ -3020,7 +3020,7 @@ COMMENT ON COLUMN deploy_dns_zone_verification_file.user_id IS '文件归属用�
 -- 能力，不允许靠漏掉谓词"顺带"成立。
 -- 依赖顺序：分类先于模板，模板先于版本（同脚本内 FK 需要目标先建）。
 
-CREATE TABLE IF NOT EXISTS deploy_app_template_category (
+CREATE TABLE IF NOT EXISTS deploy_application_scaffold_category (
     id              BIGINT        NOT NULL,
     uuid            VARCHAR(36)   NOT NULL,
     tenant_id       BIGINT        NOT NULL,
@@ -3039,23 +3039,23 @@ CREATE TABLE IF NOT EXISTS deploy_app_template_category (
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     version         BIGINT        NOT NULL DEFAULT 1,
     deleted_at      TIMESTAMPTZ,
-    CONSTRAINT pk_deploy_app_template_category PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_app_template_category_uuid UNIQUE (uuid),
-    CONSTRAINT fk_deploy_app_template_category_parent FOREIGN KEY (parent_id) REFERENCES deploy_app_template_category(id),
-    CONSTRAINT chk_deploy_app_template_category_status CHECK (status IN ('ACTIVE', 'DISABLED'))
+    CONSTRAINT pk_deploy_application_scaffold_category PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_application_scaffold_category_uuid UNIQUE (uuid),
+    CONSTRAINT fk_deploy_application_scaffold_category_parent FOREIGN KEY (parent_id) REFERENCES deploy_application_scaffold_category(id),
+    CONSTRAINT chk_deploy_application_scaffold_category_status CHECK (status IN ('ACTIVE', 'DISABLED'))
 );
 
 -- key 的唯一性必须带谓词：软删除的分类要释放 key 供同 key 重建，
 -- 而 PostgreSQL 的 UNIQUE 约束不带谓词，只能用部分唯一索引表达。
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_category_tenant_key
-    ON deploy_app_template_category (tenant_id, category_key)
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_scaffold_category_tenant_key
+    ON deploy_application_scaffold_category (tenant_id, category_key)
     WHERE deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_deploy_app_template_category_browse
-    ON deploy_app_template_category (tenant_id, parent_id, status, sort_order, id)
+CREATE INDEX IF NOT EXISTS idx_deploy_application_scaffold_category_browse
+    ON deploy_application_scaffold_category (tenant_id, parent_id, status, sort_order, id)
     WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS deploy_app_template (
+CREATE TABLE IF NOT EXISTS deploy_application_scaffold (
     id               BIGINT        NOT NULL,
     uuid             VARCHAR(36)   NOT NULL,
     tenant_id        BIGINT        NOT NULL,
@@ -3095,48 +3095,53 @@ CREATE TABLE IF NOT EXISTS deploy_app_template (
     updated_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     version          BIGINT        NOT NULL DEFAULT 1,
     deleted_at       TIMESTAMPTZ,
-    CONSTRAINT pk_deploy_app_template PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_app_template_uuid UNIQUE (uuid),
-    CONSTRAINT fk_deploy_app_template_category FOREIGN KEY (category_id) REFERENCES deploy_app_template_category(id),
-    CONSTRAINT chk_deploy_app_template_type CHECK (template_type IN ('APP', 'PPT', 'VIDEO')),
-    CONSTRAINT chk_deploy_app_template_visibility CHECK (visibility IN ('PUBLIC', 'PRIVATE')),
-    CONSTRAINT chk_deploy_app_template_pricing CHECK (pricing_model IN ('FREE', 'PAID')),
+    app_config_schema JSONB NOT NULL DEFAULT '{}',
+    variable_schema JSONB NOT NULL DEFAULT '{}',
+    dependency_manifest JSONB NOT NULL DEFAULT '{}',
+    capability_manifest JSONB NOT NULL DEFAULT '{}',
+    license_code VARCHAR(64),
+    CONSTRAINT pk_deploy_application_scaffold PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_application_scaffold_uuid UNIQUE (uuid),
+    CONSTRAINT fk_deploy_application_scaffold_category FOREIGN KEY (category_id) REFERENCES deploy_application_scaffold_category(id),
+    CONSTRAINT chk_deploy_application_scaffold_type CHECK (template_type IN ('APP', 'PPT', 'VIDEO')),
+    CONSTRAINT chk_deploy_application_scaffold_visibility CHECK (visibility IN ('PUBLIC', 'PRIVATE')),
+    CONSTRAINT chk_deploy_application_scaffold_pricing CHECK (pricing_model IN ('FREE', 'PAID')),
     -- 付费模板必须标价；免费模板价格恒为 0，防止"免费但标价"的脏数据。
-    CONSTRAINT chk_deploy_app_template_price CHECK (
+    CONSTRAINT chk_deploy_application_scaffold_price CHECK (
         (pricing_model = 'PAID' AND price_minor > 0) OR (pricing_model = 'FREE' AND price_minor = 0)
     ),
-    CONSTRAINT chk_deploy_app_template_status CHECK (
+    CONSTRAINT chk_deploy_application_scaffold_status CHECK (
         status IN ('DRAFT', 'PENDING_REVIEW', 'PUBLISHED', 'REJECTED', 'DISABLED')
     )
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_tenant_key
-    ON deploy_app_template (tenant_id, template_key)
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_scaffold_tenant_key
+    ON deploy_application_scaffold (tenant_id, template_key)
     WHERE deleted_at IS NULL;
 
 -- 市场浏览主路径：租户 + 状态 + 可见性 + 分类，排序固定 updated_at DESC, id。
-CREATE INDEX IF NOT EXISTS idx_deploy_app_template_marketplace
-    ON deploy_app_template (tenant_id, status, visibility, category_id, updated_at DESC, id)
+CREATE INDEX IF NOT EXISTS idx_deploy_application_scaffold_marketplace
+    ON deploy_application_scaffold (tenant_id, status, visibility, category_id, updated_at DESC, id)
     WHERE deleted_at IS NULL;
 
 -- 按模板类型浏览的市场路径：类型是市场的一级 facet（APP/PPT/VIDEO 页签），
 -- 与分类筛选平级，值得自己的索引前缀。
-CREATE INDEX IF NOT EXISTS idx_deploy_app_template_marketplace_type
-    ON deploy_app_template (tenant_id, status, visibility, template_type, updated_at DESC, id)
+CREATE INDEX IF NOT EXISTS idx_deploy_application_scaffold_marketplace_type
+    ON deploy_application_scaffold (tenant_id, status, visibility, template_type, updated_at DESC, id)
     WHERE deleted_at IS NULL;
 
 -- 作者工作台列表路径。
-CREATE INDEX IF NOT EXISTS idx_deploy_app_template_author
-    ON deploy_app_template (tenant_id, author_user_id, status, updated_at DESC, id)
+CREATE INDEX IF NOT EXISTS idx_deploy_application_scaffold_author
+    ON deploy_application_scaffold (tenant_id, author_user_id, status, updated_at DESC, id)
     WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS deploy_app_template_version (
+CREATE TABLE IF NOT EXISTS deploy_application_scaffold_version (
     id                  BIGINT        NOT NULL,
     uuid                VARCHAR(36)   NOT NULL,
     tenant_id           BIGINT        NOT NULL,
     organization_id     BIGINT        NOT NULL DEFAULT 0,
     template_id         BIGINT        NOT NULL,
-    -- 作者可读的版本串。命名跟 deploy_build_template.template_version 对齐：
+    -- 作者可读的版本串。命名跟 deploy_build_recipe.template_version 对齐：
     -- 审计块还有一条乐观锁列也叫 version，业务列若同名会让基线建表直接
     -- 报 42701（column specified more than once）。
     template_version    VARCHAR(64)   NOT NULL,
@@ -3156,30 +3161,30 @@ CREATE TABLE IF NOT EXISTS deploy_app_template_version (
     updated_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     version             BIGINT        NOT NULL DEFAULT 1,
     deleted_at          TIMESTAMPTZ,
-    CONSTRAINT pk_deploy_app_template_version PRIMARY KEY (id),
-    CONSTRAINT uk_deploy_app_template_version_uuid UNIQUE (uuid),
-    CONSTRAINT fk_deploy_app_template_version_template FOREIGN KEY (template_id) REFERENCES deploy_app_template(id),
-    CONSTRAINT chk_deploy_app_template_version_status CHECK (status IN ('DRAFT', 'PUBLISHED', 'WITHDRAWN'))
+    CONSTRAINT pk_deploy_application_scaffold_version PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_application_scaffold_version_uuid UNIQUE (uuid),
+    CONSTRAINT fk_deploy_application_scaffold_version_template FOREIGN KEY (template_id) REFERENCES deploy_application_scaffold(id),
+    CONSTRAINT chk_deploy_application_scaffold_version_status CHECK (status IN ('DRAFT', 'PUBLISHED', 'WITHDRAWN'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_template_version_number
-    ON deploy_app_template_version (template_id, template_version)
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_scaffold_version_number
+    ON deploy_application_scaffold_version (template_id, template_version)
     WHERE deleted_at IS NULL;
 
-CREATE INDEX IF NOT EXISTS idx_deploy_app_template_version_list
-    ON deploy_app_template_version (tenant_id, template_id, status, created_at DESC, id)
+CREATE INDEX IF NOT EXISTS idx_deploy_application_scaffold_version_list
+    ON deploy_application_scaffold_version (tenant_id, template_id, status, created_at DESC, id)
     WHERE deleted_at IS NULL;
 
-COMMENT ON TABLE deploy_app_template_category IS '应用模板市场分类；平台管理员维护，浏览树最多两层';
-COMMENT ON COLUMN deploy_app_template_category.category_key IS '租户内稳定的分类标识，模板引用与统计都以它为准';
-COMMENT ON TABLE deploy_app_template IS '应用模板：作者发布的可获取应用形态，含可见性、定价与审核状态';
-COMMENT ON COLUMN deploy_app_template.app_uuid IS '来源 deploy_app.uuid，引用不级联：模板独立于应用行存在';
-COMMENT ON COLUMN deploy_app_template.visibility IS 'PUBLIC 进市场浏览；PRIVATE 仅作者与自己租户可见';
-COMMENT ON COLUMN deploy_app_template.pricing_model IS 'FREE 零元直接获取；PAID 模板经 sdkwork-order 下单、sdkwork-payment 支付，权益由订单中心持有';
-COMMENT ON COLUMN deploy_app_template.price_minor IS '标价，货币最小单位（分）；FREE 恒为 0';
-COMMENT ON COLUMN deploy_app_template.status IS 'DRAFT→PENDING_REVIEW→PUBLISHED；REJECTED 退回作者；DISABLED 平台下架';
-COMMENT ON TABLE deploy_app_template_version IS '应用模板版本：一次发布的不可变快照，含产物引用与校验和';
-COMMENT ON COLUMN deploy_app_template_version.artifact_uuid IS '打包产物 deploy_artifact.uuid；未打包为 NULL';
+COMMENT ON TABLE deploy_application_scaffold_category IS '应用模板市场分类；平台管理员维护，浏览树最多两层';
+COMMENT ON COLUMN deploy_application_scaffold_category.category_key IS '租户内稳定的分类标识，模板引用与统计都以它为准';
+COMMENT ON TABLE deploy_application_scaffold IS '应用模板：作者发布的可获取应用形态，含可见性、定价与审核状态';
+COMMENT ON COLUMN deploy_application_scaffold.app_uuid IS '来源 deploy_app.uuid，引用不级联：模板独立于应用行存在';
+COMMENT ON COLUMN deploy_application_scaffold.visibility IS 'PUBLIC 进市场浏览；PRIVATE 仅作者与自己租户可见';
+COMMENT ON COLUMN deploy_application_scaffold.pricing_model IS 'FREE 零元直接获取；PAID 模板经 sdkwork-order 下单、sdkwork-payment 支付，权益由订单中心持有';
+COMMENT ON COLUMN deploy_application_scaffold.price_minor IS '标价，货币最小单位（分）；FREE 恒为 0';
+COMMENT ON COLUMN deploy_application_scaffold.status IS 'DRAFT→PENDING_REVIEW→PUBLISHED；REJECTED 退回作者；DISABLED 平台下架';
+COMMENT ON TABLE deploy_application_scaffold_version IS '应用模板版本：一次发布的不可变快照，含产物引用与校验和';
+COMMENT ON COLUMN deploy_application_scaffold_version.artifact_uuid IS '打包产物 deploy_artifact.uuid；未打包为 NULL';
 
 
 -- folded migration: database/migrations/postgres/0004_deploy_download_catalog.up.sql
@@ -3371,3 +3376,45 @@ ALTER TABLE deploy_package
 
 COMMENT ON COLUMN deploy_package.checksum_sha512 IS 'SHA-512 of the published installer; required by the electron-updater feed';
 COMMENT ON COLUMN deploy_package.feed_metadata IS 'Updater protocol facts for this package (release notes, minimum OS, blockmap name)';
+
+CREATE TABLE IF NOT EXISTS deploy_application_resource_link (
+    id              VARCHAR(36)  NOT NULL,
+    tenant_id       BIGINT       NOT NULL,
+    organization_id BIGINT       NOT NULL DEFAULT 0,
+    app_id          BIGINT       NOT NULL,
+    env_key         VARCHAR(32)  NOT NULL,
+    resource_kind   VARCHAR(24)  NOT NULL,
+    resource_ref    VARCHAR(128) NOT NULL,
+    provider_code   VARCHAR(32),
+    is_default      BOOLEAN      NOT NULL DEFAULT FALSE,
+    binding_status  VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    metadata        JSONB        NOT NULL DEFAULT '{}',
+    created_by      BIGINT,
+    updated_by      BIGINT,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ,
+    version         BIGINT       NOT NULL DEFAULT 1,
+    CONSTRAINT pk_deploy_application_resource_link PRIMARY KEY (id),
+    CONSTRAINT fk_deploy_application_resource_link_app
+        FOREIGN KEY (app_id) REFERENCES deploy_app(id),
+    CONSTRAINT chk_deploy_application_resource_link_kind
+        CHECK (resource_kind IN ('official_account', 'mini_program', 'payment_account')),
+    CONSTRAINT chk_deploy_application_resource_link_status
+        CHECK (binding_status IN ('ACTIVE', 'DISABLED'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_resource_link_ref
+    ON deploy_application_resource_link (app_id, env_key, resource_kind, resource_ref)
+    WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_resource_link_single
+    ON deploy_application_resource_link (app_id, env_key, resource_kind)
+    WHERE resource_kind IN ('official_account', 'mini_program') AND deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_resource_link_default
+    ON deploy_application_resource_link (app_id, env_key, provider_code)
+    WHERE is_default AND resource_kind = 'payment_account' AND deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_deploy_application_resource_link_app
+    ON deploy_application_resource_link (tenant_id, app_id, env_key, resource_kind, deleted_at, id);

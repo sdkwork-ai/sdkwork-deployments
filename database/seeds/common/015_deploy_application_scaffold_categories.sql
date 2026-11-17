@@ -1,6 +1,6 @@
 -- Deploy application-template marketplace: the initial category taxonomy.
 --
--- Categories are tenant-scoped reference data (`deploy_app_template_category`)
+-- Categories are tenant-scoped reference data (`deploy_application_scaffold_category`)
 -- and the publish API requires one. A freshly provisioned tenant therefore
 -- cannot publish a template until the taxonomy exists. This seed is the
 -- baseline set shipped with every profile; platform administrators may extend,
@@ -37,7 +37,7 @@ WITH seed
         (910001300010, '91000130-0000-4000-8000-000000000010', 'other',
          '其他应用', '暂不属于以上分类的应用模板。', 100)
 )
-INSERT INTO deploy_app_template_category
+INSERT INTO deploy_application_scaffold_category
     (id, uuid, tenant_id, organization_id, parent_id, category_key,
      display_name, description, sort_order, status, created_by, updated_by,
      created_at, updated_at, version, deleted_at)

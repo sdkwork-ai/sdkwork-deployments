@@ -21,6 +21,12 @@
       "lifecycle_status": "active"
     },
     {
+      "table_name": "deploy_domain_dns_record",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
       "table_name": "deploy_nginx_config",
       "owner": "deploy-platform",
       "compliance_level": "L2",
@@ -195,6 +201,12 @@
       "lifecycle_status": "active"
     },
     {
+      "table_name": "deploy_certificate_renewal",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
       "table_name": "deploy_certificate_quota_usage",
       "owner": "deploy-platform",
       "compliance_level": "L2",
@@ -231,7 +243,19 @@
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_build_template",
+      "table_name": "deploy_app_source_spec",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "deploy_app_source_spec_route",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
+    },
+    {
+      "table_name": "deploy_build_recipe",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
@@ -333,43 +357,25 @@
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_certificate_renewal",
+      "table_name": "deploy_dns_zone_verification_file",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_app_source_spec",
+      "table_name": "deploy_application_scaffold_category",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_app_source_spec_route",
+      "table_name": "deploy_application_scaffold",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_app_template_category",
-      "owner": "deploy-platform",
-      "compliance_level": "L2",
-      "lifecycle_status": "active"
-    },
-    {
-      "table_name": "deploy_app_template",
-      "owner": "deploy-platform",
-      "compliance_level": "L2",
-      "lifecycle_status": "active"
-    },
-    {
-      "table_name": "deploy_app_template_version",
-      "owner": "deploy-platform",
-      "compliance_level": "L2",
-      "lifecycle_status": "active"
-    },
-    {
-      "table_name": "deploy_domain_dns_record",
+      "table_name": "deploy_application_scaffold_version",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
@@ -399,7 +405,7 @@
       "lifecycle_status": "active"
     },
     {
-      "table_name": "deploy_dns_zone_verification_file",
+      "table_name": "deploy_application_resource_link",
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"

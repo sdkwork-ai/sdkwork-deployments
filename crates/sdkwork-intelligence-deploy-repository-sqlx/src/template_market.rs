@@ -1,7 +1,7 @@
 //! App template marketplace catalog storage.
 //!
-//! Three tables (`deploy_app_template_category`, `deploy_app_template`,
-//! `deploy_app_template_version`) behind the marketplace port. One invariant
+//! Three tables (`deploy_application_scaffold_category`, `deploy_application_scaffold`,
+//! `deploy_application_scaffold_version`) behind the marketplace port. One invariant
 //! lives here rather than in the service because only SQL can make it
 //! race-proof:
 //!
@@ -12,7 +12,7 @@
 //! still fenced to one tenant plus `PUBLIC` + `PUBLISHED`.
 //!
 //! Acquisition, payment and entitlement are owned by the sdkwork-order order
-//! center and sdkwork-payment: `deploy_app_template.install_count` is a
+//! center and sdkwork-payment: `deploy_application_scaffold.install_count` is a
 //! commerce-fed counter maintained by the order center, and this store only
 //! reads it for marketplace ranking and response mapping.
 
@@ -157,7 +157,7 @@ fn metadata_with_screenshots(
     screenshots: &[AppTemplateScreenshot],
 ) -> DeployServiceResult<serde_json::Value> {
     let object = metadata.as_object_mut().ok_or_else(|| {
-        DeployServiceError::Internal("deploy_app_template.metadata is not a JSON object".to_owned())
+        DeployServiceError::Internal("deploy_application_scaffold.metadata is not a JSON object".to_owned())
     })?;
     object.insert(
         "screenshots".to_owned(),
@@ -179,7 +179,7 @@ fn screenshots_from_metadata(
     }
     serde_json::from_value(value.clone()).map_err(|error| {
         sqlx::Error::Decode(
-            format!("deploy_app_template.metadata.screenshots is malformed: {error}").into(),
+            format!("deploy_application_scaffold.metadata.screenshots is malformed: {error}").into(),
         )
     })
 }
@@ -320,16 +320,16 @@ impl DeployRepository {
             optional_tenant_predicate("c.tenant_id", 1)
         );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template_category c WHERE {predicate}"
+            "SELECT COUNT(*) FROM deploy_application_scaffold_category c WHERE {predicate}"
         )))
         .bind(tenant_id.unwrap_or(0))
         .bind(status_filter)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count deploy_app_template_category", error))?;
+        .map_err(|error| store_error("count deploy_application_scaffold_category", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {CATEGORY_SELECT} FROM deploy_app_template_category c
-             LEFT JOIN deploy_app_template_category pc ON pc.id = c.parent_id
+            "SELECT {CATEGORY_SELECT} FROM deploy_application_scaffold_category c
+             LEFT JOIN deploy_application_scaffold_category pc ON pc.id = c.parent_id
              WHERE {predicate}
              ORDER BY c.sort_order ASC, c.id ASC LIMIT $3 OFFSET $4"
         )))
@@ -339,13 +339,13 @@ impl DeployRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list deploy_app_template_category", error))?;
+        .map_err(|error| store_error("list deploy_application_scaffold_category", error))?;
         let items = rows
             .iter()
             .map(map_category_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| {
-                DeployServiceError::Internal(format!("map deploy_app_template_category: {error}"))
+                DeployServiceError::Internal(format!("map deploy_application_scaffold_category: {error}"))
             })?;
         Ok(TemplateCategoryPage {
             items,
@@ -374,7 +374,7 @@ impl DeployRepository {
         let category_id = next_id(self.id_generator())?;
         let category_uuid = new_uuid();
         sqlx::query(
-            "INSERT INTO deploy_app_template_category (
+            "INSERT INTO deploy_application_scaffold_category (
                 id, uuid, tenant_id, organization_id, parent_id, category_key, display_name,
                 description, sort_order, status, created_by, updated_by
             ) VALUES ($1, $2, $3, COALESCE($4, 0), $5, $6, $7, $8, COALESCE($9, 0), 'ACTIVE', $10, $10)",
@@ -391,7 +391,7 @@ impl DeployRepository {
         .bind(actor_id)
         .execute(&self.pool)
         .await
-        .map_err(|error| store_error("insert deploy_app_template_category", error))?;
+        .map_err(|error| store_error("insert deploy_application_scaffold_category", error))?;
         self.retrieve_template_category_repo(Some(tenant_id), &category_uuid)
             .await
     }
@@ -406,15 +406,15 @@ impl DeployRepository {
             optional_tenant_predicate("c.tenant_id", 1)
         );
         let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {CATEGORY_SELECT} FROM deploy_app_template_category c
-             LEFT JOIN deploy_app_template_category pc ON pc.id = c.parent_id
+            "SELECT {CATEGORY_SELECT} FROM deploy_application_scaffold_category c
+             LEFT JOIN deploy_application_scaffold_category pc ON pc.id = c.parent_id
              WHERE {predicate}"
         )))
         .bind(tenant_id.unwrap_or(0))
         .bind(category_uuid)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve deploy_app_template_category", error))?;
+        .map_err(|error| store_error("retrieve deploy_application_scaffold_category", error))?;
         row.as_ref()
             .map(map_category_row)
             .transpose()
@@ -448,7 +448,7 @@ impl DeployRepository {
             }
         };
         let result = sqlx::query(
-            "UPDATE deploy_app_template_category SET
+            "UPDATE deploy_application_scaffold_category SET
                 parent_id = COALESCE($3, parent_id),
                 display_name = COALESCE($4, display_name),
                 description = COALESCE($5, description),
@@ -481,7 +481,7 @@ impl DeployRepository {
         .bind(actor_id)
         .execute(&self.pool)
         .await
-        .map_err(|error| store_error("update deploy_app_template_category", error))?;
+        .map_err(|error| store_error("update deploy_application_scaffold_category", error))?;
         if result.rows_affected() == 0 {
             return Err(DeployServiceError::not_found("template category not found"));
         }
@@ -498,7 +498,7 @@ impl DeployRepository {
             .resolve_category_internal_id(tenant_id, category_uuid)
             .await?;
         let children: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM deploy_app_template_category
+            "SELECT COUNT(*) FROM deploy_application_scaffold_category
              WHERE parent_id = $1 AND deleted_at IS NULL",
         )
         .bind(category_id)
@@ -511,7 +511,7 @@ impl DeployRepository {
             ));
         }
         let templates: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM deploy_app_template
+            "SELECT COUNT(*) FROM deploy_application_scaffold
              WHERE category_id = $1 AND deleted_at IS NULL",
         )
         .bind(category_id)
@@ -524,13 +524,13 @@ impl DeployRepository {
             ));
         }
         sqlx::query(
-            "UPDATE deploy_app_template_category SET deleted_at = NOW()
+            "UPDATE deploy_application_scaffold_category SET deleted_at = NOW()
              WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(category_id)
         .execute(&self.pool)
         .await
-        .map_err(|error| store_error("delete deploy_app_template_category", error))?;
+        .map_err(|error| store_error("delete deploy_application_scaffold_category", error))?;
         Ok(())
     }
 
@@ -540,14 +540,14 @@ impl DeployRepository {
         category_uuid: &str,
     ) -> DeployServiceResult<i64> {
         let row = sqlx::query(
-            "SELECT id, status FROM deploy_app_template_category
+            "SELECT id, status FROM deploy_application_scaffold_category
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
         )
         .bind(tenant_id)
         .bind(category_uuid)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("resolve deploy_app_template_category id", error))?;
+        .map_err(|error| store_error("resolve deploy_application_scaffold_category id", error))?;
         let row =
             row.ok_or_else(|| DeployServiceError::validation("template category not found"))?;
         let status: String = row
@@ -595,8 +595,8 @@ impl DeployRepository {
             AND ($5 = '' OR t.template_type = $5)"
         );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT COUNT(*) FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE {predicate}"
         )))
         .bind(tenant_id)
@@ -608,8 +608,8 @@ impl DeployRepository {
         .await
         .map_err(|error| store_error("count marketplace templates", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {TEMPLATE_SUMMARY_SELECT} FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT {TEMPLATE_SUMMARY_SELECT} FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE {predicate}
              ORDER BY {order_by} LIMIT $6 OFFSET $7"
         )))
@@ -644,8 +644,8 @@ impl DeployRepository {
         template_uuid: &str,
     ) -> DeployServiceResult<AppTemplateResponse> {
         let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {TEMPLATE_SELECT} FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT {TEMPLATE_SELECT} FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE t.tenant_id = $1 AND t.uuid = $2 AND t.visibility = 'PUBLIC'
              AND t.status = 'PUBLISHED' AND t.deleted_at IS NULL"
         )))
@@ -688,7 +688,7 @@ impl DeployRepository {
             AND ($4 = '' OR LOWER(t.display_name) LIKE $4 OR LOWER(t.summary) LIKE $4)"
         );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template t WHERE {predicate}"
+            "SELECT COUNT(*) FROM deploy_application_scaffold t WHERE {predicate}"
         )))
         .bind(tenant_id)
         .bind(author_user_id.unwrap_or(0))
@@ -696,10 +696,10 @@ impl DeployRepository {
         .bind(&keyword)
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count deploy_app_template", error))?;
+        .map_err(|error| store_error("count deploy_application_scaffold", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {TEMPLATE_SELECT} FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT {TEMPLATE_SELECT} FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE {predicate}
              ORDER BY t.updated_at DESC, t.id DESC LIMIT $5 OFFSET $6"
         )))
@@ -711,7 +711,7 @@ impl DeployRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list deploy_app_template", error))?;
+        .map_err(|error| store_error("list deploy_application_scaffold", error))?;
         let items = rows
             .iter()
             .map(map_template_row)
@@ -750,8 +750,8 @@ impl DeployRepository {
             optional_tenant_predicate("t.tenant_id", 1)
         );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT COUNT(*) FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE {predicate}"
         )))
         .bind(tenant_id.unwrap_or(0))
@@ -764,8 +764,8 @@ impl DeployRepository {
         .await
         .map_err(|error| store_error("count admin templates", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {TEMPLATE_SELECT} FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT {TEMPLATE_SELECT} FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE {predicate}
              ORDER BY t.updated_at DESC, t.id DESC LIMIT $7 OFFSET $8"
         )))
@@ -802,8 +802,8 @@ impl DeployRepository {
         // `$3 <= 0` reads "no ownership gate": the marketplace and admin reads
         // pass NULL, the author read passes its subject.
         let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {TEMPLATE_SELECT} FROM deploy_app_template t
-             JOIN deploy_app_template_category c ON c.id = t.category_id
+            "SELECT {TEMPLATE_SELECT} FROM deploy_application_scaffold t
+             JOIN deploy_application_scaffold_category c ON c.id = t.category_id
              WHERE t.uuid = $1 AND t.deleted_at IS NULL
              AND (t.tenant_id = $2 OR $2 = 0)
              AND (t.author_user_id = $3 OR $3 <= 0)"
@@ -813,7 +813,7 @@ impl DeployRepository {
         .bind(author_user_id.unwrap_or(0))
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve deploy_app_template", error))?;
+        .map_err(|error| store_error("retrieve deploy_application_scaffold", error))?;
         row.as_ref()
             .map(map_template_row)
             .transpose()
@@ -888,9 +888,9 @@ impl DeployRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin create deploy_app_template", error))?;
+            .map_err(|error| store_error("begin create deploy_application_scaffold", error))?;
         sqlx::query(
-            "INSERT INTO deploy_app_template (
+            "INSERT INTO deploy_application_scaffold (
                 id, uuid, tenant_id, organization_id, category_id, author_user_id, app_uuid,
                 template_type, template_key, display_name, summary, description, icon_media_ref,
                 cover_media_ref, visibility, pricing_model, price_minor, currency, status,
@@ -920,7 +920,7 @@ impl DeployRepository {
         .bind(metadata)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("insert deploy_app_template", error))?;
+        .map_err(|error| store_error("insert deploy_application_scaffold", error))?;
         if let Some(initial) = request.initial_version.as_ref() {
             self.insert_template_version(
                 &mut transaction,
@@ -936,7 +936,7 @@ impl DeployRepository {
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit create deploy_app_template", error))?;
+            .map_err(|error| store_error("commit create deploy_application_scaffold", error))?;
         self.retrieve_app_template_repo(Some(tenant_id), None, &template_uuid)
             .await
     }
@@ -952,9 +952,9 @@ impl DeployRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin update deploy_app_template", error))?;
+            .map_err(|error| store_error("begin update deploy_application_scaffold", error))?;
         let row = sqlx::query(
-            "SELECT status, pricing_model, price_minor, metadata FROM deploy_app_template
+            "SELECT status, pricing_model, price_minor, metadata FROM deploy_application_scaffold
              WHERE tenant_id = $1 AND uuid = $2 AND author_user_id = $3 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -963,7 +963,7 @@ impl DeployRepository {
         .bind(author_user_id)
         .fetch_optional(&mut *transaction)
         .await
-        .map_err(|error| store_error("lock deploy_app_template", error))?;
+        .map_err(|error| store_error("lock deploy_application_scaffold", error))?;
         let row = row.ok_or_else(|| DeployServiceError::not_found("template not found"))?;
         let status: String = row
             .try_get("status")
@@ -1025,7 +1025,7 @@ impl DeployRepository {
             }
         };
         sqlx::query(
-            "UPDATE deploy_app_template SET
+            "UPDATE deploy_application_scaffold SET
                 display_name = COALESCE($4, display_name),
                 summary = COALESCE($5, summary),
                 description = COALESCE($6, description),
@@ -1077,11 +1077,11 @@ impl DeployRepository {
         .bind(metadata)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("update deploy_app_template", error))?;
+        .map_err(|error| store_error("update deploy_application_scaffold", error))?;
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit update deploy_app_template", error))?;
+            .map_err(|error| store_error("commit update deploy_application_scaffold", error))?;
         self.retrieve_app_template_repo(Some(tenant_id), None, template_uuid)
             .await
     }
@@ -1093,7 +1093,7 @@ impl DeployRepository {
         template_uuid: &str,
     ) -> DeployServiceResult<()> {
         let result = sqlx::query(
-            "UPDATE deploy_app_template SET deleted_at = NOW()
+            "UPDATE deploy_application_scaffold SET deleted_at = NOW()
              WHERE uuid = $1 AND deleted_at IS NULL
              AND (tenant_id = $2 OR $2 = 0)
              AND (author_user_id = $3 OR $3 <= 0)",
@@ -1103,7 +1103,7 @@ impl DeployRepository {
         .bind(author_user_id.unwrap_or(0))
         .execute(&self.pool)
         .await
-        .map_err(|error| store_error("delete deploy_app_template", error))?;
+        .map_err(|error| store_error("delete deploy_application_scaffold", error))?;
         if result.rows_affected() == 0 {
             return Err(DeployServiceError::not_found("template not found"));
         }
@@ -1120,9 +1120,9 @@ impl DeployRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin submit deploy_app_template", error))?;
+            .map_err(|error| store_error("begin submit deploy_application_scaffold", error))?;
         let row = sqlx::query(
-            "SELECT id, status FROM deploy_app_template
+            "SELECT id, status FROM deploy_application_scaffold
              WHERE tenant_id = $1 AND uuid = $2 AND author_user_id = $3 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -1131,7 +1131,7 @@ impl DeployRepository {
         .bind(author_user_id)
         .fetch_optional(&mut *transaction)
         .await
-        .map_err(|error| store_error("lock deploy_app_template", error))?;
+        .map_err(|error| store_error("lock deploy_application_scaffold", error))?;
         let row = row.ok_or_else(|| DeployServiceError::not_found("template not found"))?;
         let template_id: i64 = row
             .try_get("id")
@@ -1145,7 +1145,7 @@ impl DeployRepository {
             )));
         }
         let versions: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM deploy_app_template_version
+            "SELECT COUNT(*) FROM deploy_application_scaffold_version
              WHERE template_id = $1 AND deleted_at IS NULL",
         )
         .bind(template_id)
@@ -1158,7 +1158,7 @@ impl DeployRepository {
             ));
         }
         sqlx::query(
-            "UPDATE deploy_app_template SET status = 'PENDING_REVIEW', updated_at = NOW(),
+            "UPDATE deploy_application_scaffold SET status = 'PENDING_REVIEW', updated_at = NOW(),
                 updated_by = $2, version = version + 1
              WHERE id = $1",
         )
@@ -1166,11 +1166,11 @@ impl DeployRepository {
         .bind(author_user_id)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("submit deploy_app_template", error))?;
+        .map_err(|error| store_error("submit deploy_application_scaffold", error))?;
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit submit deploy_app_template", error))?;
+            .map_err(|error| store_error("commit submit deploy_application_scaffold", error))?;
         self.retrieve_app_template_repo(Some(tenant_id), None, template_uuid)
             .await
     }
@@ -1192,8 +1192,8 @@ impl DeployRepository {
             AND (t.author_user_id = $3 OR $3 <= 0)"
         );
         let total: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
-            "SELECT COUNT(*) FROM deploy_app_template_version v
-             JOIN deploy_app_template t ON t.id = v.template_id
+            "SELECT COUNT(*) FROM deploy_application_scaffold_version v
+             JOIN deploy_application_scaffold t ON t.id = v.template_id
              WHERE {predicate}"
         )))
         .bind(template_uuid)
@@ -1201,10 +1201,10 @@ impl DeployRepository {
         .bind(author_user_id.unwrap_or(0))
         .fetch_one(&self.pool)
         .await
-        .map_err(|error| store_error("count deploy_app_template_version", error))?;
+        .map_err(|error| store_error("count deploy_application_scaffold_version", error))?;
         let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {VERSION_SELECT} FROM deploy_app_template_version v
-             JOIN deploy_app_template t ON t.id = v.template_id
+            "SELECT {VERSION_SELECT} FROM deploy_application_scaffold_version v
+             JOIN deploy_application_scaffold t ON t.id = v.template_id
              WHERE {predicate}
              ORDER BY v.created_at DESC, v.id DESC LIMIT $4 OFFSET $5"
         )))
@@ -1215,7 +1215,7 @@ impl DeployRepository {
         .bind(offset)
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| store_error("list deploy_app_template_version", error))?;
+        .map_err(|error| store_error("list deploy_application_scaffold_version", error))?;
         let items = rows
             .iter()
             .map(map_version_row)
@@ -1237,8 +1237,8 @@ impl DeployRepository {
         version_uuid: &str,
     ) -> DeployServiceResult<AppTemplateVersionResponse> {
         let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT {VERSION_SELECT} FROM deploy_app_template_version v
-             JOIN deploy_app_template t ON t.id = v.template_id
+            "SELECT {VERSION_SELECT} FROM deploy_application_scaffold_version v
+             JOIN deploy_application_scaffold t ON t.id = v.template_id
              WHERE v.uuid = $1 AND t.uuid = $2 AND v.deleted_at IS NULL AND t.deleted_at IS NULL
              AND (t.tenant_id = $3 OR $3 = 0)
              AND (t.author_user_id = $4 OR $4 <= 0)"
@@ -1249,7 +1249,7 @@ impl DeployRepository {
         .bind(author_user_id.unwrap_or(0))
         .fetch_optional(&self.pool)
         .await
-        .map_err(|error| store_error("retrieve deploy_app_template_version", error))?;
+        .map_err(|error| store_error("retrieve deploy_application_scaffold_version", error))?;
         row.as_ref()
             .map(map_version_row)
             .transpose()
@@ -1271,9 +1271,9 @@ impl DeployRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin create deploy_app_template_version", error))?;
+            .map_err(|error| store_error("begin create deploy_application_scaffold_version", error))?;
         let row = sqlx::query(
-            "SELECT id, status, organization_id FROM deploy_app_template
+            "SELECT id, status, organization_id FROM deploy_application_scaffold
              WHERE tenant_id = $1 AND uuid = $2 AND author_user_id = $3 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -1282,7 +1282,7 @@ impl DeployRepository {
         .bind(author_user_id)
         .fetch_optional(&mut *transaction)
         .await
-        .map_err(|error| store_error("lock deploy_app_template", error))?;
+        .map_err(|error| store_error("lock deploy_application_scaffold", error))?;
         let row = row.ok_or_else(|| DeployServiceError::not_found("template not found"))?;
         let template_id: i64 = row
             .try_get("id")
@@ -1318,7 +1318,7 @@ impl DeployRepository {
             .await?;
         if version_status == TEMPLATE_VERSION_STATUS_PUBLISHED {
             sqlx::query(
-                "UPDATE deploy_app_template SET latest_version_uuid = $2, updated_at = NOW(),
+                "UPDATE deploy_application_scaffold SET latest_version_uuid = $2, updated_at = NOW(),
                     updated_by = $3, version = version + 1
                  WHERE id = $1",
             )
@@ -1327,12 +1327,12 @@ impl DeployRepository {
             .bind(author_user_id)
             .execute(&mut *transaction)
             .await
-            .map_err(|error| store_error("advance deploy_app_template latest version", error))?;
+            .map_err(|error| store_error("advance deploy_application_scaffold latest version", error))?;
         }
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit create deploy_app_template_version", error))?;
+            .map_err(|error| store_error("commit create deploy_application_scaffold_version", error))?;
         self.retrieve_app_template_version_repo(Some(tenant_id), None, template_uuid, &version_uuid)
             .await
     }
@@ -1360,7 +1360,7 @@ impl DeployRepository {
             None
         };
         sqlx::query(
-            "INSERT INTO deploy_app_template_version (
+            "INSERT INTO deploy_application_scaffold_version (
                 id, uuid, tenant_id, organization_id, template_id, template_version, changelog,
                 artifact_uuid, source_app_version, platform_targets_json, package_size_bytes,
                 checksum_sha256, status, published_at, created_by, updated_by
@@ -1388,7 +1388,7 @@ impl DeployRepository {
         .bind(actor_id)
         .execute(&mut **transaction)
         .await
-        .map_err(|error| store_error("insert deploy_app_template_version", error))?;
+        .map_err(|error| store_error("insert deploy_application_scaffold_version", error))?;
         Ok(version_uuid)
     }
 
@@ -1416,9 +1416,9 @@ impl DeployRepository {
             .pool
             .begin()
             .await
-            .map_err(|error| store_error("begin review deploy_app_template", error))?;
+            .map_err(|error| store_error("begin review deploy_application_scaffold", error))?;
         let row = sqlx::query(
-            "SELECT id, status FROM deploy_app_template
+            "SELECT id, status FROM deploy_application_scaffold
              WHERE uuid = $1 AND deleted_at IS NULL AND (tenant_id = $2 OR $2 = 0)
              FOR UPDATE",
         )
@@ -1426,14 +1426,14 @@ impl DeployRepository {
         .bind(tenant_id.unwrap_or(0))
         .fetch_optional(&mut *transaction)
         .await
-        .map_err(|error| store_error("lock deploy_app_template", error))?;
+        .map_err(|error| store_error("lock deploy_application_scaffold", error))?;
         let row = row.ok_or_else(|| DeployServiceError::not_found("template not found"))?;
         let template_id: i64 = row
             .try_get("id")
             .map_err(|error| DeployServiceError::Internal(format!("read id: {error}")))?;
         let next_status = request.status.as_deref();
         sqlx::query(
-            "UPDATE deploy_app_template SET
+            "UPDATE deploy_application_scaffold SET
                 status = COALESCE($2, status),
                 review_note = COALESCE($3, review_note),
                 is_featured = COALESCE($4, is_featured),
@@ -1457,13 +1457,13 @@ impl DeployRepository {
         .bind(operator_id)
         .execute(&mut *transaction)
         .await
-        .map_err(|error| store_error("review deploy_app_template", error))?;
+        .map_err(|error| store_error("review deploy_application_scaffold", error))?;
         if next_status == Some(TEMPLATE_STATUS_PUBLISHED) {
             // Approval publishes every draft version: the author submitted the
             // listing as a whole, and partial approvals would silently strand
             // the newest artifact.
             sqlx::query(
-                "UPDATE deploy_app_template_version SET status = $2,
+                "UPDATE deploy_application_scaffold_version SET status = $2,
                     published_at = COALESCE(published_at, NOW()),
                     updated_by = COALESCE($3, updated_by),
                     updated_at = NOW(), version = version + 1
@@ -1477,7 +1477,7 @@ impl DeployRepository {
             .await
             .map_err(|error| store_error("publish template versions", error))?;
             let latest: Option<String> = sqlx::query_scalar(
-                "SELECT uuid FROM deploy_app_template_version
+                "SELECT uuid FROM deploy_application_scaffold_version
                  WHERE template_id = $1 AND status = $2 AND deleted_at IS NULL
                  ORDER BY created_at DESC, id DESC LIMIT 1",
             )
@@ -1491,7 +1491,7 @@ impl DeployRepository {
                     "a template cannot be published without at least one version",
                 ));
             }
-            sqlx::query("UPDATE deploy_app_template SET latest_version_uuid = $2 WHERE id = $1")
+            sqlx::query("UPDATE deploy_application_scaffold SET latest_version_uuid = $2 WHERE id = $1")
                 .bind(template_id)
                 .bind(latest)
                 .execute(&mut *transaction)
@@ -1501,7 +1501,7 @@ impl DeployRepository {
         transaction
             .commit()
             .await
-            .map_err(|error| store_error("commit review deploy_app_template", error))?;
+            .map_err(|error| store_error("commit review deploy_application_scaffold", error))?;
         self.retrieve_app_template_repo(tenant_id, None, template_uuid)
             .await
     }

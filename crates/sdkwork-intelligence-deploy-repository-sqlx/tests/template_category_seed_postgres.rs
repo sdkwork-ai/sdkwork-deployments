@@ -11,7 +11,7 @@ mod common;
 use sqlx::{AssertSqlSafe, PgPool};
 
 const CATEGORIES: &str =
-    include_str!("../../../database/seeds/common/015_deploy_app_template_categories.sql");
+    include_str!("../../../database/seeds/common/015_deploy_application_scaffold_categories.sql");
 
 const EXPECTED_KEYS: [&str; 10] = [
     "web-h5",
@@ -41,7 +41,7 @@ async fn baseline_taxonomy_is_complete_and_reseed_is_idempotent() {
     apply_seed(&pool).await;
 
     let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM deploy_app_template_category
+        "SELECT COUNT(*) FROM deploy_application_scaffold_category
          WHERE tenant_id = 100001 AND deleted_at IS NULL",
     )
     .fetch_one(&pool)
@@ -50,7 +50,7 @@ async fn baseline_taxonomy_is_complete_and_reseed_is_idempotent() {
     assert_eq!(total, 10);
 
     let keys: Vec<String> = sqlx::query_scalar(
-        "SELECT category_key FROM deploy_app_template_category
+        "SELECT category_key FROM deploy_application_scaffold_category
          WHERE tenant_id = 100001 AND deleted_at IS NULL
          ORDER BY sort_order, id",
     )
@@ -64,7 +64,7 @@ async fn baseline_taxonomy_is_complete_and_reseed_is_idempotent() {
              COUNT(*) FILTER (WHERE status = 'ACTIVE'),
              COUNT(*) FILTER (WHERE organization_id <> 0 OR parent_id IS NOT NULL),
              MIN(id), MAX(id)
-         FROM deploy_app_template_category
+         FROM deploy_application_scaffold_category
          WHERE tenant_id = 100001 AND deleted_at IS NULL",
     )
     .fetch_one(&pool)
@@ -76,7 +76,7 @@ async fn baseline_taxonomy_is_complete_and_reseed_is_idempotent() {
     assert_eq!(last_id, 910001300010);
 
     let uuids: i64 = sqlx::query_scalar(
-        "SELECT COUNT(DISTINCT uuid) FROM deploy_app_template_category
+        "SELECT COUNT(DISTINCT uuid) FROM deploy_application_scaffold_category
          WHERE tenant_id = 100001 AND deleted_at IS NULL",
     )
     .fetch_one(&pool)

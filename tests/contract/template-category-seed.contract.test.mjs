@@ -13,13 +13,13 @@ import path from 'node:path';
 import process from 'node:process';
 
 const root = process.cwd();
-const seedPath = path.join('database', 'seeds', 'common', '015_deploy_app_template_categories.sql');
+const seedPath = path.join('database', 'seeds', 'common', '015_deploy_application_scaffold_categories.sql');
 assert.equal(existsSync(path.join(root, seedPath)), true, `${seedPath} must exist`);
 
 const manifest = JSON.parse(readFileSync(path.join(root, 'database', 'seeds', 'seed.manifest.json'), 'utf8'));
 for (const [profile, config] of Object.entries(manifest.profiles)) {
   assert.equal(
-    config.common.includes('common/015_deploy_app_template_categories.sql'),
+    config.common.includes('common/015_deploy_application_scaffold_categories.sql'),
     true,
     `seed profile "${profile}" must initialize template categories`,
   );

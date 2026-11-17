@@ -18,6 +18,9 @@ tables:
   - name: deploy_domain_verification
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_domain_dns_record
+    lifecycle_status: active
+    owner: deploy-platform
   - name: deploy_nginx_config
     lifecycle_status: active
     owner: deploy-platform
@@ -105,6 +108,9 @@ tables:
   - name: deploy_certificate_challenge
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_certificate_renewal
+    lifecycle_status: active
+    owner: deploy-platform
   - name: deploy_certificate_quota_usage
     lifecycle_status: active
     owner: deploy-platform
@@ -123,7 +129,13 @@ tables:
   - name: deploy_app
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_build_template
+  - name: deploy_app_source_spec
+    lifecycle_status: active
+    owner: deploy-platform
+  - name: deploy_app_source_spec_route
+    lifecycle_status: active
+    owner: deploy-platform
+  - name: deploy_build_recipe
     lifecycle_status: active
     owner: deploy-platform
   - name: deploy_app_platform_target
@@ -174,70 +186,18 @@ tables:
   - name: deploy_environment_promotion
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_certificate_renewal
+  - name: deploy_dns_zone_verification_file
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_app_source_spec
+  - name: deploy_application_scaffold_category
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_app_source_spec_route
+  - name: deploy_application_scaffold
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_app_template_category
+  - name: deploy_application_scaffold_version
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_app_template
-    lifecycle_status: active
-    owner: deploy-platform
-  - name: deploy_app_template_version
-    lifecycle_status: active
-    owner: deploy-platform
-  - name: deploy_domain_dns_record
-    lifecycle_status: active
-    owner: deploy-platform
-    columns:
-      id: { type: int64, required: true }
-      uuid: { type: string, required: true }
-      tenant_id: { type: int64, required: true }
-      organization_id: { type: int64, required: true }
-      zone_id: { type: int64, required: true }
-      domain_id: { type: int64, required: false }
-      record_name: { type: string, required: true }
-      record_type: { type: string, required: true }
-      record_value: { type: string, required: true }
-      ttl_seconds: { type: int32, required: false }
-      priority: { type: int32, required: false }
-      record_line: { type: string, required: false }
-      dns_provider: { type: string, required: true }
-      provider_account_id: { type: string, required: true }
-      provider_record_ref: { type: string, required: false }
-      record_status: { type: string, required: true }
-      synced_at: { type: instant, required: true }
-      created_by: { type: int64, required: false }
-      created_at: { type: instant, required: true }
-      updated_at: { type: instant, required: true }
-      version: { type: int64, required: true }
-      deleted_at: { type: instant, required: false }
-    constraints:
-      - { name: deploy_domain_dns_record_pkey, type: primary_key, columns: [id] }
-      - { name: uk_deploy_domain_dns_record_uuid, type: unique, columns: [uuid] }
-      - name: fk_deploy_domain_dns_record_zone
-        type: foreign_key
-        columns: [zone_id]
-        references_table: deploy_dns_zone
-        references_columns: [id]
-      - name: fk_deploy_domain_dns_record_domain
-        type: foreign_key
-        columns: [domain_id]
-        references_table: deploy_domain
-        references_columns: [id]
-      - { name: chk_deploy_domain_dns_record_owner, type: check }
-      - { name: chk_deploy_domain_dns_record_status, type: check }
-      - { name: chk_deploy_domain_dns_record_provider_account, type: check }
-    indexes:
-      - { name: uk_deploy_domain_dns_record_uuid, columns: [uuid], unique: true }
-      - { name: idx_deploy_domain_dns_record_zone, columns: [tenant_id, zone_id, synced_at, id], predicate: "deleted_at IS NULL" }
-      - { name: idx_deploy_domain_dns_record_domain, columns: [tenant_id, domain_id], predicate: "deleted_at IS NULL" }
   - name: deploy_download_catalog
     lifecycle_status: active
     owner: deploy-platform
@@ -250,6 +210,6 @@ tables:
   - name: deploy_download_update
     lifecycle_status: active
     owner: deploy-platform
-  - name: deploy_dns_zone_verification_file
+  - name: deploy_application_resource_link
     lifecycle_status: active
     owner: deploy-platform

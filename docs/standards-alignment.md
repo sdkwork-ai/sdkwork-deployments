@@ -81,7 +81,7 @@ control plane:
 
 - `deploy_app` is the tenant application aggregate (STATIC_WEB, SPA_WEB, API_SERVICE,
   WECHAT_MINIPROGRAM, DOUYIN_MINIPROGRAM, IOS_APP, ANDROID_APP, HARMONYOS_APP, DESKTOP_APP) with
-  `deploy_app_platform_target`, `deploy_source_repository`, `deploy_build_template`,
+  `deploy_app_platform_target`, `deploy_source_repository`, `deploy_build_recipe`,
   `deploy_build`, `deploy_package`, `deploy_release` (semver unique), `deploy_release_channel`,
   `deploy_channel_rollout`, and `deploy_signing_identity` tables from migration 0007.
 - Desktop and operating-system delivery is implemented: `DESKTOP_APP` targets

@@ -34,7 +34,7 @@
   "profiles": {
     "minimal": {
       "common": [
-        "common/015_deploy_app_template_categories.sql"
+        "common/015_deploy_application_scaffold_categories.sql"
       ],
       "locales": {
         "zh-CN": [],
@@ -44,7 +44,7 @@
     "standard": {
       "common": [
         "common/010_birdcoder_catalog_core.sql",
-        "common/015_deploy_app_template_categories.sql",
+        "common/015_deploy_application_scaffold_categories.sql",
         "common/014_birdcoder_catalog_production.sql"
       ],
       "locales": {
@@ -55,7 +55,7 @@
     "test": {
       "common": [
         "common/010_birdcoder_catalog_core.sql",
-        "common/015_deploy_app_template_categories.sql",
+        "common/015_deploy_application_scaffold_categories.sql",
         "common/011_birdcoder_catalog_test.sql"
       ],
       "locales": {
@@ -66,7 +66,7 @@
     "development": {
       "common": [
         "common/010_birdcoder_catalog_core.sql",
-        "common/015_deploy_app_template_categories.sql",
+        "common/015_deploy_application_scaffold_categories.sql",
         "common/012_birdcoder_catalog_development.sql"
       ],
       "locales": {
@@ -77,7 +77,7 @@
     "staging": {
       "common": [
         "common/010_birdcoder_catalog_core.sql",
-        "common/015_deploy_app_template_categories.sql",
+        "common/015_deploy_application_scaffold_categories.sql",
         "common/013_birdcoder_catalog_staging.sql"
       ],
       "locales": {
@@ -88,7 +88,7 @@
     "production": {
       "common": [
         "common/010_birdcoder_catalog_core.sql",
-        "common/015_deploy_app_template_categories.sql",
+        "common/015_deploy_application_scaffold_categories.sql",
         "common/014_birdcoder_catalog_production.sql"
       ],
       "locales": {

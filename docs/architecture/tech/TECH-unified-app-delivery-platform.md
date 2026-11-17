@@ -175,7 +175,7 @@ Unique: `(app_id, target_key)`. One active default target per platform per App.
 
 Unique: `(app_id, repo_key)` and `(tenant_id, repo_url, repo_status)` active index.
 
-### 4.4 `deploy_build_template`
+### 4.4 `deploy_build_recipe`
 
 | Column | Contract |
 | --- | --- |

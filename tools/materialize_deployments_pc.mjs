@@ -16,7 +16,7 @@ const packages = [
   ["admin-infrastructure", "backend-admin", "infrastructure", { "@sdkwork/deployments-pc-commons": "workspace:*" }, null, [["nginx", "Nginx", "Publishing gateway configuration", "deploy.nginx.write"]]],
   ["admin-nodes", "backend-admin", "nodes", { "@sdkwork/deployments-pc-commons": "workspace:*" }, null, [["clusters", "Clusters", "Node cluster of host nodes", "deploy.clusters.read"], ["nodes", "Nodes", "Host node inventory", "deploy.servers.read"]]],
   ["admin-audit", "backend-admin", "audit", { "@sdkwork/deployments-pc-commons": "workspace:*" }, null, [["audit", "Audit", "Publishing operator evidence", "deploy.auditLogs.read"]]],
-  // App template marketplace (deploy_app_template): the console storefront and
+  // App template marketplace (deploy_application_scaffold): the console storefront and
   // the author workbench render custom pages, so the generator only owns the
   // module declaration plus the extra index exports those pages are reachable
   // through; the admin module contributes registry-driven catalog resources

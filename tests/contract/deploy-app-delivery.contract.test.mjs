@@ -105,7 +105,7 @@ const expectedTables = [
   'deploy_app_mount',
   'deploy_app_binding',
   'deploy_source_repository',
-  'deploy_build_template',
+  'deploy_build_recipe',
   'deploy_build',
   'deploy_package',
   'deploy_release_channel',
