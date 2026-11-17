@@ -25,7 +25,9 @@ sdkwork-webserver-acme-service.workspace = true
 chrono.workspace = true
 idna.workspace = true
 psl.workspace = true
+reqwest.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

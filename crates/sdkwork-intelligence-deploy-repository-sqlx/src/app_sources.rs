@@ -24,10 +24,12 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_deploy_core::{
     evaluate_app_source_readiness, AppSourceArchiveFacts, AppSourceFacts, AppSourceGitFacts,
-    AppSourceReadinessReason, REMIX_SOURCE_REPOSITORY_KEY, SOURCE_REPOSITORY_STATUS_VALIDATED,
+    AppSourceReadinessReason, GitRepositoryValidationStatus, GitValidationErrorCode,
+    REMIX_SOURCE_REPOSITORY_KEY, SOURCE_REPOSITORY_STATUS_PENDING,
+    SOURCE_REPOSITORY_STATUS_VALIDATED,
 };
 use sdkwork_intelligence_deploy_service::repository::{
-    UpdateAppSourceCommand, UpdateAppSourceGitCommand,
+    GitRepositoryValidationWrite, UpdateAppSourceCommand, UpdateAppSourceGitCommand,
 };
 use sqlx::{postgres::PgRow, Postgres, Row, Transaction};
 
@@ -58,6 +60,8 @@ const APP_SOURCE_SELECT: &str = "
     r.clone_mode,
     r.credential_secret_ref,
     r.repo_status,
+    r.last_validated_at,
+    r.last_error_code,
     COALESCE(r.deleted_at IS NOT NULL, FALSE) AS repo_deleted,
     ar.uuid AS artifact_uuid,
     ar.package_type AS artifact_package_type,
@@ -322,15 +326,40 @@ impl DeployRepository {
         .map_err(|error| store_error("update deploy_app.remix_enabled", error))?;
         Ok(())
     }
+
+    pub(super) async fn record_git_repository_validation_repo(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        write: &GitRepositoryValidationWrite,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        let app_internal_id = resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
+        record_git_repository_validation_row(
+            &self.pool,
+            tenant_id,
+            app_internal_id,
+            actor_id,
+            write,
+        )
+        .await?;
+        self.retrieve_app_source_repo(tenant_id, app_id).await
+    }
 }
 
 /// Writes the reserved `remix` repository row and answers its internal id.
 ///
 /// The row is what carries the provider, URL, credential reference and validation
-/// state the readiness rule reads. `repo_status` is set to `VALIDATED` because the
-/// service already validated the configuration — what is *not* verified is remote
-/// reachability, which needs a Git worker this service does not host (recorded as a
-/// follow-up, not hidden behind a `PENDING` that nothing would ever advance).
+/// state the readiness rule reads. A write lands in `PENDING`, never in
+/// `VALIDATED`: the service validated the *declaration* (provider, scheme, ref,
+/// sub-path), and this layer has no way to know the remote exists. Only
+/// `apps.source.validate` records a verdict.
+///
+/// A repeated identical PUT keeps the recorded verdict, which is what makes the
+/// operation idempotent; changing the repository *identity* — provider, URL or
+/// credential reference — invalidates it, because a verdict describes one
+/// repository. `cloneMode` is not part of the identity: it changes how a client
+/// downloads, not which repository exists.
 ///
 /// `default_branch` is left at `main` rather than being overwritten with the
 /// selected ref: this row records *where* the repository is, and the ref is a
@@ -349,18 +378,39 @@ async fn upsert_remix_repository(
         "INSERT INTO deploy_source_repository
             (id, uuid, tenant_id, organization_id, app_id, repo_key, repo_provider,
              repo_url, default_branch, clone_mode, credential_secret_ref, repo_status,
-             last_validated_at, created_by, updated_by, created_at, updated_at, version)
-         VALUES ($1, $2, $3, 0, $4, $5, $6, $7, 'main', $8, $9, $10,
-                 CAST($11 AS TIMESTAMPTZ), $12, $12, CAST($11 AS TIMESTAMPTZ),
-                 CAST($11 AS TIMESTAMPTZ), 1)
+             last_validated_at, last_error_code, created_by, updated_by, created_at,
+             updated_at, version)
+         VALUES ($1, $2, $3, 0, $4, $5, $6, $7, 'main', $8, $9, $10, NULL, NULL,
+                 $11, $11, CAST($12 AS TIMESTAMPTZ), CAST($12 AS TIMESTAMPTZ), 1)
          ON CONFLICT (app_id, repo_key) WHERE deleted_at IS NULL DO UPDATE SET
              repo_provider = EXCLUDED.repo_provider,
              repo_url = EXCLUDED.repo_url,
              clone_mode = EXCLUDED.clone_mode,
              credential_secret_ref = EXCLUDED.credential_secret_ref,
-             repo_status = EXCLUDED.repo_status,
-             last_validated_at = EXCLUDED.last_validated_at,
-             last_error_code = NULL,
+             repo_status = CASE
+                 WHEN deploy_source_repository.repo_provider = EXCLUDED.repo_provider
+                  AND deploy_source_repository.repo_url = EXCLUDED.repo_url
+                  AND deploy_source_repository.credential_secret_ref
+                      IS NOT DISTINCT FROM EXCLUDED.credential_secret_ref
+                 THEN deploy_source_repository.repo_status
+                 ELSE EXCLUDED.repo_status
+             END,
+             last_validated_at = CASE
+                 WHEN deploy_source_repository.repo_provider = EXCLUDED.repo_provider
+                  AND deploy_source_repository.repo_url = EXCLUDED.repo_url
+                  AND deploy_source_repository.credential_secret_ref
+                      IS NOT DISTINCT FROM EXCLUDED.credential_secret_ref
+                 THEN deploy_source_repository.last_validated_at
+                 ELSE EXCLUDED.last_validated_at
+             END,
+             last_error_code = CASE
+                 WHEN deploy_source_repository.repo_provider = EXCLUDED.repo_provider
+                  AND deploy_source_repository.repo_url = EXCLUDED.repo_url
+                  AND deploy_source_repository.credential_secret_ref
+                      IS NOT DISTINCT FROM EXCLUDED.credential_secret_ref
+                 THEN deploy_source_repository.last_error_code
+                 ELSE EXCLUDED.last_error_code
+             END,
              updated_by = EXCLUDED.updated_by,
              updated_at = EXCLUDED.updated_at,
              version = deploy_source_repository.version + 1
@@ -375,14 +425,66 @@ async fn upsert_remix_repository(
     .bind(&git.repo_url)
     .bind(&git.clone_mode)
     .bind(git.credential_secret_ref.as_deref())
-    .bind(SOURCE_REPOSITORY_STATUS_VALIDATED)
-    .bind(&now)
+    .bind(SOURCE_REPOSITORY_STATUS_PENDING)
     .bind(actor_id)
+    .bind(&now)
     .fetch_one(&mut **transaction)
     .await
     .map_err(|error| store_error("upsert remix deploy_source_repository", error))?;
     row.try_get("id")
         .map_err(|error| DeployServiceError::Internal(format!("read remix repository id: {error}")))
+}
+
+/// Records one validation verdict on the reserved `remix` repository row.
+///
+/// `repo_status`, `last_validated_at` and `last_error_code` are one fact and are
+/// written together: the timestamp is set exactly for `VALIDATED` and cleared
+/// otherwise, so no reader sees a validated timestamp on an invalid row (or the
+/// reverse).
+async fn record_git_repository_validation_row(
+    pool: &sqlx::PgPool,
+    tenant_id: i64,
+    app_internal_id: i64,
+    actor_id: Option<i64>,
+    write: &GitRepositoryValidationWrite,
+) -> DeployServiceResult<()> {
+    let now = now_rfc3339();
+    let validated_at =
+        (write.repo_status == GitRepositoryValidationStatus::Validated).then(|| now.clone());
+    let updated = sqlx::query(
+        "UPDATE deploy_source_repository r
+            SET repo_status = $3,
+                last_validated_at = CAST($4 AS TIMESTAMPTZ),
+                last_error_code = $5,
+                updated_by = $6,
+                updated_at = CAST($7 AS TIMESTAMPTZ),
+                version = r.version + 1
+           FROM deploy_app_source s
+          WHERE s.git_repository_id = r.id
+            AND s.tenant_id = $1
+            AND s.app_id = $2
+            AND s.deleted_at IS NULL
+            AND r.tenant_id = $1
+            AND r.repo_key = $8
+            AND r.deleted_at IS NULL",
+    )
+    .bind(tenant_id)
+    .bind(app_internal_id)
+    .bind(write.repo_status.as_str())
+    .bind(validated_at.as_deref())
+    .bind(write.last_error_code.map(GitValidationErrorCode::as_str))
+    .bind(actor_id)
+    .bind(&now)
+    .bind(REMIX_SOURCE_REPOSITORY_KEY)
+    .execute(pool)
+    .await
+    .map_err(|error| store_error("record Git repository validation", error))?;
+    if updated.rows_affected() == 0 {
+        return Err(DeployServiceError::not_found(
+            "the application has no Git source to validate",
+        ));
+    }
+    Ok(())
 }
 
 /// Resolves the artifact named by an archive source and proves it is usable.
@@ -433,7 +535,7 @@ fn map_app_source_row(row: &PgRow) -> DeployServiceResult<AppSourceResponse> {
         .and_then(|value| AppSourceKind::parse(&value));
 
     let git = match source_kind {
-        Some(AppSourceKind::Git) => Some(git_response(row)),
+        Some(AppSourceKind::Git) => Some(git_response(row)?),
         _ => None,
     };
     let archive = match source_kind {
@@ -478,18 +580,37 @@ fn map_app_source_row(row: &PgRow) -> DeployServiceResult<AppSourceResponse> {
 /// `repo_ref` is the *effective* ref: the recorded `source_ref` when one was
 /// selected, otherwise the repository row's `default_branch`. Returning the
 /// fallback here is what lets the remix client use `repoRef` unconditionally.
-fn git_response(row: &PgRow) -> AppSourceGitResponse {
+///
+/// The validation facts (`repoStatus`, `lastValidatedAt`, `lastErrorCode`) are
+/// read from the row and explained through the core vocabulary, so the console
+/// gets the same sentence the audit trail recorded instead of carrying its own
+/// copy of every code.
+fn git_response(row: &PgRow) -> DeployServiceResult<AppSourceGitResponse> {
     let source_ref: Option<String> = row.try_get("source_ref").ok().flatten();
     let default_branch: String = row.try_get("default_branch").unwrap_or_default();
-    AppSourceGitResponse {
+    let repo_status: String = row.try_get("repo_status").unwrap_or_default();
+    let last_error_code: Option<String> = row.try_get("last_error_code").ok().flatten();
+    let parsed_error = last_error_code
+        .as_deref()
+        .and_then(GitValidationErrorCode::parse);
+    Ok(AppSourceGitResponse {
         repo_provider: row.try_get("repo_provider").unwrap_or_default(),
         repo_url: row.try_get("repo_url").unwrap_or_default(),
         repo_ref: source_ref.unwrap_or(default_branch),
         sub_path: row.try_get("sub_path").ok().flatten(),
         clone_mode: row.try_get("clone_mode").unwrap_or_default(),
         credential_secret_ref: row.try_get("credential_secret_ref").ok().flatten(),
-        repo_status: row.try_get("repo_status").unwrap_or_default(),
-    }
+        repo_status: repo_status.clone(),
+        last_validated_at: optional_datetime_from_row(row, "last_validated_at").map_err(
+            |error| {
+                DeployServiceError::Internal(format!("read repository last_validated_at: {error}"))
+            },
+        )?,
+        last_error_code,
+        last_error_description: parsed_error.map(|code| code.description().to_owned()),
+        credentials_required: repo_status == SOURCE_REPOSITORY_STATUS_VALIDATED
+            && parsed_error == Some(GitValidationErrorCode::CredentialsRequired),
+    })
 }
 
 fn archive_response(row: &PgRow) -> DeployServiceResult<AppSourceArchiveResponse> {

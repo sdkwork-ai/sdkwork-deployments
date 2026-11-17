@@ -201,6 +201,7 @@ export type { AppsSourceSpecsUpdateResponse } from './apps-source-specs-update-r
 export type { AppsSourceSpecsBindResponse } from './apps-source-specs-bind-response';
 export type { AppsSourceRetrieveResponse } from './apps-source-retrieve-response';
 export type { AppsSourceUpdateResponse } from './apps-source-update-response';
+export type { AppsSourceValidateResponse } from './apps-source-validate-response';
 export type { AppsRemixRetrieveResponse } from './apps-remix-retrieve-response';
 export type { AppsRemixUpdateResponse } from './apps-remix-update-response';
 export type { AppsResourceLinksListResponse } from './apps-resource-links-list-response';

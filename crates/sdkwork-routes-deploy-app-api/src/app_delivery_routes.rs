@@ -147,6 +147,7 @@ pub fn build_app_delivery_router() -> Router<AppState> {
                 .put(update_app_source)
                 .delete(delete_app_source),
         )
+        .route(paths::APP_SOURCE_VALIDATE, post(validate_app_source))
         .route(
             paths::APP_REMIX,
             get(retrieve_app_remix).put(update_app_remix),
@@ -635,6 +636,30 @@ async fn delete_app_source(
         async {
             let context = require_app_context(context)?;
             service_result(state.api.delete_app_source(&context, &app_id).await)
+        }
+        .await,
+    )
+}
+
+/// `POST /apps/{appId}/source/validate` — probe the Git repository and record the
+/// verdict.
+///
+/// Answers the updated source resource (the same shape `GET /source` returns), so
+/// the console sees the new `repoStatus`, `lastErrorCode` and derived `readiness`
+/// from one call. `422` when the configured source is an archive, `404` when there
+/// is no source at all.
+async fn validate_app_source(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state.api.validate_app_source(&context, &app_id).await?;
+            ok_json(envelope::resource(result))
         }
         .await,
     )

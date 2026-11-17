@@ -2742,8 +2742,12 @@ paths:
         the derived readiness verdict. Readiness is never stored: it is computed
         from the referenced repository's or artifact's current state on every
         read, so a retired artifact or a soft-deleted repository degrades the
-        verdict immediately. An application with no configured source answers 200
-        with readiness MISSING and reason SOURCE_NOT_CONFIGURED rather than 404.
+        verdict immediately. A Git source is READY only when repoStatus is
+        VALIDATED, which only apps.source.validate can record: PENDING answers
+        readiness MISSING with GIT_REPOSITORY_PENDING, and INVALID answers
+        GIT_REPOSITORY_INVALID with lastErrorCode naming the failure. An
+        application with no configured source answers 200 with readiness MISSING
+        and reason SOURCE_NOT_CONFIGURED rather than 404.
       tags:
       - app
       security:
@@ -2789,12 +2793,17 @@ paths:
         subPath (the repository-relative directory, for a monorepo), ARCHIVE
         carries the id of an artifact produced by the existing upload flow
         (uploadSessions.create, upload, uploadSessions.complete, artifacts.create).
-        The write is validated to produce a usable source, so a successful
-        response is READY; replacing the source never changes remixEnabled, and
-        removing it (DELETE) turns remix off in the same transaction. Remote
-        reachability of a Git repository is not verified by this operation.
-        Idempotent by construction: PUT replaces the whole selection, so a retried
-        request converges on the same row without an idempotency key.
+        The write validates the *declaration* only: provider, scheme, ref,
+        sub-path and clone mode. A Git write lands in PENDING, never VALIDATED,
+        so it is not READY — remote reachability is established exclusively by
+        apps.source.validate, which keeps a write from depending on the
+        reachability of a third-party host. An identical PUT preserves the
+        recorded verdict; changing repoProvider, repoUrl or credentialSecretRef
+        invalidates it and returns the repository to PENDING. Replacing the source
+        never changes remixEnabled, and removing it (DELETE) turns remix off in
+        the same transaction. Idempotent by construction: PUT replaces the whole
+        selection, so a retried request converges on the same row without an
+        idempotency key.
       tags:
       - app
       security:
@@ -2808,7 +2817,11 @@ paths:
               $ref: '#/components/schemas/UpdateAppSourceRequest'
       responses:
         '200':
-          description: The source was replaced and is ready.
+          description: >-
+            The source was replaced. A Git source reports repoStatus PENDING and
+            readiness MISSING (GIT_REPOSITORY_PENDING) until
+            apps.source.validate records a verdict; an archive source is READY
+            when its artifact is active.
           content:
             application/json:
               schema:
@@ -2866,6 +2879,85 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
         '404':
           description: The application has no configured source.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/source/validate:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: apps.source.validate
+      summary: Validate the application's Git source repository
+      description: >-
+        Probes the configured Git repository once and records the verdict, which
+        is the only way a Git source becomes READY. The probe is deliberately
+        limited: one bounded HTTP request (5 s budget, at most 5 redirects,
+        status code only, HEAD with a single GET fallback when the server refuses
+        HEAD). 2xx/3xx records VALIDATED with lastValidatedAt; 401/403 records
+        VALIDATED with GIT_VALIDATION_CREDENTIALS_REQUIRED, because the
+        repository is reachable and only the clone needs the credential; 404/410
+        records INVALID with GIT_VALIDATION_REPOSITORY_NOT_FOUND; 5xx records
+        INVALID with GIT_VALIDATION_SERVER_ERROR; a timeout or transport failure
+        records INVALID with GIT_VALIDATION_TIMEOUT or
+        GIT_VALIDATION_NETWORK_FAILURE. A git@host:path remote cannot be probed
+        without an SSH credential: it stays PENDING with
+        GIT_VALIDATION_UNSUPPORTED_SCHEME and needs manual confirmation — this
+        operation never fabricates VALIDATED. Reachable is not clonable: the
+        verdict proves the host answers for the URL, not that the recorded ref,
+        subPath or credentialSecretRef are correct. Safe to repeat: each call
+        re-probes and overwrites the recorded verdict, and an operation on a
+        source that is not Git answers 422. Writes an audit entry
+        (app.source.validate). Answers the updated source resource, so the caller
+        sees repoStatus, lastErrorCode and the derived readiness in one response.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: deploy.apps.write
+      responses:
+        '200':
+          description: >-
+            The validation attempt was recorded. Inspect repoStatus and
+            readiness: VALIDATED is a reachable repository, INVALID names the
+            failure in lastErrorCode, PENDING means the check could not run
+            (SSH remote or no probe wired) and needs manual confirmation.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceResponse'
+        '401':
+          description: Missing credentials.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: The application does not exist in the caller's tenant, or it has no source to validate.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: The configured source is an archive, so there is no Git repository to probe.
           content:
             application/problem+json:
               schema:
@@ -2930,11 +3022,15 @@ paths:
       summary: Enable or disable remix
       description: >-
         Enabling requires a READY source and is refused with 409 naming the
-        readiness reason (SOURCE_NOT_CONFIGURED, GIT_REPOSITORY_NOT_VALIDATED,
-        ARCHIVE_UNAVAILABLE, ...). Disabling is always accepted: an operator must
-        be able to switch remix off even when the source has become unusable.
-        Idempotent by construction: the body is the target state, so a retried
-        request converges without an idempotency key.
+        readiness reason (SOURCE_NOT_CONFIGURED, GIT_REPOSITORY_PENDING,
+        GIT_REPOSITORY_INVALID, GIT_REPOSITORY_NOT_VALIDATED,
+        ARCHIVE_UNAVAILABLE, ...). A Git source is READY only after
+        apps.source.validate records VALIDATED, so enabling remix for a freshly
+        written repository is refused until that check has run and succeeded.
+        Disabling is always accepted: an operator must be able to switch remix off
+        even when the source has become unusable. Idempotent by construction: the
+        body is the target state, so a retried request converges without an
+        idempotency key.
       tags:
       - app
       security:
@@ -10073,6 +10169,12 @@ components:
           description: Derived on every read from the referenced repository or artifact; never stored.
         readinessReason:
           type: string
+          description: >-
+            Closed-set code explaining a MISSING verdict. GIT_REPOSITORY_PENDING
+            means the repository was never probed (run apps.source.validate);
+            GIT_REPOSITORY_INVALID means the last probe failed (git.lastErrorCode
+            names the failure); GIT_REPOSITORY_NOT_VALIDATED covers a status this
+            API does not write.
           enum:
           - SOURCE_NOT_CONFIGURED
           - SOURCE_KIND_MISMATCH
@@ -10080,6 +10182,8 @@ components:
           - GIT_PROVIDER_UNSUPPORTED
           - GIT_REPOSITORY_URL_INVALID
           - GIT_REPOSITORY_NOT_VALIDATED
+          - GIT_REPOSITORY_PENDING
+          - GIT_REPOSITORY_INVALID
           - GIT_REFERENCE_INVALID
           - GIT_SUB_PATH_INVALID
           - ARCHIVE_UNAVAILABLE
@@ -10117,7 +10221,53 @@ components:
           type: string
         repoStatus:
           type: string
-          description: VALIDATED is what makes a Git source ready.
+          description: >-
+            VALIDATED is what makes a Git source ready. A GIT write lands in
+            PENDING; POST /app/v3/api/apps/{appId}/source/validate is the only
+            operation that can record VALIDATED or INVALID. REVOKED and ARCHIVED
+            exist in the shared repository table and are never written for a
+            remix source; a row carrying one reads as MISSING with
+            GIT_REPOSITORY_NOT_VALIDATED.
+          enum:
+          - PENDING
+          - VALIDATED
+          - INVALID
+          - REVOKED
+          - ARCHIVED
+        lastValidatedAt:
+          type: string
+          format: date-time
+          description: >-
+            When the repository last passed validation. Set exactly when
+            repoStatus is VALIDATED, cleared otherwise.
+        lastErrorCode:
+          type: string
+          description: >-
+            Outcome of the last validation attempt. On a VALIDATED row it is
+            present only when the repository is reachable but demands credentials
+            (GIT_VALIDATION_CREDENTIALS_REQUIRED); on a PENDING row it explains
+            why no probe ran; on an INVALID row it names the failure.
+          enum:
+          - GIT_VALIDATION_UNSUPPORTED_SCHEME
+          - GIT_VALIDATION_URL_INVALID
+          - GIT_VALIDATION_REPOSITORY_NOT_FOUND
+          - GIT_VALIDATION_SERVER_ERROR
+          - GIT_VALIDATION_UNEXPECTED_STATUS
+          - GIT_VALIDATION_TIMEOUT
+          - GIT_VALIDATION_NETWORK_FAILURE
+          - GIT_VALIDATION_CREDENTIALS_REQUIRED
+          - GIT_VALIDATION_PROBE_UNAVAILABLE
+        lastErrorDescription:
+          type: string
+          description: >-
+            Operator-facing sentence for lastErrorCode, so a client does not have
+            to carry its own copy of the vocabulary.
+        credentialsRequired:
+          type: boolean
+          description: >-
+            true when the last validation found the repository reachable but
+            answering 401/403, so the clone needs credentialSecretRef.
+          default: false
     AppSourceArchiveResponse:
       type: object
       additionalProperties: false
@@ -10191,6 +10341,12 @@ components:
           - MISSING
         readinessReason:
           type: string
+          description: >-
+            Closed-set code explaining a MISSING verdict. GIT_REPOSITORY_PENDING
+            means the repository was never probed (run apps.source.validate);
+            GIT_REPOSITORY_INVALID means the last probe failed (git.lastErrorCode
+            names the failure); GIT_REPOSITORY_NOT_VALIDATED covers a status this
+            API does not write.
           enum:
           - SOURCE_NOT_CONFIGURED
           - SOURCE_KIND_MISMATCH
@@ -10198,6 +10354,8 @@ components:
           - GIT_PROVIDER_UNSUPPORTED
           - GIT_REPOSITORY_URL_INVALID
           - GIT_REPOSITORY_NOT_VALIDATED
+          - GIT_REPOSITORY_PENDING
+          - GIT_REPOSITORY_INVALID
           - GIT_REFERENCE_INVALID
           - GIT_SUB_PATH_INVALID
           - ARCHIVE_UNAVAILABLE

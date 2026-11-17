@@ -27,8 +27,34 @@ use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::repository::{
     UpdateAppSourceCommand, UpdateAppSourceGitCommand,
 };
-use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
+use sdkwork_intelligence_deploy_service::{
+    DeployRepositoryPort, DeployService, GitRepositoryProbePort, GitRepositoryProbeResult,
+};
 use sqlx::PgPool;
+
+/// A probe whose answer the test controls.
+///
+/// Injected rather than dialled: what these tests prove is the persistence and
+/// the readiness transition (`PENDING` → `VALIDATED`/`INVALID`, and never a
+/// fabricated `VALIDATED`), not the HTTP client — which has its own loopback
+/// tests in the service crate.
+struct StaticGitProbe {
+    result: GitRepositoryProbeResult,
+}
+
+#[async_trait::async_trait]
+impl GitRepositoryProbePort for StaticGitProbe {
+    async fn probe(&self, _repo_url: &str) -> GitRepositoryProbeResult {
+        self.result.clone()
+    }
+}
+
+fn probing_service(
+    repository: &DeployRepository,
+    result: GitRepositoryProbeResult,
+) -> DeployService {
+    service(repository).with_git_repository_probe(std::sync::Arc::new(StaticGitProbe { result }))
+}
 
 const TENANT_ID: i64 = 7;
 const ORGANIZATION_ID: i64 = 9;
@@ -189,7 +215,7 @@ async fn an_application_without_a_source_reports_source_not_configured() {
 
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
-async fn a_git_source_with_a_sub_path_is_ready_and_reports_the_selection() {
+async fn a_git_source_is_pending_until_validation_records_a_verdict() {
     let (repository, _pool) = repository().await;
     let app_id = create_app(&repository, "git-source").await;
 
@@ -203,15 +229,212 @@ async fn a_git_source_with_a_sub_path_is_ready_and_reports_the_selection() {
         .await
         .expect("set git source");
 
-    assert_eq!(source.readiness, AppSourceReadiness::Ready);
+    // A write is a declaration, not a reachability claim.
     assert_eq!(source.source_kind, Some(AppSourceKind::Git));
-    let git = source.git.expect("git half");
+    let git = source.git.clone().expect("git half");
     assert_eq!(git.repo_provider, "GITHUB");
     assert_eq!(git.repo_url, "https://github.com/sdkwork/app.git");
     assert_eq!(git.repo_ref, "release/1.4");
     assert_eq!(git.sub_path.as_deref(), Some("apps/web"));
-    assert_eq!(git.repo_status, "VALIDATED");
+    assert_eq!(git.repo_status, "PENDING");
+    assert!(git.last_validated_at.is_none());
+    assert!(git.last_error_code.is_none());
+    assert!(!git.credentials_required);
     assert!(source.archive.is_none());
+    assert_eq!(source.readiness, AppSourceReadiness::Missing);
+    assert_eq!(
+        source.readiness_reason.as_deref(),
+        Some("GIT_REPOSITORY_PENDING")
+    );
+
+    // 2xx moves PENDING → VALIDATED, and only then is the source READY.
+    let service = probing_service(&repository, GitRepositoryProbeResult::Status(200));
+    let validated = service
+        .validate_app_source(&context(), &app_id)
+        .await
+        .expect("validate reachable repository");
+    assert_eq!(validated.readiness, AppSourceReadiness::Ready);
+    assert!(validated.readiness_reason.is_none());
+    let git = validated.git.expect("git half");
+    assert_eq!(git.repo_status, "VALIDATED");
+    assert!(
+        git.last_validated_at.is_some(),
+        "VALIDATED must stamp last_validated_at"
+    );
+    assert!(git.last_error_code.is_none());
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn validation_of_an_absent_repository_records_invalid_and_the_reason() {
+    let (repository, _pool) = repository().await;
+    let app_id = create_app(&repository, "git-invalid").await;
+    repository
+        .update_app_source(TENANT_ID, Some(ACTOR_ID), &app_id, &git_command(None))
+        .await
+        .expect("set git source");
+
+    let service = probing_service(&repository, GitRepositoryProbeResult::Status(404));
+    let invalid = service
+        .validate_app_source(&context(), &app_id)
+        .await
+        .expect("the attempt itself succeeds");
+    assert_eq!(invalid.readiness, AppSourceReadiness::Missing);
+    assert_eq!(
+        invalid.readiness_reason.as_deref(),
+        Some("GIT_REPOSITORY_INVALID")
+    );
+    let git = invalid.git.expect("git half");
+    assert_eq!(git.repo_status, "INVALID");
+    assert_eq!(
+        git.last_error_code.as_deref(),
+        Some("GIT_VALIDATION_REPOSITORY_NOT_FOUND")
+    );
+    assert!(
+        git.last_validated_at.is_none(),
+        "an invalid row must not carry a validation timestamp"
+    );
+    assert!(
+        git.last_error_description
+            .as_deref()
+            .is_some_and(|description| !description.is_empty()),
+        "the response must explain the failure"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn a_credentials_challenge_is_recorded_as_reachable_but_private() {
+    let (repository, _pool) = repository().await;
+    let app_id = create_app(&repository, "git-private").await;
+    repository
+        .update_app_source(TENANT_ID, Some(ACTOR_ID), &app_id, &git_command(None))
+        .await
+        .expect("set git source");
+
+    let service = probing_service(&repository, GitRepositoryProbeResult::Status(401));
+    let source = service
+        .validate_app_source(&context(), &app_id)
+        .await
+        .expect("validate private repository");
+    assert_eq!(
+        source.readiness,
+        AppSourceReadiness::Ready,
+        "a 401 proves the repository exists, so the source is ready"
+    );
+    let git = source.git.expect("git half");
+    assert_eq!(git.repo_status, "VALIDATED");
+    assert!(
+        git.credentials_required,
+        "the clone will need credentialSecretRef"
+    );
+    assert_eq!(
+        git.last_error_code.as_deref(),
+        Some("GIT_VALIDATION_CREDENTIALS_REQUIRED")
+    );
+    assert!(
+        git.last_validated_at.is_some(),
+        "a reachable repository is validated even when it demands credentials"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn an_ssh_remote_stays_pending_and_needs_manual_confirmation() {
+    let (repository, _pool) = repository().await;
+    let app_id = create_app(&repository, "git-ssh").await;
+    let mut command = git_command(None);
+    command.git.as_mut().expect("git half").repo_url = "git@github.com:sdkwork/app.git".to_owned();
+    repository
+        .update_app_source(TENANT_ID, Some(ACTOR_ID), &app_id, &command)
+        .await
+        .expect("set ssh git source");
+
+    // Even with a probe installed: an SSH remote must never be reported as
+    // validated, because nothing here can authenticate to it.
+    let service = probing_service(&repository, GitRepositoryProbeResult::Status(200));
+    let source = service
+        .validate_app_source(&context(), &app_id)
+        .await
+        .expect("validate ssh repository");
+    assert_eq!(source.readiness, AppSourceReadiness::Missing);
+    assert_eq!(
+        source.readiness_reason.as_deref(),
+        Some("GIT_REPOSITORY_PENDING")
+    );
+    let git = source.git.expect("git half");
+    assert_eq!(git.repo_status, "PENDING");
+    assert_eq!(
+        git.last_error_code.as_deref(),
+        Some("GIT_VALIDATION_UNSUPPORTED_SCHEME")
+    );
+    assert!(git.last_validated_at.is_none());
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn an_identical_put_keeps_the_verdict_and_a_changed_url_invalidates_it() {
+    let (repository, _pool) = repository().await;
+    let app_id = create_app(&repository, "git-idempotent-put").await;
+    repository
+        .update_app_source(TENANT_ID, Some(ACTOR_ID), &app_id, &git_command(None))
+        .await
+        .expect("set git source");
+    let service = probing_service(&repository, GitRepositoryProbeResult::Status(200));
+    service
+        .validate_app_source(&context(), &app_id)
+        .await
+        .expect("validate");
+
+    let replay = repository
+        .update_app_source(TENANT_ID, Some(ACTOR_ID), &app_id, &git_command(None))
+        .await
+        .expect("replay the same PUT");
+    assert_eq!(
+        replay.git.expect("git half").repo_status,
+        "VALIDATED",
+        "an identical PUT must not throw away a verdict it still describes"
+    );
+
+    let mut moved = git_command(None);
+    moved.git.as_mut().expect("git half").repo_url =
+        "https://gitlab.com/sdkwork/app.git".to_owned();
+    let changed = repository
+        .update_app_source(TENANT_ID, Some(ACTOR_ID), &app_id, &moved)
+        .await
+        .expect("replace with another repository");
+    let git = changed.git.expect("git half");
+    assert_eq!(git.repo_status, "PENDING");
+    assert!(git.last_validated_at.is_none());
+    assert_eq!(changed.readiness, AppSourceReadiness::Missing);
+    assert_eq!(
+        changed.readiness_reason.as_deref(),
+        Some("GIT_REPOSITORY_PENDING")
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn validating_an_archive_source_is_a_validation_error() {
+    let (repository, pool) = repository().await;
+    let service = service(&repository);
+    let app_id = create_app(&repository, "validate-archive").await;
+    seed_artifact(&pool, &app_id, ARTIFACT_UUID).await;
+    repository
+        .update_app_source(
+            TENANT_ID,
+            Some(ACTOR_ID),
+            &app_id,
+            &archive_command(ARTIFACT_UUID),
+        )
+        .await
+        .expect("set archive source");
+
+    let refused = service
+        .validate_app_source(&context(), &app_id)
+        .await
+        .expect_err("an archive has no repository to probe");
+    assert_eq!(refused.kind(), DeployServiceErrorKind::Validation);
 }
 
 #[tokio::test]

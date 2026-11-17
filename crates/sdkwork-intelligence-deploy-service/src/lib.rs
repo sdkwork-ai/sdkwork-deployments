@@ -19,6 +19,7 @@ pub mod domain_dns_records;
 pub mod domain_verification;
 pub mod downloads;
 pub mod entitlement;
+pub mod git_repository_probe;
 pub mod repository;
 pub mod runtime_publication;
 pub mod template_market_access;
@@ -65,11 +66,16 @@ pub use domain_verification::{
     DomainVerificationChallenge, DomainVerificationObservation,
     UnconfiguredDomainOwnershipVerifier,
 };
+pub use git_repository_probe::{
+    BoundedGitRepositoryProbe, GitRepositoryProbePort, GitRepositoryProbeResult,
+    GIT_REPOSITORY_PROBE_REDIRECT_LIMIT, GIT_REPOSITORY_PROBE_TIMEOUT,
+};
 pub use repository::{
     AppIdentityProvisioningTarget, CertificateOrderClaim, CertificateRenewalClaim,
     DeployRepositoryPort, DnsChallengeZone, DnsRecordSnapshotRow, DomainDnsRecordFilter,
     DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset, ExpiredCertificateSweep,
-    TemplateReadScope, UpdateAppSourceCommand, UpdateAppSourceGitCommand, ZoneDnsSyncTarget,
+    GitRepositoryValidationWrite, TemplateReadScope, UpdateAppSourceCommand,
+    UpdateAppSourceGitCommand, ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,
@@ -142,6 +148,13 @@ pub struct DeployService {
     /// the platform crawlers themselves can do (timeouts, body caps), because a
     /// self-check with powers the crawler lacks endorses nothing.
     pub(crate) verification_probe: Arc<dyn crate::verification_file::VerificationFileProbePort>,
+    /// The outbound HTTP probe a Git source is validated with.
+    ///
+    /// `Option` because there is no honest default: a deployment that hosts no
+    /// egress must report "not checked" rather than pretend a probe it never made
+    /// succeeded. Until one is installed, `apps.source.validate` leaves the
+    /// repository `PENDING` with `GIT_VALIDATION_PROBE_UNAVAILABLE`.
+    pub(crate) git_repository_probe: Option<Arc<dyn GitRepositoryProbePort>>,
     runtime_publication: Option<Arc<RuntimePublicationService>>,
 }
 
@@ -162,6 +175,7 @@ impl DeployService {
             verification_probe: Arc::new(
                 crate::verification_file::UnconfiguredVerificationFileProbe,
             ),
+            git_repository_probe: None,
             runtime_publication: None,
         }
     }
@@ -188,6 +202,7 @@ impl DeployService {
             verification_probe: Arc::new(
                 crate::verification_file::UnconfiguredVerificationFileProbe,
             ),
+            git_repository_probe: None,
             runtime_publication: Some(runtime_publication),
         }
     }
@@ -201,6 +216,18 @@ impl DeployService {
         probe: Arc<dyn crate::verification_file::VerificationFileProbePort>,
     ) -> Self {
         self.verification_probe = probe;
+        self
+    }
+
+    /// Installs the outbound probe that `apps.source.validate` runs against a Git
+    /// repository.
+    ///
+    /// Without it the operation answers `PENDING` with
+    /// `GIT_VALIDATION_PROBE_UNAVAILABLE` and the source stays unusable: "we did
+    /// not check" must never be written as `VALIDATED`, because `VALIDATED` is
+    /// what enables remix.
+    pub fn with_git_repository_probe(mut self, probe: Arc<dyn GitRepositoryProbePort>) -> Self {
+        self.git_repository_probe = Some(probe);
         self
     }
 

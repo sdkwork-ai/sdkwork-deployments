@@ -84,6 +84,13 @@ pub const APP_SOURCE_SPEC_SOURCE: &str = "/app/v3/api/apps/{appId}/source_specs/
 /// than a collection: `GET` answers `200` with `MISSING` when nothing is
 /// configured, because "no source" is a state of the resource, not an absent one.
 pub const APP_SOURCE: &str = "/app/v3/api/apps/{appId}/source";
+/// The validation command for that source.
+///
+/// A sub-resource rather than a field on the PUT: validating is an *action*
+/// against the current configuration, it can be repeated, and it is the only
+/// operation that can turn a Git source `READY`. Folding it into the write would
+/// make every PUT depend on the reachability of a third-party host.
+pub const APP_SOURCE_VALIDATE: &str = "/app/v3/api/apps/{appId}/source/validate";
 /// The remix state: the enable switch plus the download instructions.
 pub const APP_REMIX: &str = "/app/v3/api/apps/{appId}/remix";
 pub const BUILD_TEMPLATES: &str = "/app/v3/api/build_templates";

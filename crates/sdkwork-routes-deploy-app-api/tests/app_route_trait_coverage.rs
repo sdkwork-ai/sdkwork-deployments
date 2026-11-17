@@ -186,6 +186,11 @@ async fn no_app_operation_falls_back_to_a_default_trait_body() {
     );
     record_default_body!(
         unbacked,
+        "apps.source.validate",
+        api.validate_app_source(&context, "probe-id").await
+    );
+    record_default_body!(
+        unbacked,
         "apps.remix.retrieve",
         api.retrieve_app_remix(&context, "probe-id").await
     );

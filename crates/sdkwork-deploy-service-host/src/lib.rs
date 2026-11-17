@@ -23,10 +23,10 @@ use sdkwork_deploy_web_port::{
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{
-    AccountBackedDns01PresenterResolver, CertificateAuthorityAuthorizationPort,
-    CertificateDns01PresenterPort, DeployRepositoryPort, DeployRuntimeAssignmentRepositoryPort,
-    DeployService, RuntimePublicationService, UnconfiguredCertificateAuthorityAuthorization,
-    UnconfiguredCertificateDns01Presenter,
+    AccountBackedDns01PresenterResolver, BoundedGitRepositoryProbe,
+    CertificateAuthorityAuthorizationPort, CertificateDns01PresenterPort, DeployRepositoryPort,
+    DeployRuntimeAssignmentRepositoryPort, DeployService, RuntimePublicationService,
+    UnconfiguredCertificateAuthorityAuthorization, UnconfiguredCertificateDns01Presenter,
 };
 
 mod certificate_caa;
@@ -350,6 +350,22 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     // that could read more than the platform's fetcher would endorse nothing.
     if let Ok(probe) = verification_file_probe::BoundedVerificationFileProbe::new() {
         service = service.with_verification_file_probe(std::sync::Arc::new(probe));
+    }
+    // The Git source probe is the only way `apps.source.validate` can move a
+    // repository from PENDING to VALIDATED. A deployment whose client cannot be
+    // built keeps the operation honest instead of unavailable: it reports
+    // `GIT_VALIDATION_PROBE_UNAVAILABLE` and leaves the source PENDING rather than
+    // endorsing a repository nobody checked.
+    match BoundedGitRepositoryProbe::new() {
+        Ok(probe) => {
+            service = service.with_git_repository_probe(std::sync::Arc::new(probe));
+        }
+        Err(error) => {
+            tracing::warn!(
+                "git source validation probe unavailable; apps.source.validate will report \
+                 GIT_VALIDATION_PROBE_UNAVAILABLE: {error}"
+            );
+        }
     }
     if let Some(key_provider) = certificate_material_key_from_env()? {
         service = service.with_certificate_material_key_provider(key_provider);

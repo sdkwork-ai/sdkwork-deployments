@@ -41,6 +41,7 @@ use sdkwork_deploy_contract::{
     UpdateNodeClusterRequest, UpdateServerRequest, UpdateTemplateCategoryRequest, UsageEventPage,
     UsageEventResponse, UsageReconciliationResponse,
 };
+use sdkwork_deploy_core::{GitRepositoryValidationStatus, GitValidationErrorCode};
 
 use crate::{CertificateOrderCaaSubject, DomainVerificationChallenge};
 use sdkwork_deploy_contract::{
@@ -2034,6 +2035,25 @@ pub trait DeployRepositoryPort:
         app_id: &str,
         enabled: bool,
     ) -> DeployServiceResult<()>;
+
+    /// Records the outcome of one Git validation attempt on the reserved `remix`
+    /// repository row, and answers the re-read source.
+    ///
+    /// `repo_status`, `last_validated_at` and `last_error_code` are written
+    /// together because they are one fact: `last_validated_at` is set exactly when
+    /// the status is `VALIDATED`, and cleared otherwise, so a reader never has to
+    /// decide which of two disagreeing columns to believe.
+    ///
+    /// Fails with `NotFound` when the application has no Git source to validate —
+    /// an archive source is not a Git repository, and "nothing to probe" is not a
+    /// successful validation.
+    async fn record_git_repository_validation(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        write: &GitRepositoryValidationWrite,
+    ) -> DeployServiceResult<AppSourceResponse>;
 }
 
 /// A validated, normalized remix-source write.
@@ -2063,6 +2083,18 @@ pub struct UpdateAppSourceGitCommand {
     pub credential_secret_ref: Option<String>,
     /// `FULL` or `SHALLOW`; already defaulted.
     pub clone_mode: String,
+}
+
+/// One recorded Git validation attempt.
+///
+/// The vocabulary comes from `sdkwork_deploy_core` rather than from strings, so a
+/// repository cannot persist a status the readiness rule does not understand. The
+/// timestamp is not carried: the writer stamps `last_validated_at` exactly for
+/// `Validated`, which is what keeps the two columns consistent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GitRepositoryValidationWrite {
+    pub repo_status: GitRepositoryValidationStatus,
+    pub last_error_code: Option<GitValidationErrorCode>,
 }
 
 /// One published installer with the release facts a feed needs.

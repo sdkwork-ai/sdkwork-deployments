@@ -27,13 +27,18 @@ pub use app_kind_rules::{
     WECHAT_MINIPROGRAM_TOTAL_PACKAGE_BYTES,
 };
 pub use app_source::{
-    evaluate_app_source_readiness, is_supported_clone_mode, is_supported_repo_provider,
-    normalize_app_source_sub_path, normalize_source_ref, remix_can_be_enabled,
-    validate_source_repo_url, AppSourceArchiveFacts, AppSourceFacts, AppSourceGitFacts,
-    AppSourceKind, AppSourceReadiness, AppSourceReadinessOutcome, AppSourceReadinessReason,
-    SourceRefError, SourceSubPathError, APP_SOURCE_CLONE_MODES, APP_SOURCE_REPO_PROVIDERS,
-    MAXIMUM_SOURCE_REF_LENGTH, MAXIMUM_SOURCE_REPO_URL_LENGTH, MAXIMUM_SOURCE_SUB_PATH_LENGTH,
-    REMIX_SOURCE_REPOSITORY_KEY, SOURCE_REPOSITORY_STATUS_VALIDATED,
+    advance_git_repository_validation, classify_git_repository_probe,
+    evaluate_app_source_readiness, git_repository_validation_record, is_supported_clone_mode,
+    is_supported_repo_provider, normalize_app_source_sub_path, normalize_source_ref,
+    plan_git_repository_probe, remix_can_be_enabled, validate_source_repo_url,
+    AppSourceArchiveFacts, AppSourceFacts, AppSourceGitFacts, AppSourceKind, AppSourceReadiness,
+    AppSourceReadinessOutcome, AppSourceReadinessReason, GitRepositoryProbeObservation,
+    GitRepositoryProbePlan, GitRepositoryProbeVerdict, GitRepositoryValidationRecord,
+    GitRepositoryValidationStatus, GitValidationErrorCode, SourceRefError, SourceSubPathError,
+    APP_SOURCE_CLONE_MODES, APP_SOURCE_REPO_PROVIDERS, MAXIMUM_SOURCE_REF_LENGTH,
+    MAXIMUM_SOURCE_REPO_URL_LENGTH, MAXIMUM_SOURCE_SUB_PATH_LENGTH, REMIX_SOURCE_REPOSITORY_KEY,
+    SOURCE_REPOSITORY_STATUS_INVALID, SOURCE_REPOSITORY_STATUS_PENDING,
+    SOURCE_REPOSITORY_STATUS_VALIDATED,
 };
 pub use certificate_key_algorithm::{
     validate_certificate_key_algorithm, CERTIFICATE_DEFAULT_KEY_ALGORITHM,

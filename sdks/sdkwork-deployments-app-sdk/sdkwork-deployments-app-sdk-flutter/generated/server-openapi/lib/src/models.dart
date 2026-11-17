@@ -6494,6 +6494,10 @@ class AppSourceGitResponse {
   final String cloneMode;
   final String? credentialSecretRef;
   final String repoStatus;
+  final String? lastValidatedAt;
+  final String? lastErrorCode;
+  final String? lastErrorDescription;
+  final bool? credentialsRequired;
 
   AppSourceGitResponse({
     required this.repoProvider,
@@ -6502,7 +6506,11 @@ class AppSourceGitResponse {
     this.subPath,
     required this.cloneMode,
     this.credentialSecretRef,
-    required this.repoStatus
+    required this.repoStatus,
+    this.lastValidatedAt,
+    this.lastErrorCode,
+    this.lastErrorDescription,
+    this.credentialsRequired
   });
 
   factory AppSourceGitResponse.fromJson(Map<String, dynamic> json) {
@@ -6543,7 +6551,11 @@ class AppSourceGitResponse {
           throw FormatException('AppSourceGitResponse.repoStatus is required');
         }
         return value;
-      })()
+      })(),
+      lastValidatedAt: json['lastValidatedAt']?.toString(),
+      lastErrorCode: json['lastErrorCode']?.toString(),
+      lastErrorDescription: json['lastErrorDescription']?.toString(),
+      credentialsRequired: json['credentialsRequired'] is bool ? json['credentialsRequired'] : null
     );
   }
 
@@ -6556,6 +6568,10 @@ class AppSourceGitResponse {
       'cloneMode': cloneMode,
       'credentialSecretRef': credentialSecretRef,
       'repoStatus': repoStatus,
+      'lastValidatedAt': lastValidatedAt,
+      'lastErrorCode': lastErrorCode,
+      'lastErrorDescription': lastErrorDescription,
+      'credentialsRequired': credentialsRequired,
     };
   }
 }
@@ -12079,6 +12095,52 @@ class AppsSourceUpdateResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AppsSourceUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsSourceValidateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsSourceValidateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsSourceValidateResponse.fromJson(Map<String, dynamic> json) {
+    return AppsSourceValidateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsSourceValidateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsSourceValidateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsSourceValidateResponse.traceId is required');
         }
         return value;
       })()

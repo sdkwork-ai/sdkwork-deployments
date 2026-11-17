@@ -29,12 +29,16 @@ use sdkwork_deploy_contract::{
     DeployServiceResult, UpdateAppRemixRequest, UpdateAppSourceRequest,
 };
 use sdkwork_deploy_core::{
-    is_supported_clone_mode, is_supported_repo_provider, normalize_app_source_sub_path,
-    normalize_source_ref, remix_can_be_enabled, validate_source_repo_url, AppSourceReadiness,
-    MAXIMUM_SOURCE_REPO_URL_LENGTH,
+    git_repository_validation_record, is_supported_clone_mode, is_supported_repo_provider,
+    normalize_app_source_sub_path, normalize_source_ref, plan_git_repository_probe,
+    remix_can_be_enabled, validate_source_repo_url, AppSourceReadiness,
+    GitRepositoryProbeObservation, GitRepositoryProbePlan, MAXIMUM_SOURCE_REPO_URL_LENGTH,
 };
 
-use crate::repository::{UpdateAppSourceCommand, UpdateAppSourceGitCommand};
+use crate::git_repository_probe::GitRepositoryProbeResult;
+use crate::repository::{
+    GitRepositoryValidationWrite, UpdateAppSourceCommand, UpdateAppSourceGitCommand,
+};
 use crate::DeployService;
 
 const DEFAULT_CLONE_MODE: &str = "SHALLOW";
@@ -59,12 +63,17 @@ impl DeployService {
     /// Creates or replaces the source.
     ///
     /// Replacing the source never changes `remix_enabled`: the write is validated
-    /// to produce a usable source (a supported provider and well-formed URL for
-    /// Git; an active, application-attributed artifact for an archive), so a
-    /// replacement cannot leave remix pointing at nothing. A source that *later*
-    /// becomes unusable — an artifact retired out from under it — degrades
-    /// readiness to `MISSING`, which the read path reports and the download path
-    /// refuses.
+    /// to produce a *structurally* usable source (a supported provider and
+    /// well-formed URL for Git; an active, application-attributed artifact for an
+    /// archive), and a replacement cannot leave remix pointing at nothing.
+    ///
+    /// A Git write no longer claims the repository is reachable: it lands in
+    /// `PENDING`, and only [`Self::validate_app_source`] can move it to
+    /// `VALIDATED`. Until then readiness is `MISSING` with
+    /// `GIT_REPOSITORY_PENDING`, and remix cannot be enabled. A source that later
+    /// becomes unusable — an artifact retired out from under it, a repository
+    /// re-probed as `INVALID` — degrades the same way, which the read path reports
+    /// and the download path refuses.
     pub async fn update_app_source(
         &self,
         context: &DeployAppRequestContext,
@@ -80,6 +89,68 @@ impl DeployService {
             .update_app_source(tenant_id, context.actor_id, app_id, &command)
             .await?;
         self.audit_app_action(context, "app.source.update", app_id)
+            .await?;
+        Ok(source)
+    }
+
+    /// Probes the configured Git repository and records the verdict.
+    ///
+    /// This is the only writer that can produce `VALIDATED`, which is why the
+    /// write path above deliberately leaves `PENDING`: "the declaration is
+    /// well-formed" and "the repository is reachable" are different claims, and
+    /// only this operation makes the second one.
+    ///
+    /// What it can and cannot establish:
+    ///
+    /// * an `http(s)` URL is probed once, bounded (5 s, ≤ 5 redirects, status code
+    ///   only). `2xx`/`3xx` → `VALIDATED`; `401`/`403` → `VALIDATED` with
+    ///   `GIT_VALIDATION_CREDENTIALS_REQUIRED` (reachable, but the clone will need
+    ///   the credential reference); `404`/`410`/`5xx`/timeout/transport failure →
+    ///   `INVALID` with the matching code;
+    /// * a `git@host:path` remote cannot be probed without an SSH credential, so
+    ///   it stays `PENDING` with `GIT_VALIDATION_UNSUPPORTED_SCHEME`. It is never
+    ///   written `VALIDATED`: this service does not know that repository exists;
+    /// * with no probe installed the row stays `PENDING` with
+    ///   `GIT_VALIDATION_PROBE_UNAVAILABLE`.
+    ///
+    /// Reachable is not clonable: the probe proves the host answers for the URL,
+    /// not that the ref, the sub-path or the credential are right.
+    pub async fn validate_app_source(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        let tenant_id = Self::tenant_id(context)?;
+        Self::assert_caller_app_scope(context, app_id)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
+        let source = self
+            .repository
+            .retrieve_app_source(tenant_id, app_id)
+            .await?;
+        let repo_url = git_repository_url_for_validation(&source)?.to_owned();
+
+        // Probe only when the URL shape allows it *and* a probe is installed; every
+        // other combination is decided by the core rule, so the "SSH stays PENDING"
+        // and "no probe stays PENDING" outcomes cannot diverge from the read path.
+        let probe_result = match plan_git_repository_probe(&repo_url) {
+            GitRepositoryProbePlan::HttpProbe => match self.git_repository_probe.as_ref() {
+                Some(probe) => Some(probe.probe(&repo_url).await),
+                None => None,
+            },
+            GitRepositoryProbePlan::RequiresManualConfirmation
+            | GitRepositoryProbePlan::UnusableUrl => None,
+        };
+        let observation = probe_result.as_ref().map(probe_observation);
+        let record = git_repository_validation_record(&repo_url, observation);
+        let write = GitRepositoryValidationWrite {
+            repo_status: record.status,
+            last_error_code: record.error_code,
+        };
+        let source = self
+            .repository
+            .record_git_repository_validation(tenant_id, context.actor_id, app_id, &write)
+            .await?;
+        self.audit_app_action(context, "app.source.validate", app_id)
             .await?;
         Ok(source)
     }
@@ -179,6 +250,47 @@ pub(crate) fn ensure_remix_can_be_enabled(source: &AppSourceResponse) -> DeployS
         "remix cannot be enabled: the application source is {} ({reason})",
         source.readiness.as_str()
     )))
+}
+
+/// Resolves the repository URL one validation attempt should probe.
+///
+/// Split out because the three refusals have three different meanings and the
+/// tests pin them without a database: no source at all is `404` (nothing exists
+/// to validate), an archive source is `422` (the operation does not apply to it),
+/// and a Git pointer with no repository facts is an internal inconsistency rather
+/// than anything the caller did.
+fn git_repository_url_for_validation(source: &AppSourceResponse) -> DeployServiceResult<&str> {
+    match source.source_kind {
+        None => Err(DeployServiceError::not_found(
+            "the application has no remix source to validate",
+        )),
+        Some(AppSourceKind::Archive) => Err(DeployServiceError::validation(
+            "the application source is an archive; only a Git source can be validated",
+        )),
+        Some(AppSourceKind::Git) => source
+            .git
+            .as_ref()
+            .map(|git| git.repo_url.as_str())
+            .ok_or_else(|| {
+                DeployServiceError::Internal(
+                    "the Git source is missing its repository facts".to_owned(),
+                )
+            }),
+    }
+}
+
+/// Narrows a transport observation to the vocabulary the core rule interprets.
+///
+/// Kept as a function so the mapping is testable and so the transport enum never
+/// leaks into `sdkwork_deploy_core`.
+fn probe_observation(result: &GitRepositoryProbeResult) -> GitRepositoryProbeObservation<'_> {
+    match result {
+        GitRepositoryProbeResult::Status(status) => GitRepositoryProbeObservation::Status(*status),
+        GitRepositoryProbeResult::TimedOut => GitRepositoryProbeObservation::TimedOut,
+        GitRepositoryProbeResult::NetworkFailure(detail) => {
+            GitRepositoryProbeObservation::NetworkFailure(detail)
+        }
+    }
 }
 
 /// Projects the source resource onto the remix resource.
@@ -512,5 +624,85 @@ mod tests {
             None
         )
         .is_none());
+    }
+
+    fn git_response() -> AppSourceGitResponse {
+        AppSourceGitResponse {
+            repo_url: "https://github.com/sdkwork/app.git".to_owned(),
+            repo_ref: "main".to_owned(),
+            repo_status: "PENDING".to_owned(),
+            ..AppSourceGitResponse::default()
+        }
+    }
+
+    fn source_of_kind(
+        kind: Option<AppSourceKind>,
+        git: Option<AppSourceGitResponse>,
+    ) -> AppSourceResponse {
+        AppSourceResponse {
+            source_kind: kind,
+            git,
+            ..source(AppSourceReadiness::Missing, "SOURCE_NOT_CONFIGURED")
+        }
+    }
+
+    #[test]
+    fn validating_a_git_source_answers_its_repository_url() {
+        let source = source_of_kind(Some(AppSourceKind::Git), Some(git_response()));
+        assert_eq!(
+            git_repository_url_for_validation(&source).expect("a Git source is validatable"),
+            "https://github.com/sdkwork/app.git"
+        );
+    }
+
+    #[test]
+    fn validating_without_a_source_is_not_found() {
+        let source = source_of_kind(None, None);
+        assert_eq!(
+            git_repository_url_for_validation(&source)
+                .expect_err("nothing to validate")
+                .kind(),
+            DeployServiceErrorKind::NotFound
+        );
+    }
+
+    #[test]
+    fn validating_an_archive_source_is_a_validation_error() {
+        let source = source_of_kind(Some(AppSourceKind::Archive), None);
+        assert_eq!(
+            git_repository_url_for_validation(&source)
+                .expect_err("an archive is not a repository")
+                .kind(),
+            DeployServiceErrorKind::Validation
+        );
+    }
+
+    #[test]
+    fn a_git_source_without_its_repository_facts_is_an_internal_inconsistency() {
+        let source = source_of_kind(Some(AppSourceKind::Git), None);
+        assert_eq!(
+            git_repository_url_for_validation(&source)
+                .expect_err("a Git pointer without a repository is inconsistent")
+                .kind(),
+            DeployServiceErrorKind::Internal
+        );
+    }
+
+    #[test]
+    fn the_transport_observation_keeps_the_status_and_the_failure_kind() {
+        assert_eq!(
+            probe_observation(&GitRepositoryProbeResult::Status(401)),
+            GitRepositoryProbeObservation::Status(401)
+        );
+        assert_eq!(
+            probe_observation(&GitRepositoryProbeResult::TimedOut),
+            GitRepositoryProbeObservation::TimedOut
+        );
+        assert_eq!(
+            probe_observation(&GitRepositoryProbeResult::NetworkFailure(
+                "dns lookup failed".to_owned()
+            )),
+            GitRepositoryProbeObservation::NetworkFailure("dns lookup failed")
+        );
     }
 }

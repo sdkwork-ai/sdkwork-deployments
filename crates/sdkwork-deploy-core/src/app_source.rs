@@ -96,6 +96,13 @@ impl AppSourceReadiness {
 /// `Ready` carries no reason; every `MISSING` verdict carries exactly one, which
 /// is what lets the console replace an opaque "source missing" with an actionable
 /// sentence ("the repository has not been validated yet").
+///
+/// The three Git repository states are kept apart on purpose, because they ask
+/// the operator for three different actions: `PENDING` asks for
+/// `apps.source.validate`, `INVALID` asks for a fix first (the failing detail is
+/// `git.lastErrorCode`), and `NOT_VALIDATED` covers a status this module does not
+/// produce itself (`ARCHIVED`, or a row written by an older deployment) where no
+/// probe has ever run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppSourceReadinessReason {
     /// No source row has been written for the application.
@@ -108,8 +115,12 @@ pub enum AppSourceReadinessReason {
     GitProviderUnsupported,
     /// The repository URL is empty, too long, or uses an unsupported scheme.
     GitRepositoryUrlInvalid,
-    /// The repository is registered but has not been validated.
+    /// The repository is registered but has never been validated.
     GitRepositoryNotValidated,
+    /// The repository is waiting for `apps.source.validate` to run.
+    GitRepositoryPending,
+    /// The last validation attempt failed; the recorded error code says why.
+    GitRepositoryInvalid,
     /// The recorded ref is not a usable Git ref.
     GitReferenceInvalid,
     /// The recorded sub-path is not a normalized repository-relative directory.
@@ -127,6 +138,8 @@ impl AppSourceReadinessReason {
             Self::GitProviderUnsupported => "GIT_PROVIDER_UNSUPPORTED",
             Self::GitRepositoryUrlInvalid => "GIT_REPOSITORY_URL_INVALID",
             Self::GitRepositoryNotValidated => "GIT_REPOSITORY_NOT_VALIDATED",
+            Self::GitRepositoryPending => "GIT_REPOSITORY_PENDING",
+            Self::GitRepositoryInvalid => "GIT_REPOSITORY_INVALID",
             Self::GitReferenceInvalid => "GIT_REFERENCE_INVALID",
             Self::GitSubPathInvalid => "GIT_SUB_PATH_INVALID",
             Self::ArchiveUnavailable => "ARCHIVE_UNAVAILABLE",
@@ -230,7 +243,17 @@ pub fn evaluate_app_source_readiness(
                 return missing(AppSourceReadinessReason::GitRepositoryUrlInvalid);
             }
             if git.repo_status != SOURCE_REPOSITORY_STATUS_VALIDATED {
-                return missing(AppSourceReadinessReason::GitRepositoryNotValidated);
+                return missing(match git.repo_status {
+                    SOURCE_REPOSITORY_STATUS_PENDING => {
+                        AppSourceReadinessReason::GitRepositoryPending
+                    }
+                    SOURCE_REPOSITORY_STATUS_INVALID => {
+                        AppSourceReadinessReason::GitRepositoryInvalid
+                    }
+                    // `ARCHIVED`, or a status a future writer introduces: the
+                    // only honest statement is that it is not validated.
+                    _ => AppSourceReadinessReason::GitRepositoryNotValidated,
+                });
             }
             if normalize_source_ref(git.source_ref).is_err() {
                 return missing(AppSourceReadinessReason::GitReferenceInvalid);
@@ -261,7 +284,329 @@ pub const fn remix_can_be_enabled(readiness: AppSourceReadiness) -> bool {
     matches!(readiness, AppSourceReadiness::Ready)
 }
 
+/// `deploy_source_repository.repo_status` values this module owns.
+///
+/// * `PENDING` — declared, not probed yet. **Every Git source write lands here**;
+///   a write no longer claims the repository is usable.
+/// * `VALIDATED` — a validation attempt established reachability. The only status
+///   that makes a Git source `READY`.
+/// * `INVALID` — the last validation attempt failed; `last_error_code` says why.
+///
+/// The schema also carries statuses this module does not write (`ARCHIVED` is
+/// filtered by the source-event reader); those keep reading as
+/// `GIT_REPOSITORY_NOT_VALIDATED`.
+pub const SOURCE_REPOSITORY_STATUS_PENDING: &str = "PENDING";
 pub const SOURCE_REPOSITORY_STATUS_VALIDATED: &str = "VALIDATED";
+pub const SOURCE_REPOSITORY_STATUS_INVALID: &str = "INVALID";
+
+/// The status a validation attempt writes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GitRepositoryValidationStatus {
+    /// Not validated (a write, an SSH remote, or no probe available).
+    Pending,
+    /// Reachable; `last_validated_at` is stamped.
+    Validated,
+    /// The attempt failed; `last_error_code` explains it.
+    Invalid,
+}
+
+impl GitRepositoryValidationStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => SOURCE_REPOSITORY_STATUS_PENDING,
+            Self::Validated => SOURCE_REPOSITORY_STATUS_VALIDATED,
+            Self::Invalid => SOURCE_REPOSITORY_STATUS_INVALID,
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            SOURCE_REPOSITORY_STATUS_PENDING => Some(Self::Pending),
+            SOURCE_REPOSITORY_STATUS_VALIDATED => Some(Self::Validated),
+            SOURCE_REPOSITORY_STATUS_INVALID => Some(Self::Invalid),
+            _ => None,
+        }
+    }
+}
+
+/// What `POST /apps/{appId}/source/validate` decided, and why.
+///
+/// The `as_str` values are persisted in `deploy_source_repository.last_error_code`
+/// and rendered by the console, so they are a stable wire vocabulary: a code is
+/// added, never repurposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GitValidationErrorCode {
+    /// An `git@host:path` (SSH) remote: no SSH credential is available here, so
+    /// the check stays manual. Deliberately **not** a silent `VALIDATED`.
+    UnsupportedScheme,
+    /// The stored URL is not the shape this module accepts at all.
+    UnusableUrl,
+    /// The server answered `404`/`410`: nothing is published at that URL.
+    RepositoryNotFound,
+    /// The server answered `5xx`.
+    ServerError,
+    /// The server answered a status that proves neither presence nor absence
+    /// (for example `400`, `405` after the GET fallback, or `429`).
+    UnexpectedStatus,
+    /// No answer within the probe budget.
+    Timeout,
+    /// The host could not be reached (DNS, TCP, TLS, redirect loop).
+    NetworkFailure,
+    /// The repository is reachable but demands credentials (`401`/`403`).
+    ///
+    /// Informational rather than a failure: the row stays `VALIDATED`, because
+    /// the repository *is* reachable — the clone will need
+    /// `credentialSecretRef`, which this probe cannot verify.
+    CredentialsRequired,
+    /// This deployment has no outbound HTTP probe wired, so nothing was checked.
+    ProbeUnavailable,
+}
+
+impl GitValidationErrorCode {
+    pub const ALL: [Self; 9] = [
+        Self::UnsupportedScheme,
+        Self::UnusableUrl,
+        Self::RepositoryNotFound,
+        Self::ServerError,
+        Self::UnexpectedStatus,
+        Self::Timeout,
+        Self::NetworkFailure,
+        Self::CredentialsRequired,
+        Self::ProbeUnavailable,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedScheme => "GIT_VALIDATION_UNSUPPORTED_SCHEME",
+            Self::UnusableUrl => "GIT_VALIDATION_URL_INVALID",
+            Self::RepositoryNotFound => "GIT_VALIDATION_REPOSITORY_NOT_FOUND",
+            Self::ServerError => "GIT_VALIDATION_SERVER_ERROR",
+            Self::UnexpectedStatus => "GIT_VALIDATION_UNEXPECTED_STATUS",
+            Self::Timeout => "GIT_VALIDATION_TIMEOUT",
+            Self::NetworkFailure => "GIT_VALIDATION_NETWORK_FAILURE",
+            Self::CredentialsRequired => "GIT_VALIDATION_CREDENTIALS_REQUIRED",
+            Self::ProbeUnavailable => "GIT_VALIDATION_PROBE_UNAVAILABLE",
+        }
+    }
+
+    /// The sentence stored next to the code and rendered by the console.
+    ///
+    /// Kept next to `as_str` so a new code cannot ship without an explanation,
+    /// and so the wording is identical in the API response and the audit trail.
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::UnsupportedScheme => {
+                "a git@/ssh remote cannot be probed without an SSH credential; confirm \
+                 reachability manually"
+            }
+            Self::UnusableUrl => "the stored repository URL is not a probeable http(s) URL",
+            Self::RepositoryNotFound => {
+                "the repository server answered 404: no repository is published at that URL"
+            }
+            Self::ServerError => "the repository server answered with a 5xx status",
+            Self::UnexpectedStatus => {
+                "the repository server answered a status that proves neither reachability nor \
+                 absence"
+            }
+            Self::Timeout => "the repository did not answer within the 5 s probe budget",
+            Self::NetworkFailure => "the repository could not be reached over the network",
+            Self::CredentialsRequired => "the repository is reachable but demands credentials",
+            Self::ProbeUnavailable => {
+                "outbound HTTP probing is not configured on this deployment, so the repository \
+                 was not checked"
+            }
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|candidate| candidate.as_str() == value)
+    }
+}
+
+/// Whether a validation attempt is even possible against this URL.
+///
+/// Split from the probe itself so the transport layer never has to reason about
+/// URL shapes: `git@host:path` is a real Git remote that this control plane has no
+/// way to authenticate, and pretending otherwise would mean either a fabricated
+/// `VALIDATED` or a misleading `INVALID`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GitRepositoryProbePlan {
+    /// An `http(s)://` URL: probe it.
+    HttpProbe,
+    /// An scp-style `git@host:path` URL: SSH, cannot be probed here.
+    RequiresManualConfirmation,
+    /// The URL is not a Git source URL this module accepts.
+    UnusableUrl,
+}
+
+/// Decides whether `repo_url` can be probed, and how.
+#[must_use]
+pub fn plan_git_repository_probe(repo_url: &str) -> GitRepositoryProbePlan {
+    let url = repo_url.trim();
+    if validate_source_repo_url(url).is_err() {
+        return GitRepositoryProbePlan::UnusableUrl;
+    }
+    if url.starts_with("http://") || url.starts_with("https://") {
+        GitRepositoryProbePlan::HttpProbe
+    } else {
+        // `validate_source_repo_url` only accepts one other shape: `git@`.
+        GitRepositoryProbePlan::RequiresManualConfirmation
+    }
+}
+
+/// What a bounded probe observed.
+///
+/// The status code is kept (rather than collapsed into a boolean) so the rule
+/// below can tell "reachable" from "reachable but private" from "absent".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GitRepositoryProbeObservation<'a> {
+    /// The server answered with this status.
+    Status(u16),
+    /// No answer within the budget.
+    TimedOut,
+    /// The connection itself failed; `detail` is for the log, not for the wire.
+    NetworkFailure(&'a str),
+}
+
+/// The verdict of one probe, with the evidence that produced it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GitRepositoryProbeVerdict {
+    /// `2xx`/`3xx`: the host answers for that URL.
+    Reachable { status_code: u16 },
+    /// `401`/`403`: the host answers, but the clone will need a credential.
+    ReachableWithCredentialsRequired { status_code: u16 },
+    /// The URL is not usable right now; the code says why.
+    Unreachable {
+        status_code: Option<u16>,
+        error_code: GitValidationErrorCode,
+    },
+}
+
+/// Classifies a probe observation by status code alone.
+///
+/// Status-code-only is a deliberate limit: the response body of a Git host is
+/// HTML or protocol data, not a contract, and parsing it would make the verdict
+/// depend on the provider's markup. The cost of that limit is documented on
+/// [`GitRepositoryProbeVerdict`]: a `200` on the landing page proves the host
+/// answers, not that `git clone` succeeds.
+pub const fn classify_git_repository_probe(
+    observation: GitRepositoryProbeObservation<'_>,
+) -> GitRepositoryProbeVerdict {
+    match observation {
+        GitRepositoryProbeObservation::Status(status_code) => {
+            if status_code >= 200 && status_code < 400 {
+                GitRepositoryProbeVerdict::Reachable { status_code }
+            } else if status_code == 401 || status_code == 403 {
+                GitRepositoryProbeVerdict::ReachableWithCredentialsRequired { status_code }
+            } else if status_code == 404 || status_code == 410 {
+                GitRepositoryProbeVerdict::Unreachable {
+                    status_code: Some(status_code),
+                    error_code: GitValidationErrorCode::RepositoryNotFound,
+                }
+            } else if status_code >= 500 {
+                GitRepositoryProbeVerdict::Unreachable {
+                    status_code: Some(status_code),
+                    error_code: GitValidationErrorCode::ServerError,
+                }
+            } else {
+                GitRepositoryProbeVerdict::Unreachable {
+                    status_code: Some(status_code),
+                    error_code: GitValidationErrorCode::UnexpectedStatus,
+                }
+            }
+        }
+        GitRepositoryProbeObservation::TimedOut => GitRepositoryProbeVerdict::Unreachable {
+            status_code: None,
+            error_code: GitValidationErrorCode::Timeout,
+        },
+        GitRepositoryProbeObservation::NetworkFailure(_) => {
+            GitRepositoryProbeVerdict::Unreachable {
+                status_code: None,
+                error_code: GitValidationErrorCode::NetworkFailure,
+            }
+        }
+    }
+}
+
+/// The state a validation attempt writes, independent of how it was obtained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GitRepositoryValidationRecord {
+    pub status: GitRepositoryValidationStatus,
+    pub error_code: Option<GitValidationErrorCode>,
+}
+
+/// The rule every validation write goes through: probe verdict → stored state.
+///
+/// Written as one total function so the state machine has exactly one
+/// implementation and one test table:
+///
+/// | attempt | status written | `last_error_code` |
+/// |---|---|---|
+/// | `2xx`/`3xx` | `VALIDATED` | — |
+/// | `401`/`403` | `VALIDATED` | `GIT_VALIDATION_CREDENTIALS_REQUIRED` |
+/// | `404`/`410`/`5xx`/other | `INVALID` | the matching code |
+/// | timeout / network failure | `INVALID` | `GIT_VALIDATION_TIMEOUT` / `..._NETWORK_FAILURE` |
+/// | SSH remote | `PENDING` (unchanged) | `GIT_VALIDATION_UNSUPPORTED_SCHEME` |
+/// | no probe wired | `PENDING` (unchanged) | `GIT_VALIDATION_PROBE_UNAVAILABLE` |
+///
+/// Note what is *not* here: a path from `PENDING` straight to `VALIDATED`. Only a
+/// probe result can produce `VALIDATED`, and an SSH remote can never produce one
+/// from this service.
+pub const fn advance_git_repository_validation(
+    verdict: GitRepositoryProbeVerdict,
+) -> GitRepositoryValidationRecord {
+    match verdict {
+        GitRepositoryProbeVerdict::Reachable { .. } => GitRepositoryValidationRecord {
+            status: GitRepositoryValidationStatus::Validated,
+            error_code: None,
+        },
+        GitRepositoryProbeVerdict::ReachableWithCredentialsRequired { .. } => {
+            GitRepositoryValidationRecord {
+                status: GitRepositoryValidationStatus::Validated,
+                error_code: Some(GitValidationErrorCode::CredentialsRequired),
+            }
+        }
+        GitRepositoryProbeVerdict::Unreachable { error_code, .. } => {
+            GitRepositoryValidationRecord {
+                status: GitRepositoryValidationStatus::Invalid,
+                error_code: Some(error_code),
+            }
+        }
+    }
+}
+
+/// The record a validation attempt writes for `repo_url`, given what the probe saw.
+///
+/// `observation` is `None` when the URL cannot be (or was not) probed. This is the
+/// single entry point the service calls, so the "SSH stays `PENDING`" and "no
+/// probe stays `PENDING`" rules cannot drift apart between callers.
+pub fn git_repository_validation_record(
+    repo_url: &str,
+    observation: Option<GitRepositoryProbeObservation<'_>>,
+) -> GitRepositoryValidationRecord {
+    match plan_git_repository_probe(repo_url) {
+        GitRepositoryProbePlan::UnusableUrl => GitRepositoryValidationRecord {
+            status: GitRepositoryValidationStatus::Invalid,
+            error_code: Some(GitValidationErrorCode::UnusableUrl),
+        },
+        GitRepositoryProbePlan::RequiresManualConfirmation => GitRepositoryValidationRecord {
+            // Stays PENDING: an unprobed SSH remote is not a validated one.
+            status: GitRepositoryValidationStatus::Pending,
+            error_code: Some(GitValidationErrorCode::UnsupportedScheme),
+        },
+        GitRepositoryProbePlan::HttpProbe => match observation {
+            Some(observation) => {
+                advance_git_repository_validation(classify_git_repository_probe(observation))
+            }
+            None => GitRepositoryValidationRecord {
+                status: GitRepositoryValidationStatus::Pending,
+                error_code: Some(GitValidationErrorCode::ProbeUnavailable),
+            },
+        },
+    }
+}
 
 /// The `deploy_source_repository.repo_key` the remix source's repository row is
 /// written under.
@@ -514,7 +859,29 @@ mod tests {
         assert_missing(
             evaluate_app_source_readiness(Some(&git_source(git_facts(
                 "https://github.com/sdkwork/app.git",
-                "PENDING",
+                SOURCE_REPOSITORY_STATUS_PENDING,
+            )))),
+            AppSourceReadinessReason::GitRepositoryPending,
+        );
+    }
+
+    #[test]
+    fn an_invalid_repository_is_missing_and_distinguishable_from_pending() {
+        assert_missing(
+            evaluate_app_source_readiness(Some(&git_source(git_facts(
+                "https://github.com/sdkwork/app.git",
+                SOURCE_REPOSITORY_STATUS_INVALID,
+            )))),
+            AppSourceReadinessReason::GitRepositoryInvalid,
+        );
+    }
+
+    #[test]
+    fn a_status_this_module_does_not_write_is_still_not_validated() {
+        assert_missing(
+            evaluate_app_source_readiness(Some(&git_source(git_facts(
+                "https://github.com/sdkwork/app.git",
+                "ARCHIVED",
             )))),
             AppSourceReadinessReason::GitRepositoryNotValidated,
         );
@@ -681,5 +1048,227 @@ mod tests {
         assert!(validate_source_repo_url("").is_err());
         assert!(validate_source_repo_url("ssh://github.com/app.git").is_err());
         assert!(validate_source_repo_url("https://user:token@github.com/app.git").is_err());
+    }
+
+    // -- validation state machine -------------------------------------------
+
+    const HTTP_REPO: &str = "https://github.com/sdkwork/app.git";
+    const SSH_REPO: &str = "git@github.com:sdkwork/app.git";
+
+    /// Applies the record to a repository row and reads the derived readiness —
+    /// the same two steps the HTTP layer performs, in the same order.
+    fn readiness_after(record: GitRepositoryValidationRecord) -> AppSourceReadinessOutcome {
+        let git = git_facts(HTTP_REPO, record.status.as_str());
+        evaluate_app_source_readiness(Some(&git_source(git)))
+    }
+
+    fn record_for(observation: GitRepositoryProbeObservation<'_>) -> GitRepositoryValidationRecord {
+        git_repository_validation_record(HTTP_REPO, Some(observation))
+    }
+
+    #[test]
+    fn a_reachable_repository_moves_pending_to_validated_and_only_then_is_ready() {
+        // The row a GIT write leaves behind.
+        assert_missing(
+            evaluate_app_source_readiness(Some(&git_source(git_facts(
+                HTTP_REPO,
+                SOURCE_REPOSITORY_STATUS_PENDING,
+            )))),
+            AppSourceReadinessReason::GitRepositoryPending,
+        );
+
+        // 2xx and 3xx both prove the host answers.
+        for status in [200u16, 204, 302, 399] {
+            let record = record_for(GitRepositoryProbeObservation::Status(status));
+            assert_eq!(record.status, GitRepositoryValidationStatus::Validated);
+            assert_eq!(
+                record.error_code, None,
+                "status {status} is plainly reachable"
+            );
+            let outcome = readiness_after(record);
+            assert!(
+                outcome.is_ready(),
+                "status {status} must make the source READY"
+            );
+            assert_eq!(outcome.reason, None);
+        }
+    }
+
+    #[test]
+    fn a_credentials_challenge_is_reachable_and_says_which_credential_is_missing() {
+        for status in [401u16, 403] {
+            let record = record_for(GitRepositoryProbeObservation::Status(status));
+            assert_eq!(
+                record.status,
+                GitRepositoryValidationStatus::Validated,
+                "status {status} proves the repository exists"
+            );
+            assert_eq!(
+                record.error_code,
+                Some(GitValidationErrorCode::CredentialsRequired)
+            );
+            assert!(
+                readiness_after(record).is_ready(),
+                "status {status} is reachable, so the source is ready"
+            );
+        }
+    }
+
+    #[test]
+    fn an_absent_repository_moves_pending_to_invalid() {
+        for status in [404u16, 410] {
+            let record = record_for(GitRepositoryProbeObservation::Status(status));
+            assert_eq!(record.status, GitRepositoryValidationStatus::Invalid);
+            assert_eq!(
+                record.error_code,
+                Some(GitValidationErrorCode::RepositoryNotFound)
+            );
+            assert_missing(
+                readiness_after(record),
+                AppSourceReadinessReason::GitRepositoryInvalid,
+            );
+        }
+    }
+
+    #[test]
+    fn a_server_error_and_an_inconclusive_status_are_invalid() {
+        for (status, expected) in [
+            (500u16, GitValidationErrorCode::ServerError),
+            (503, GitValidationErrorCode::ServerError),
+            (400, GitValidationErrorCode::UnexpectedStatus),
+            (408, GitValidationErrorCode::UnexpectedStatus),
+            (429, GitValidationErrorCode::UnexpectedStatus),
+        ] {
+            let record = record_for(GitRepositoryProbeObservation::Status(status));
+            assert_eq!(record.status, GitRepositoryValidationStatus::Invalid);
+            assert_eq!(record.error_code, Some(expected), "status {status}");
+        }
+    }
+
+    #[test]
+    fn a_timed_out_or_unreachable_probe_is_invalid_and_names_the_failure() {
+        let timed_out = record_for(GitRepositoryProbeObservation::TimedOut);
+        assert_eq!(timed_out.status, GitRepositoryValidationStatus::Invalid);
+        assert_eq!(timed_out.error_code, Some(GitValidationErrorCode::Timeout));
+
+        let unreachable = record_for(GitRepositoryProbeObservation::NetworkFailure(
+            "dns lookup failed",
+        ));
+        assert_eq!(unreachable.status, GitRepositoryValidationStatus::Invalid);
+        assert_eq!(
+            unreachable.error_code,
+            Some(GitValidationErrorCode::NetworkFailure)
+        );
+        assert_missing(
+            readiness_after(unreachable),
+            AppSourceReadinessReason::GitRepositoryInvalid,
+        );
+    }
+
+    #[test]
+    fn an_ssh_remote_stays_pending_and_is_never_fabricated_as_validated() {
+        let record = git_repository_validation_record(SSH_REPO, None);
+        assert_eq!(
+            record.status,
+            GitRepositoryValidationStatus::Pending,
+            "an SSH remote cannot be probed here, so it cannot be validated here"
+        );
+        assert_eq!(
+            record.error_code,
+            Some(GitValidationErrorCode::UnsupportedScheme)
+        );
+        let git = git_facts(SSH_REPO, record.status.as_str());
+        assert_missing(
+            evaluate_app_source_readiness(Some(&git_source(git))),
+            AppSourceReadinessReason::GitRepositoryPending,
+        );
+    }
+
+    #[test]
+    fn a_deployment_without_a_probe_leaves_the_status_pending() {
+        let record = git_repository_validation_record(HTTP_REPO, None);
+        assert_eq!(record.status, GitRepositoryValidationStatus::Pending);
+        assert_eq!(
+            record.error_code,
+            Some(GitValidationErrorCode::ProbeUnavailable)
+        );
+    }
+
+    #[test]
+    fn a_url_this_module_cannot_probe_is_invalid_rather_than_silently_accepted() {
+        let record = git_repository_validation_record("ftp://example.com/app.git", None);
+        assert_eq!(record.status, GitRepositoryValidationStatus::Invalid);
+        assert_eq!(record.error_code, Some(GitValidationErrorCode::UnusableUrl));
+    }
+
+    #[test]
+    fn revalidation_can_degrade_and_recover() {
+        // An already-validated row that has since gone away.
+        let degraded = record_for(GitRepositoryProbeObservation::Status(404));
+        assert_eq!(degraded.status, GitRepositoryValidationStatus::Invalid);
+
+        // An invalid row whose URL was fixed.
+        let recovered = record_for(GitRepositoryProbeObservation::Status(200));
+        assert_eq!(recovered.status, GitRepositoryValidationStatus::Validated);
+        assert!(readiness_after(recovered).is_ready());
+    }
+
+    #[test]
+    fn probe_plans_cover_exactly_the_url_shapes_the_writer_accepts() {
+        for url in [
+            "https://github.com/sdkwork/app.git",
+            "http://127.0.0.1:1/app.git",
+        ] {
+            assert_eq!(
+                plan_git_repository_probe(url),
+                GitRepositoryProbePlan::HttpProbe
+            );
+        }
+        assert_eq!(
+            plan_git_repository_probe(SSH_REPO),
+            GitRepositoryProbePlan::RequiresManualConfirmation
+        );
+        for url in ["ssh://github.com/app.git", "ftp://example.com/app.git", ""] {
+            assert_eq!(
+                plan_git_repository_probe(url),
+                GitRepositoryProbePlan::UnusableUrl
+            );
+        }
+    }
+
+    #[test]
+    fn every_validation_error_code_round_trips_and_has_an_explanation() {
+        for code in GitValidationErrorCode::ALL {
+            assert_eq!(GitValidationErrorCode::parse(code.as_str()), Some(code));
+            assert!(
+                !code.description().is_empty(),
+                "{} needs an operator-facing explanation",
+                code.as_str()
+            );
+        }
+        assert_eq!(
+            GitValidationErrorCode::parse("GIT_VALIDATION_UNKNOWN"),
+            None
+        );
+    }
+
+    #[test]
+    fn validation_statuses_map_to_the_persisted_vocabulary() {
+        assert_eq!(GitRepositoryValidationStatus::Pending.as_str(), "PENDING");
+        assert_eq!(
+            GitRepositoryValidationStatus::Validated.as_str(),
+            "VALIDATED"
+        );
+        assert_eq!(GitRepositoryValidationStatus::Invalid.as_str(), "INVALID");
+        for status in [
+            GitRepositoryValidationStatus::Pending,
+            GitRepositoryValidationStatus::Validated,
+            GitRepositoryValidationStatus::Invalid,
+        ] {
+            assert_eq!(
+                GitRepositoryValidationStatus::parse(status.as_str()),
+                Some(status)
+            );
+        }
     }
 }

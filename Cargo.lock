@@ -4592,6 +4592,7 @@ dependencies = [
  "idna",
  "psl",
  "rcgen",
+ "reqwest",
  "sdkwork-database-id",
  "sdkwork-deploy-certificate-material",
  "sdkwork-deploy-cloud-account-port",

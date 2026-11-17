@@ -209,6 +209,15 @@ class AppApi {
     await _client.delete(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/source'));
   }
 
+  /// Validate the application's Git source repository
+  Future<AppsSourceValidateResponse?> appsSourceValidate(String appId) async {
+    final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/source/validate'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsSourceValidateResponse.fromJson(map);
+    })();
+  }
+
   /// Retrieve the remix state and download instructions
   Future<AppsRemixRetrieveResponse?> appsRemixRetrieve(String appId) async {
     final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/remix'));

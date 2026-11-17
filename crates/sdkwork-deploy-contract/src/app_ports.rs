@@ -943,6 +943,22 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    /// Probes the configured Git repository and records the verdict.
+    ///
+    /// Answers the updated source resource: the console needs the resulting
+    /// `readiness`/`readinessReason` as well as the recorded
+    /// `repoStatus`/`lastErrorCode`, and a second `GET /source` would be a race
+    /// against the next write.
+    async fn validate_app_source(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "validate_app_source API is not implemented".to_owned(),
+        ))
+    }
+
     async fn retrieve_app_remix(
         &self,
         _context: &DeployAppRequestContext,

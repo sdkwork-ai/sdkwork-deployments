@@ -41,8 +41,8 @@ use sdkwork_deploy_contract::{
 use sdkwork_deploy_web_port::RuntimeAssignmentReceipt;
 use sdkwork_intelligence_deploy_service::repository::{
     AppIdentityProvisioningTarget, DomainDnsRecordFilter, DomainDnsRecordUpsert,
-    DomainDnsSnapshotWrite, DomainHostnameAsset, InsertAuditLogCommand, InsertUsageEventCommand,
-    UpdateAppSourceCommand, ZoneDnsSyncTarget,
+    DomainDnsSnapshotWrite, DomainHostnameAsset, GitRepositoryValidationWrite,
+    InsertAuditLogCommand, InsertUsageEventCommand, UpdateAppSourceCommand, ZoneDnsSyncTarget,
 };
 use sdkwork_intelligence_deploy_service::repository::{RepositoryMatch, TriggerTarget};
 use sdkwork_intelligence_deploy_service::runtime_publication::{
@@ -920,6 +920,17 @@ impl DeployRepositoryPort for DeployRepository {
         enabled: bool,
     ) -> DeployServiceResult<()> {
         self.update_app_remix_enabled_repo(tenant_id, actor_id, app_id, enabled)
+            .await
+    }
+
+    async fn record_git_repository_validation(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        write: &GitRepositoryValidationWrite,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        self.record_git_repository_validation_repo(tenant_id, actor_id, app_id, write)
             .await
     }
 

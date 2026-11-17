@@ -1750,6 +1750,14 @@ impl DeployAppApi for DeployService {
         self.delete_app_source(context, app_id).await
     }
 
+    async fn validate_app_source(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        self.validate_app_source(context, app_id).await
+    }
+
     async fn retrieve_app_remix(
         &self,
         context: &DeployAppRequestContext,

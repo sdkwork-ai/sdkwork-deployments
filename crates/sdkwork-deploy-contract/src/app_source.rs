@@ -111,9 +111,31 @@ pub struct AppSourceGitResponse {
     )]
     pub credential_secret_ref: Option<String>,
     /// `deploy_source_repository.repo_status` — `VALIDATED` is what makes a Git
-    /// source ready.
+    /// source ready, and only `POST /apps/{appId}/source/validate` can produce it.
     #[serde(rename = "repoStatus")]
     pub repo_status: String,
+    /// When the repository last passed validation; absent unless
+    /// `repoStatus = VALIDATED`.
+    #[serde(rename = "lastValidatedAt", skip_serializing_if = "Option::is_none")]
+    pub last_validated_at: Option<String>,
+    /// `deploy_source_repository.last_error_code`: the outcome of the last
+    /// validation attempt (`GIT_VALIDATION_*`), when that outcome needs a word.
+    ///
+    /// A `VALIDATED` row carries a code only when the repository is reachable but
+    /// demands credentials (`GIT_VALIDATION_CREDENTIALS_REQUIRED`).
+    #[serde(rename = "lastErrorCode", skip_serializing_if = "Option::is_none")]
+    pub last_error_code: Option<String>,
+    /// The operator-facing sentence for [`Self::last_error_code`], so the console
+    /// does not have to carry a copy of the vocabulary.
+    #[serde(
+        rename = "lastErrorDescription",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub last_error_description: Option<String>,
+    /// `true` when the last validation found the repository reachable but
+    /// answering `401`/`403` — the clone therefore needs `credentialSecretRef`.
+    #[serde(rename = "credentialsRequired", default)]
+    pub credentials_required: bool,
 }
 
 /// The archive half of [`AppSourceResponse`].
