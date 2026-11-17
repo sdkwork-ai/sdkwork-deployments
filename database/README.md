@@ -15,6 +15,10 @@ This module is in **initialization state** for greenfield deployments:
 3. **Seeds** — every profile includes `common/015_deploy_application_scaffold_categories.sql`, the baseline application-template taxonomy required before the first template create.
 4. **Drift** — run `pnpm db:drift:check` before release.
 
+## Identity provisioning state
+
+Migration `0008_deploy_app_identity_provisioning` adds `deploy_app.identity_status` (`pending_identity` | `active` | `failed`) and `deploy_app.identity_provisioning_key`. Use the read-only report [`tools/report_identity_provisioning.sql`](../tools/report_identity_provisioning.sql) to inventory the states and find pending/failed applications and the `active` + NULL-key anomaly. Retry, anomaly triage, and the current entrypoint boundaries are documented in [`docs/runbooks/identity-provisioning-reconciliation.md`](../docs/runbooks/identity-provisioning-reconciliation.md).
+
 ## Commands
 
 ```bash
