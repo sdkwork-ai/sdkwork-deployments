@@ -5249,6 +5249,348 @@
         "x-sdkwork-permission": "deploy.apps.write"
       }
     },
+    "/app/v3/api/apps/{appId}/resource_links": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.resourceLinks.list",
+        "summary": "List an application's account bindings",
+        "description": "The official account, mini program and payment accounts one application environment publishes through. `deploy_application_resource_link` is the authority for those facts; `deploy_app.metadata.integrations` is the legacy document the ordered migration normalizes once, and `deploy_app_platform_target.app_idValue` records the deployment unit's platform identifier rather than the account the environment acts as.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Restrict the listing to one lifecycle environment.",
+            "schema": {
+              "$ref": "#/components/schemas/AppPublishEnvironment"
+            }
+          },
+          {
+            "name": "resource_kind",
+            "in": "query",
+            "description": "Restrict the listing to one account kind.",
+            "schema": {
+              "$ref": "#/components/schemas/AppResourceKind"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/AppResourceLinkResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "凭据绑定的应用不是被寻址的应用",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "应用不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
+      },
+      "put": {
+        "operationId": "apps.resourceLinks.update",
+        "summary": "Bind or replace an application's account binding",
+        "description": "An explicit upsert, not a hidden create: the request addresses one binding and answers the stored row. A single-instance kind (official account, mini program) is addressed by (environment, resourceKind), so replacing the environment's official account with another one is a single call — a second row of the kind is refused by the schema, because \"the environment's official account\" is one account. A payment account is addressed by (environment, resourceKind, resourceRef), so binding another merchant account adds a row. isDefault applies only to a payment account: at most one row per (environment, providerCode) may carry it, and setting it here moves the default in the same transaction instead of failing on the unique index. Repeating an identical request converges on the same row, so the address is the idempotency key and no Idempotency-Key header is required.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertAppResourceLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The stored binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppResourceLinkResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "凭据绑定的应用不是被寻址的应用",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "应用不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "该环境已绑定同一类型的其他账号",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "绑定内容不合法",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/resource_links/{resourceLinkId}": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "resourceLinkId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "apps.resourceLinks.delete",
+        "summary": "Retire an account binding",
+        "description": "Soft-retires the binding: the row keeps its audit trail (\"this account used to serve production\" is a question an operator asks after an incident), while the partial unique indexes stop constraining the address and the runtime stops resolving it. Answers 404 when the binding does not exist in the caller's tenant or belongs to another application.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The binding was retired."
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "凭据绑定的应用不是被寻址的应用",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "绑定不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
     "/app/v3/api/apps/{appId}/platform_targets": {
       "parameters": [
         {
@@ -11859,6 +12201,129 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "AppResourceKind": {
+        "type": "string",
+        "description": "Which kind of account a binding records. Spelled exactly like `chk_deploy_application_resource_link_kind`, so the value needs no translation between this contract, the SQL parameter and the SDK.",
+        "enum": [
+          "official_account",
+          "mini_program",
+          "payment_account"
+        ]
+      },
+      "AppResourceLinkStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "DISABLED"
+        ]
+      },
+      "AppResourceLinkResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "appId",
+          "environment",
+          "resourceKind",
+          "resourceRef",
+          "isDefault",
+          "bindingStatus",
+          "metadata",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "appId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "environment": {
+            "$ref": "#/components/schemas/AppPublishEnvironment"
+          },
+          "resourceKind": {
+            "$ref": "#/components/schemas/AppResourceKind"
+          },
+          "resourceRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "The provider-side identifier: the WeChat AppID for an official account or mini program, the merchant account number for a payment account."
+          },
+          "providerCode": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "isDefault": {
+            "type": "boolean",
+            "description": "The environment's default account *for its provider*. Always false for the single-instance kinds, which have no default to elect."
+          },
+          "bindingStatus": {
+            "$ref": "#/components/schemas/AppResourceLinkStatus"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Display snapshot and provider facts the binding was approved with."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          }
+        }
+      },
+      "UpsertAppResourceLinkRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "environment",
+          "resourceKind",
+          "resourceRef"
+        ],
+        "properties": {
+          "environment": {
+            "$ref": "#/components/schemas/AppPublishEnvironment"
+          },
+          "resourceKind": {
+            "$ref": "#/components/schemas/AppResourceKind"
+          },
+          "resourceRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "providerCode": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "Required for `payment_account`. The default account is unique per provider, and a NULL provider would make every row its own default."
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false,
+            "description": "Only meaningful for a payment account; refused for the single-instance kinds."
+          },
+          "bindingStatus": {
+            "$ref": "#/components/schemas/AppResourceLinkStatus"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Display snapshot and provider facts to store with the binding."
           }
         }
       },

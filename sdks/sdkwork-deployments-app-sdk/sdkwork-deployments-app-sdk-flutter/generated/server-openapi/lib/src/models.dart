@@ -2123,6 +2123,198 @@ class AppSourceBindingResponse {
   }
 }
 
+class AppResourceLinkResponse {
+  final String id;
+  final String appId;
+  final String environment;
+  final String resourceKind;
+  final String resourceRef;
+  final String? providerCode;
+  final bool isDefault;
+  final String bindingStatus;
+  final Map<String, dynamic> metadata;
+  final String createdAt;
+  final String updatedAt;
+  final String version;
+
+  AppResourceLinkResponse({
+    required this.id,
+    required this.appId,
+    required this.environment,
+    required this.resourceKind,
+    required this.resourceRef,
+    this.providerCode,
+    required this.isDefault,
+    required this.bindingStatus,
+    required this.metadata,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version
+  });
+
+  factory AppResourceLinkResponse.fromJson(Map<String, dynamic> json) {
+    return AppResourceLinkResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.id is required');
+        }
+        return value;
+      })(),
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.appId is required');
+        }
+        return value;
+      })(),
+      environment: (() {
+        final value = json['environment']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.environment is required');
+        }
+        return value;
+      })(),
+      resourceKind: (() {
+        final value = json['resourceKind']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.resourceKind is required');
+        }
+        return value;
+      })(),
+      resourceRef: (() {
+        final value = json['resourceRef']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.resourceRef is required');
+        }
+        return value;
+      })(),
+      providerCode: json['providerCode']?.toString(),
+      isDefault: (() {
+        final value = json['isDefault'];
+        if (value is! bool) {
+          throw FormatException('AppResourceLinkResponse.isDefault is required');
+        }
+        return value;
+      })(),
+      bindingStatus: (() {
+        final value = json['bindingStatus']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.bindingStatus is required');
+        }
+        return value;
+      })(),
+      metadata: (() {
+        final map = _sdkworkAsMap(json['metadata']);
+        if (map == null) {
+          throw FormatException('AppResourceLinkResponse.metadata is required');
+        }
+        return map;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.updatedAt is required');
+        }
+        return value;
+      })(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('AppResourceLinkResponse.version is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'environment': environment,
+      'resourceKind': resourceKind,
+      'resourceRef': resourceRef,
+      'providerCode': providerCode,
+      'isDefault': isDefault,
+      'bindingStatus': bindingStatus,
+      'metadata': metadata,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'version': version,
+    };
+  }
+}
+
+class UpsertAppResourceLinkRequest {
+  final String environment;
+  final String resourceKind;
+  final String resourceRef;
+  final String? providerCode;
+  final bool? isDefault;
+  final String? bindingStatus;
+  final Map<String, dynamic>? metadata;
+
+  UpsertAppResourceLinkRequest({
+    required this.environment,
+    required this.resourceKind,
+    required this.resourceRef,
+    this.providerCode,
+    this.isDefault,
+    this.bindingStatus,
+    this.metadata
+  });
+
+  factory UpsertAppResourceLinkRequest.fromJson(Map<String, dynamic> json) {
+    return UpsertAppResourceLinkRequest(
+      environment: (() {
+        final value = json['environment']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertAppResourceLinkRequest.environment is required');
+        }
+        return value;
+      })(),
+      resourceKind: (() {
+        final value = json['resourceKind']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertAppResourceLinkRequest.resourceKind is required');
+        }
+        return value;
+      })(),
+      resourceRef: (() {
+        final value = json['resourceRef']?.toString();
+        if (value == null) {
+          throw FormatException('UpsertAppResourceLinkRequest.resourceRef is required');
+        }
+        return value;
+      })(),
+      providerCode: json['providerCode']?.toString(),
+      isDefault: json['isDefault'] is bool ? json['isDefault'] : null,
+      bindingStatus: json['bindingStatus']?.toString(),
+      metadata: _sdkworkAsMap(json['metadata'])
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'environment': environment,
+      'resourceKind': resourceKind,
+      'resourceRef': resourceRef,
+      'providerCode': providerCode,
+      'isDefault': isDefault,
+      'bindingStatus': bindingStatus,
+      'metadata': metadata,
+    };
+  }
+}
+
 class AppSourceSpecResponse {
   final String id;
   final String specKey;
@@ -11979,6 +12171,98 @@ class AppsRemixUpdateResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AppsRemixUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsResourceLinksListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsResourceLinksListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsResourceLinksListResponse.fromJson(Map<String, dynamic> json) {
+    return AppsResourceLinksListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsResourceLinksListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsResourceLinksListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsResourceLinksListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsResourceLinksUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsResourceLinksUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsResourceLinksUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return AppsResourceLinksUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsResourceLinksUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsResourceLinksUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsResourceLinksUpdateResponse.traceId is required');
         }
         return value;
       })()

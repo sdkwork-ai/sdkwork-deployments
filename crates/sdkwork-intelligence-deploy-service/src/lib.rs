@@ -4,6 +4,7 @@ pub mod app;
 pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;
+pub mod app_resource_links;
 pub mod app_source_specs;
 pub mod app_sources;
 pub mod backend;
@@ -24,6 +25,10 @@ pub mod template_market_access;
 pub mod verification_file;
 
 pub use app_composition::{AppCompositionRepositoryPort, ReplaceAppCompositionCommand};
+pub use app_resource_links::{
+    AppResourceLinkRepositoryPort, DeleteAppResourceLinkCommand, ListAppResourceLinksCommand,
+    UpsertAppResourceLinkCommand,
+};
 pub use app_source_specs::{
     AppSourceSpecRepositoryPort, BindAppSourceSpecSourceCommand, CreateAppSourceSpecCommand,
     DeclareAppSourceSpecsCommand, DeleteAppSourceSpecCommand, ListAppSourceSpecsQuery,

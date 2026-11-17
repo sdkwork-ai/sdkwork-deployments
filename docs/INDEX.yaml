@@ -37,6 +37,10 @@ entries:
     path: docs/engineering/plans/PLAN-2026-0004-app-ownership-and-admin-ledger.md
     kind: plan
     status: proposed
+  - id: TECH-application-resource-bindings
+    path: docs/architecture/tech/TECH-application-resource-bindings.md
+    kind: tech
+    status: active
   - id: REVIEW-20260721-cloud-site-publishing-commercial-readiness
     path: docs/engineering/reviews/REVIEW-20260721-cloud-site-publishing-commercial-readiness.md
     kind: review

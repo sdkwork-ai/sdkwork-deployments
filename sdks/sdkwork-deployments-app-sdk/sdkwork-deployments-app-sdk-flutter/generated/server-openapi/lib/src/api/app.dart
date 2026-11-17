@@ -228,6 +228,36 @@ class AppApi {
     })();
   }
 
+  /// List an application's account bindings
+  Future<AppsResourceLinksListResponse?> appsResourceLinksList(String appId, [String? environment, String? resourceKind, int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('environment', environment, 'form', true, false, null),
+      QueryParameterSpec('resource_kind', resourceKind, 'form', true, false, null),
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/resource_links'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsResourceLinksListResponse.fromJson(map);
+    })();
+  }
+
+  /// Bind or replace an application's account binding
+  Future<AppsResourceLinksUpdateResponse?> appsResourceLinksUpdate(String appId, UpsertAppResourceLinkRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/resource_links'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsResourceLinksUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// Retire an account binding
+  Future<void> appsResourceLinksDelete(String appId, String resourceLinkId) async {
+    await _client.delete(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/resource_links/${serializePathParameter(resourceLinkId, const PathParameterSpec('resourceLinkId', 'simple', false))}'));
+  }
+
   /// List platform targets of an app
   Future<PlatformTargetsListResponse?> platformTargetsList(String appId) async {
     final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/platform_targets'));

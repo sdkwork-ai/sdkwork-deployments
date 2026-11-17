@@ -1,4 +1,4 @@
-﻿# SDKWork Deploy Technical Architecture
+# SDKWork Deploy Technical Architecture
 
 Status: active
 Owner: SDKWork maintainers
@@ -16,6 +16,11 @@ DEPLOYMENT_SPEC.md, SECURITY_SPEC.md
   tenant App delivery model: application types, source repositories, governed builds, the
   `sdkwork.deploy-package.v1` deployment package standard, semantic version management with
   channels, and typed deployment targets.
+- [TECH-application-resource-bindings.md](TECH-application-resource-bindings.md) - active account
+  binding authority: `deploy_application_resource_link` owns official account / mini program /
+  payment account bindings, `deploy_app_platform_target` owns deployment targets and platform-side
+  identifiers, and `deploy_app.metadata.integrations` is the legacy input the ordered backfill
+  normalizes once.
 
 ## 1. Architecture Overview
 

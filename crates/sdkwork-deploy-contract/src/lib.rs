@@ -4,6 +4,7 @@ pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;
 pub mod app_ports;
+pub mod app_resource_link;
 pub mod app_source;
 pub mod app_source_spec;
 pub mod certificate_plan;
@@ -22,6 +23,7 @@ pub use app_ports::{
     ListAppsQuery, ListDomainDnsRecordsQuery, ListDomainZonesQuery, UsageEventQuery,
     ZoneProviderAccountFilter, ZONE_PROVIDER_ACCOUNT_UNASSIGNED,
 };
+pub use app_resource_link::*;
 pub use app_source::*;
 pub use app_source_spec::*;
 pub use certificate_plan::*;

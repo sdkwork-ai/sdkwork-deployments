@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest } from '../types';
+import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResourceKind, AppResourceLinkResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpsertAppResourceLinkRequest } from '../types';
 
 
 export interface AppSourceRepositoriesCreateParams {
@@ -69,6 +69,43 @@ export class AppPlatformTargetsApi {
 /** Retrieve a platform target */
   async retrieve(appId: string, platformTargetId: string, requestOptions?: ApiRequestOptions): Promise<PlatformTargetResponse> {
     return this.client.request<PlatformTargetResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/platform_targets/${serializePathParameter(platformTargetId, { name: 'platformTargetId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface AppResourceLinksListParams {
+  environment?: AppPublishEnvironment;
+  resourceKind?: AppResourceKind;
+  page?: number;
+  pageSize?: number;
+}
+
+export class AppResourceLinksApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List an application's account bindings */
+  async list(appId: string, params?: AppResourceLinksListParams, requestOptions?: ApiRequestOptions): Promise<{ items: AppResourceLinkResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'environment', value: params?.environment, style: 'form', explode: true, allowReserved: false },
+      { name: 'resource_kind', value: params?.resourceKind, style: 'form', explode: true, allowReserved: false },
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: AppResourceLinkResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/resource_links`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Bind or replace an application's account binding */
+  async update(appId: string, body: UpsertAppResourceLinkRequest, requestOptions?: ApiRequestOptions): Promise<AppResourceLinkResponse> {
+    return this.client.request<AppResourceLinkResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/resource_links`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+
+/** Retire an account binding */
+  async delete(appId: string, resourceLinkId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/resource_links/${serializePathParameter(resourceLinkId, { name: 'resourceLinkId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 }
 
@@ -247,6 +284,7 @@ export class AppApi {
   public readonly sourceSpecs: AppSourceSpecsApi;
   public readonly source: AppSourceApi;
   public readonly remix: AppRemixApi;
+  public readonly resourceLinks: AppResourceLinksApi;
   public readonly platformTargets: AppPlatformTargetsApi;
   public readonly sourceRepositories: AppSourceRepositoriesApi;
 
@@ -257,6 +295,7 @@ export class AppApi {
     this.sourceSpecs = new AppSourceSpecsApi(client);
     this.source = new AppSourceApi(client);
     this.remix = new AppRemixApi(client);
+    this.resourceLinks = new AppResourceLinksApi(client);
     this.platformTargets = new AppPlatformTargetsApi(client);
     this.sourceRepositories = new AppSourceRepositoriesApi(client);
   }

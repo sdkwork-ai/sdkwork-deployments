@@ -4,26 +4,26 @@ use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppDomainResponse, AppEnvironmentPage, AppEnvironmentResponse, AppPage,
-    AppReleasePage, AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
-    AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage, AppTemplateSummaryResponse,
-    AppTemplateVersionPage, AppTemplateVersionResponse, ArtifactPage, ArtifactResponse,
-    AuditLogPage, AuditLogResponse, BuildPage, BuildQueueItemResponse, BuildQueuePage,
-    BuildResponse, BuildTemplatePage, BuildTemplateResponse, CertificateChallengePage,
-    CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
-    CertificateRenewalPage, CertificateRenewalResponse, CertificateResponse, ChannelPage,
-    ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage,
-    CloudAccountResponse, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
-    DomainHostnameResponse, DomainVerificationFilePage, DomainVerificationFileResponse,
-    DomainVerifyResponse, DomainZonePage, DomainZoneResponse, EntitlementProjectionPage,
-    EntitlementProjectionResponse, EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage,
-    EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse, NginxConfigPage,
-    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
-    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
-    PlatformTargetResponse, RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse,
-    SigningIdentityHealthPage, SigningIdentityHealthResponse, SigningIdentityPage,
-    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
-    SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse, UsageEventPage,
-    UsageEventResponse,
+    AppReleasePage, AppReleaseResponse, AppResourceLinkPage, AppResourceLinkResponse, AppResponse,
+    AppSourceSpecPage, AppSourceSpecResponse, AppTemplatePage, AppTemplateResponse,
+    AppTemplateSummaryPage, AppTemplateSummaryResponse, AppTemplateVersionPage,
+    AppTemplateVersionResponse, ArtifactPage, ArtifactResponse, AuditLogPage, AuditLogResponse,
+    BuildPage, BuildQueueItemResponse, BuildQueuePage, BuildResponse, BuildTemplatePage,
+    BuildTemplateResponse, CertificateChallengePage, CertificateChallengeResponse,
+    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
+    CertificateRenewalResponse, CertificateResponse, ChannelPage, ChannelResponse,
+    ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage, CloudAccountResponse,
+    DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage, DomainHostnameResponse,
+    DomainVerificationFilePage, DomainVerificationFileResponse, DomainVerifyResponse,
+    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse,
+    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
+    HealthCheckPage, HealthCheckResponse, NginxConfigPage, NginxConfigResponse,
+    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
+    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
+    RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
+    SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
+    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage,
+    TemplateCategoryResponse, UsageEventPage, UsageEventResponse,
 };
 use sdkwork_deploy_core::normalize_pagination;
 use sdkwork_utils_rust::{PageInfo, PageMode, SdkWorkPageData, SdkWorkResourceData};
@@ -181,6 +181,18 @@ pub fn domain_dns_record_page(
 pub fn env_variable_page(data: EnvVariablePage) -> SdkWorkPageData<EnvVariableResponse> {
     let page_size = data.items.len().max(1) as i32;
     offset_page(data.items, 1, page_size, data.total)
+}
+
+/// The account bindings of one application environment.
+///
+/// Paged with the request's own `page`/`page_size`: the collection is small but
+/// not bounded by design (a payment account per provider, times the environments
+/// an operator configures), and returning an unbounded list would make a future
+/// large tenant an outage instead of a page.
+pub fn app_resource_link_page(
+    page: AppResourceLinkPage,
+) -> SdkWorkPageData<AppResourceLinkResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
 }
 
 /// The zone's verification files, as a single unpaginated page.

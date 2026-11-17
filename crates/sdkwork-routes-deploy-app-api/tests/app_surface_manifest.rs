@@ -112,6 +112,15 @@ async fn the_application_lifecycle_routes_are_mounted() {
         (Method::POST, "/app/v3/api/apps/probe-id/env_variables"),
         (Method::GET, "/app/v3/api/apps/probe-id/health_checks"),
         (Method::POST, "/app/v3/api/apps/probe-id/health_checks"),
+        // Account bindings: the console replaces the legacy integrations document
+        // with these three calls, so a missing mount would silently strand every
+        // binding the operator edits.
+        (Method::GET, "/app/v3/api/apps/probe-id/resource_links"),
+        (Method::PUT, "/app/v3/api/apps/probe-id/resource_links"),
+        (
+            Method::DELETE,
+            "/app/v3/api/apps/probe-id/resource_links/probe-link-id",
+        ),
     ] {
         let status = probe(method.clone(), path).await;
         assert_ne!(

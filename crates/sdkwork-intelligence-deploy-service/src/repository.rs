@@ -321,7 +321,11 @@ pub struct TemplateReadScope {
 // spec contract, not from the deploy repository's request-level methods.
 #[async_trait]
 pub trait DeployRepositoryPort:
-    crate::AppCompositionRepositoryPort + crate::AppSourceSpecRepositoryPort + Send + Sync
+    crate::AppCompositionRepositoryPort
+    + crate::AppResourceLinkRepositoryPort
+    + crate::AppSourceSpecRepositoryPort
+    + Send
+    + Sync
 {
     async fn ready_check(&self) -> DeployServiceResult<()>;
 

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_composition::{AppCompositionResponse, UpdateAppCompositionRequest};
 use crate::app_delivery::*;
+use crate::app_resource_link::*;
 use crate::app_source::*;
 use crate::app_source_spec::*;
 use crate::dto::*;
@@ -620,6 +621,52 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<EnvVariableResponse> {
         Err(crate::DeployServiceError::Internal(
             "env variable API is not implemented".to_owned(),
+        ))
+    }
+
+    /// The account bindings of one application environment.
+    ///
+    /// `deploy_application_resource_link` is the authority for "which official
+    /// account / mini program / payment account does this environment publish
+    /// through"; `deploy_app_platform_target.app_id_value` is not a second
+    /// authority (see `app_resource_link.rs`).
+    async fn list_app_resource_links(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _query: &ListAppResourceLinksQuery,
+    ) -> DeployServiceResult<AppResourceLinkPage> {
+        Err(crate::DeployServiceError::Internal(
+            "app resource link API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Binds an account to one environment, or replaces the addressed binding.
+    ///
+    /// An explicit upsert, not a hidden create: the addressed key is
+    /// `(environment, kind)` for the single-instance kinds and
+    /// `(environment, kind, resourceRef)` for a payment account.
+    async fn upsert_app_resource_link(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &UpsertAppResourceLinkRequest,
+    ) -> DeployServiceResult<AppResourceLinkResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app resource link API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Soft-retires one binding. The row stays for audit; the runtime stops
+    /// resolving it.
+    async fn delete_app_resource_link(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _resource_link_id: &str,
+    ) -> DeployServiceResult<()> {
+        Err(crate::DeployServiceError::Internal(
+            "app resource link API is not implemented".to_owned(),
         ))
     }
 

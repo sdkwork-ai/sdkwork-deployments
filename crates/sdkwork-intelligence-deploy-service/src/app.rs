@@ -1279,6 +1279,36 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn list_app_resource_links(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        query: &sdkwork_deploy_contract::ListAppResourceLinksQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppResourceLinkPage> {
+        // Forwarded to the inherent method so the scope gate, the owner gate and
+        // the request normalization live in one place; a second implementation
+        // here is how a route and a service drift apart.
+        DeployService::list_app_resource_links(self, context, app_id, query).await
+    }
+
+    async fn upsert_app_resource_link(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::UpsertAppResourceLinkRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppResourceLinkResponse> {
+        DeployService::upsert_app_resource_link(self, context, app_id, request).await
+    }
+
+    async fn delete_app_resource_link(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        resource_link_id: &str,
+    ) -> DeployServiceResult<()> {
+        DeployService::delete_app_resource_link(self, context, app_id, resource_link_id).await
+    }
+
     async fn list_certificates(
         &self,
         context: &DeployAppRequestContext,

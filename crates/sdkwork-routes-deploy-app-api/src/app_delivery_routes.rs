@@ -16,11 +16,11 @@ use sdkwork_deploy_contract::{
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
     CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateBuildRequest,
     CreateBuildTemplateRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployAppRequestContext, ListAppsQuery, PromoteChannelRequest,
-    PromoteEnvironmentRequest, RegisterPackageRequest, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRemixRequest,
-    UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
-    UsageEventQuery,
+    CreateSourceRepositoryRequest, DeployAppRequestContext, ListAppResourceLinksQuery,
+    ListAppsQuery, PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest,
+    UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest,
+    UpdateBuildStateRequest, UpsertAppResourceLinkRequest, UsageEventQuery,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -151,6 +151,97 @@ pub fn build_app_delivery_router() -> Router<AppState> {
             paths::APP_REMIX,
             get(retrieve_app_remix).put(update_app_remix),
         )
+        .route(
+            paths::APP_RESOURCE_LINKS,
+            get(list_app_resource_links).put(upsert_app_resource_link),
+        )
+        .route(
+            paths::APP_RESOURCE_LINK,
+            axum::routing::delete(delete_app_resource_link),
+        )
+}
+
+// -- application account bindings ------------------------------------------
+
+async fn list_app_resource_links(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Query(query): Query<ListAppResourceLinksQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = state
+                .api
+                .list_app_resource_links(&context, &app_id, &query)
+                .await?;
+            ok_json(envelope::app_resource_link_page(page))
+        }
+        .await,
+    )
+}
+
+/// Bind an account, or replace the binding this request addresses.
+///
+/// `PUT` on the collection rather than `POST`, because the operation is an
+/// explicit upsert (API_SPEC §15.4: "upsert behavior MUST be explicit and must not
+/// be hidden behind a normal create operation"). Repeating the same request
+/// converges on the same row, so the operation needs no `Idempotency-Key` — the
+/// address is the idempotency key.
+async fn upsert_app_resource_link(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<UpsertAppResourceLinkRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .upsert_app_resource_link(&context, &app_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn delete_app_resource_link(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+) -> Response {
+    finish_no_content(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            // Read by name, like the source-spec handlers: the route table is
+            // generated from the OpenAPI path, so a renamed segment is a visible
+            // miss instead of a positional shift.
+            let app_id = params.get("appId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
+            })?;
+            let resource_link_id = params.get("resourceLinkId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation(
+                    "resourceLinkId is required",
+                )
+            })?;
+            service_result(
+                state
+                    .api
+                    .delete_app_resource_link(&context, &app_id, &resource_link_id)
+                    .await,
+            )
+        }
+        .await,
+    )
 }
 
 // -- source specs ----------------------------------------------------------

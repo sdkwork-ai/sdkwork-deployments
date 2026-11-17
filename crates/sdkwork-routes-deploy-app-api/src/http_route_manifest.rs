@@ -446,6 +446,27 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.apps.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/resource_links",
+        "app",
+        "apps.resourceLinks.list",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/resource_links",
+        "app",
+        "apps.resourceLinks.update",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/app/v3/api/apps/{appId}/resource_links/{resourceLinkId}",
+        "app",
+        "apps.resourceLinks.delete",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/apps/{appId}/platform_targets",
         "app",
         "platformTargets.list",

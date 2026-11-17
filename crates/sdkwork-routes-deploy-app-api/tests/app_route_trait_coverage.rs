@@ -38,8 +38,10 @@ use std::sync::Arc;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    AppSourceGitInput, AppSourceKind, DeployAppApi, DeployAppRequestContext, DeployServiceError,
-    DeployServiceErrorKind, ListAppsQuery, UpdateAppRemixRequest, UpdateAppSourceRequest,
+    AppPublishEnvironment, AppResourceKind, AppResourceLinkStatus, AppSourceGitInput,
+    AppSourceKind, DeployAppApi, DeployAppRequestContext, DeployServiceError,
+    DeployServiceErrorKind, ListAppResourceLinksQuery, ListAppsQuery, UpdateAppRemixRequest,
+    UpdateAppSourceRequest, UpsertAppResourceLinkRequest,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployService;
@@ -196,6 +198,45 @@ async fn no_app_operation_falls_back_to_a_default_trait_body() {
             &UpdateAppRemixRequest { enabled: false },
         )
         .await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.resourceLinks.list",
+        api.list_app_resource_links(
+            &context,
+            "probe-id",
+            &ListAppResourceLinksQuery {
+                page: 1,
+                page_size: 20,
+                environment: None,
+                resource_kind: None,
+            },
+        )
+        .await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.resourceLinks.update",
+        api.upsert_app_resource_link(
+            &context,
+            "probe-id",
+            &UpsertAppResourceLinkRequest {
+                environment: AppPublishEnvironment::Production,
+                resource_kind: AppResourceKind::OfficialAccount,
+                resource_ref: "probe-reference".to_owned(),
+                provider_code: Some("wechat".to_owned()),
+                is_default: false,
+                binding_status: AppResourceLinkStatus::Active,
+                metadata: serde_json::json!({}),
+            },
+        )
+        .await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.resourceLinks.delete",
+        api.delete_app_resource_link(&context, "probe-id", "probe-id")
+            .await
     );
 
     assert!(

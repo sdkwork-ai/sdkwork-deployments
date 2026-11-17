@@ -17,9 +17,11 @@ use std::sync::Arc;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    AppPublishEnvironment, AppSourceGitInput, AppSourceKind, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, DeployAppApi, DeployAppRequestContext, DeployServiceErrorKind,
+    AppPublishEnvironment, AppResourceKind, AppResourceLinkStatus, AppSourceGitInput,
+    AppSourceKind, CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi,
+    DeployAppRequestContext, DeployServiceErrorKind, ListAppResourceLinksQuery,
     UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppSourceRequest,
+    UpsertAppResourceLinkRequest,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -276,6 +278,86 @@ async fn application_a_still_addresses_its_own_remix_source() {
             .await
             .unwrap_err(),
         api.update_app_remix(&app_a, APP_A_UUID, &remix_state(false))
+            .await
+            .unwrap_err(),
+    ] {
+        assert_ne!(
+            error.kind(),
+            DeployServiceErrorKind::Forbidden,
+            "the credential's own application must pass the scope gate: {error}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Account bindings (deploy_application_resource_link)
+// ---------------------------------------------------------------------------
+
+fn resource_link() -> UpsertAppResourceLinkRequest {
+    UpsertAppResourceLinkRequest {
+        environment: AppPublishEnvironment::Production,
+        resource_kind: AppResourceKind::OfficialAccount,
+        resource_ref: "wx-a1b2c3d4e5f6".to_owned(),
+        provider_code: Some("wechat".to_owned()),
+        is_default: false,
+        binding_status: AppResourceLinkStatus::Active,
+        metadata: serde_json::json!({ "displayName": "Application A" }),
+    }
+}
+
+fn resource_link_query() -> ListAppResourceLinksQuery {
+    ListAppResourceLinksQuery {
+        page: 1,
+        page_size: 20,
+        environment: None,
+        resource_kind: None,
+    }
+}
+
+/// Account bindings are addressed by `appId` like every other app-surface route,
+/// so the credential's application must bound them too: a token bound to
+/// application A can neither read nor rebind B's official account, and cannot
+/// retire B's binding.
+#[tokio::test]
+async fn application_a_cannot_address_application_b_resource_links() {
+    let service = service();
+    let api: &dyn DeployAppApi = &service;
+    let app_a = caller(Some(APP_A_UUID));
+
+    assert_forbidden!(
+        "apps.resourceLinks.list",
+        api.list_app_resource_links(&app_a, APP_B_UUID, &resource_link_query())
+            .await
+    );
+    assert_forbidden!(
+        "apps.resourceLinks.update",
+        api.upsert_app_resource_link(&app_a, APP_B_UUID, &resource_link())
+            .await
+    );
+    assert_forbidden!(
+        "apps.resourceLinks.delete",
+        api.delete_app_resource_link(&app_a, APP_B_UUID, APP_A_UUID)
+            .await
+    );
+}
+
+/// The same calls addressed to the credential's own application are not refused
+/// by the scope gate: they reach the (unreachable) repository instead. Without
+/// this case a blanket `Forbidden` would satisfy the test above.
+#[tokio::test]
+async fn application_a_still_addresses_its_own_resource_links() {
+    let service = service();
+    let api: &dyn DeployAppApi = &service;
+    let app_a = caller(Some(APP_A_UUID));
+
+    for error in [
+        api.list_app_resource_links(&app_a, APP_A_UUID, &resource_link_query())
+            .await
+            .unwrap_err(),
+        api.upsert_app_resource_link(&app_a, APP_A_UUID, &resource_link())
+            .await
+            .unwrap_err(),
+        api.delete_app_resource_link(&app_a, APP_A_UUID, APP_A_UUID)
             .await
             .unwrap_err(),
     ] {

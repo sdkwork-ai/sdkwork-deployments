@@ -4,6 +4,7 @@ use sqlx::PgPool;
 mod app_composition;
 mod app_deployments;
 mod app_releases;
+mod app_resource_links;
 mod app_source_specs;
 mod app_sources;
 mod apps;

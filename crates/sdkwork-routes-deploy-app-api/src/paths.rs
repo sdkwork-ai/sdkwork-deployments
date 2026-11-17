@@ -35,6 +35,16 @@ pub const APP_COMPOSITION: &str = "/app/v3/api/apps/{appId}/composition";
 pub const APP_ACTIVATE: &str = "/app/v3/api/apps/{appId}/activate";
 pub const APP_PAUSE: &str = "/app/v3/api/apps/{appId}/pause";
 pub const APP_ENV_VARIABLES: &str = "/app/v3/api/apps/{appId}/env_variables";
+/// The account bindings an application environment publishes through.
+///
+/// One collection, because the three kinds share one authority: an official
+/// account, a mini program and a payment account are all "the account this
+/// environment acts as", and the kind is a field rather than a route segment. The
+/// write is a `PUT` on the collection (an explicit upsert addressed by
+/// `(environment, kind[, resourceRef])` — API_SPEC §15.4 forbids hiding an upsert
+/// behind a create), and one binding is retired through its own id.
+pub const APP_RESOURCE_LINKS: &str = "/app/v3/api/apps/{appId}/resource_links";
+pub const APP_RESOURCE_LINK: &str = "/app/v3/api/apps/{appId}/resource_links/{resourceLinkId}";
 /// The app's publishing domains: every default hostname
 /// (`<appDomainLabel>.app[-<env>].<suffix>`) plus the custom hostnames bound
 /// to the app, with each one's binding/verification state.

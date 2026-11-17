@@ -2331,3 +2331,32 @@ impl DeployRuntimeAssignmentRepositoryPort for DeployRepository {
             .await
     }
 }
+
+/// Account bindings.
+///
+/// A separate impl block, like the runtime-assignment port above, because the
+/// aggregate is addressed by `app_uuid` + binding command rather than by the
+/// request-level methods `DeployRepositoryPort` groups.
+#[async_trait]
+impl sdkwork_intelligence_deploy_service::AppResourceLinkRepositoryPort for DeployRepository {
+    async fn list_app_resource_links(
+        &self,
+        command: sdkwork_intelligence_deploy_service::ListAppResourceLinksCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppResourceLinkPage> {
+        self.list_app_resource_links_repo(command).await
+    }
+
+    async fn upsert_app_resource_link(
+        &self,
+        command: sdkwork_intelligence_deploy_service::UpsertAppResourceLinkCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppResourceLinkResponse> {
+        self.upsert_app_resource_link_repo(command).await
+    }
+
+    async fn delete_app_resource_link(
+        &self,
+        command: sdkwork_intelligence_deploy_service::DeleteAppResourceLinkCommand,
+    ) -> DeployServiceResult<()> {
+        self.delete_app_resource_link_repo(command).await
+    }
+}
