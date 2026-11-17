@@ -43,8 +43,19 @@ impl crate::DeployService {
         idempotency_key: &str,
         request: &UpdateAppCompositionRequest,
     ) -> DeployServiceResult<AppCompositionResponse> {
+        // Credential first: a token issued for application A may only address A
+        // (`APPLICATION_IDENTITY_SPEC.md` §4.1). Refused before validation and
+        // before any provider call, because the path segment is untrusted input
+        // exactly like a body field, and rewriting another application's
+        // composition changes what that application serves.
+        Self::assert_caller_app_scope(context, app_id)?;
         validate_composition_request(app_id, expected_app_version, idempotency_key, request)?;
         let tenant_id = Self::require_tenant(context)?;
+        // Then the pre-existing subject gate: the addressed application must be
+        // reachable for this caller's owner level. The scope check above never
+        // replaces it — a credential with no application identity still relies on
+        // this gate alone.
+        self.assert_app_access(context, tenant_id, app_id).await?;
         execute_composition_update(
             self.repository.as_ref(),
             self.content_provider.as_ref(),

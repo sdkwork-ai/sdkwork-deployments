@@ -209,6 +209,24 @@ impl DeployService {
         }
     }
 
+    /// Requires that a **path-addressed** application is the one the credential
+    /// proves (`APPLICATION_IDENTITY_SPEC.md` §4.1: a token must not be accepted
+    /// by another application).
+    ///
+    /// The path segment is the same untrusted input a body field is, so it is
+    /// checked against the verified principal rather than trusted: a credential
+    /// bound to application A may address A and nothing else, for reads exactly
+    /// as for writes. A credential that names no application keeps the existing
+    /// tenant/owner boundary, which the caller checks separately
+    /// (`assert_app_access` / `assert_app_reachable`) — this helper never
+    /// replaces that gate, it runs in front of it.
+    pub(crate) fn assert_caller_app_scope(
+        context: &DeployAppRequestContext,
+        addressed_app_id: &str,
+    ) -> DeployServiceResult<()> {
+        Self::bind_caller_app_scope(context, Some(addressed_app_id)).map(|_bound| ())
+    }
+
     /// Runs one observation pass over a hostname's outstanding ownership proof.
     ///
     /// "Issue the challenge" and "check whether the operator published it" are
@@ -1237,6 +1255,10 @@ impl DeployAppApi for DeployService {
         environment: Option<&str>,
     ) -> DeployServiceResult<sdkwork_deploy_contract::EnvVariablePage> {
         let tenant_id = Self::require_tenant(context)?;
+        // The owner gate alone lets the same owner (and every tenant-level
+        // caller) read another of their applications' variables; the credential's
+        // own application narrows the addressable set first.
+        Self::assert_caller_app_scope(context, app_id)?;
         self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .list_env_variables(tenant_id, app_id, environment)
@@ -1250,6 +1272,7 @@ impl DeployAppApi for DeployService {
         request: &CreateEnvVariableRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::EnvVariableResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        Self::assert_caller_app_scope(context, app_id)?;
         self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .create_env_variable(tenant_id, app_id, request)
@@ -1370,6 +1393,13 @@ impl DeployAppApi for DeployService {
         app_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::HealthCheckPage> {
         let tenant_id = Self::require_tenant(context)?;
+        // Two conjunctive gates, in cheapest-first order: the credential may only
+        // address its own application, and the addressed application must be
+        // reachable for this subject. Before this, the path `appId` was the only
+        // input — any token in the tenant could read another application's
+        // checks.
+        Self::assert_caller_app_scope(context, app_id)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository.list_health_checks(tenant_id, app_id).await
     }
 
@@ -1380,6 +1410,8 @@ impl DeployAppApi for DeployService {
         request: &CreateHealthCheckRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::HealthCheckResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        Self::assert_caller_app_scope(context, app_id)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
         self.repository
             .create_health_check(tenant_id, app_id, request)
             .await
@@ -2524,6 +2556,38 @@ mod app_scope_tests {
         assert_eq!(
             DeployService::bind_caller_app_scope(&unscoped, None).expect("tenant caller"),
             None
+        );
+    }
+
+    /// A **path-addressed** application is checked against the credential exactly
+    /// like a body field: A may address A (whitespace tolerated), never B. This is
+    /// the gate `health_checks` / `env_variables` / `app_composition` now run
+    /// before their owner gate.
+    #[test]
+    fn addressing_another_application_in_the_path_is_refused() {
+        let app_a = context_with_app(Some("app-a"));
+        assert!(
+            DeployService::assert_caller_app_scope(&app_a, "app-a").is_ok(),
+            "the credential's own application must stay addressable"
+        );
+        assert!(
+            DeployService::assert_caller_app_scope(&app_a, " app-a ").is_ok(),
+            "a padded path segment names the same application"
+        );
+        let error = DeployService::assert_caller_app_scope(&app_a, "app-b")
+            .expect_err("a path naming app-b must be refused for app-a's credential");
+        assert_eq!(error.kind(), DeployServiceErrorKind::Forbidden);
+    }
+
+    /// The scope gate must not become a blanket denial: with no application
+    /// identity in the credential the tenant/owner gate decides, so a console or
+    /// user-auth caller keeps working.
+    #[test]
+    fn unscoped_credential_defers_the_path_check_to_the_owner_gate() {
+        let unscoped = context_with_app(None);
+        assert!(
+            DeployService::assert_caller_app_scope(&unscoped, "app-b").is_ok(),
+            "without an app identity the owner gate is the boundary, not this check"
         );
     }
 }
