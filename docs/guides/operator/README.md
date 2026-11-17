@@ -28,6 +28,8 @@ SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL=<knowledgebase-internal-api-url>
 SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-knowledgebase-internal-ingress-token
 SDKWORK_DEPLOY_WEB_INTERNAL_API_URL=<web-internal-api-url>
 SDKWORK_DEPLOY_WEB_INTERNAL_API_INGRESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-web-internal-ingress-token
+# Optional IAM application access token file for the internal-api machine profile.
+# SDKWORK_DEPLOY_WEB_INTERNAL_API_ACCESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-web-internal-app-access-token
 ```
 
 The three ingress credentials are projected as read-only files under `/run/secrets/sdkwork/` with

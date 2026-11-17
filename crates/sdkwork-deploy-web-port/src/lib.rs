@@ -1,10 +1,17 @@
 //! Generated Web Internal SDK adapter for runtime assignment publication.
+//!
+//! identity:service - a background runtime-assignment publisher with a declared
+//! machine identity (ingress token + IAM application access token); there is no
+//! end-user request to borrow a caller pair from.
 
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult};
 use sdkwork_deploy_runtime_compiler::CompiledRuntimeSet;
+use sdkwork_utils_rust::service_identity::{
+    missing_service_credentials, ServiceCredentials, ServiceTokenKind,
+};
 use sdkwork_utils_rust::string::trim;
 use sdkwork_webserver_internal_sdk::{
     PublishRuntimeAssignmentRequest, RuntimeAssignment, RuntimeObservation, SdkworkCustomClient,
@@ -14,6 +21,15 @@ use sdkwork_webserver_internal_sdk::{
 pub const WEB_INTERNAL_API_URL_ENV: &str = "SDKWORK_DEPLOY_WEB_INTERNAL_API_URL";
 pub const WEB_INTERNAL_API_INGRESS_TOKEN_FILE_ENV: &str =
     "SDKWORK_DEPLOY_WEB_INTERNAL_API_INGRESS_TOKEN_FILE";
+/// Optional IAM application access token file.
+///
+/// The internal-api credential profile requires X-SDKWork-Ingress-Token
+/// **and** an Access-Token that resolves to an IAM application/tenant scope
+/// (APP_SDK_INTEGRATION_SPEC.md §5.2.1). Without this file the adapter refuses
+/// to dispatch and reports exactly what is missing instead of sending a header
+/// the runtime rejects.
+pub const WEB_INTERNAL_API_ACCESS_TOKEN_FILE_ENV: &str =
+    "SDKWORK_DEPLOY_WEB_INTERNAL_API_ACCESS_TOKEN_FILE";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeAssignmentReceipt {
@@ -84,6 +100,7 @@ impl DeployWebRuntimePort for UnconfiguredWebRuntimePort {
 pub struct SdkWebRuntimeFacade {
     base_url: String,
     ingress_token_file: PathBuf,
+    access_token_file: Option<PathBuf>,
 }
 
 impl SdkWebRuntimeFacade {
@@ -98,7 +115,16 @@ impl SdkWebRuntimeFacade {
         Ok(Self {
             base_url: base_url.to_owned(),
             ingress_token_file,
+            access_token_file: None,
         })
+    }
+
+    /// Declares the IAM application access token that scopes this machine
+    /// caller. Without it the adapter fails closed instead of dispatching.
+    #[must_use]
+    pub fn with_access_token_file(mut self, access_token_file: PathBuf) -> Self {
+        self.access_token_file = Some(access_token_file);
+        self
     }
 
     pub fn from_env() -> Result<Self, String> {
@@ -106,11 +132,29 @@ impl SdkWebRuntimeFacade {
             .map_err(|_| format!("{WEB_INTERNAL_API_URL_ENV} is required"))?;
         let token_file = std::env::var(WEB_INTERNAL_API_INGRESS_TOKEN_FILE_ENV)
             .map_err(|_| format!("{WEB_INTERNAL_API_INGRESS_TOKEN_FILE_ENV} is required"))?;
-        Self::new(base_url, PathBuf::from(token_file))
+        let mut facade = Self::new(base_url, PathBuf::from(token_file))?;
+        if let Ok(access_token_file) = std::env::var(WEB_INTERNAL_API_ACCESS_TOKEN_FILE_ENV) {
+            if !access_token_file.trim().is_empty() {
+                facade = facade.with_access_token_file(PathBuf::from(access_token_file));
+            }
+        }
+        Ok(facade)
     }
 
     fn client(&self) -> DeployServiceResult<SdkworkCustomClient> {
-        let token = read_secret_file(&self.ingress_token_file)?;
+        let service_token = read_secret_file(&self.ingress_token_file)?;
+        let access_token = match &self.access_token_file {
+            Some(path) => read_secret_file(path)?,
+            None => String::new(),
+        };
+        let credentials = ServiceCredentials::new(service_token, access_token);
+        if !credentials.is_complete() {
+            return Err(DeployServiceError::Internal(missing_service_credentials(
+                "sdkwork-webserver internal-api (runtime assignment publication)",
+                WEB_INTERNAL_API_INGRESS_TOKEN_FILE_ENV,
+                WEB_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
+            )));
+        }
         // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
         let base_url = sdkwork_utils_rust::service_base_url::registry_base_url_or(
             "sdkwork-webserver",
@@ -118,7 +162,9 @@ impl SdkWebRuntimeFacade {
         );
         let client =
             SdkworkCustomClient::new_with_base_url(&base_url).map_err(map_web_sdk_error)?;
-        client.set_api_key(token);
+        for (name, value) in credentials.wire_headers(ServiceTokenKind::Ingress) {
+            client.set_header(name, value);
+        }
         Ok(client)
     }
 }
@@ -272,6 +318,31 @@ mod tests {
         ));
         fs::write(&path, "0123456789abcdef\n").unwrap();
         assert_eq!(read_secret_file(&path).unwrap(), "0123456789abcdef");
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn a_missing_access_token_fails_closed_with_the_required_setting() {
+        let path = std::env::temp_dir().join(format!(
+            "sdkwork-deploy-web-ingress-{}",
+            sdkwork_utils_rust::sha256_hash(b"web-port-access-test")
+        ));
+        fs::write(&path, "0123456789abcdef\n").unwrap();
+        let facade =
+            SdkWebRuntimeFacade::new("http://127.0.0.1:1".to_owned(), path.clone()).unwrap();
+        let error = facade
+            .client()
+            .err()
+            .expect("an incomplete service identity must not dispatch");
+        let message = error.to_string();
+        assert!(
+            message.contains(WEB_INTERNAL_API_ACCESS_TOKEN_FILE_ENV),
+            "the diagnostic names the missing setting: {message}"
+        );
+        assert!(
+            message.contains(WEB_INTERNAL_API_INGRESS_TOKEN_FILE_ENV),
+            "the diagnostic names the service-token setting too: {message}"
+        );
         fs::remove_file(path).unwrap();
     }
 
