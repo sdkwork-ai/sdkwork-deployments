@@ -141,7 +141,7 @@ impl SdkWebRuntimeFacade {
         Ok(facade)
     }
 
-    fn client(&self) -> DeployServiceResult<SdkworkCustomClient> {
+    fn service_identity_headers(&self) -> DeployServiceResult<Vec<(&'static str, String)>> {
         let service_token = read_secret_file(&self.ingress_token_file)?;
         let access_token = match &self.access_token_file {
             Some(path) => read_secret_file(path)?,
@@ -155,6 +155,13 @@ impl SdkWebRuntimeFacade {
                 WEB_INTERNAL_API_ACCESS_TOKEN_FILE_ENV,
             )));
         }
+        Ok(credentials.wire_headers(ServiceTokenKind::Ingress))
+    }
+
+    fn client(&self) -> DeployServiceResult<SdkworkCustomClient> {
+        // Render the declared machine identity first so a half-configured
+        // deployment never dispatches.
+        let headers = self.service_identity_headers()?;
         // DISCOVERY_SPEC §12.1: registry-first, configured URL as degradation.
         let base_url = sdkwork_utils_rust::service_base_url::registry_base_url_or(
             "sdkwork-webserver",
@@ -162,7 +169,7 @@ impl SdkWebRuntimeFacade {
         );
         let client =
             SdkworkCustomClient::new_with_base_url(&base_url).map_err(map_web_sdk_error)?;
-        for (name, value) in credentials.wire_headers(ServiceTokenKind::Ingress) {
+        for (name, value) in headers {
             client.set_header(name, value);
         }
         Ok(client)
@@ -319,6 +326,33 @@ mod tests {
         fs::write(&path, "0123456789abcdef\n").unwrap();
         assert_eq!(read_secret_file(&path).unwrap(), "0123456789abcdef");
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn a_complete_pair_renders_the_ingress_and_access_token_headers() {
+        let path = std::env::temp_dir().join(format!(
+            "sdkwork-deploy-web-ingress-ok-{}",
+            sdkwork_utils_rust::sha256_hash(b"web-port-pair-test")
+        ));
+        let access_path = std::env::temp_dir().join(format!(
+            "sdkwork-deploy-web-access-ok-{}",
+            sdkwork_utils_rust::sha256_hash(b"web-port-pair-access-test")
+        ));
+        fs::write(&path, "0123456789abcdef\n").unwrap();
+        fs::write(&access_path, "fedcba9876543210\n").unwrap();
+        let facade = SdkWebRuntimeFacade::new("http://127.0.0.1:1".to_owned(), path.clone())
+            .unwrap()
+            .with_access_token_file(access_path.clone());
+        assert_eq!(
+            facade.service_identity_headers().unwrap(),
+            vec![
+                ("X-SDKWork-Ingress-Token", "0123456789abcdef".to_owned()),
+                ("Access-Token", "fedcba9876543210".to_owned()),
+            ],
+            "the internal-api machine profile needs both headers"
+        );
+        fs::remove_file(path).unwrap();
+        fs::remove_file(access_path).unwrap();
     }
 
     #[test]
