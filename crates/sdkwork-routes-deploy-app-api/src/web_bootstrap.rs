@@ -55,11 +55,17 @@ fn deploy_app_context_from_web_request(
         .organization_id()
         .and_then(|value| value.parse().ok());
     let session_id = principal.session_id().map(str::to_owned);
+    // The deploy application identity the token was issued for
+    // (`APPLICATION_IDENTITY_SPEC.md` §4). Carried on the domain context so the
+    // service layer can narrow application-scoped reads instead of trusting a
+    // path/body `appId`.
+    let app_id = principal.app_id().trim();
     Some(DeployAppRequestContext {
         tenant_id,
         actor_id,
         organization_id,
         session_id,
+        app_id: (!app_id.is_empty()).then(|| app_id.to_owned()),
         auth_token: None,
         access_token: None,
     })

@@ -169,6 +169,46 @@ impl DeployService {
             && stored.checksum == request.checksum
     }
 
+    /// The deploy application this caller's credential proves, if any.
+    ///
+    /// `APPLICATION_IDENTITY_SPEC.md` §4.2 makes the token's `app_id` the deploy
+    /// application identity; §4.3 requires data-plane queries to filter by
+    /// `(tenant_id, app_id)`. The value comes from the verified principal only.
+    fn caller_app_scope(context: &DeployAppRequestContext) -> Option<&str> {
+        context.app_scope()
+    }
+
+    /// Proves that a write may only name the application the credential proves,
+    /// and answers the `app_id` the row must be attributed to.
+    ///
+    /// Three cases, and none of them widens an existing boundary:
+    ///
+    /// * no app identity in the credential — the body's `appId` stands, which is
+    ///   the pre-existing tenant/owner-scoped behaviour;
+    /// * app identity present, body silent — the row is attributed to the
+    ///   caller's own application, so it stays readable by that caller instead of
+    ///   becoming an un-attributed row;
+    /// * app identity present, body names the same application — accepted;
+    /// * app identity present, body names a different application — refused.
+    ///   Silently rewriting the field would answer with a row the caller did not
+    ///   ask for, which is worse than a 403.
+    fn bind_caller_app_scope(
+        context: &DeployAppRequestContext,
+        requested_app_id: Option<&str>,
+    ) -> DeployServiceResult<Option<String>> {
+        let requested = requested_app_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+        match (Self::caller_app_scope(context), requested) {
+            (None, requested) => Ok(requested.map(str::to_owned)),
+            (Some(scope), None) => Ok(Some(scope.to_owned())),
+            (Some(scope), Some(requested)) if requested == scope => Ok(Some(scope.to_owned())),
+            (Some(_), Some(_)) => Err(sdkwork_deploy_contract::DeployServiceError::forbidden(
+                "a credential bound to one application cannot act on another application",
+            )),
+        }
+    }
+
     /// Runs one observation pass over a hostname's outstanding ownership proof.
     ///
     /// "Issue the challenge" and "check whether the operator published it" are
@@ -1102,8 +1142,12 @@ impl DeployAppApi for DeployService {
         page_size: i32,
     ) -> DeployServiceResult<sdkwork_deploy_contract::ArtifactPage> {
         let tenant_id = Self::require_tenant(context)?;
+        // The credential's application narrows the page to that application's
+        // artifacts: without it the endpoint enumerates every artifact in the
+        // tenant (file names, Drive nodes, checksums) to whichever application
+        // asks first.
         self.repository
-            .list_artifacts(tenant_id, page, page_size)
+            .list_artifacts(tenant_id, Self::caller_app_scope(context), page, page_size)
             .await
     }
 
@@ -1113,7 +1157,12 @@ impl DeployAppApi for DeployService {
         request: &CreateArtifactRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::ArtifactResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        if let Some(app_id) = request.app_id.as_deref() {
+        // Refused before any row is written: a credential bound to application A
+        // cannot register an artifact as application B's, which would otherwise
+        // hand B an artifact it never published and A an artifact it can no
+        // longer read.
+        let app_scope = Self::bind_caller_app_scope(context, request.app_id.as_deref())?;
+        if let Some(app_id) = app_scope.as_deref() {
             self.assert_app_access(context, tenant_id, app_id).await?;
         }
         if !is_deploy_package_artifact_type(request.package_type) {
@@ -1134,7 +1183,7 @@ impl DeployAppApi for DeployService {
             ));
         }
         self.repository
-            .create_artifact_from_drive(tenant_id, request)
+            .create_artifact_from_drive(tenant_id, app_scope.as_deref(), request)
             .await
     }
 
@@ -1144,9 +1193,10 @@ impl DeployAppApi for DeployService {
         artifact_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::ArtifactResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        let app_scope = Self::caller_app_scope(context);
         let artifact = self
             .repository
-            .retrieve_artifact(tenant_id, artifact_id)
+            .retrieve_artifact(tenant_id, app_scope, artifact_id)
             .await?;
         if let Some(app_id) = artifact.app_id.as_deref() {
             // An artifact attached to an app is readable through app scope. A
@@ -1172,8 +1222,11 @@ impl DeployAppApi for DeployService {
         artifact_id: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
+        // Retiring is a write: the marketplace read exception that
+        // `retrieve_artifact` grants does not apply, and the credential's
+        // application narrows the row the UPDATE may touch.
         self.repository
-            .retain_artifact(tenant_id, artifact_id)
+            .retain_artifact(tenant_id, Self::caller_app_scope(context), artifact_id)
             .await
     }
 
@@ -1339,9 +1392,20 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         let tenant_id = Self::require_tenant(context)?;
         Self::validate_upload_request(request)?;
+        // A credential bound to application A may only open an upload for A.
+        // Registering one under B would attribute A's bytes (and the artifact
+        // minted from them) to an application that never uploaded them.
+        let app_scope = Self::bind_caller_app_scope(context, request.app_id.as_deref())?;
+        if let Some(app_id) = app_scope.as_deref() {
+            self.assert_app_access(context, tenant_id, app_id).await?;
+        }
         if let Some(existing) = self
             .repository
-            .find_upload_session_by_idempotency_key(tenant_id, &request.idempotency_key)
+            .find_upload_session_by_idempotency_key(
+                tenant_id,
+                app_scope.as_deref(),
+                &request.idempotency_key,
+            )
             .await?
         {
             if Self::upload_session_request_matches_stored(request, &existing) {
@@ -1363,14 +1427,18 @@ impl DeployAppApi for DeployService {
             .await?;
         match self
             .repository
-            .create_upload_session_ref(tenant_id, context, request, &drive_response)
+            .create_upload_session_ref(tenant_id, app_scope.as_deref(), request, &drive_response)
             .await
         {
             Ok(response) => Ok(response),
             Err(error @ sdkwork_deploy_contract::DeployServiceError::Conflict(_)) => {
                 if let Some(existing) = self
                     .repository
-                    .find_upload_session_by_idempotency_key(tenant_id, &request.idempotency_key)
+                    .find_upload_session_by_idempotency_key(
+                        tenant_id,
+                        app_scope.as_deref(),
+                        &request.idempotency_key,
+                    )
                     .await?
                 {
                     if Self::upload_session_request_matches_stored(request, &existing) {
@@ -1389,9 +1457,10 @@ impl DeployAppApi for DeployService {
         upload_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        let app_scope = Self::caller_app_scope(context);
         let stored = self
             .repository
-            .retrieve_upload_session_ref(tenant_id, upload_session_id)
+            .retrieve_upload_session_ref(tenant_id, app_scope, upload_session_id)
             .await?;
         let refreshed = self
             .drive
@@ -1404,6 +1473,7 @@ impl DeployAppApi for DeployService {
         self.repository
             .update_upload_session_status(
                 tenant_id,
+                app_scope,
                 upload_session_id,
                 refreshed.status,
                 refreshed.drive_node_id.as_deref(),
@@ -1423,9 +1493,10 @@ impl DeployAppApi for DeployService {
                 "checksumSha256Hex is required",
             ));
         }
+        let app_scope = Self::caller_app_scope(context);
         let stored = self
             .repository
-            .retrieve_upload_session_ref(tenant_id, upload_session_id)
+            .retrieve_upload_session_ref(tenant_id, app_scope, upload_session_id)
             .await?;
         Self::ensure_upload_session_mutable(&stored)?;
         let drive_response = self
@@ -1441,6 +1512,7 @@ impl DeployAppApi for DeployService {
             .repository
             .update_upload_session_status(
                 tenant_id,
+                app_scope,
                 upload_session_id,
                 drive_response.status,
                 drive_response.drive_node_id.as_deref(),
@@ -1452,6 +1524,7 @@ impl DeployAppApi for DeployService {
             self.repository
                 .create_artifact_from_upload_session(
                     tenant_id,
+                    app_scope,
                     upload_session_id,
                     &request.checksum_sha256_hex,
                 )
@@ -1466,9 +1539,10 @@ impl DeployAppApi for DeployService {
         upload_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
         let tenant_id = Self::require_tenant(context)?;
+        let app_scope = Self::caller_app_scope(context);
         let stored = self
             .repository
-            .retrieve_upload_session_ref(tenant_id, upload_session_id)
+            .retrieve_upload_session_ref(tenant_id, app_scope, upload_session_id)
             .await?;
         Self::ensure_upload_session_mutable(&stored)?;
         let drive_response = self
@@ -1482,6 +1556,7 @@ impl DeployAppApi for DeployService {
         self.repository
             .update_upload_session_status(
                 tenant_id,
+                app_scope,
                 upload_session_id,
                 drive_response.status,
                 drive_response.drive_node_id.as_deref(),
@@ -2363,6 +2438,93 @@ mod upload_session_tests {
             updated_at: String::new(),
         };
         assert!(DeployService::ensure_upload_session_mutable(&completed).is_err());
+    }
+}
+
+#[cfg(test)]
+mod app_scope_tests {
+    use super::*;
+
+    fn context_with_app(app_id: Option<&str>) -> DeployAppRequestContext {
+        DeployAppRequestContext {
+            tenant_id: 7,
+            actor_id: Some(11),
+            organization_id: Some(9),
+            session_id: Some("session-1".to_owned()),
+            app_id: app_id.map(str::to_owned),
+            auth_token: None,
+            access_token: None,
+        }
+    }
+
+    /// `APPLICATION_IDENTITY_SPEC.md` §4.3: the data-plane filter follows the
+    /// deploy application the *credential* proves. Application A's token can
+    /// therefore only ever yield A's scope — never B's — which is what keeps
+    /// `list_artifacts` / `retrieve_artifact` / the upload-session family from
+    /// answering with another application's rows.
+    #[test]
+    fn token_app_scope_is_the_credentials_application_only() {
+        let app_a = context_with_app(Some("app-a"));
+        assert_eq!(DeployService::caller_app_scope(&app_a), Some("app-a"));
+        assert_ne!(DeployService::caller_app_scope(&app_a), Some("app-b"));
+    }
+
+    /// A blank claim names no application. It must read as "no scope" so the
+    /// query keeps the pre-existing tenant/owner boundary instead of building a
+    /// filter that matches no row while appearing to be scoped.
+    #[test]
+    fn blank_or_absent_app_claim_reads_as_no_scope() {
+        for app_id in [None, Some(""), Some("   ")] {
+            let context = context_with_app(app_id);
+            assert_eq!(
+                DeployService::caller_app_scope(&context),
+                None,
+                "{app_id:?} must not be read as an application identity"
+            );
+        }
+    }
+
+    /// A write may only name the application the credential proves. Naming B
+    /// from A's credential is refused outright rather than silently rewritten:
+    /// the response would otherwise describe a row the caller never asked for.
+    #[test]
+    fn write_naming_another_application_is_refused() {
+        let context = context_with_app(Some("app-a"));
+        let error = DeployService::bind_caller_app_scope(&context, Some("app-b"))
+            .expect_err("a write bound to app-b must be refused for app-a's credential");
+        assert_eq!(error.kind(), DeployServiceErrorKind::Forbidden);
+    }
+
+    /// The same application is accepted, and an omitted body `appId` binds the
+    /// row to the credential's application so the caller can still read it back.
+    #[test]
+    fn write_binds_to_the_credentials_application() {
+        let context = context_with_app(Some("app-a"));
+        assert_eq!(
+            DeployService::bind_caller_app_scope(&context, None).expect("own app, implicit"),
+            Some("app-a".to_owned())
+        );
+        assert_eq!(
+            DeployService::bind_caller_app_scope(&context, Some(" app-a "))
+                .expect("own app, explicit"),
+            Some("app-a".to_owned())
+        );
+    }
+
+    /// A credential that names no application keeps today's behaviour: the body
+    /// decides the attribution, and an omitted one stays un-attributed. This is
+    /// the compatibility side of the change — no existing caller is narrowed.
+    #[test]
+    fn credential_without_application_keeps_the_requested_binding() {
+        let unscoped = context_with_app(None);
+        assert_eq!(
+            DeployService::bind_caller_app_scope(&unscoped, Some("app-b")).expect("tenant caller"),
+            Some("app-b".to_owned())
+        );
+        assert_eq!(
+            DeployService::bind_caller_app_scope(&unscoped, None).expect("tenant caller"),
+            None
+        );
     }
 }
 

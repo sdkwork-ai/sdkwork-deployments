@@ -139,6 +139,7 @@ fn app_context() -> DeployAppRequestContext {
         actor_id: Some(11),
         organization_id: Some(ORGANIZATION_ID),
         session_id: Some("certificate-creation-test".to_owned()),
+        app_id: None,
         auth_token: None,
         access_token: None,
     }

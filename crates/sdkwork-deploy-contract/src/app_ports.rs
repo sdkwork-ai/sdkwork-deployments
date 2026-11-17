@@ -14,10 +14,35 @@ pub struct DeployAppRequestContext {
     pub actor_id: Option<i64>,
     pub organization_id: Option<i64>,
     pub session_id: Option<String>,
+    /// The deploy application the caller's credential proves it is
+    /// (`APPLICATION_IDENTITY_SPEC.md` §4: an access token carries the deploy
+    /// application in `app_id`/`aud`, and `aud` must equal `app_id`).
+    ///
+    /// Comes from the verified principal, never from a request body or path, so a
+    /// client cannot widen it. `None` means the credential names no application —
+    /// a user auth token without an `app_id` claim — and leaves the pre-existing
+    /// tenant/owner boundary in force. Data-plane reads of application-scoped
+    /// rows must be narrowed by this value while it is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
     #[serde(default, skip_serializing)]
     pub auth_token: Option<String>,
     #[serde(default, skip_serializing)]
     pub access_token: Option<String>,
+}
+
+impl DeployAppRequestContext {
+    /// The deploy application identity the caller's credential proves, if any.
+    ///
+    /// Normalizes a blank claim to `None`: an empty `app_id` cannot name an
+    /// application, and treating it as a value would build a filter that matches
+    /// no row while reading as if scope had been applied.
+    pub fn app_scope(&self) -> Option<&str> {
+        self.app_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -80,6 +80,10 @@ fn probe_context() -> DeployAppRequestContext {
         actor_id: Some(1),
         organization_id: Some(9),
         session_id: Some("trait-coverage-probe".to_owned()),
+        // No application identity: the probe's tenant is unknown to the fixture,
+        // so an app-scoped query must reach "not found"/"validation" (a real
+        // body) instead of short-circuiting into a default one.
+        app_id: None,
         auth_token: None,
         access_token: None,
     }

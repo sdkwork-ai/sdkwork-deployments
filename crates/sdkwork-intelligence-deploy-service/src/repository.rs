@@ -21,7 +21,7 @@ use sdkwork_deploy_contract::{
     CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
     CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
     CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
-    CreateTemplateCategoryRequest, DeployAppRequestContext, DeployUploadSessionResponse,
+    CreateTemplateCategoryRequest, DeployUploadSessionResponse,
     DeploymentStatus, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
     DomainHostnameResponse, DomainZonePage, DomainZoneResponse, EntitlementProjectionPage,
     EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
@@ -611,30 +611,46 @@ pub trait DeployRepositoryPort:
         status: i32,
     ) -> DeployServiceResult<AppResponse>;
 
+    /// Lists artifacts visible to the caller.
+    ///
+    /// `app_scope` is the deploy application the caller's credential proves
+    /// (`APPLICATION_IDENTITY_SPEC.md` §4.3 — data-plane queries filter by
+    /// `(tenant_id, app_id)`). `None` keeps the tenant-wide listing for a caller
+    /// whose credential names no application.
     async fn list_artifacts(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<ArtifactPage>;
 
+    /// Registers an artifact, binding its `app_id` to `app_scope` when present.
     async fn create_artifact_from_drive(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         request: &CreateArtifactRequest,
     ) -> DeployServiceResult<ArtifactResponse>;
 
     async fn retrieve_artifact(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         artifact_id: &str,
     ) -> DeployServiceResult<ArtifactResponse>;
 
-    async fn retain_artifact(&self, tenant_id: i64, artifact_id: &str) -> DeployServiceResult<()>;
+    async fn retain_artifact(
+        &self,
+        tenant_id: i64,
+        app_scope: Option<&str>,
+        artifact_id: &str,
+    ) -> DeployServiceResult<()>;
 
     async fn create_artifact_from_upload_session(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         upload_session_id: &str,
         checksum_sha256: &str,
     ) -> DeployServiceResult<ArtifactResponse>;
@@ -794,29 +810,37 @@ pub trait DeployRepositoryPort:
 
     async fn insert_audit_log(&self, command: InsertAuditLogCommand) -> DeployServiceResult<()>;
 
+    /// Records the Drive-backed upload session, binding its `app_id` to
+    /// `app_scope` when the caller's credential proves one.
     async fn create_upload_session_ref(
         &self,
         tenant_id: i64,
-        context: &DeployAppRequestContext,
+        app_scope: Option<&str>,
         request: &CreateDeployUploadSessionRequest,
         drive: &DeployUploadSessionResponse,
     ) -> DeployServiceResult<DeployUploadSessionResponse>;
 
+    /// Idempotency replay lookup, narrowed to the caller's application when the
+    /// credential proves one: two applications in a tenant must not observe each
+    /// other's sessions through a shared key.
     async fn find_upload_session_by_idempotency_key(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         idempotency_key: &str,
     ) -> DeployServiceResult<Option<DeployUploadSessionResponse>>;
 
     async fn retrieve_upload_session_ref(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         upload_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse>;
 
     async fn update_upload_session_status(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         upload_session_id: &str,
         status: i32,
         drive_node_id: Option<&str>,

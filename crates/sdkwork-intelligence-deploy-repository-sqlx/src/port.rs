@@ -17,7 +17,7 @@ use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
     CreateHealthCheckRequest, CreateNginxConfigRequest, CreateNodeClusterRequest,
     CreatePlatformTargetRequest, CreateServerRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployAppRequestContext, DeployUploadSessionResponse,
+    CreateSourceRepositoryRequest, DeployUploadSessionResponse,
     DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
     DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
     EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
@@ -418,41 +418,58 @@ impl DeployRepositoryPort for DeployRepository {
     async fn list_artifacts(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<ArtifactPage> {
-        self.list_artifacts_repo(tenant_id, page, page_size).await
+        self.list_artifacts_repo(tenant_id, app_scope, page, page_size)
+            .await
     }
 
     async fn create_artifact_from_drive(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         request: &CreateArtifactRequest,
     ) -> DeployServiceResult<ArtifactResponse> {
-        self.create_artifact_from_drive_repo(tenant_id, request)
+        self.create_artifact_from_drive_repo(tenant_id, app_scope, request)
             .await
     }
 
     async fn retrieve_artifact(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         artifact_id: &str,
     ) -> DeployServiceResult<ArtifactResponse> {
-        self.retrieve_artifact_repo(tenant_id, artifact_id).await
+        self.retrieve_artifact_repo(tenant_id, app_scope, artifact_id)
+            .await
     }
 
-    async fn retain_artifact(&self, tenant_id: i64, artifact_id: &str) -> DeployServiceResult<()> {
-        self.retain_artifact_repo(tenant_id, artifact_id).await
+    async fn retain_artifact(
+        &self,
+        tenant_id: i64,
+        app_scope: Option<&str>,
+        artifact_id: &str,
+    ) -> DeployServiceResult<()> {
+        self.retain_artifact_repo(tenant_id, app_scope, artifact_id)
+            .await
     }
 
     async fn create_artifact_from_upload_session(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         upload_session_id: &str,
         checksum_sha256: &str,
     ) -> DeployServiceResult<ArtifactResponse> {
-        self.create_artifact_from_upload_session_repo(tenant_id, upload_session_id, checksum_sha256)
-            .await
+        self.create_artifact_from_upload_session_repo(
+            tenant_id,
+            app_scope,
+            upload_session_id,
+            checksum_sha256,
+        )
+        .await
     }
 
     async fn list_env_variables(
@@ -680,41 +697,50 @@ impl DeployRepositoryPort for DeployRepository {
     async fn create_upload_session_ref(
         &self,
         tenant_id: i64,
-        context: &DeployAppRequestContext,
+        app_scope: Option<&str>,
         request: &CreateDeployUploadSessionRequest,
         drive: &DeployUploadSessionResponse,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
-        self.create_upload_session_ref_repo(tenant_id, context, request, drive)
+        self.create_upload_session_ref_repo(tenant_id, app_scope, request, drive)
             .await
     }
 
     async fn find_upload_session_by_idempotency_key(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         idempotency_key: &str,
     ) -> DeployServiceResult<Option<DeployUploadSessionResponse>> {
-        self.find_upload_session_by_idempotency_key_repo(tenant_id, idempotency_key)
+        self.find_upload_session_by_idempotency_key_repo(tenant_id, app_scope, idempotency_key)
             .await
     }
 
     async fn retrieve_upload_session_ref(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         upload_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
-        self.retrieve_upload_session_ref_repo(tenant_id, upload_session_id)
+        self.retrieve_upload_session_ref_repo(tenant_id, app_scope, upload_session_id)
             .await
     }
 
     async fn update_upload_session_status(
         &self,
         tenant_id: i64,
+        app_scope: Option<&str>,
         upload_session_id: &str,
         status: i32,
         drive_node_id: Option<&str>,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
-        self.update_upload_session_status_repo(tenant_id, upload_session_id, status, drive_node_id)
-            .await
+        self.update_upload_session_status_repo(
+            tenant_id,
+            app_scope,
+            upload_session_id,
+            status,
+            drive_node_id,
+        )
+        .await
     }
 
     // -- unified app delivery (REQ-2026-0002) --------------------------------

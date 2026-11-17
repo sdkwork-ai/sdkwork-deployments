@@ -223,6 +223,28 @@ pub(crate) async fn resolve_app_internal_id(
         .ok_or_else(|| DeployServiceError::not_found("app not found"))
 }
 
+/// Resolves the caller's deploy-application scope — the application identity the
+/// credential proved (`APPLICATION_IDENTITY_SPEC.md` §4) — to the internal id
+/// that `*_app_id` columns store.
+///
+/// `None` in, `None` out: a credential that names no application keeps the
+/// pre-existing tenant/owner boundary. A credential that *does* name one fails
+/// closed when this tenant has no such row (deleted, or a foreign id replayed
+/// into a token) instead of silently degrading the query to the tenant-wide
+/// form that the scope was added to replace.
+pub(crate) async fn resolve_scope_app_internal_id(
+    pool: &PgPool,
+    tenant_id: i64,
+    app_scope: Option<&str>,
+) -> Result<Option<i64>, DeployServiceError> {
+    match app_scope {
+        Some(app_uuid) => resolve_app_internal_id(pool, tenant_id, app_uuid)
+            .await
+            .map(Some),
+        None => Ok(None),
+    }
+}
+
 pub(crate) async fn resolve_platform_target_internal_id(
     pool: &PgPool,
     tenant_id: i64,
