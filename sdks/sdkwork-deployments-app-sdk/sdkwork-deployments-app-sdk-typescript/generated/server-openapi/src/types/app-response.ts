@@ -3,7 +3,10 @@ import type { AppOwnerType } from './app-owner-type';
 import type { AppStatus } from './app-status';
 
 export interface AppResponse {
+  /** Opaque, stable public address of the application (`deploy_app.uuid`). Every app endpoint resolves against this value; it is **not** the decimal id IAM anchors on — that is `deployApplicationId`. */
   id: string;
+  /** The application's **decimal** primary key (`deploy_app.id`), and the **IAM installation anchor**: `apps.identityProvision` sends exactly this value to IAM as `deployApplicationId`, IAM stores it in `iam_tenant_application.deploy_application_id` under a unique index, and the installation's runtime `app_id` / token `aud` are this same decimal number. Read it from here after `apps.create` instead of deriving or guessing it. Distinct from `id`, which is the uuid. */
+  deployApplicationId: string;
   name: string;
   slug: string;
   appKind: AppKind;

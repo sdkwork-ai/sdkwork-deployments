@@ -752,6 +752,23 @@ where
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AppResponse {
     pub id: String,
+    /// The application's **decimal** primary key (`deploy_app.id`), serialized as
+    /// a string under the int64 wire contract (`API_SPEC.md` §13.6). This is a
+    /// different identity from `id` above, which is the opaque `deploy_app.uuid`
+    /// every app endpoint resolves against.
+    ///
+    /// This value is the **IAM installation anchor**. `identity_provision` sends
+    /// `deploy_app.id` to IAM as `deployApplicationId`, IAM stores it in
+    /// `iam_tenant_application.deploy_application_id` under a unique index, and
+    /// the minted installation's runtime `app_id` / token `aud` are that same
+    /// decimal number. Exposing it is what lets a caller that just created an
+    /// application read back the anchor it must present, instead of guessing the
+    /// mapping and failing closed.
+    #[serde(
+        rename = "deployApplicationId",
+        with = "sdkwork_utils_rust::serde_int64"
+    )]
+    pub deploy_application_id: i64,
     pub name: String,
     pub slug: String,
     #[serde(rename = "appKind")]

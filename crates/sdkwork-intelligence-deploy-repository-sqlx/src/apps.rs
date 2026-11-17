@@ -22,7 +22,7 @@ use crate::support::{
 use crate::DeployRepository;
 use sdkwork_intelligence_deploy_service::repository::AppIdentityProvisioningTarget;
 
-const APP_SELECT: &str = "a.uuid, a.name, a.slug, a.app_kind, a.app_status, a.type,
+const APP_SELECT: &str = "a.id, a.uuid, a.name, a.slug, a.app_kind, a.app_status, a.type,
     a.description, a.runtime_config, a.metadata, a.current_revision_id, a.desired_revision_id,
     a.default_environment,
     (SELECT COUNT(*) FROM deploy_app_platform_target t
@@ -143,8 +143,16 @@ fn map_app_row(row: &PgRow) -> Result<AppResponse, DeployServiceError> {
         }
         AppOwnerType::Platform | AppOwnerType::Tenant => None,
     };
+    // The decimal primary key is read strictly, unlike the presentation fields
+    // around it: it is the IAM installation anchor (`identity_provision` forwards
+    // it to IAM as `deployApplicationId`), so a decode failure must surface as an
+    // internal error rather than collapse to a `0` that no row can have.
+    let deploy_application_id: i64 = row
+        .try_get("id")
+        .map_err(|error| DeployServiceError::Internal(format!("read deploy_app id: {error}")))?;
     Ok(AppResponse {
         id: row.try_get("uuid").unwrap_or_default(),
+        deploy_application_id,
         name: row.try_get("name").unwrap_or_default(),
         slug,
         app_kind: row.try_get("app_kind").unwrap_or_default(),

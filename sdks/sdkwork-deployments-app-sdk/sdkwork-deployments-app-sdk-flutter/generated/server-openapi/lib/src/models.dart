@@ -5514,6 +5514,7 @@ class CreateAppRequest {
 
 class AppResponse {
   final String id;
+  final String deployApplicationId;
   final String name;
   final String slug;
   final String appKind;
@@ -5546,6 +5547,7 @@ class AppResponse {
 
   AppResponse({
     required this.id,
+    required this.deployApplicationId,
     required this.name,
     required this.slug,
     required this.appKind,
@@ -5583,6 +5585,13 @@ class AppResponse {
         final value = json['id']?.toString();
         if (value == null) {
           throw FormatException('AppResponse.id is required');
+        }
+        return value;
+      })(),
+      deployApplicationId: (() {
+        final value = json['deployApplicationId']?.toString();
+        if (value == null) {
+          throw FormatException('AppResponse.deployApplicationId is required');
         }
         return value;
       })(),
@@ -5696,6 +5705,7 @@ class AppResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
+      'deployApplicationId': deployApplicationId,
       'name': name,
       'slug': slug,
       'appKind': appKind,
