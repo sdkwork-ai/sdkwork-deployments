@@ -2725,6 +2725,264 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/source:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: apps.source.retrieve
+      summary: Retrieve the application's remix source
+      description: >-
+        Returns the one source a remix downloads — a Git repository (optionally
+        narrowed to a directory inside it) or an uploaded archive artifact — plus
+        the derived readiness verdict. Readiness is never stored: it is computed
+        from the referenced repository's or artifact's current state on every
+        read, so a retired artifact or a soft-deleted repository degrades the
+        verdict immediately. An application with no configured source answers 200
+        with readiness MISSING and reason SOURCE_NOT_CONFIGURED rather than 404.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: The configured source, or a MISSING verdict when none is configured.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceResponse'
+        '401':
+          description: Missing credentials.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: The application does not exist in the caller's tenant.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    put:
+      operationId: apps.source.update
+      summary: Replace the application's remix source
+      description: >-
+        Creates or replaces the single source a remix downloads. kind selects the
+        shape: GIT carries repoProvider/repoUrl plus the optional repoRef and
+        subPath (the repository-relative directory, for a monorepo), ARCHIVE
+        carries the id of an artifact produced by the existing upload flow
+        (uploadSessions.create, upload, uploadSessions.complete, artifacts.create).
+        The write is validated to produce a usable source, so a successful
+        response is READY; replacing the source never changes remixEnabled, and
+        removing it (DELETE) turns remix off in the same transaction. Remote
+        reachability of a Git repository is not verified by this operation.
+        Idempotent by construction: PUT replaces the whole selection, so a retried
+        request converges on the same row without an idempotency key.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppSourceRequest'
+      responses:
+        '200':
+          description: The source was replaced and is ready.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppSourceResponse'
+        '401':
+          description: Missing credentials.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: The application or the archive artifact does not exist in the caller's tenant.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: The source configuration was rejected.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      operationId: apps.source.delete
+      summary: Retire the application's remix source
+      description: >-
+        Soft-retires the source and clears remixEnabled in the same transaction:
+        a removed source cannot leave remix advertising a download that no longer
+        resolves. Answers 404 when the application has no source configured.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '204':
+          description: The source was retired and remix is off.
+        '401':
+          description: Missing credentials.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: The application has no configured source.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/remix:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: apps.remix.retrieve
+      summary: Retrieve the remix state and download instructions
+      description: >-
+        The remix read: whether remix is enabled, the source readiness, and — only
+        when remix is enabled and the source is READY — the download instructions.
+        mode selects the transport: GIT returns repoUrl/repoRef/subPath for the
+        client to clone, ARCHIVE returns the artifact's Drive node identity,
+        content length and checksum for the client to fetch through the Drive app
+        API (downloadGrants.create or nodes.downloadUrls.retrieve). Deploy does
+        not proxy file bytes and does not generate a server-side tarball.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      responses:
+        '200':
+          description: The remix state, with download instructions when usable.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppRemixResponse'
+        '401':
+          description: Missing credentials.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: The application does not exist in the caller's tenant.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    put:
+      operationId: apps.remix.update
+      summary: Enable or disable remix
+      description: >-
+        Enabling requires a READY source and is refused with 409 naming the
+        readiness reason (SOURCE_NOT_CONFIGURED, GIT_REPOSITORY_NOT_VALIDATED,
+        ARCHIVE_UNAVAILABLE, ...). Disabling is always accepted: an operator must
+        be able to switch remix off even when the source has become unusable.
+        Idempotent by construction: the body is the target state, so a retried
+        request converges without an idempotency key.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppRemixRequest'
+      responses:
+        '200':
+          description: The remix state after the transition.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppRemixResponse'
+        '401':
+          description: Missing credentials.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: The application does not exist in the caller's tenant.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: The source is not READY, so remix cannot be enabled.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/apps/{appId}/platform_targets:
     parameters:
     - name: appId
@@ -9405,6 +9663,245 @@ components:
           format: date-time
         version:
           type: string
+    UpdateAppSourceRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - kind
+      properties:
+        kind:
+          type: string
+          enum:
+          - GIT
+          - ARCHIVE
+          description: Selects which half of the request is required.
+        git:
+          $ref: '#/components/schemas/AppSourceGitInput'
+        archive:
+          $ref: '#/components/schemas/AppSourceArchiveInput'
+    AppSourceGitInput:
+      type: object
+      additionalProperties: false
+      required:
+      - repoProvider
+      - repoUrl
+      properties:
+        repoProvider:
+          type: string
+          enum:
+          - GITHUB
+          - GITEE
+          - GITLAB
+          - SELF_HOSTED
+        repoUrl:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: https://, http://, or an scp-style git@host:path URL. Credentials must not be embedded.
+        repoRef:
+          type: string
+          maxLength: 255
+          description: Branch, tag or commit. Absent means the repository default branch.
+        subPath:
+          type: string
+          maxLength: 1000
+          description: Repository-relative directory the code lives in. Absent (or /, ., ./) means the repository root. Absolute paths and .. segments are refused.
+        credentialSecretRef:
+          type: string
+          maxLength: 512
+          description: Reference to the stored clone credential. The secret itself never travels here.
+        cloneMode:
+          type: string
+          enum:
+          - FULL
+          - SHALLOW
+          description: Absent defaults to SHALLOW.
+    AppSourceArchiveInput:
+      type: object
+      additionalProperties: false
+      required:
+      - artifactId
+      properties:
+        artifactId:
+          type: string
+          format: uuid
+          description: An active artifact attributed to this application.
+    AppSourceResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - appId
+      - remixEnabled
+      - readiness
+      properties:
+        appId:
+          type: string
+          format: uuid
+        remixEnabled:
+          type: boolean
+        sourceKind:
+          type: string
+          enum:
+          - GIT
+          - ARCHIVE
+        readiness:
+          type: string
+          enum:
+          - READY
+          - MISSING
+          description: Derived on every read from the referenced repository or artifact; never stored.
+        readinessReason:
+          type: string
+          enum:
+          - SOURCE_NOT_CONFIGURED
+          - SOURCE_KIND_MISMATCH
+          - GIT_REPOSITORY_UNUSABLE
+          - GIT_PROVIDER_UNSUPPORTED
+          - GIT_REPOSITORY_URL_INVALID
+          - GIT_REPOSITORY_NOT_VALIDATED
+          - GIT_REFERENCE_INVALID
+          - GIT_SUB_PATH_INVALID
+          - ARCHIVE_UNAVAILABLE
+        git:
+          $ref: '#/components/schemas/AppSourceGitResponse'
+        archive:
+          $ref: '#/components/schemas/AppSourceArchiveResponse'
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+    AppSourceGitResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - repoProvider
+      - repoUrl
+      - repoRef
+      - cloneMode
+      - repoStatus
+      properties:
+        repoProvider:
+          type: string
+        repoUrl:
+          type: string
+        repoRef:
+          type: string
+          description: The effective ref to check out; falls back to the repository default branch.
+        subPath:
+          type: string
+        cloneMode:
+          type: string
+        credentialSecretRef:
+          type: string
+        repoStatus:
+          type: string
+          description: VALIDATED is what makes a Git source ready.
+    AppSourceArchiveResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - artifactId
+      - uploadSessionId
+      - packageType
+      - fileName
+      - contentType
+      - contentLength
+      - driveNodeId
+      - createdAt
+      properties:
+        artifactId:
+          type: string
+          format: uuid
+        uploadSessionId:
+          type: string
+          format: uuid
+        packageType:
+          type: integer
+        fileName:
+          type: string
+        contentType:
+          type: string
+        contentLength:
+          type: string
+          format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
+        checksumSha256:
+          type: string
+        driveNodeId:
+          type: string
+          description: Drive node identity to resolve download bytes through the Drive app API.
+        driveSpaceId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    UpdateAppRemixRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - enabled
+      properties:
+        enabled:
+          type: boolean
+    AppRemixResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - appId
+      - remixEnabled
+      - readiness
+      properties:
+        appId:
+          type: string
+          format: uuid
+        remixEnabled:
+          type: boolean
+        sourceKind:
+          type: string
+          enum:
+          - GIT
+          - ARCHIVE
+        readiness:
+          type: string
+          enum:
+          - READY
+          - MISSING
+        readinessReason:
+          type: string
+          enum:
+          - SOURCE_NOT_CONFIGURED
+          - SOURCE_KIND_MISMATCH
+          - GIT_REPOSITORY_UNUSABLE
+          - GIT_PROVIDER_UNSUPPORTED
+          - GIT_REPOSITORY_URL_INVALID
+          - GIT_REPOSITORY_NOT_VALIDATED
+          - GIT_REFERENCE_INVALID
+          - GIT_SUB_PATH_INVALID
+          - ARCHIVE_UNAVAILABLE
+        download:
+          $ref: '#/components/schemas/AppRemixDownloadResponse'
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+    AppRemixDownloadResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - mode
+      properties:
+        mode:
+          type: string
+          enum:
+          - GIT
+          - ARCHIVE
+        git:
+          $ref: '#/components/schemas/AppSourceGitResponse'
+        archive:
+          $ref: '#/components/schemas/AppSourceArchiveResponse'
     CreateBuildTemplateRequest:
       type: object
       additionalProperties: false

@@ -104,6 +104,15 @@ export type { CreatePlatformTargetRequest } from './create-platform-target-reque
 export type { PlatformTargetResponse } from './platform-target-response';
 export type { CreateSourceRepositoryRequest } from './create-source-repository-request';
 export type { SourceRepositoryResponse } from './source-repository-response';
+export type { UpdateAppSourceRequest } from './update-app-source-request';
+export type { AppSourceGitInput } from './app-source-git-input';
+export type { AppSourceArchiveInput } from './app-source-archive-input';
+export type { AppSourceResponse } from './app-source-response';
+export type { AppSourceGitResponse } from './app-source-git-response';
+export type { AppSourceArchiveResponse } from './app-source-archive-response';
+export type { UpdateAppRemixRequest } from './update-app-remix-request';
+export type { AppRemixResponse } from './app-remix-response';
+export type { AppRemixDownloadResponse } from './app-remix-download-response';
 export type { CreateBuildTemplateRequest } from './create-build-template-request';
 export type { BuildTemplateResponse } from './build-template-response';
 export type { CreateBuildRequest } from './create-build-request';
@@ -186,6 +195,10 @@ export type { AppsSourceSpecsCreateResponse201 } from './apps-source-specs-creat
 export type { AppsSourceSpecsRetrieveResponse } from './apps-source-specs-retrieve-response';
 export type { AppsSourceSpecsUpdateResponse } from './apps-source-specs-update-response';
 export type { AppsSourceSpecsBindResponse } from './apps-source-specs-bind-response';
+export type { AppsSourceRetrieveResponse } from './apps-source-retrieve-response';
+export type { AppsSourceUpdateResponse } from './apps-source-update-response';
+export type { AppsRemixRetrieveResponse } from './apps-remix-retrieve-response';
+export type { AppsRemixUpdateResponse } from './apps-remix-update-response';
 export type { PlatformTargetsListResponse } from './platform-targets-list-response';
 export type { PlatformTargetsCreateResponse201 } from './platform-targets-create-response201';
 export type { PlatformTargetsRetrieveResponse } from './platform-targets-retrieve-response';

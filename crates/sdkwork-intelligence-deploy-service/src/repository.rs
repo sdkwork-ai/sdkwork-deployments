@@ -7,21 +7,21 @@ use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, AppTemplatePage, AppTemplateResponse, AppTemplateSummaryPage,
-    AppTemplateVersionPage, AppTemplateVersionResponse, ArtifactPage, ArtifactResponse,
-    AuditLogPage, BuildPage, BuildQueuePage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, CertificateChallengePage, CertificateOrderPage,
-    CertificateOrderResponse, CertificatePage, CertificateRenewalPage, CertificateResponse,
-    ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
-    CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest,
-    CreateAppDeploymentRequest, CreateAppEnvironmentRequest, CreateAppReleaseRequest,
-    CreateAppRequest, CreateAppTemplateRequest, CreateAppTemplateVersionRequest,
-    CreateArtifactRequest, CreateBuildRequest, CreateBuildTemplateRequest,
-    CreateCertificateRequest, CreateDeployUploadSessionRequest, CreateDomainHostnameRequest,
-    CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
-    CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
-    CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
-    CreateTemplateCategoryRequest, DeployUploadSessionResponse,
+    AppReleaseResponse, AppResponse, AppSourceKind, AppSourceResponse, AppTemplatePage,
+    AppTemplateResponse, AppTemplateSummaryPage, AppTemplateVersionPage,
+    AppTemplateVersionResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage,
+    BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse,
+    CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
+    CertificateRenewalPage, CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
+    ChannelRolloutResponse, CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest,
+    CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
+    CreateAppReleaseRequest, CreateAppRequest, CreateAppTemplateRequest,
+    CreateAppTemplateVersionRequest, CreateArtifactRequest, CreateBuildRequest,
+    CreateBuildTemplateRequest, CreateCertificateRequest, CreateDeployUploadSessionRequest,
+    CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
+    CreateHealthCheckRequest, CreateNginxConfigRequest, CreateNodeClusterRequest,
+    CreatePlatformTargetRequest, CreateServerRequest, CreateSigningIdentityRequest,
+    CreateSourceRepositoryRequest, CreateTemplateCategoryRequest, DeployUploadSessionResponse,
     DeploymentStatus, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
     DomainHostnameResponse, DomainZonePage, DomainZoneResponse, EntitlementProjectionPage,
     EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
@@ -1978,6 +1978,87 @@ pub trait DeployRepositoryPort:
         &self,
         item_uuid: &str,
     ) -> DeployServiceResult<Option<PublishedDownloadRecord>>;
+
+    /// Reads the application's remix source, with readiness derived from the
+    /// current state of the repository/artifact it references.
+    ///
+    /// Never fails for "no source configured": an application without a source is
+    /// a `MISSING` answer, not a missing resource. The application itself must
+    /// exist in the tenant, which is where `NotFound` comes from.
+    async fn retrieve_app_source(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse>;
+
+    /// Creates or replaces the application's remix source.
+    ///
+    /// One transaction: a Git source also writes the reserved `remix`
+    /// `deploy_source_repository` row, an archive source binds the artifact. The
+    /// command carries already-normalized values — the service validated the
+    /// provider, URL, ref, sub-path and clone mode — so this layer never re-decides
+    /// what a valid source is.
+    async fn update_app_source(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        command: &UpdateAppSourceCommand,
+    ) -> DeployServiceResult<AppSourceResponse>;
+
+    /// Retires the application's remix source and turns `remix_enabled` off in the
+    /// same transaction.
+    ///
+    /// Removing the source cannot leave remix enabled: the download would have
+    /// nothing to resolve, and the flag would keep advertising a capability the
+    /// application no longer has.
+    async fn delete_app_source(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Writes `deploy_app.remix_enabled`.
+    ///
+    /// The caller has already proven the precondition (readiness) against the same
+    /// tenant and application; this layer only persists the flag.
+    async fn update_app_remix_enabled(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        enabled: bool,
+    ) -> DeployServiceResult<()>;
+}
+
+/// A validated, normalized remix-source write.
+///
+/// An internal command rather than the wire request: by the time the repository
+/// sees it, the provider is supported, the URL is acceptable, the ref and sub-path
+/// are normalized, and the clone mode is defaulted. Keeping the wire DTO out of the
+/// port means the repository cannot be handed a half-validated request by any
+/// future caller.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateAppSourceCommand {
+    pub kind: AppSourceKind,
+    /// Present exactly when `kind = GIT`.
+    pub git: Option<UpdateAppSourceGitCommand>,
+    /// Present exactly when `kind = ARCHIVE`.
+    pub archive_artifact_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpdateAppSourceGitCommand {
+    pub repo_provider: String,
+    pub repo_url: String,
+    /// Normalized ref; `None` means the repository's default branch.
+    pub repo_ref: Option<String>,
+    /// Normalized repository-relative directory; `None` means the root.
+    pub sub_path: Option<String>,
+    pub credential_secret_ref: Option<String>,
+    /// `FULL` or `SHALLOW`; already defaulted.
+    pub clone_mode: String,
 }
 
 /// One published installer with the release facts a feed needs.

@@ -96,7 +96,8 @@ impl DeployRepository {
         app_scope: Option<&str>,
         upload_session_id: &str,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
         let query = format!(
             "SELECT uuid, app_id, package_type, file_name, content_type, content_length,
                     checksum, status, drive_upload_session_id, drive_upload_item_id,
@@ -133,7 +134,8 @@ impl DeployRepository {
         app_scope: Option<&str>,
         idempotency_key: &str,
     ) -> DeployServiceResult<Option<DeployUploadSessionResponse>> {
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
         let query = format!(
             "SELECT uuid, app_id, package_type, file_name, content_type, content_length,
                     checksum, status, drive_upload_session_id, drive_upload_item_id,
@@ -177,7 +179,8 @@ impl DeployRepository {
         status: i32,
         drive_node_id: Option<&str>,
     ) -> DeployServiceResult<DeployUploadSessionResponse> {
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
         let now = now_rfc3339();
         let query = format!(
             "UPDATE deploy_upload_session_ref

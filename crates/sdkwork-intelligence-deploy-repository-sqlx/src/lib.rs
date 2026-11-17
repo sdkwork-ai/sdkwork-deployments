@@ -5,6 +5,7 @@ mod app_composition;
 mod app_deployments;
 mod app_releases;
 mod app_source_specs;
+mod app_sources;
 mod apps;
 mod artifacts;
 mod audit;

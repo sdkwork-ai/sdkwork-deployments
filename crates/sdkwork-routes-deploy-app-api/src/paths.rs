@@ -68,6 +68,14 @@ pub const APP_SOURCE_REPOSITORY: &str =
 pub const APP_SOURCE_SPECS: &str = "/app/v3/api/apps/{appId}/source_specs";
 pub const APP_SOURCE_SPEC: &str = "/app/v3/api/apps/{appId}/source_specs/{specId}";
 pub const APP_SOURCE_SPEC_SOURCE: &str = "/app/v3/api/apps/{appId}/source_specs/{specId}/source";
+/// The application's remix source: what a remix downloads, and whether it can.
+///
+/// A singleton under the application (one source per app, a database fact) rather
+/// than a collection: `GET` answers `200` with `MISSING` when nothing is
+/// configured, because "no source" is a state of the resource, not an absent one.
+pub const APP_SOURCE: &str = "/app/v3/api/apps/{appId}/source";
+/// The remix state: the enable switch plus the download instructions.
+pub const APP_REMIX: &str = "/app/v3/api/apps/{appId}/remix";
 pub const BUILD_TEMPLATES: &str = "/app/v3/api/build_templates";
 pub const BUILD_TEMPLATE: &str = "/app/v3/api/build_templates/{buildTemplateId}";
 pub const APP_BUILDS: &str = "/app/v3/api/apps/{appId}/builds";

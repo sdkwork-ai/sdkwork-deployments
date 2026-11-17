@@ -411,6 +411,41 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.apps.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/source",
+        "app",
+        "apps.source.retrieve",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/source",
+        "app",
+        "apps.source.update",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Delete,
+        "/app/v3/api/apps/{appId}/source",
+        "app",
+        "apps.source.delete",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/remix",
+        "app",
+        "apps.remix.retrieve",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/remix",
+        "app",
+        "apps.remix.update",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/apps/{appId}/platform_targets",
         "app",
         "platformTargets.list",

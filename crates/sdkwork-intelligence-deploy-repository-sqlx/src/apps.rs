@@ -590,9 +590,9 @@ impl DeployRepository {
         let Some(row) = row else {
             return Err(DeployServiceError::not_found("app not found"));
         };
-        let internal_id: i64 = row
-            .try_get("id")
-            .map_err(|error| DeployServiceError::Internal(format!("read deploy_app id: {error}")))?;
+        let internal_id: i64 = row.try_get("id").map_err(|error| {
+            DeployServiceError::Internal(format!("read deploy_app id: {error}"))
+        })?;
         // `organization_id` is `NOT NULL DEFAULT 0`, and IAM spells "no
         // organization" as the literal "0" (its own platform bootstrap writes
         // that value), so the column is forwarded as-is instead of being
@@ -607,9 +607,9 @@ impl DeployRepository {
                 "deploy_app identity provisioning key was not recorded".to_owned(),
             ));
         };
-        let app_uuid: String = row
-            .try_get("uuid")
-            .map_err(|error| DeployServiceError::Internal(format!("read deploy_app uuid: {error}")))?;
+        let app_uuid: String = row.try_get("uuid").map_err(|error| {
+            DeployServiceError::Internal(format!("read deploy_app uuid: {error}"))
+        })?;
 
         Ok(AppIdentityProvisioningTarget {
             deploy_application_id: internal_id.to_string(),

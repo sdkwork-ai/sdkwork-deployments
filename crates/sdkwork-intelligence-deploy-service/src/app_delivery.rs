@@ -127,7 +127,7 @@ fn identity_application_type(app_kind: &str) -> String {
 }
 
 impl DeployService {
-    fn tenant_id(context: &DeployAppRequestContext) -> DeployServiceResult<i64> {
+    pub(crate) fn tenant_id(context: &DeployAppRequestContext) -> DeployServiceResult<i64> {
         if context.tenant_id <= 0 {
             return Err(DeployServiceError::forbidden(
                 "app delivery operations require tenant authorization",

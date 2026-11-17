@@ -2,6 +2,7 @@
 
 pub mod app_domains;
 pub mod app_kind_rules;
+pub mod app_source;
 pub mod certificate_key_algorithm;
 pub mod certificate_validity;
 pub mod database_profile;
@@ -24,6 +25,15 @@ pub use app_kind_rules::{
     DOUYIN_MINIPROGRAM_TOTAL_PACKAGE_BYTES, JVM_ARTIFACT_MAXIMUM_BYTES,
     PROCESS_BUNDLE_MAXIMUM_BYTES, WEB_BUNDLE_MAXIMUM_BYTES, WECHAT_MINIPROGRAM_MAIN_PACKAGE_BYTES,
     WECHAT_MINIPROGRAM_TOTAL_PACKAGE_BYTES,
+};
+pub use app_source::{
+    evaluate_app_source_readiness, is_supported_clone_mode, is_supported_repo_provider,
+    normalize_app_source_sub_path, normalize_source_ref, remix_can_be_enabled,
+    validate_source_repo_url, AppSourceArchiveFacts, AppSourceFacts, AppSourceGitFacts,
+    AppSourceKind, AppSourceReadiness, AppSourceReadinessOutcome, AppSourceReadinessReason,
+    SourceRefError, SourceSubPathError, APP_SOURCE_CLONE_MODES, APP_SOURCE_REPO_PROVIDERS,
+    MAXIMUM_SOURCE_REF_LENGTH, MAXIMUM_SOURCE_REPO_URL_LENGTH, MAXIMUM_SOURCE_SUB_PATH_LENGTH,
+    REMIX_SOURCE_REPOSITORY_KEY, SOURCE_REPOSITORY_STATUS_VALIDATED,
 };
 pub use certificate_key_algorithm::{
     validate_certificate_key_algorithm, CERTIFICATE_DEFAULT_KEY_ALGORITHM,

@@ -5,9 +5,9 @@ use sdkwork_deploy_contract::{
     is_deploy_package_artifact_type, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, AppSourceSpecPage, AppSourceSpecResponse,
-    BindAppSourceSpecSourceRequest, BuildPage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
+    AppReleaseResponse, AppRemixResponse, AppResponse, AppSourceResponse, AppSourceSpecPage,
+    AppSourceSpecResponse, BindAppSourceSpecSourceRequest, BuildPage, BuildResponse,
+    BuildTemplatePage, BuildTemplateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
     ChannelRolloutResponse, CompleteDeployUploadSessionRequest, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
     CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateArtifactRequest,
@@ -21,10 +21,10 @@ use sdkwork_deploy_contract::{
     PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
     RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, SigningIdentityPage,
     SigningIdentityResponse, SourceRepositoryPage, SourceRepositoryResponse,
-    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
-    UpdateAppSourceSpecRequest, UpdateBuildStateRequest, UpdateDomainHostnameRequest,
-    UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery, UPLOAD_SESSION_STATUS_CANCELLED,
-    UPLOAD_SESSION_STATUS_COMPLETED,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRemixRequest,
+    UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
+    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, UsageEventPage, UsageEventQuery,
+    UPLOAD_SESSION_STATUS_CANCELLED, UPLOAD_SESSION_STATUS_COMPLETED,
 };
 use sdkwork_deploy_drive_port::{
     DeployDriveActor, DeployDriveScope, DriveRequestCredentials, PrepareDeployUploadCommand,
@@ -1693,6 +1693,48 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<SourceRepositoryResponse> {
         self.retrieve_source_repository(context, app_id, repo_id)
             .await
+    }
+
+    async fn retrieve_app_source(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        self.retrieve_app_source(context, app_id).await
+    }
+
+    async fn update_app_source(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &UpdateAppSourceRequest,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        self.update_app_source(context, app_id, request).await
+    }
+
+    async fn delete_app_source(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<()> {
+        self.delete_app_source(context, app_id).await
+    }
+
+    async fn retrieve_app_remix(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<AppRemixResponse> {
+        self.retrieve_app_remix(context, app_id).await
+    }
+
+    async fn update_app_remix(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &UpdateAppRemixRequest,
+    ) -> DeployServiceResult<AppRemixResponse> {
+        self.update_app_remix(context, app_id, request).await
     }
 
     async fn create_build_template(

@@ -129,7 +129,8 @@ async fn application_a_cannot_read_application_b_artifacts_or_upload_sessions() 
 
     // ---- artifacts.list -----------------------------------------------------
     assert_eq!(
-        scoped.total, 1,
+        scoped.total,
+        1,
         "application A's listing must contain exactly its own artifact, got {:?}",
         scoped
             .items
@@ -144,7 +145,10 @@ async fn application_a_cannot_read_application_b_artifacts_or_upload_sessions() 
     );
     // The tenant boundary is retained: an unscoped caller still sees both, which
     // is what the console/back-office path relies on.
-    assert_eq!(tenant_wide.total, 2, "the tenant-wide listing must be unchanged");
+    assert_eq!(
+        tenant_wide.total, 2,
+        "the tenant-wide listing must be unchanged"
+    );
 
     // ---- artifacts.retrieve -------------------------------------------------
     let denied = repository
@@ -164,13 +168,11 @@ async fn application_a_cannot_read_application_b_artifacts_or_upload_sessions() 
         .await
         .expect_err("application A must not retire application B's artifact");
     assert_eq!(denied.kind(), DeployServiceErrorKind::NotFound);
-    let still_active: i32 = sqlx::query_scalar(
-        "SELECT status FROM deploy_artifact WHERE id = $1",
-    )
-    .bind(ARTIFACT_B_ID)
-    .fetch_one(&pool)
-    .await
-    .expect("read application B artifact status");
+    let still_active: i32 = sqlx::query_scalar("SELECT status FROM deploy_artifact WHERE id = $1")
+        .bind(ARTIFACT_B_ID)
+        .fetch_one(&pool)
+        .await
+        .expect("read application B artifact status");
     assert_eq!(
         still_active, ARTIFACT_STATUS_ACTIVE,
         "application B's artifact must be untouched by application A's request"
@@ -205,7 +207,12 @@ async fn application_a_cannot_read_application_b_artifacts_or_upload_sessions() 
 
     // ---- artifact minting from another application's session ---------------
     let denied = repository
-        .create_artifact_from_upload_session(TENANT_ID, Some(APP_A_UUID), SESSION_B_UUID, "checksum")
+        .create_artifact_from_upload_session(
+            TENANT_ID,
+            Some(APP_A_UUID),
+            SESSION_B_UUID,
+            "checksum",
+        )
         .await
         .expect_err("application A must not mint an artifact from application B's session");
     assert_eq!(denied.kind(), DeployServiceErrorKind::NotFound);

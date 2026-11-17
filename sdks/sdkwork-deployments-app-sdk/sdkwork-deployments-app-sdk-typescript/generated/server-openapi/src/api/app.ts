@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppPublishEnvironment, AppResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRequest, UpdateAppSourceSpecRequest } from '../types';
+import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest } from '../types';
 
 
 export interface AppSourceRepositoriesCreateParams {
@@ -69,6 +69,49 @@ export class AppPlatformTargetsApi {
 /** Retrieve a platform target */
   async retrieve(appId: string, platformTargetId: string, requestOptions?: ApiRequestOptions): Promise<PlatformTargetResponse> {
     return this.client.request<PlatformTargetResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/platform_targets/${serializePathParameter(platformTargetId, { name: 'platformTargetId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export class AppRemixApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Retrieve the remix state and download instructions */
+  async retrieve(appId: string, requestOptions?: ApiRequestOptions): Promise<AppRemixResponse> {
+    return this.client.request<AppRemixResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/remix`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Enable or disable remix */
+  async update(appId: string, body: UpdateAppRemixRequest, requestOptions?: ApiRequestOptions): Promise<AppRemixResponse> {
+    return this.client.request<AppRemixResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/remix`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export class AppSourceApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Retrieve the application's remix source */
+  async retrieve(appId: string, requestOptions?: ApiRequestOptions): Promise<AppSourceResponse> {
+    return this.client.request<AppSourceResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Replace the application's remix source */
+  async update(appId: string, body: UpdateAppSourceRequest, requestOptions?: ApiRequestOptions): Promise<AppSourceResponse> {
+    return this.client.request<AppSourceResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+
+/** Retire the application's remix source */
+  async delete(appId: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 }
 
@@ -202,6 +245,8 @@ export class AppApi {
   public readonly domains: AppDomainsApi;
   public readonly composition: AppCompositionApi;
   public readonly sourceSpecs: AppSourceSpecsApi;
+  public readonly source: AppSourceApi;
+  public readonly remix: AppRemixApi;
   public readonly platformTargets: AppPlatformTargetsApi;
   public readonly sourceRepositories: AppSourceRepositoriesApi;
 
@@ -210,6 +255,8 @@ export class AppApi {
     this.domains = new AppDomainsApi(client);
     this.composition = new AppCompositionApi(client);
     this.sourceSpecs = new AppSourceSpecsApi(client);
+    this.source = new AppSourceApi(client);
+    this.remix = new AppRemixApi(client);
     this.platformTargets = new AppPlatformTargetsApi(client);
     this.sourceRepositories = new AppSourceRepositoriesApi(client);
   }

@@ -45,7 +45,8 @@ impl DeployRepository {
         page_size: i32,
     ) -> DeployServiceResult<ArtifactPage> {
         let (_page, page_size, offset) = pagination(page, page_size);
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
 
         let count_query = format!(
             "SELECT COUNT(*) AS total FROM deploy_artifact a
@@ -99,7 +100,8 @@ impl DeployRepository {
         app_scope: Option<&str>,
         artifact_id: &str,
     ) -> DeployServiceResult<ArtifactResponse> {
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
         let query = format!(
             "SELECT {ARTIFACT_SELECT}
              FROM deploy_artifact a
@@ -154,9 +156,7 @@ impl DeployRepository {
         // from registering an un-attributed row it could then not read.
         let bound_app_uuid = app_scope.or(request.app_id.as_deref());
         let app_internal_id = match bound_app_uuid {
-            Some(app_id) => {
-                Some(resolve_app_internal_id(&self.pool, tenant_id, app_id).await?)
-            }
+            Some(app_id) => Some(resolve_app_internal_id(&self.pool, tenant_id, app_id).await?),
             None => None,
         };
         let reference_id = next_id(self.id_generator())?;
@@ -204,7 +204,8 @@ impl DeployRepository {
         app_scope: Option<&str>,
         artifact_id: &str,
     ) -> DeployServiceResult<()> {
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
         let now = now_rfc3339();
         let query = format!(
             "UPDATE deploy_artifact a
@@ -236,7 +237,8 @@ impl DeployRepository {
         upload_session_id: &str,
         checksum_sha256: &str,
     ) -> DeployServiceResult<ArtifactResponse> {
-        let app_internal_id = resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
+        let app_internal_id =
+            resolve_scope_app_internal_id(&self.pool, tenant_id, app_scope).await?;
         let session_query = format!(
             "SELECT s.id, s.uuid, s.app_id, s.package_type, s.file_name, s.content_type,
                     s.content_length, s.status, s.drive_node_id, s.drive_space_id

@@ -5,6 +5,7 @@ pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;
 pub mod app_source_specs;
+pub mod app_sources;
 pub mod backend;
 pub mod certificate_caa;
 pub mod certificate_dns;
@@ -63,7 +64,7 @@ pub use repository::{
     AppIdentityProvisioningTarget, CertificateOrderClaim, CertificateRenewalClaim,
     DeployRepositoryPort, DnsChallengeZone, DnsRecordSnapshotRow, DomainDnsRecordFilter,
     DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset, ExpiredCertificateSweep,
-    TemplateReadScope, ZoneDnsSyncTarget,
+    TemplateReadScope, UpdateAppSourceCommand, UpdateAppSourceGitCommand, ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
     DeployRuntimeAssignmentMutationPort, DeployRuntimeAssignmentRepositoryPort,

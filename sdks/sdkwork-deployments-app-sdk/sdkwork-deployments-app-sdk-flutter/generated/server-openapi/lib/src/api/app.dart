@@ -185,6 +185,49 @@ class AppApi {
     })();
   }
 
+  /// Retrieve the application's remix source
+  Future<AppsSourceRetrieveResponse?> appsSourceRetrieve(String appId) async {
+    final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/source'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsSourceRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Replace the application's remix source
+  Future<AppsSourceUpdateResponse?> appsSourceUpdate(String appId, UpdateAppSourceRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/source'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsSourceUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// Retire the application's remix source
+  Future<void> appsSourceDelete(String appId) async {
+    await _client.delete(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/source'));
+  }
+
+  /// Retrieve the remix state and download instructions
+  Future<AppsRemixRetrieveResponse?> appsRemixRetrieve(String appId) async {
+    final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/remix'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsRemixRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Enable or disable remix
+  Future<AppsRemixUpdateResponse?> appsRemixUpdate(String appId, UpdateAppRemixRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/remix'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsRemixUpdateResponse.fromJson(map);
+    })();
+  }
+
   /// List platform targets of an app
   Future<PlatformTargetsListResponse?> platformTargetsList(String appId) async {
     final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/platform_targets'));

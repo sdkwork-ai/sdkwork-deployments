@@ -18,8 +18,9 @@ use sdkwork_deploy_contract::{
     CreateBuildTemplateRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
     CreateSourceRepositoryRequest, DeployAppRequestContext, ListAppsQuery, PromoteChannelRequest,
     PromoteEnvironmentRequest, RegisterPackageRequest, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRequest,
-    UpdateAppSourceSpecRequest, UpdateBuildStateRequest, UsageEventQuery,
+    UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRemixRequest,
+    UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
+    UsageEventQuery,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -139,6 +140,16 @@ pub fn build_app_delivery_router() -> Router<AppState> {
         .route(
             paths::APP_SOURCE_SPEC_SOURCE,
             put(bind_app_source_spec_source),
+        )
+        .route(
+            paths::APP_SOURCE,
+            get(retrieve_app_source)
+                .put(update_app_source)
+                .delete(delete_app_source),
+        )
+        .route(
+            paths::APP_REMIX,
+            get(retrieve_app_remix).put(update_app_remix),
         )
 }
 
@@ -470,6 +481,109 @@ async fn retrieve_platform_target(
             let result = state
                 .api
                 .retrieve_platform_target(&context, &app_id, &target_id)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+// -- remix source ---------------------------------------------------------------
+
+/// `GET /apps/{appId}/source`
+///
+/// Answers `200` even when nothing is configured: an application without a source
+/// is a `MISSING` answer the console renders as an empty form, not a `404`.
+async fn retrieve_app_source(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state.api.retrieve_app_source(&context, &app_id).await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+/// `PUT /apps/{appId}/source` — replace the source (Git or archive).
+async fn update_app_source(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<UpdateAppSourceRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .update_app_source(&context, &app_id, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn delete_app_source(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_no_content(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            service_result(state.api.delete_app_source(&context, &app_id).await)
+        }
+        .await,
+    )
+}
+
+// -- remix state ----------------------------------------------------------------
+
+async fn retrieve_app_remix(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state.api.retrieve_app_remix(&context, &app_id).await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+/// `PUT /apps/{appId}/remix` — enable/disable; enabling needs a `READY` source
+/// (the service answers `409` naming the readiness reason otherwise).
+async fn update_app_remix(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<UpdateAppRemixRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .update_app_remix(&context, &app_id, &request)
                 .await?;
             ok_json(envelope::resource(result))
         }

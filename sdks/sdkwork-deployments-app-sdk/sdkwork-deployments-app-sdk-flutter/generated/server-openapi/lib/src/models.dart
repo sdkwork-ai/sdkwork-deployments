@@ -6100,6 +6100,513 @@ class SourceRepositoryResponse {
   }
 }
 
+class UpdateAppSourceRequest {
+  final String kind;
+  final AppSourceGitInput? git;
+  final AppSourceArchiveInput? archive;
+
+  UpdateAppSourceRequest({
+    required this.kind,
+    this.git,
+    this.archive
+  });
+
+  factory UpdateAppSourceRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateAppSourceRequest(
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('UpdateAppSourceRequest.kind is required');
+        }
+        return value;
+      })(),
+      git: (() {
+        final map = _sdkworkAsMap(json['git']);
+        return map == null ? null : AppSourceGitInput.fromJson(map);
+      })(),
+      archive: (() {
+        final map = _sdkworkAsMap(json['archive']);
+        return map == null ? null : AppSourceArchiveInput.fromJson(map);
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'kind': kind,
+      'git': git?.toJson(),
+      'archive': archive?.toJson(),
+    };
+  }
+}
+
+class AppSourceGitInput {
+  final String repoProvider;
+  final String repoUrl;
+  final String? repoRef;
+  final String? subPath;
+  final String? credentialSecretRef;
+  final String? cloneMode;
+
+  AppSourceGitInput({
+    required this.repoProvider,
+    required this.repoUrl,
+    this.repoRef,
+    this.subPath,
+    this.credentialSecretRef,
+    this.cloneMode
+  });
+
+  factory AppSourceGitInput.fromJson(Map<String, dynamic> json) {
+    return AppSourceGitInput(
+      repoProvider: (() {
+        final value = json['repoProvider']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitInput.repoProvider is required');
+        }
+        return value;
+      })(),
+      repoUrl: (() {
+        final value = json['repoUrl']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitInput.repoUrl is required');
+        }
+        return value;
+      })(),
+      repoRef: json['repoRef']?.toString(),
+      subPath: json['subPath']?.toString(),
+      credentialSecretRef: json['credentialSecretRef']?.toString(),
+      cloneMode: json['cloneMode']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'repoProvider': repoProvider,
+      'repoUrl': repoUrl,
+      'repoRef': repoRef,
+      'subPath': subPath,
+      'credentialSecretRef': credentialSecretRef,
+      'cloneMode': cloneMode,
+    };
+  }
+}
+
+class AppSourceArchiveInput {
+  final String artifactId;
+
+  AppSourceArchiveInput({
+    required this.artifactId
+  });
+
+  factory AppSourceArchiveInput.fromJson(Map<String, dynamic> json) {
+    return AppSourceArchiveInput(
+      artifactId: (() {
+        final value = json['artifactId']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveInput.artifactId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'artifactId': artifactId,
+    };
+  }
+}
+
+class AppSourceResponse {
+  final String appId;
+  final bool remixEnabled;
+  final String? sourceKind;
+  final String readiness;
+  final String? readinessReason;
+  final AppSourceGitResponse? git;
+  final AppSourceArchiveResponse? archive;
+  final String? updatedAt;
+  final String? version;
+
+  AppSourceResponse({
+    required this.appId,
+    required this.remixEnabled,
+    this.sourceKind,
+    required this.readiness,
+    this.readinessReason,
+    this.git,
+    this.archive,
+    this.updatedAt,
+    this.version
+  });
+
+  factory AppSourceResponse.fromJson(Map<String, dynamic> json) {
+    return AppSourceResponse(
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceResponse.appId is required');
+        }
+        return value;
+      })(),
+      remixEnabled: (() {
+        final value = json['remixEnabled'];
+        if (value is! bool) {
+          throw FormatException('AppSourceResponse.remixEnabled is required');
+        }
+        return value;
+      })(),
+      sourceKind: json['sourceKind']?.toString(),
+      readiness: (() {
+        final value = json['readiness']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceResponse.readiness is required');
+        }
+        return value;
+      })(),
+      readinessReason: json['readinessReason']?.toString(),
+      git: (() {
+        final map = _sdkworkAsMap(json['git']);
+        return map == null ? null : AppSourceGitResponse.fromJson(map);
+      })(),
+      archive: (() {
+        final map = _sdkworkAsMap(json['archive']);
+        return map == null ? null : AppSourceArchiveResponse.fromJson(map);
+      })(),
+      updatedAt: json['updatedAt']?.toString(),
+      version: json['version']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'appId': appId,
+      'remixEnabled': remixEnabled,
+      'sourceKind': sourceKind,
+      'readiness': readiness,
+      'readinessReason': readinessReason,
+      'git': git?.toJson(),
+      'archive': archive?.toJson(),
+      'updatedAt': updatedAt,
+      'version': version,
+    };
+  }
+}
+
+class AppSourceGitResponse {
+  final String repoProvider;
+  final String repoUrl;
+  final String repoRef;
+  final String? subPath;
+  final String cloneMode;
+  final String? credentialSecretRef;
+  final String repoStatus;
+
+  AppSourceGitResponse({
+    required this.repoProvider,
+    required this.repoUrl,
+    required this.repoRef,
+    this.subPath,
+    required this.cloneMode,
+    this.credentialSecretRef,
+    required this.repoStatus
+  });
+
+  factory AppSourceGitResponse.fromJson(Map<String, dynamic> json) {
+    return AppSourceGitResponse(
+      repoProvider: (() {
+        final value = json['repoProvider']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitResponse.repoProvider is required');
+        }
+        return value;
+      })(),
+      repoUrl: (() {
+        final value = json['repoUrl']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitResponse.repoUrl is required');
+        }
+        return value;
+      })(),
+      repoRef: (() {
+        final value = json['repoRef']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitResponse.repoRef is required');
+        }
+        return value;
+      })(),
+      subPath: json['subPath']?.toString(),
+      cloneMode: (() {
+        final value = json['cloneMode']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitResponse.cloneMode is required');
+        }
+        return value;
+      })(),
+      credentialSecretRef: json['credentialSecretRef']?.toString(),
+      repoStatus: (() {
+        final value = json['repoStatus']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceGitResponse.repoStatus is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'repoProvider': repoProvider,
+      'repoUrl': repoUrl,
+      'repoRef': repoRef,
+      'subPath': subPath,
+      'cloneMode': cloneMode,
+      'credentialSecretRef': credentialSecretRef,
+      'repoStatus': repoStatus,
+    };
+  }
+}
+
+class AppSourceArchiveResponse {
+  final String artifactId;
+  final String uploadSessionId;
+  final int packageType;
+  final String fileName;
+  final String contentType;
+  final String contentLength;
+  final String? checksumSha256;
+  final String driveNodeId;
+  final String? driveSpaceId;
+  final String createdAt;
+
+  AppSourceArchiveResponse({
+    required this.artifactId,
+    required this.uploadSessionId,
+    required this.packageType,
+    required this.fileName,
+    required this.contentType,
+    required this.contentLength,
+    this.checksumSha256,
+    required this.driveNodeId,
+    this.driveSpaceId,
+    required this.createdAt
+  });
+
+  factory AppSourceArchiveResponse.fromJson(Map<String, dynamic> json) {
+    return AppSourceArchiveResponse(
+      artifactId: (() {
+        final value = json['artifactId']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.artifactId is required');
+        }
+        return value;
+      })(),
+      uploadSessionId: (() {
+        final value = json['uploadSessionId']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.uploadSessionId is required');
+        }
+        return value;
+      })(),
+      packageType: (() {
+        final value = json['packageType'];
+        if (value is! int) {
+          throw FormatException('AppSourceArchiveResponse.packageType is required');
+        }
+        return value;
+      })(),
+      fileName: (() {
+        final value = json['fileName']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.fileName is required');
+        }
+        return value;
+      })(),
+      contentType: (() {
+        final value = json['contentType']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.contentType is required');
+        }
+        return value;
+      })(),
+      contentLength: (() {
+        final value = json['contentLength']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.contentLength is required');
+        }
+        return value;
+      })(),
+      checksumSha256: json['checksumSha256']?.toString(),
+      driveNodeId: (() {
+        final value = json['driveNodeId']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.driveNodeId is required');
+        }
+        return value;
+      })(),
+      driveSpaceId: json['driveSpaceId']?.toString(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('AppSourceArchiveResponse.createdAt is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'artifactId': artifactId,
+      'uploadSessionId': uploadSessionId,
+      'packageType': packageType,
+      'fileName': fileName,
+      'contentType': contentType,
+      'contentLength': contentLength,
+      'checksumSha256': checksumSha256,
+      'driveNodeId': driveNodeId,
+      'driveSpaceId': driveSpaceId,
+      'createdAt': createdAt,
+    };
+  }
+}
+
+class UpdateAppRemixRequest {
+  final bool enabled;
+
+  UpdateAppRemixRequest({
+    required this.enabled
+  });
+
+  factory UpdateAppRemixRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateAppRemixRequest(
+      enabled: (() {
+        final value = json['enabled'];
+        if (value is! bool) {
+          throw FormatException('UpdateAppRemixRequest.enabled is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'enabled': enabled,
+    };
+  }
+}
+
+class AppRemixResponse {
+  final String appId;
+  final bool remixEnabled;
+  final String? sourceKind;
+  final String readiness;
+  final String? readinessReason;
+  final AppRemixDownloadResponse? download;
+  final String? updatedAt;
+  final String? version;
+
+  AppRemixResponse({
+    required this.appId,
+    required this.remixEnabled,
+    this.sourceKind,
+    required this.readiness,
+    this.readinessReason,
+    this.download,
+    this.updatedAt,
+    this.version
+  });
+
+  factory AppRemixResponse.fromJson(Map<String, dynamic> json) {
+    return AppRemixResponse(
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('AppRemixResponse.appId is required');
+        }
+        return value;
+      })(),
+      remixEnabled: (() {
+        final value = json['remixEnabled'];
+        if (value is! bool) {
+          throw FormatException('AppRemixResponse.remixEnabled is required');
+        }
+        return value;
+      })(),
+      sourceKind: json['sourceKind']?.toString(),
+      readiness: (() {
+        final value = json['readiness']?.toString();
+        if (value == null) {
+          throw FormatException('AppRemixResponse.readiness is required');
+        }
+        return value;
+      })(),
+      readinessReason: json['readinessReason']?.toString(),
+      download: (() {
+        final map = _sdkworkAsMap(json['download']);
+        return map == null ? null : AppRemixDownloadResponse.fromJson(map);
+      })(),
+      updatedAt: json['updatedAt']?.toString(),
+      version: json['version']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'appId': appId,
+      'remixEnabled': remixEnabled,
+      'sourceKind': sourceKind,
+      'readiness': readiness,
+      'readinessReason': readinessReason,
+      'download': download?.toJson(),
+      'updatedAt': updatedAt,
+      'version': version,
+    };
+  }
+}
+
+class AppRemixDownloadResponse {
+  final String mode;
+  final AppSourceGitResponse? git;
+  final AppSourceArchiveResponse? archive;
+
+  AppRemixDownloadResponse({
+    required this.mode,
+    this.git,
+    this.archive
+  });
+
+  factory AppRemixDownloadResponse.fromJson(Map<String, dynamic> json) {
+    return AppRemixDownloadResponse(
+      mode: (() {
+        final value = json['mode']?.toString();
+        if (value == null) {
+          throw FormatException('AppRemixDownloadResponse.mode is required');
+        }
+        return value;
+      })(),
+      git: (() {
+        final map = _sdkworkAsMap(json['git']);
+        return map == null ? null : AppSourceGitResponse.fromJson(map);
+      })(),
+      archive: (() {
+        final map = _sdkworkAsMap(json['archive']);
+        return map == null ? null : AppSourceArchiveResponse.fromJson(map);
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'mode': mode,
+      'git': git?.toJson(),
+      'archive': archive?.toJson(),
+    };
+  }
+}
+
 class CreateBuildTemplateRequest {
   final String templateName;
   final String templateVersion;
@@ -11288,6 +11795,190 @@ class AppsSourceSpecsBindResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AppsSourceSpecsBindResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsSourceRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsSourceRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsSourceRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return AppsSourceRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsSourceRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsSourceRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsSourceRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsSourceUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsSourceUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsSourceUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return AppsSourceUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsSourceUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsSourceUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsSourceUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsRemixRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsRemixRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsRemixRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return AppsRemixRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsRemixRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsRemixRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsRemixRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsRemixUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsRemixUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsRemixUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return AppsRemixUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsRemixUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsRemixUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsRemixUpdateResponse.traceId is required');
         }
         return value;
       })()

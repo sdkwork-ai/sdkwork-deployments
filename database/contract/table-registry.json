@@ -409,6 +409,12 @@
       "owner": "deploy-platform",
       "compliance_level": "L2",
       "lifecycle_status": "active"
+    },
+    {
+      "table_name": "deploy_app_source",
+      "owner": "deploy-platform",
+      "compliance_level": "L2",
+      "lifecycle_status": "active"
     }
   ]
 }

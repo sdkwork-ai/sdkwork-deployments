@@ -38,8 +38,8 @@ use std::sync::Arc;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    DeployAppApi, DeployAppRequestContext, DeployServiceError, DeployServiceErrorKind,
-    ListAppsQuery,
+    AppSourceGitInput, AppSourceKind, DeployAppApi, DeployAppRequestContext, DeployServiceError,
+    DeployServiceErrorKind, ListAppsQuery, UpdateAppRemixRequest, UpdateAppSourceRequest,
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployService;
@@ -92,6 +92,24 @@ fn probe_context() -> DeployAppRequestContext {
 fn is_default_body(error: &DeployServiceError) -> bool {
     error.kind() == DeployServiceErrorKind::Internal
         && error.to_string().contains(DEFAULT_BODY_MARKER)
+}
+
+/// Deliberately minimal — and deliberately *unresolvable*: the probe tenant is
+/// unknown to the fixture, so any real body stops at "app not found" while a
+/// default body would answer `Internal` regardless of the arguments.
+fn source_request() -> UpdateAppSourceRequest {
+    UpdateAppSourceRequest {
+        kind: AppSourceKind::Git,
+        git: Some(AppSourceGitInput {
+            repo_provider: "GITHUB".to_owned(),
+            repo_url: "https://github.com/sdkwork/app.git".to_owned(),
+            repo_ref: None,
+            sub_path: None,
+            credential_secret_ref: None,
+            clone_mode: None,
+        }),
+        archive: None,
+    }
 }
 
 /// Records an app-api operation whose result is a default trait body.
@@ -147,6 +165,37 @@ async fn no_app_operation_falls_back_to_a_default_trait_body() {
         unbacked,
         "apps.retrieve",
         api.retrieve_app(&context, "probe-id").await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.source.retrieve",
+        api.retrieve_app_source(&context, "probe-id").await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.source.update",
+        api.update_app_source(&context, "probe-id", &source_request())
+            .await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.source.delete",
+        api.delete_app_source(&context, "probe-id").await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.remix.retrieve",
+        api.retrieve_app_remix(&context, "probe-id").await
+    );
+    record_default_body!(
+        unbacked,
+        "apps.remix.update",
+        api.update_app_remix(
+            &context,
+            "probe-id",
+            &UpdateAppRemixRequest { enabled: false },
+        )
+        .await
     );
 
     assert!(

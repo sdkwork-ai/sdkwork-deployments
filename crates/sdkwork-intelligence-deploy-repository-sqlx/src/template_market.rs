@@ -169,7 +169,9 @@ fn metadata_with_screenshots(
     screenshots: &[AppTemplateScreenshot],
 ) -> DeployServiceResult<serde_json::Value> {
     let object = metadata.as_object_mut().ok_or_else(|| {
-        DeployServiceError::Internal("deploy_application_scaffold.metadata is not a JSON object".to_owned())
+        DeployServiceError::Internal(
+            "deploy_application_scaffold.metadata is not a JSON object".to_owned(),
+        )
     })?;
     object.insert(
         "screenshots".to_owned(),
@@ -191,7 +193,8 @@ fn screenshots_from_metadata(
     }
     serde_json::from_value(value.clone()).map_err(|error| {
         sqlx::Error::Decode(
-            format!("deploy_application_scaffold.metadata.screenshots is malformed: {error}").into(),
+            format!("deploy_application_scaffold.metadata.screenshots is malformed: {error}")
+                .into(),
         )
     })
 }
@@ -357,7 +360,9 @@ impl DeployRepository {
             .map(map_category_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| {
-                DeployServiceError::Internal(format!("map deploy_application_scaffold_category: {error}"))
+                DeployServiceError::Internal(format!(
+                    "map deploy_application_scaffold_category: {error}"
+                ))
             })?;
         Ok(TemplateCategoryPage {
             items,
@@ -1397,11 +1402,9 @@ impl DeployRepository {
         // Validate up front so a malformed version fails before the row lock;
         // the insert helper re-validates when it binds.
         require_text(&request.version, "version", 64)?;
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| store_error("begin create deploy_application_scaffold_version", error))?;
+        let mut transaction = self.pool.begin().await.map_err(|error| {
+            store_error("begin create deploy_application_scaffold_version", error)
+        })?;
         let row = sqlx::query(
             "SELECT id, status, organization_id FROM deploy_application_scaffold
              WHERE tenant_id = $1 AND uuid = $2 AND author_user_id = $3 AND deleted_at IS NULL
@@ -1459,10 +1462,9 @@ impl DeployRepository {
             .await
             .map_err(|error| store_error("advance deploy_application_scaffold latest version", error))?;
         }
-        transaction
-            .commit()
-            .await
-            .map_err(|error| store_error("commit create deploy_application_scaffold_version", error))?;
+        transaction.commit().await.map_err(|error| {
+            store_error("commit create deploy_application_scaffold_version", error)
+        })?;
         self.retrieve_app_template_version_repo(Some(tenant_id), None, template_uuid, &version_uuid)
             .await
     }
@@ -1621,12 +1623,14 @@ impl DeployRepository {
                     "a template cannot be published without at least one version",
                 ));
             }
-            sqlx::query("UPDATE deploy_application_scaffold SET latest_version_uuid = $2 WHERE id = $1")
-                .bind(template_id)
-                .bind(latest)
-                .execute(&mut *transaction)
-                .await
-                .map_err(|error| store_error("pin latest template version", error))?;
+            sqlx::query(
+                "UPDATE deploy_application_scaffold SET latest_version_uuid = $2 WHERE id = $1",
+            )
+            .bind(template_id)
+            .bind(latest)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|error| store_error("pin latest template version", error))?;
         }
         transaction
             .commit()

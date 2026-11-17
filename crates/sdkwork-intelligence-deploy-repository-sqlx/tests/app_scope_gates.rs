@@ -17,8 +17,9 @@ use std::sync::Arc;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    AppPublishEnvironment, CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi,
-    DeployAppRequestContext, DeployServiceErrorKind, UpdateAppCompositionRequest,
+    AppPublishEnvironment, AppSourceGitInput, AppSourceKind, CreateEnvVariableRequest,
+    CreateHealthCheckRequest, DeployAppApi, DeployAppRequestContext, DeployServiceErrorKind,
+    UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppSourceRequest,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -157,7 +158,9 @@ async fn application_a_still_addresses_itself() {
     let app_a = caller(Some(APP_A_UUID));
 
     for error in [
-        api.list_health_checks(&app_a, APP_A_UUID).await.unwrap_err(),
+        api.list_health_checks(&app_a, APP_A_UUID)
+            .await
+            .unwrap_err(),
         api.create_health_check(&app_a, APP_A_UUID, &health_check())
             .await
             .unwrap_err(),
@@ -194,4 +197,92 @@ async fn unscoped_credential_is_decided_by_the_owner_gate_not_the_scope_gate() {
         DeployServiceErrorKind::Forbidden,
         "an unscoped credential must not be refused by the application-scope gate: {error}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Remix source and remix state
+// ---------------------------------------------------------------------------
+
+fn git_source() -> UpdateAppSourceRequest {
+    UpdateAppSourceRequest {
+        kind: AppSourceKind::Git,
+        git: Some(AppSourceGitInput {
+            repo_provider: "GITHUB".to_owned(),
+            repo_url: "https://github.com/sdkwork/app.git".to_owned(),
+            repo_ref: None,
+            sub_path: None,
+            credential_secret_ref: None,
+            clone_mode: None,
+        }),
+        archive: None,
+    }
+}
+
+fn remix_state(enabled: bool) -> UpdateAppRemixRequest {
+    UpdateAppRemixRequest { enabled }
+}
+
+/// The remix surface is addressed by `appId` on every route, so it carries the same
+/// credential gate as the other app-scoped surfaces: application A's token must not
+/// read or write B's source, and must not toggle B's remix.
+#[tokio::test]
+async fn application_a_cannot_address_application_b_remix_source() {
+    let service = service();
+    let api: &dyn DeployAppApi = &service;
+    let app_a = caller(Some(APP_A_UUID));
+
+    assert_forbidden!(
+        "apps.source.retrieve",
+        api.retrieve_app_source(&app_a, APP_B_UUID).await
+    );
+    assert_forbidden!(
+        "apps.source.update",
+        api.update_app_source(&app_a, APP_B_UUID, &git_source())
+            .await
+    );
+    assert_forbidden!(
+        "apps.source.delete",
+        api.delete_app_source(&app_a, APP_B_UUID).await
+    );
+    assert_forbidden!(
+        "apps.remix.retrieve",
+        api.retrieve_app_remix(&app_a, APP_B_UUID).await
+    );
+    assert_forbidden!(
+        "apps.remix.update",
+        api.update_app_remix(&app_a, APP_B_UUID, &remix_state(true))
+            .await
+    );
+}
+
+/// The same calls addressed to the credential's own application pass the gate and
+/// stop at the unreachable repository — otherwise the refusal above could be a
+/// blanket denial.
+#[tokio::test]
+async fn application_a_still_addresses_its_own_remix_source() {
+    let service = service();
+    let api: &dyn DeployAppApi = &service;
+    let app_a = caller(Some(APP_A_UUID));
+
+    for error in [
+        api.retrieve_app_source(&app_a, APP_A_UUID)
+            .await
+            .unwrap_err(),
+        api.update_app_source(&app_a, APP_A_UUID, &git_source())
+            .await
+            .unwrap_err(),
+        api.delete_app_source(&app_a, APP_A_UUID).await.unwrap_err(),
+        api.retrieve_app_remix(&app_a, APP_A_UUID)
+            .await
+            .unwrap_err(),
+        api.update_app_remix(&app_a, APP_A_UUID, &remix_state(false))
+            .await
+            .unwrap_err(),
+    ] {
+        assert_ne!(
+            error.kind(),
+            DeployServiceErrorKind::Forbidden,
+            "the credential's own application must pass the scope gate: {error}"
+        );
+    }
 }

@@ -213,3 +213,6 @@ tables:
   - name: deploy_application_resource_link
     lifecycle_status: active
     owner: deploy-platform
+  - name: deploy_app_source
+    lifecycle_status: active
+    owner: deploy-platform

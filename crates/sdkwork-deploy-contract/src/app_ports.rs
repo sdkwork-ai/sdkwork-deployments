@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_composition::{AppCompositionResponse, UpdateAppCompositionRequest};
 use crate::app_delivery::*;
+use crate::app_source::*;
 use crate::app_source_spec::*;
 use crate::dto::*;
 use crate::problem::DeployServiceResult;
@@ -861,6 +862,58 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<SourceRepositoryResponse> {
         Err(crate::DeployServiceError::Internal(
             "retrieve_source_repository API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn retrieve_app_source(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "retrieve_app_source API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn update_app_source(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &UpdateAppSourceRequest,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "update_app_source API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn delete_app_source(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<()> {
+        Err(crate::DeployServiceError::Internal(
+            "delete_app_source API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn retrieve_app_remix(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<AppRemixResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "retrieve_app_remix API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn update_app_remix(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &UpdateAppRemixRequest,
+    ) -> DeployServiceResult<AppRemixResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "update_app_remix API is not implemented".to_owned(),
         ))
     }
 

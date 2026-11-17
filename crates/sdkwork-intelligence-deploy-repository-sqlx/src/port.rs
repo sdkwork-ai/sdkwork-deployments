@@ -6,25 +6,25 @@ use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage,
-    BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse,
-    CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
-    CertificateRenewalPage, CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
-    ChannelRolloutResponse, CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest,
-    CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
-    CreateAppReleaseRequest, CreateAppRequest, CreateArtifactRequest, CreateBuildRequest,
-    CreateBuildTemplateRequest, CreateCertificateRequest, CreateDeployUploadSessionRequest,
-    CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
-    CreateHealthCheckRequest, CreateNginxConfigRequest, CreateNodeClusterRequest,
-    CreatePlatformTargetRequest, CreateServerRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployUploadSessionResponse,
-    DeploymentStatus, DomainHostnamePage, DomainHostnameResponse, DomainZonePage,
-    DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage, EnvVariableResponse,
-    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
-    ListAppsQuery, ListDomainZonesQuery, ListNginxConfigsQuery, NginxConfigPage,
-    NginxConfigResponse, NginxReloadResponse, NginxStatusResponse, NginxValidateResponse,
-    NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage,
-    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    AppReleaseResponse, AppResponse, AppSourceResponse, ArtifactPage, ArtifactResponse,
+    AuditLogPage, BuildPage, BuildQueuePage, BuildResponse, BuildTemplatePage,
+    BuildTemplateResponse, CertificateChallengePage, CertificateOrderPage,
+    CertificateOrderResponse, CertificatePage, CertificateRenewalPage, CertificateResponse,
+    ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
+    CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest,
+    CreateAppDeploymentRequest, CreateAppEnvironmentRequest, CreateAppReleaseRequest,
+    CreateAppRequest, CreateArtifactRequest, CreateBuildRequest, CreateBuildTemplateRequest,
+    CreateCertificateRequest, CreateDeployUploadSessionRequest, CreateDomainHostnameRequest,
+    CreateDomainZoneRequest, CreateEnvVariableRequest, CreateHealthCheckRequest,
+    CreateNginxConfigRequest, CreateNodeClusterRequest, CreatePlatformTargetRequest,
+    CreateServerRequest, CreateSigningIdentityRequest, CreateSourceRepositoryRequest,
+    DeployUploadSessionResponse, DeploymentStatus, DomainHostnamePage, DomainHostnameResponse,
+    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EnvVariablePage,
+    EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage,
+    HealthCheckResponse, ListAppsQuery, ListDomainZonesQuery, ListNginxConfigsQuery,
+    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
+    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
+    PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
     RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, RetentionRunResponse,
     RunnerHealthPage, ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
     SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
@@ -42,7 +42,7 @@ use sdkwork_deploy_web_port::RuntimeAssignmentReceipt;
 use sdkwork_intelligence_deploy_service::repository::{
     AppIdentityProvisioningTarget, DomainDnsRecordFilter, DomainDnsRecordUpsert,
     DomainDnsSnapshotWrite, DomainHostnameAsset, InsertAuditLogCommand, InsertUsageEventCommand,
-    ZoneDnsSyncTarget,
+    UpdateAppSourceCommand, ZoneDnsSyncTarget,
 };
 use sdkwork_intelligence_deploy_service::repository::{RepositoryMatch, TriggerTarget};
 use sdkwork_intelligence_deploy_service::runtime_publication::{
@@ -880,6 +880,46 @@ impl DeployRepositoryPort for DeployRepository {
         repo_id: &str,
     ) -> DeployServiceResult<SourceRepositoryResponse> {
         self.retrieve_source_repository_repo(tenant_id, app_id, repo_id)
+            .await
+    }
+
+    async fn retrieve_app_source(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        self.retrieve_app_source_repo(tenant_id, app_id).await
+    }
+
+    async fn update_app_source(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        command: &UpdateAppSourceCommand,
+    ) -> DeployServiceResult<AppSourceResponse> {
+        self.update_app_source_repo(tenant_id, actor_id, app_id, command)
+            .await
+    }
+
+    async fn delete_app_source(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+    ) -> DeployServiceResult<()> {
+        self.delete_app_source_repo(tenant_id, actor_id, app_id)
+            .await
+    }
+
+    async fn update_app_remix_enabled(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        enabled: bool,
+    ) -> DeployServiceResult<()> {
+        self.update_app_remix_enabled_repo(tenant_id, actor_id, app_id, enabled)
             .await
     }
 
