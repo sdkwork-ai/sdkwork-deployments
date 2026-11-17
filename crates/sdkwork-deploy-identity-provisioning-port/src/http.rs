@@ -1,5 +1,11 @@
 //! Opt-in adapter that provisions through IAM's backend HTTP route.
 //!
+//! identity:service - this is a background machine surface. It authenticates the
+//! IAM provisioning route with the deployment's dedicated backend provisioning
+//! token (read from a secret file and carried in the provisioning request body);
+//! there is no end-user request whose dual tokens could be borrowed, and the
+//! tenant/application scope is the deploy application being provisioned.
+//!
 //! Route authority (read from sdkwork-iam, not guessed):
 //!
 //! - `crates/sdkwork-routes-iam-backend-api/src/handlers.rs:186-189` mounts
