@@ -25,7 +25,10 @@ final params = <String, dynamic>{
   'page': 1,
   'page_size': 2,
   'keyword': 'keyword',
+  'ownership_scope': 'PLATFORM',
   'scope': 'PLATFORM',
+  'owner_organization_id': '1',
+  'app_kind': 'app-kind',
 };
 final result = await client.app.appsList(params);
 print(result);
@@ -122,7 +125,10 @@ final params = <String, dynamic>{
   'page': 1,
   'page_size': 2,
   'keyword': 'keyword',
+  'ownership_scope': 'PLATFORM',
   'scope': 'PLATFORM',
+  'owner_organization_id': '1',
+  'app_kind': 'app-kind',
 };
 final result = await client.app.appsList(params);
 print(result);
@@ -262,7 +268,10 @@ try {
     'page': 1,
     'page_size': 2,
     'keyword': 'keyword',
+    'ownership_scope': 'PLATFORM',
     'scope': 'PLATFORM',
+    'owner_organization_id': '1',
+    'app_kind': 'app-kind',
   };
   final result = await client.app.appsList(params);
   print(result);

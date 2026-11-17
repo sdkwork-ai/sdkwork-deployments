@@ -33,8 +33,8 @@ async fn seed_release_scope(pool: &PgPool) -> (String, String, String) {
         "INSERT INTO deploy_app (id, uuid, tenant_id, organization_id, name, slug, app_kind,
                                  app_status, type, runtime_config, metadata, data_scope,
                                  default_environment, created_at, updated_at, version)
-         VALUES (5001, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 7, 9, 'Release App', 'release-app',
-                 'MOBILE', 'ACTIVE', 1, '{}', '{}', 1, 'production', NOW(), NOW(), 1);
+         VALUES (5001, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 7, 0, 'Release App', 'release-app',
+                 'ANDROID_APP', 'ACTIVE', 1, '{}', '{}', 1, 'production', NOW(), NOW(), 1);
 
          INSERT INTO deploy_app_platform_target (id, uuid, tenant_id, organization_id, app_id,
                                                  target_key, platform, target_status,

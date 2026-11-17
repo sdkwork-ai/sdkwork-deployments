@@ -49,7 +49,7 @@ async fn seed_app(pool: &PgPool) {
     .bind(SEEDED_APP_ID)
     .bind(SEEDED_APP_UUID)
     .bind(TENANT_ID)
-    .bind(ORGANIZATION_ID)
+    .bind(0)
     .execute(pool)
     .await
     .expect("seed deploy_app");
@@ -64,7 +64,7 @@ fn every_reachable_app() -> ListAppsQuery {
         page: 1,
         page_size: 20,
         keyword: None,
-        scope: None,
+        ..Default::default()
     }
 }
 
@@ -142,7 +142,13 @@ async fn list_retrieve_and_update_report_the_rows_decimal_id_beside_the_uuid() {
     let patch: UpdateAppRequest =
         serde_json::from_str(r#"{"name":"Renamed App"}"#).expect("patch parses");
     let updated = repository
-        .update_app(TENANT_ID, Some(ACTOR_ID), SEEDED_APP_UUID, &patch)
+        .update_app(
+            TENANT_ID,
+            Some(ACTOR_ID),
+            Some(ORGANIZATION_ID),
+            SEEDED_APP_UUID,
+            &patch,
+        )
         .await
         .expect("update the seeded app");
     assert_eq!(updated.name, "Renamed App", "the patch was applied");

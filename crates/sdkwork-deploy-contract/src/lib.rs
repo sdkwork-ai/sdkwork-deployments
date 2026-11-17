@@ -20,8 +20,8 @@ pub use app_delivery::*;
 pub use app_domains::{ProvisionAppDomainsResult, ResolvedDeployServer};
 pub use app_ports::{
     DeployAppApi, DeployAppRequestContext, DeployBackendApi, DeployBackendRequestContext,
-    ListAppsQuery, ListDomainDnsRecordsQuery, ListDomainZonesQuery, UsageEventQuery,
-    ZoneProviderAccountFilter, ZONE_PROVIDER_ACCOUNT_UNASSIGNED,
+    ListAppsAdminQuery, ListAppsQuery, ListDomainDnsRecordsQuery, ListDomainZonesQuery,
+    UsageEventQuery, ZoneProviderAccountFilter, ZONE_PROVIDER_ACCOUNT_UNASSIGNED,
 };
 pub use app_resource_link::*;
 pub use app_source::*;

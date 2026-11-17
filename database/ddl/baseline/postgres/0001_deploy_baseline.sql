@@ -1873,18 +1873,50 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     CONSTRAINT pk_deploy_app PRIMARY KEY (id),
     CONSTRAINT chk_deploy_app_type CHECK (type BETWEEN 1 AND 6),
     CONSTRAINT chk_deploy_app_status CHECK (app_status IN ('DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED')),
+    -- The endpoint kind (`app_kind`) is a closed vocabulary: one application is
+    -- one endpoint, and an unknown value is a registration defect rather than a
+    -- future extension. `STATIC_WEB` / `SPA_WEB` are the legacy rendering-model
+    -- kinds kept for existing rows; `H5_WEB` / `PC_WEB` are the endpoint-accurate
+    -- web kinds, and `FLUTTER_APP` is the cross-platform kind IAM already names
+    -- (`applicationType = flutter`).
+    CONSTRAINT chk_deploy_app_app_kind CHECK (
+        app_kind IN (
+            'STATIC_WEB', 'SPA_WEB', 'H5_WEB', 'PC_WEB',
+            'API_SERVICE',
+            'WECHAT_MINIPROGRAM', 'DOUYIN_MINIPROGRAM',
+            'IOS_APP', 'ANDROID_APP', 'HARMONYOS_APP',
+            'FLUTTER_APP', 'DESKTOP_APP'
+        )
+    ),
     CONSTRAINT chk_deploy_app_owner_type CHECK (
         owner_type IN ('PLATFORM', 'TENANT', 'ORGANIZATION', 'USER')
     ),
-    -- The level and its owner pointer must agree. Without this a row could
-    -- advertise `USER` while carrying no user — rendering an empty owner cell
-    -- that looks like missing data rather than a broken write — or advertise
-    -- `PLATFORM` while pointing at one person, which is the exact ambiguity the
-    -- explicit column exists to remove.
-    CONSTRAINT chk_deploy_app_owner_pointer CHECK (
-        (owner_type = 'USER' AND user_id IS NOT NULL)
-        OR (owner_type = 'ORGANIZATION' AND organization_id <> 0)
-        OR (owner_type IN ('PLATFORM', 'TENANT') AND user_id IS NULL)
+    -- The ownership mode and every pointer it owns must agree, as three
+    -- mutually exclusive shapes:
+    --
+    --   TENANT       organization_id = 0, user_id IS NULL
+    --   ORGANIZATION organization_id > 0, user_id IS NULL
+    --   USER         organization_id = 0, user_id IS NOT NULL
+    --
+    -- `PLATFORM` is platform-internal and shares the TENANT row shape because
+    -- its scope is the platform, not an organization. Among the three
+    -- tenant-addressable modes, `organization_id = 0` therefore holds exactly
+    -- for `TENANT` (and for the platform-internal `PLATFORM`).
+    --
+    -- This replaces the earlier, weaker `chk_deploy_app_owner_pointer`: that one
+    -- let a `TENANT` row carry a real organization and let a `USER` row keep
+    -- one, which made "tenant application" and "organization application" the
+    -- same row under different labels.
+    CONSTRAINT chk_deploy_app_ownership_alignment CHECK (
+        (owner_type IN ('PLATFORM', 'TENANT')
+            AND organization_id = 0
+            AND user_id IS NULL)
+        OR (owner_type = 'ORGANIZATION'
+            AND organization_id > 0
+            AND user_id IS NULL)
+        OR (owner_type = 'USER'
+            AND organization_id = 0
+            AND user_id IS NOT NULL)
     ),
     CONSTRAINT chk_deploy_app_default_environment CHECK (
         default_environment IN ('development', 'test', 'staging', 'demo', 'production')
@@ -1952,6 +1984,20 @@ CREATE INDEX IF NOT EXISTS idx_deploy_app_owner
 CREATE INDEX IF NOT EXISTS idx_deploy_app_owner_organization
     ON deploy_app (tenant_id, organization_id)
     WHERE deleted_at IS NULL AND owner_type = 'ORGANIZATION';
+
+-- Filtering the app ledger by ownership mode *and* endpoint kind is the
+-- operator's primary view (the admin console asks "whose app is this and which
+-- endpoint is it"). `idx_deploy_app_owner` serves the mode alone; these two add
+-- `app_kind` so the combined facet is one index scan instead of a bitmap merge.
+-- The organization leg is separate because a personal or tenant app carries
+-- `organization_id = 0` and must not dilute the organization scan.
+CREATE INDEX IF NOT EXISTS idx_deploy_app_tenant_ownership_kind
+    ON deploy_app (tenant_id, owner_type, app_kind)
+    WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_deploy_app_tenant_organization_kind
+    ON deploy_app (tenant_id, organization_id, app_kind)
+    WHERE deleted_at IS NULL;
 
 -- Application source specs: one row per (app, environment, spec).
 --

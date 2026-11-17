@@ -57,13 +57,25 @@ pub fn required_identity_field(platform: &str) -> RequiredIdentityField {
 /// Validates that an application kind may target the given platform.
 pub fn validate_app_kind_platform(app_kind: &str, platform: &str) -> Result<(), String> {
     let allowed: &[&str] = match app_kind {
-        "STATIC_WEB" | "SPA_WEB" => &["WEB"],
+        "STATIC_WEB" | "SPA_WEB" | "H5_WEB" | "PC_WEB" => &["WEB"],
         "API_SERVICE" => &["API"],
         "WECHAT_MINIPROGRAM" => &["WECHAT"],
         "DOUYIN_MINIPROGRAM" => &["DOUYIN"],
         "IOS_APP" => &["IOS"],
         "ANDROID_APP" => &["ANDROID"],
         "HARMONYOS_APP" => &["HARMONYOS"],
+        // A Flutter application is one codebase delivered to several stores, so
+        // its *platform targets* name the concrete platforms. The endpoint kind
+        // itself therefore admits every platform Flutter ships to.
+        "FLUTTER_APP" => &[
+            "IOS",
+            "ANDROID",
+            "HARMONYOS",
+            "WINDOWS",
+            "MACOS",
+            "LINUX",
+            "WEB",
+        ],
         "DESKTOP_APP" => &["WINDOWS", "MACOS", "LINUX"],
         _ => return Err(format!("unknown app kind {app_kind}")),
     };
@@ -167,6 +179,13 @@ mod tests {
     fn app_kind_platform_matrix_is_enforced() {
         assert!(validate_app_kind_platform("STATIC_WEB", "WEB").is_ok());
         assert!(validate_app_kind_platform("SPA_WEB", "WEB").is_ok());
+        assert!(validate_app_kind_platform("H5_WEB", "WEB").is_ok());
+        assert!(validate_app_kind_platform("PC_WEB", "WEB").is_ok());
+        assert!(validate_app_kind_platform("H5_WEB", "IOS").is_err());
+        assert!(validate_app_kind_platform("FLUTTER_APP", "IOS").is_ok());
+        assert!(validate_app_kind_platform("FLUTTER_APP", "ANDROID").is_ok());
+        assert!(validate_app_kind_platform("FLUTTER_APP", "WEB").is_ok());
+        assert!(validate_app_kind_platform("FLUTTER_APP", "WECHAT").is_err());
         assert!(validate_app_kind_platform("API_SERVICE", "API").is_ok());
         assert!(validate_app_kind_platform("WECHAT_MINIPROGRAM", "WECHAT").is_ok());
         assert!(validate_app_kind_platform("DOUYIN_MINIPROGRAM", "DOUYIN").is_ok());

@@ -88,7 +88,7 @@ async fn seed_old_package_and_release(pool: &PgPool) -> RetentionFixture {
     sqlx::query(
         "INSERT INTO deploy_app (id, uuid, tenant_id, organization_id, name, slug, app_kind,
              app_status, created_at, updated_at)
-         VALUES ($1, '00000000-0000-4000-8000-000000000002', 7, 9, 'retention-app', 'retention-app',
+         VALUES ($1, '00000000-0000-4000-8000-000000000002', 7, 0, 'retention-app', 'retention-app',
                  'API_SERVICE', 'ACTIVE', NOW() - INTERVAL '400 days', NOW() - INTERVAL '400 days')",
     )
     .bind(APP_ID)
@@ -204,7 +204,7 @@ async fn usage_daily_rebuild_is_idempotent_and_reconcilable() {
     sqlx::query(
         "INSERT INTO deploy_app (id, uuid, tenant_id, organization_id, name, slug, app_kind,
              app_status, created_at, updated_at)
-         VALUES ($1, '00000000-0000-4000-8000-000000000010', 7, 9, 'usage-app', 'usage-app',
+         VALUES ($1, '00000000-0000-4000-8000-000000000010', 7, 0, 'usage-app', 'usage-app',
                  'API_SERVICE', 'ACTIVE', NOW(), NOW())",
     )
     .bind(APP_ID)

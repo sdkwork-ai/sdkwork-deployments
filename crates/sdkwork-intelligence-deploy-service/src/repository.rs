@@ -82,6 +82,13 @@ pub struct AppIdentityProvisioningTarget {
     pub display_name: String,
     pub environment: String,
     pub app_kind: String,
+    /// `deploy_app.owner_type`: the ownership level the installation must
+    /// mirror (`TENANT`, `ORGANIZATION`, `USER`, or the platform-internal
+    /// `PLATFORM`).
+    pub ownership_scope: String,
+    /// `deploy_app.user_id`: the owner for a `USER` application, absent
+    /// otherwise.
+    pub owner_user_id: Option<String>,
     /// `deploy_app.identity_provisioning_key`, claimed (and persisted) by
     /// [`DeployRepositoryPort::begin_app_identity_provisioning`].
     pub provisioning_idempotency_key: String,
@@ -867,12 +874,23 @@ pub trait DeployRepositoryPort:
     /// `actor_id` and `organization_id` are the caller's subject, not filters:
     /// they drive the reachability gate inside the implementation, so a tenant
     /// member sees the shared levels plus their own apps rather than the whole
-    /// tenant. `query.scope` only narrows further.
+    /// tenant. `query.ownership_scope` / `query.organization_id` / `query.app_kind`
+    /// only narrow further.
     async fn list_apps(
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
         organization_id: Option<i64>,
+        query: &ListAppsQuery,
+    ) -> DeployServiceResult<AppPage>;
+
+    /// The operator ledger: no owner gate, optional tenant scope.
+    ///
+    /// `tenant_filter` is `None` only for an operator context that carries no
+    /// tenant; every other caller resolves to exactly one tenant.
+    async fn list_apps_admin(
+        &self,
+        tenant_filter: Option<i64>,
         query: &ListAppsQuery,
     ) -> DeployServiceResult<AppPage>;
 
@@ -882,6 +900,7 @@ pub trait DeployRepositoryPort:
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
+        organization_id: Option<i64>,
         app_id: &str,
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse>;

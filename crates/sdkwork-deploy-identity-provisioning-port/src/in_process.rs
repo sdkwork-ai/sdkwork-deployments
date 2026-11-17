@@ -21,7 +21,7 @@ use sdkwork_iam_web_adapter::{provision_tenant_application, TenantApplicationPro
 
 use crate::settings::{IdentityProvisioningConfigError, IdentityProvisioningSettings};
 use crate::{
-    normalize_application_type, DeployApplicationProvisioningCommand,
+    normalize_application_type, normalize_ownership_scope, DeployApplicationProvisioningCommand,
     DeployIdentityProvisioningPort, IdentityProvisioningError, ProvisioningOutcome,
     TenantApplicationReceipt,
 };
@@ -74,6 +74,13 @@ fn provision_command(
         access_permissions: Vec::new(),
         runtime_config: serde_json::json!({}),
         deploy_application_id: Some(command.deploy_application_id.clone()),
+        // The installation's ownership must agree with the application's own
+        // level; `PLATFORM` is normalised to `TENANT` because an installation has
+        // no platform-wide scope.
+        ownership_scope: Some(
+            normalize_ownership_scope(command.ownership_scope.as_str()).to_owned(),
+        ),
+        owner_user_id: command.owner_user_id.clone(),
         provisioning_idempotency_key: Some(command.provisioning_idempotency_key.clone()),
     }
 }
@@ -116,6 +123,8 @@ mod tests {
             display_name: "Shop".to_owned(),
             environment: "production".to_owned(),
             application_type: "pc".to_owned(),
+            ownership_scope: "TENANT".to_owned(),
+            owner_user_id: None,
             deploy_application_id: "1845123456789012345".to_owned(),
             provisioning_idempotency_key: "deploy:1845123456789012345".to_owned(),
         }
@@ -135,6 +144,20 @@ mod tests {
         assert_eq!(mapped.instance_key, command().instance_key);
         assert_eq!(mapped.display_name, "Shop");
         assert_eq!(mapped.environment, "production");
+    }
+
+    #[test]
+    fn provision_command_carries_the_ownership_scope() {
+        let mapped = provision_command(&command());
+        assert_eq!(mapped.ownership_scope.as_deref(), Some("TENANT"));
+        assert!(mapped.owner_user_id.is_none());
+
+        let mut personal = command();
+        personal.ownership_scope = "USER".to_owned();
+        personal.owner_user_id = Some("11001".to_owned());
+        let mapped_personal = provision_command(&personal);
+        assert_eq!(mapped_personal.ownership_scope.as_deref(), Some("USER"));
+        assert_eq!(mapped_personal.owner_user_id.as_deref(), Some("11001"));
     }
 
     #[test]

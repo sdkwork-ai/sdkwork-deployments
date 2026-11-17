@@ -31,7 +31,10 @@ const params = {
   page: 1,
   page_size: 2,
   keyword: 'keyword',
+  ownership_scope: 'PLATFORM',
   scope: 'PLATFORM',
+  owner_organization_id: 'owner_organization_id',
+  app_kind: 'app_kind',
 };
 const result = await client.app.list(params);
 ```
@@ -133,7 +136,10 @@ const params = {
   page: 1,
   page_size: 2,
   keyword: 'keyword',
+  ownership_scope: 'PLATFORM',
   scope: 'PLATFORM',
+  owner_organization_id: 'owner_organization_id',
+  app_kind: 'app_kind',
 };
 const result = await client.app.list(params);
 ```
@@ -274,7 +280,10 @@ try {
     page: 1,
     page_size: 2,
     keyword: 'keyword',
+    ownership_scope: 'PLATFORM',
     scope: 'PLATFORM',
+    owner_organization_id: 'owner_organization_id',
+    app_kind: 'app_kind',
   };
   const result = await client.app.list(params);
 } catch (error) {

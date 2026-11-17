@@ -36,7 +36,7 @@ async fn seed_control_plane(pool: &PgPool) {
         "INSERT INTO deploy_app (
             id,uuid,tenant_id,organization_id,name,slug,app_kind,app_status,runtime_config,
             metadata,default_environment,created_at,updated_at,version
-         ) VALUES (10,'site-1',7,9,'Docs','docs','WEB','ACTIVE','{}','{}',
+         ) VALUES (10,'site-1',7,0,'Docs','docs','SPA_WEB','ACTIVE','{}','{}',
                    'production','2026-07-22T00:00:00Z','2026-07-22T00:00:00Z',0)",
     )
     .execute(pool)

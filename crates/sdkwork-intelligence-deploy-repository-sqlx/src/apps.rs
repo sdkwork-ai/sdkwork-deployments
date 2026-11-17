@@ -150,6 +150,11 @@ fn map_app_row(row: &PgRow) -> Result<AppResponse, DeployServiceError> {
     let deploy_application_id: i64 = row
         .try_get("id")
         .map_err(|error| DeployServiceError::Internal(format!("read deploy_app id: {error}")))?;
+    // `organization_id` is `NOT NULL DEFAULT 0`. `0` is the tenant-level
+    // encoding, not "an organization numbered zero", so it is reported
+    // verbatim: `ownershipScope` plus this value are what let a caller tell the
+    // three modes apart without a second request.
+    let organization_id: i64 = row.try_get("organization_id").unwrap_or_default();
     Ok(AppResponse {
         id: row.try_get("uuid").unwrap_or_default(),
         deploy_application_id,
@@ -169,20 +174,14 @@ fn map_app_row(row: &PgRow) -> Result<AppResponse, DeployServiceError> {
         app_domain_suffixes: effective_suffixes,
         latest_release_tag: row.try_get("latest_release_tag").ok(),
         owner_type,
+        ownership_scope: owner_type,
         owner_user_id: optional_int64_string(row, "user_id"),
         owner_id,
         tenant_id: row
             .try_get::<i64, _>("tenant_id")
             .unwrap_or_default()
             .to_string(),
-        // `organization_id` is `NOT NULL DEFAULT 0`, and 0 means "no
-        // organization". Reporting it as `"0"` would read as an organization
-        // whose id happens to be zero, so it is normalised to absent here rather
-        // than left for every consumer to remember.
-        organization_id: match row.try_get::<i64, _>("organization_id").unwrap_or_default() {
-            0 => None,
-            value => Some(value.to_string()),
-        },
+        organization_id: organization_id.to_string(),
         created_by: optional_int64_string(row, "created_by"),
         updated_by: optional_int64_string(row, "updated_by"),
         activated_at: optional_datetime(row, "activated_at")?,
@@ -216,9 +215,16 @@ impl DeployRepository {
             .unwrap_or("production")
             .to_owned();
 
-        // Resolve the ownership level and its pointer as one decision: the DDL's
-        // `chk_deploy_app_owner_pointer` accepts them only as a pair, so deciding
-        // either alone would let the repository write a row the database rejects.
+        // Resolve the ownership level and its pointers as one decision: the DDL's
+        // `chk_deploy_app_ownership_alignment` accepts them only as one of the
+        // three tenant-addressable shapes, so deciding any field alone would let
+        // the repository write a row the database rejects.
+        //
+        // Absent means `TENANT` (`organization_id = 0`): an application that was
+        // not registered against an organization belongs to the current tenant,
+        // which is what `organization_id = 0` encodes. It is deliberately *not*
+        // inferred as the creating user's personal app — that turned every
+        // console create into an app only its creator could see.
         //
         // `PLATFORM` is refused rather than accepted. `apps.create` is guarded by
         // `deploy.apps.write`, which draws no line between a platform operator and
@@ -227,29 +233,10 @@ impl DeployRepository {
         // internally; they are readable here but not assertable from a tenant
         // command. `ORGANIZATION` is similarly bounded to the caller's own
         // organization, which is the only one the request context can speak for.
-        let owner_type = match request.owner_type {
-            // Absent means "this app belongs to whoever asked" — what a console
-            // create always is. A service principal has no user subject to own
-            // anything, so it lands on the tenant level.
-            None => {
-                if actor_id.is_some() {
-                    AppOwnerType::User
-                } else {
-                    AppOwnerType::Tenant
-                }
-            }
-            Some(AppOwnerType::User) => {
-                if actor_id.is_some() {
-                    AppOwnerType::User
-                } else {
-                    // `USER` with nobody to own it is not a row this schema
-                    // accepts. Degrading to the tenant level keeps the app
-                    // reachable instead of invisible to everyone.
-                    AppOwnerType::Tenant
-                }
-            }
+        let (owner_type, owner_organization_id, owner_user_id) = match request.owner_type {
+            None | Some(AppOwnerType::Tenant) => (AppOwnerType::Tenant, 0, None),
             Some(AppOwnerType::Organization) => match organization_id {
-                Some(value) if value != 0 => AppOwnerType::Organization,
+                Some(value) if value > 0 => (AppOwnerType::Organization, value, None),
                 _ => {
                     return Err(DeployServiceError::validation(
                         "ownerType ORGANIZATION requires the caller to belong to an organization"
@@ -257,17 +244,24 @@ impl DeployRepository {
                     ))
                 }
             },
-            Some(AppOwnerType::Tenant) => AppOwnerType::Tenant,
+            // `USER` with nobody to own it is not a row this schema accepts.
+            // Silently degrading to `TENANT` used to hide the caller's mistake;
+            // it is rejected now that the ownership mode is part of the product
+            // contract.
+            Some(AppOwnerType::User) => match actor_id {
+                Some(actor) => (AppOwnerType::User, 0, Some(actor)),
+                None => {
+                    return Err(DeployServiceError::validation(
+                        "ownerType USER requires an authenticated user subject".to_owned(),
+                    ))
+                }
+            },
             Some(AppOwnerType::Platform) => {
                 return Err(DeployServiceError::validation(
                     "ownerType PLATFORM cannot be set through apps.create; platform applications are provisioned internally"
                         .to_owned(),
                 ))
             }
-        };
-        let owner_user_id = match owner_type {
-            AppOwnerType::User => actor_id,
-            _ => None,
         };
 
         // `deploy_app.type` is `INTEGER NOT NULL DEFAULT 1 CHECK (type BETWEEN 1 AND 6)`
@@ -381,7 +375,7 @@ impl DeployRepository {
         .bind(app_id)
         .bind(&app_uuid)
         .bind(tenant_id)
-        .bind(organization_id.unwrap_or(0))
+        .bind(owner_organization_id)
         .bind(&request.name)
         .bind(&slug)
         .bind(app_kind)
@@ -453,8 +447,17 @@ impl DeployRepository {
         let (page, page_size, offset) = pagination(query.page, query.page_size);
         // Absent maps to the empty string, which the predicate reads as "every
         // level the caller can already reach". That keeps every caller that never
-        // sends `scope` on the answer it had before the parameter existed.
-        let scope = query.scope.map(AppOwnerType::as_str).unwrap_or("");
+        // sends `ownership_scope` on the answer it had before the parameter existed.
+        let ownership_scope = query
+            .resolved_ownership_scope()?
+            .map(AppOwnerType::as_str)
+            .unwrap_or("");
+        let organization_filter = query.organization_filter()?;
+        let app_kinds: Vec<String> = query
+            .app_kind_values()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
         let keyword = query
             .keyword
             .as_deref()
@@ -466,9 +469,9 @@ impl DeployRepository {
             "a.tenant_id = $1
              AND {}
              AND a.deleted_at IS NULL
-             AND ($4 = '' OR a.owner_type = $4)
-             AND ($5 = '' OR LOWER(a.name) LIKE $5 OR LOWER(a.slug) LIKE $5)",
-            Self::app_owner_gate(2, 3)
+             AND {}",
+            Self::app_owner_gate(2, 3),
+            Self::app_inventory_filters(4, 5, 6, 7)
         );
         let count_row = sqlx::query(AssertSqlSafe(format!(
             "SELECT COUNT(*) AS total FROM deploy_app a WHERE {predicate}"
@@ -476,8 +479,10 @@ impl DeployRepository {
         .bind(tenant_id)
         .bind(actor_id)
         .bind(organization_id.unwrap_or(0))
-        .bind(scope)
+        .bind(ownership_scope)
         .bind(&keyword)
+        .bind(organization_filter)
+        .bind(&app_kinds)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("count deploy_app", error))?;
@@ -487,13 +492,15 @@ impl DeployRepository {
             "SELECT {APP_SELECT}
              FROM deploy_app a
              WHERE {predicate}
-             ORDER BY a.created_at DESC, a.id DESC LIMIT $6 OFFSET $7"
+             ORDER BY a.created_at DESC, a.id DESC LIMIT $8 OFFSET $9"
         )))
         .bind(tenant_id)
         .bind(actor_id)
         .bind(organization_id.unwrap_or(0))
-        .bind(scope)
+        .bind(ownership_scope)
         .bind(keyword)
+        .bind(organization_filter)
+        .bind(app_kinds)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -510,6 +517,113 @@ impl DeployRepository {
             page,
             page_size,
         })
+    }
+
+    /// The operator ledger: the same facets as [`Self::list_apps_repo`], with
+    /// the tenant supplied by the operator context instead of the caller's
+    /// subject, and **without** the owner gate.
+    ///
+    /// Reach on this surface is the route's permission (`deploy.apps.read`) plus
+    /// the tenant scope: a context that names a tenant sees exactly that tenant,
+    /// and only a context with no tenant — a platform operator — sees every
+    /// tenant. That is the conservative reading of the admin ledger: the
+    /// cross-tenant answer requires an operator who is not tenant-scoped, not a
+    /// filter value a tenant member could type.
+    pub(super) async fn list_apps_admin_repo(
+        &self,
+        tenant_filter: Option<i64>,
+        query: &ListAppsQuery,
+    ) -> DeployServiceResult<AppPage> {
+        let (page, page_size, offset) = pagination(query.page, query.page_size);
+        let ownership_scope = query
+            .resolved_ownership_scope()?
+            .map(AppOwnerType::as_str)
+            .unwrap_or("");
+        let organization_filter = query.organization_filter()?;
+        let app_kinds: Vec<String> = query
+            .app_kind_values()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let keyword = query
+            .keyword
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| format!("%{}%", value.to_ascii_lowercase()))
+            .unwrap_or_default();
+        let predicate = format!(
+            "($1::bigint IS NULL OR a.tenant_id = $1)
+             AND a.deleted_at IS NULL
+             AND {}",
+            Self::app_inventory_filters(2, 3, 4, 5)
+        );
+        let count_row = sqlx::query(AssertSqlSafe(format!(
+            "SELECT COUNT(*) AS total FROM deploy_app a WHERE {predicate}"
+        )))
+        .bind(tenant_filter)
+        .bind(ownership_scope)
+        .bind(&keyword)
+        .bind(organization_filter)
+        .bind(&app_kinds)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("count deploy_app", error))?;
+        let total: i64 = count_row.try_get("total").unwrap_or(0);
+
+        let rows = sqlx::query(AssertSqlSafe(format!(
+            "SELECT {APP_SELECT}
+             FROM deploy_app a
+             WHERE {predicate}
+             ORDER BY a.tenant_id, a.created_at DESC, a.id DESC LIMIT $6 OFFSET $7"
+        )))
+        .bind(tenant_filter)
+        .bind(ownership_scope)
+        .bind(keyword)
+        .bind(organization_filter)
+        .bind(app_kinds)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list deploy_app", error))?;
+
+        let items = rows
+            .iter()
+            .map(map_app_row)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(AppPage {
+            items,
+            total,
+            page,
+            page_size,
+        })
+    }
+
+    /// The facet clause shared by the tenant and operator ledgers.
+    ///
+    /// Callers pass the parameter positions so the one predicate serves both
+    /// statements; the strings are built from integer positions only, never from
+    /// caller input.
+    fn app_inventory_filters(
+        ownership_parameter: usize,
+        keyword_parameter: usize,
+        organization_parameter: usize,
+        app_kind_parameter: usize,
+    ) -> String {
+        format!(
+            "(${ownership_parameter} = '' OR a.owner_type = ${ownership_parameter})
+             AND (${keyword_parameter} = ''
+                  OR LOWER(a.name) LIKE ${keyword_parameter}
+                  OR LOWER(a.slug) LIKE ${keyword_parameter})
+             AND (${organization_parameter}::bigint IS NULL
+                  OR (${organization_parameter} = 0 AND a.owner_type = 'TENANT')
+                  OR (${organization_parameter} > 0
+                      AND a.owner_type = 'ORGANIZATION'
+                      AND a.organization_id = ${organization_parameter}))
+             AND (cardinality(${app_kind_parameter}::text[]) = 0
+                  OR a.app_kind = ANY(${app_kind_parameter}::text[]))"
+        )
     }
 
     pub(super) async fn retrieve_app_repo(
@@ -586,7 +700,7 @@ impl DeployRepository {
                     COALESCE(identity_provisioning_key, 'deploy:' || id::text)
              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
              RETURNING id, uuid, tenant_id, organization_id, name,
-                       default_environment, app_kind,
+                       default_environment, app_kind, owner_type, user_id,
                        identity_provisioning_key, identity_status",
         )
         .bind(tenant_id)
@@ -630,6 +744,10 @@ impl DeployRepository {
             display_name: row.try_get("name").unwrap_or_default(),
             environment: row.try_get("default_environment").unwrap_or_default(),
             app_kind: row.try_get("app_kind").unwrap_or_default(),
+            ownership_scope: row
+                .try_get::<String, _>("owner_type")
+                .unwrap_or_else(|_| "TENANT".to_owned()),
+            owner_user_id: optional_int64_string(&row, "user_id"),
             provisioning_idempotency_key: provisioning_key,
             identity_status: row.try_get("identity_status").unwrap_or_default(),
         })
@@ -669,6 +787,7 @@ impl DeployRepository {
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
+        organization_id: Option<i64>,
         app_id: &str,
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
@@ -741,12 +860,19 @@ impl DeployRepository {
         // Ownership is a separate statement rather than more `CASE` arms in the
         // update above, because it is the only field whose new value depends on
         // the row's *current* one (an absent `ownerUserId` means "keep the
-        // existing owner"), and because `chk_deploy_app_owner_pointer` has to see
+        // existing owner"), and because `chk_deploy_app_ownership_alignment` has to see
         // the level and pointer move together in one statement.
         match (request.owner_type, request.owner_user_id.as_deref()) {
             (Some(level), owner_user_id) => {
-                self.set_app_owner_repo(tenant_id, actor_id, app_id, level, owner_user_id)
-                    .await?;
+                self.set_app_owner_repo(
+                    tenant_id,
+                    actor_id,
+                    organization_id,
+                    app_id,
+                    level,
+                    owner_user_id,
+                )
+                .await?;
             }
             // Naming only a user keeps the level at `USER`: handing an app to
             // somebody is always a transfer to a personal owner.
@@ -754,6 +880,7 @@ impl DeployRepository {
                 self.set_app_owner_repo(
                     tenant_id,
                     actor_id,
+                    organization_id,
                     app_id,
                     AppOwnerType::User,
                     Some(owner_user_id),
@@ -765,20 +892,23 @@ impl DeployRepository {
         self.retrieve_app_repo(tenant_id, app_id).await
     }
 
-    /// Move an app to another ownership level, rewriting the owner pointer in the
-    /// same statement so `chk_deploy_app_owner_pointer` never sees a half-applied
-    /// pair.
+    /// Move an app to another ownership level, rewriting the owner pointers in
+    /// the same statement so `chk_deploy_app_ownership_alignment` never sees a
+    /// half-applied shape.
     ///
     /// `PLATFORM` is refused for the same reason `apps.create` refuses it:
     /// `deploy.apps.write` does not distinguish a platform operator from any other
     /// tenant member, so allowing it here would let a member publish an app visible
     /// to every tenant. `USER` needs a subject — the requested one, or the app's
-    /// existing owner — and `ORGANIZATION` needs an organization the app already
-    /// carries, because `deploy_app` has no other way to name one.
+    /// existing owner — and `TENANT` / `USER` both require `organization_id = 0`.
+    /// `ORGANIZATION` needs an organization: the caller's own organization when
+    /// the context carries one, otherwise the one the app already carries (an
+    /// operator moving an existing organization app between levels).
     pub(super) async fn set_app_owner_repo(
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
+        caller_organization_id: Option<i64>,
         app_id: &str,
         level: AppOwnerType,
         owner_user_id: Option<&str>,
@@ -797,7 +927,7 @@ impl DeployRepository {
             return Err(DeployServiceError::not_found("app not found"));
         };
         let current_user_id: Option<i64> = row.try_get("user_id").ok().flatten();
-        let organization_id: i64 = row.try_get("organization_id").unwrap_or_default();
+        let current_organization_id: i64 = row.try_get("organization_id").unwrap_or_default();
         let requested_user_id: Option<i64> = owner_user_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -810,25 +940,28 @@ impl DeployRepository {
             })
             .transpose()?;
 
-        let (owner_type, user_id) = match level {
+        let (owner_type, user_id, organization_id) = match level {
             AppOwnerType::Platform => {
                 return Err(DeployServiceError::validation(
                     "ownerType PLATFORM cannot be set through apps.update; platform applications are provisioned internally"
                         .to_owned(),
                 ))
             }
-            AppOwnerType::Tenant => (AppOwnerType::Tenant, None),
+            AppOwnerType::Tenant => (AppOwnerType::Tenant, None, 0),
             AppOwnerType::Organization => {
-                if organization_id == 0 {
-                    return Err(DeployServiceError::validation(
-                        "ownerType ORGANIZATION requires the app to carry an organization"
-                            .to_owned(),
-                    ));
-                }
-                (AppOwnerType::Organization, None)
+                let target = caller_organization_id
+                    .filter(|value| *value > 0)
+                    .or_else(|| (current_organization_id > 0).then_some(current_organization_id))
+                    .ok_or_else(|| {
+                        DeployServiceError::validation(
+                            "ownerType ORGANIZATION requires the caller to belong to an organization"
+                                .to_owned(),
+                        )
+                    })?;
+                (AppOwnerType::Organization, None, target)
             }
             AppOwnerType::User => match requested_user_id.or(current_user_id) {
-                Some(user) => (AppOwnerType::User, Some(user)),
+                Some(user) => (AppOwnerType::User, Some(user), 0),
                 None => {
                     return Err(DeployServiceError::validation(
                         "ownerType USER requires ownerUserId when the app has no user owner"
@@ -839,14 +972,15 @@ impl DeployRepository {
         };
         sqlx::query(
             "UPDATE deploy_app SET
-                owner_type = $3, user_id = $4,
-                updated_by = $5, updated_at = NOW(), version = version + 1
+                owner_type = $3, user_id = $4, organization_id = $5,
+                updated_by = $6, updated_at = NOW(), version = version + 1
              WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
         )
         .bind(app_internal_id)
         .bind(tenant_id)
         .bind(owner_type.as_str())
         .bind(user_id)
+        .bind(organization_id)
         .bind(actor_id)
         .fetch_optional(&self.pool)
         .await

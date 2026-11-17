@@ -114,13 +114,17 @@ fn identity_status_after_attempt(
 /// IAM's own vocabulary is `api` | `h5` | `pc` | `flutter` | `other`, which is
 /// not the deploy app kind set (`AppKind::as_str`). IAM now requires the field
 /// (the application templates that used to supply it are retired), so every kind
-/// maps onto a member of that closed set: known web/desktop kinds are `pc`, an
-/// API service is `api`, and everything else — including an unrecognised or empty
-/// kind — is `other` rather than a value IAM would have to reinterpret.
+/// maps onto a member of that closed set. The endpoint-accurate kinds map onto
+/// their IAM counterpart (`H5_WEB` → `h5`, `PC_WEB` → `pc`, `FLUTTER_APP` →
+/// `flutter`); the legacy web kinds stay `pc`, an API service is `api`, and
+/// everything else — including an unrecognised or empty kind — is `other`
+/// rather than a value IAM would have to reinterpret.
 fn identity_application_type(app_kind: &str) -> String {
     let application_type = match app_kind.trim().to_ascii_uppercase().as_str() {
         "API_SERVICE" => "api",
-        "STATIC_WEB" | "SPA_WEB" | "DESKTOP_APP" => "pc",
+        "H5_WEB" => "h5",
+        "PC_WEB" | "STATIC_WEB" | "SPA_WEB" | "DESKTOP_APP" => "pc",
+        "FLUTTER_APP" => "flutter",
         _ => "other",
     };
     application_type.to_owned()
@@ -311,6 +315,11 @@ impl DeployService {
             display_name: target.display_name.clone(),
             environment: target.environment.clone(),
             application_type: identity_application_type(&target.app_kind),
+            // The installation mirrors the application's own ownership so the
+            // two scopes cannot disagree; the port normalises the deploy-only
+            // `PLATFORM` level onto IAM's tenant scope.
+            ownership_scope: target.ownership_scope.clone(),
+            owner_user_id: target.owner_user_id.clone(),
             deploy_application_id: target.deploy_application_id.clone(),
             provisioning_idempotency_key: target.provisioning_idempotency_key.clone(),
         };
@@ -412,7 +421,13 @@ impl DeployService {
             request.app_domain_label.is_some() || request.app_domain_suffixes.is_some();
         let app = self
             .repository
-            .update_app(tenant_id, context.actor_id, app_id, request)
+            .update_app(
+                tenant_id,
+                context.actor_id,
+                context.organization_id,
+                app_id,
+                request,
+            )
             .await?;
         if domain_config_changed {
             self.provision_app_default_domains_all_environments(context, &app.id)
@@ -1500,7 +1515,7 @@ pub(crate) fn assert_app_reachable(
         AppOwnerType::Platform | AppOwnerType::Tenant => Ok(()),
         AppOwnerType::Organization => {
             let caller_org = context.organization_id.map(|value| value.to_string());
-            if caller_org.is_some() && caller_org == app.organization_id {
+            if caller_org.is_some() && caller_org.as_deref() == Some(app.organization_id.as_str()) {
                 Ok(())
             } else {
                 Err(DeployServiceError::not_found("app not found"))
@@ -1567,9 +1582,12 @@ mod identity_provisioning_tests {
     fn app_kinds_map_onto_the_iam_application_type_vocabulary() {
         for (kind, expected) in [
             ("API_SERVICE", "api"),
+            ("H5_WEB", "h5"),
+            ("PC_WEB", "pc"),
             ("STATIC_WEB", "pc"),
             ("SPA_WEB", "pc"),
             ("DESKTOP_APP", "pc"),
+            ("FLUTTER_APP", "flutter"),
             // Kinds with no honest IAM counterpart are reported as `other`
             // rather than being mapped onto a web type they are not.
             ("WECHAT_MINIPROGRAM", "other"),

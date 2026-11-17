@@ -198,7 +198,7 @@ async fn usage_batch_ingest_resolves_app_uuid_through_binding_and_app_paths() {
         "INSERT INTO deploy_app (id, uuid, tenant_id, organization_id, name, slug, app_kind,
                                  app_status, type, runtime_config, metadata, data_scope,
                                  default_environment, created_at, updated_at, version)
-         VALUES ({app_id}, '{app_uuid}', {tenant_id}, 0, 'Usage App', 'usage-app', 'SITE',
+         VALUES ({app_id}, '{app_uuid}', {tenant_id}, 0, 'Usage App', 'usage-app', 'STATIC_WEB',
                  'ACTIVE', 1, '{{}}', '{{}}', 1, 'production', NOW(), NOW(), 1);
 
          INSERT INTO deploy_dns_zone (id, uuid, tenant_id, apex_hostname, status, created_at, updated_at)

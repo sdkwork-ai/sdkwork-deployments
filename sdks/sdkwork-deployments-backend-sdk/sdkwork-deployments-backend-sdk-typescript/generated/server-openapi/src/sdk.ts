@@ -2,6 +2,7 @@ import { HttpClient, createHttpClient } from './http/client';
 import type { SdkworkBackendConfig } from './types/common';
 import type { AuthTokenManager } from '@sdkwork/sdk-common';
 
+import { AppApi, createAppApi } from './api/app';
 import { NginxApi, createNginxApi } from './api/nginx';
 import { ServerApi, createServerApi } from './api/server';
 import { ClusterApi, createClusterApi } from './api/cluster';
@@ -14,13 +15,13 @@ import { RetentionApi, createRetentionApi } from './api/retention';
 import { UsageApi, createUsageApi } from './api/usage';
 import { SigningHealthApi, createSigningHealthApi } from './api/signing-health';
 import { SourceEventsApi, createSourceEventsApi } from './api/source-events';
-import { AppApi, createAppApi } from './api/app';
 import { TemplateApi, createTemplateApi } from './api/template';
 import { DownloadCatalogApi, createDownloadCatalogApi } from './api/download-catalog';
 
 export class SdkworkDeployBackendClient {
   private httpClient: HttpClient;
 
+  public readonly app: AppApi;
   public readonly nginx: NginxApi;
   public readonly server: ServerApi;
   public readonly cluster: ClusterApi;
@@ -33,12 +34,13 @@ export class SdkworkDeployBackendClient {
   public readonly usage: UsageApi;
   public readonly signingHealth: SigningHealthApi;
   public readonly sourceEvents: SourceEventsApi;
-  public readonly app: AppApi;
   public readonly template: TemplateApi;
   public readonly downloadCatalog: DownloadCatalogApi;
 
   constructor(config: SdkworkBackendConfig) {
     this.httpClient = createHttpClient(config);
+    this.app = createAppApi(this.httpClient);
+
     this.nginx = createNginxApi(this.httpClient);
 
     this.server = createServerApi(this.httpClient);
@@ -62,8 +64,6 @@ export class SdkworkDeployBackendClient {
     this.signingHealth = createSigningHealthApi(this.httpClient);
 
     this.sourceEvents = createSourceEventsApi(this.httpClient);
-
-    this.app = createAppApi(this.httpClient);
 
     this.template = createTemplateApi(this.httpClient);
 

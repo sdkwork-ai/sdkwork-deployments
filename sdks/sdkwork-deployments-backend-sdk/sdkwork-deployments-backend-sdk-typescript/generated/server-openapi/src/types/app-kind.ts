@@ -1,0 +1,2 @@
+/** The endpoint kind an application is registered as. One application is one endpoint; `STATIC_WEB` and `SPA_WEB` are the legacy rendering-model kinds and `H5_WEB` / `PC_WEB` are the endpoint-accurate web kinds. */
+export type AppKind = 'STATIC_WEB' | 'SPA_WEB' | 'H5_WEB' | 'PC_WEB' | 'API_SERVICE' | 'WECHAT_MINIPROGRAM' | 'DOUYIN_MINIPROGRAM' | 'IOS_APP' | 'ANDROID_APP' | 'HARMONYOS_APP' | 'FLUTTER_APP' | 'DESKTOP_APP';

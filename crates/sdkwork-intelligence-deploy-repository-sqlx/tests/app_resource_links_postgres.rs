@@ -48,7 +48,7 @@ async fn seed_app(pool: &sqlx::PgPool, id: i64, uuid: &str, slug: &str) {
     .bind(id)
     .bind(uuid)
     .bind(TENANT_ID)
-    .bind(ORGANIZATION_ID)
+    .bind(0)
     .bind(slug)
     .execute(pool)
     .await

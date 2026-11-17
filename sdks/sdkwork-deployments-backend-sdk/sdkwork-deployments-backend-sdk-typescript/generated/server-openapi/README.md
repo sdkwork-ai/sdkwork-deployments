@@ -27,8 +27,17 @@ client.setAuthToken('your-auth-token');
 client.setAccessToken('your-access-token');
 
 // Use the SDK
-const appId = '1';
-const result = await client.app.identityProvision(appId);
+const params = {
+  page: 1,
+  page_size: 2,
+  keyword: 'keyword',
+  tenant_id: 'tenant_id',
+  ownership_scope: 'PLATFORM',
+  scope: 'PLATFORM',
+  owner_organization_id: 'owner_organization_id',
+  app_kind: 'app_kind',
+};
+const result = await client.app.list(params);
 ```
 
 ## Authentication
@@ -55,6 +64,7 @@ const client = new SdkworkDeployBackendClient({
 
 ## API Modules
 
+- `client.app` - app API
 - `client.nginx` - nginx API
 - `client.server` - server API
 - `client.cluster` - cluster API
@@ -67,11 +77,27 @@ const client = new SdkworkDeployBackendClient({
 - `client.usage` - usage API
 - `client.signingHealth` - signing_health API
 - `client.sourceEvents` - source_events API
-- `client.app` - app API
 - `client.template` - template API
 - `client.downloadCatalog` - download_catalog API
 
 ## Usage Examples
+
+### app
+
+```typescript
+// 获取应用台账列表
+const params = {
+  page: 1,
+  page_size: 2,
+  keyword: 'keyword',
+  tenant_id: 'tenant_id',
+  ownership_scope: 'PLATFORM',
+  scope: 'PLATFORM',
+  owner_organization_id: 'owner_organization_id',
+  app_kind: 'app_kind',
+};
+const result = await client.app.list(params);
+```
 
 ### nginx
 
@@ -209,14 +235,6 @@ const params = {
 const result = await client.sourceEvents.list(params);
 ```
 
-### app
-
-```typescript
-// 重试应用身份开通
-const appId = '1';
-const result = await client.app.identityProvision(appId);
-```
-
 ### template
 
 ```typescript
@@ -242,8 +260,17 @@ const result = await client.downloadCatalog.list();
 import { SdkworkDeployBackendClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/deployments-backend-sdk';
 
 try {
-  const appId = '1';
-  const result = await client.app.identityProvision(appId);
+  const params = {
+    page: 1,
+    page_size: 2,
+    keyword: 'keyword',
+    tenant_id: 'tenant_id',
+    ownership_scope: 'PLATFORM',
+    scope: 'PLATFORM',
+    owner_organization_id: 'owner_organization_id',
+    app_kind: 'app_kind',
+  };
+  const result = await client.app.list(params);
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

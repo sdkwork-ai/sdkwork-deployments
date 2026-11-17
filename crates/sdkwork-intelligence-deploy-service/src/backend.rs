@@ -3,14 +3,14 @@
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
     next_order_transition, AcmeAccountPage, AcmeAccountResponse, AppIdentityProvisionResponse,
-    BuildQueuePage, CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse,
-    CreateNginxConfigRequest, CreateNodeClusterRequest, CreateServerRequest, DeployBackendApi,
-    DeployBackendRequestContext, DeployServiceError, DeployServiceResult,
-    EntitlementProjectionPage, IngestUsageEventsRequest, ListNginxConfigsQuery,
-    RequestCertificateOrderRequest, RetentionRunRequest, RetentionRunResponse, RunnerHealthPage,
-    SigningIdentityHealthPage, SourceEventIngestResponse, SourceEventPage,
-    StoreCertificateVersionRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
-    UpdateServerRequest, UsageIngestResult, UsageReconciliationRequest,
+    AppPage, BuildQueuePage, CertificateChallengePage, CertificateOrderPage,
+    CertificateOrderResponse, CreateNginxConfigRequest, CreateNodeClusterRequest,
+    CreateServerRequest, DeployBackendApi, DeployBackendRequestContext, DeployServiceError,
+    DeployServiceResult, EntitlementProjectionPage, IngestUsageEventsRequest, ListAppsAdminQuery,
+    ListNginxConfigsQuery, RequestCertificateOrderRequest, RetentionRunRequest,
+    RetentionRunResponse, RunnerHealthPage, SigningIdentityHealthPage, SourceEventIngestResponse,
+    SourceEventPage, StoreCertificateVersionRequest, UpdateNginxConfigRequest,
+    UpdateNodeClusterRequest, UpdateServerRequest, UsageIngestResult, UsageReconciliationRequest,
     UsageReconciliationResponse,
 };
 
@@ -37,6 +37,30 @@ impl DeployService {
 
 #[async_trait]
 impl DeployBackendApi for DeployService {
+    async fn list_apps(
+        &self,
+        context: &DeployBackendRequestContext,
+        query: &ListAppsAdminQuery,
+    ) -> DeployServiceResult<AppPage> {
+        let context_tenant = Self::backend_tenant_scope(context)?;
+        let requested_tenant = query.tenant_filter()?;
+        // An operator whose context is tenant-scoped cannot read another tenant
+        // by naming it; a mismatch is a client bug, not a filter that silently
+        // returns a different tenant's ledger.
+        let effective_tenant = match (context_tenant, requested_tenant) {
+            (Some(context_tenant), Some(requested)) if context_tenant != requested => {
+                return Err(DeployServiceError::validation(
+                    "tenant_id must match the operator request context tenant".to_owned(),
+                ))
+            }
+            (Some(context_tenant), _) => Some(context_tenant),
+            (None, requested) => requested,
+        };
+        self.repository
+            .list_apps_admin(effective_tenant, &query.filter())
+            .await
+    }
+
     async fn list_nginx_configs(
         &self,
         context: &DeployBackendRequestContext,

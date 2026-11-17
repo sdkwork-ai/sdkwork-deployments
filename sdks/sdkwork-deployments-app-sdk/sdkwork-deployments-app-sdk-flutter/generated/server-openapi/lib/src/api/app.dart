@@ -12,12 +12,15 @@ class AppApi {
   AppApi(this._client);
 
   /// List the apps the caller may reach
-  Future<AppsListResponse?> appsList([int? page, int? pageSize, String? keyword, String? scope]) async {
+  Future<AppsListResponse?> appsList([int? page, int? pageSize, String? keyword, String? ownershipScope, String? scope, String? ownerOrganizationId, List<String>? appKind]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
       QueryParameterSpec('keyword', keyword, 'form', true, false, null),
-      QueryParameterSpec('scope', scope, 'form', true, false, null)
+      QueryParameterSpec('ownership_scope', ownershipScope, 'form', true, false, null),
+      QueryParameterSpec('scope', scope, 'form', true, false, null),
+      QueryParameterSpec('owner_organization_id', ownerOrganizationId, 'form', true, false, null),
+      QueryParameterSpec('app_kind', appKind, 'form', true, false, null)
     ]);
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/apps'), query));
     return (() {

@@ -30,7 +30,7 @@ use crate::settings::{
     IAM_BACKEND_API_URL_ENV, IAM_BACKEND_AUTH_TOKEN_FILE_ENV,
 };
 use crate::{
-    normalize_application_type, DeployApplicationProvisioningCommand,
+    normalize_application_type, normalize_ownership_scope, DeployApplicationProvisioningCommand,
     DeployIdentityProvisioningPort, IdentityProvisioningError, ProvisioningOutcome,
     TenantApplicationReceipt,
 };
@@ -203,6 +203,19 @@ fn provision_request_body(
         "applicationType".to_owned(),
         Value::String(normalize_application_type(command.application_type.as_str()).to_owned()),
     );
+    // The installation's ownership is the application's ownership, normalised
+    // onto IAM's installation scopes (`PLATFORM` becomes `TENANT`: an
+    // installation has no platform-wide scope).
+    body.insert(
+        "ownershipScope".to_owned(),
+        Value::String(normalize_ownership_scope(command.ownership_scope.as_str()).to_owned()),
+    );
+    if let Some(owner_user_id) = command.owner_user_id.as_deref() {
+        body.insert(
+            "ownerUserId".to_owned(),
+            Value::String(owner_user_id.to_owned()),
+        );
+    }
     // Deliberately empty, not an omission: this installation grants no API scope
     // of its own. IAM now accepts the empty list.
     body.insert("accessPermissions".to_owned(), Value::Array(Vec::new()));
@@ -268,6 +281,8 @@ mod tests {
             display_name: "Shop".to_owned(),
             environment: "production".to_owned(),
             application_type: "pc".to_owned(),
+            ownership_scope: "TENANT".to_owned(),
+            owner_user_id: None,
             deploy_application_id: "1845123456789012345".to_owned(),
             provisioning_idempotency_key: "deploy:1845123456789012345".to_owned(),
         }
@@ -317,6 +332,27 @@ mod tests {
         assert_eq!(
             provision_request_body("token-value", &api)["applicationType"],
             "api"
+        );
+    }
+
+    #[test]
+    fn request_body_carries_the_ownership_scope_and_only_a_user_owner() {
+        let tenant = provision_request_body("token-value", &command());
+        assert_eq!(tenant["ownershipScope"], "TENANT");
+        assert!(tenant.get("ownerUserId").is_none());
+
+        let mut personal = command();
+        personal.ownership_scope = "USER".to_owned();
+        personal.owner_user_id = Some("11001".to_owned());
+        let personal_body = provision_request_body("token-value", &personal);
+        assert_eq!(personal_body["ownershipScope"], "USER");
+        assert_eq!(personal_body["ownerUserId"], "11001");
+
+        let mut platform = command();
+        platform.ownership_scope = "PLATFORM".to_owned();
+        assert_eq!(
+            provision_request_body("token-value", &platform)["ownershipScope"],
+            "TENANT"
         );
     }
 

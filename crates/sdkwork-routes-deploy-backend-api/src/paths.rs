@@ -29,6 +29,13 @@ pub const USAGE_RECONCILE: &str = "/backend/v3/api/usage/reconcile";
 pub const SIGNING_IDENTITY_HEALTH: &str = "/backend/v3/api/signing_identity_health";
 pub const SOURCE_EVENTS: &str = "/backend/v3/api/source_events";
 
+// -- application ledger (operator) --------------------------------------------
+
+/// The operator application ledger: every app in the operator's tenant (or
+/// across tenants when the context carries none), filterable by the same
+/// ownership and endpoint facets as the tenant surface.
+pub const APPS: &str = "/backend/v3/api/apps";
+
 // -- application identity (operator retry entry) ------------------------------
 
 /// Re-runs IAM installation provisioning for one application.

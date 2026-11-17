@@ -1,4 +1,4 @@
-﻿# SDKWork Unified App Delivery Control-Plane Architecture
+# SDKWork Unified App Delivery Control-Plane Architecture
 
 Status: implementation in progress
 Owner: SDKWork Deploy maintainers
@@ -131,7 +131,10 @@ Purpose: tenant-owned application aggregate.
 | Column | Contract |
 | --- | --- |
 | `name`, `slug` | tenant display name and unique tenant slug |
-| `app_kind` | `STATIC_WEB`, `SPA_WEB`, `API_SERVICE`, `WECHAT_MINIPROGRAM`, `DOUYIN_MINIPROGRAM`, `IOS_APP`, `ANDROID_APP`, `HARMONYOS_APP` |
+| `app_kind` | `STATIC_WEB`, `SPA_WEB`, `H5_WEB`, `PC_WEB`, `API_SERVICE`, `WECHAT_MINIPROGRAM`, `DOUYIN_MINIPROGRAM`, `IOS_APP`, `ANDROID_APP`, `HARMONYOS_APP`, `FLUTTER_APP`, `DESKTOP_APP` (closed set; one App is one endpoint) |
+| `owner_type` | `PLATFORM`, `TENANT` (`organization_id = 0`), `ORGANIZATION` (`organization_id > 0`), `USER` (`user_id` required, `organization_id = 0`); the three tenant-addressable modes are mutually exclusive |
+| `organization_id` | `0` for tenant/user applications, the owning organization for `ORGANIZATION`; the `apps.list` facet reads `0` as the tenant mode |
+| `user_id` | the owning person for `USER`; distinct from `created_by` (the command issuer) |
 | `description` | bounded description |
 | `app_status` | `DRAFT`, `READY`, `ACTIVE`, `PAUSED`, `ARCHIVED`, `FAILED` |
 | `app_id` | nullable link to `deploy_app` for web-kind Apps |

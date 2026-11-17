@@ -3219,7 +3219,7 @@
       "get": {
         "operationId": "apps.list",
         "summary": "List the apps the caller may reach",
-        "description": "Returns the applications this subject can reach, which is the two tenant-wide ownership levels (`PLATFORM`, `TENANT`) plus their own personal apps and their organization's apps. Reach is decided server-side from the request principal; `scope` can only narrow the page, never widen it.",
+        "description": "Returns the applications this subject can reach, which is the two tenant-wide ownership levels (`PLATFORM`, `TENANT`) plus their own personal apps and their organization's apps. Reach is decided server-side from the request principal; `ownership_scope`, `owner_organization_id`, and `app_kind` can only narrow the page, never widen it.",
         "tags": [
           "app"
         ],
@@ -3246,11 +3246,44 @@
             }
           },
           {
-            "name": "scope",
+            "name": "ownership_scope",
             "in": "query",
-            "description": "Restrict the listing to one ownership level. Omitted means every level the caller can already reach, which is the audit view.",
+            "description": "Restrict the listing to one ownership mode. `TENANT` is the tenant-level inventory (`organizationId` `\"0\"`), `ORGANIZATION` is an organization's inventory, and `USER` is personal inventory. Omitted means every mode the caller can already reach, which is the audit view.",
             "schema": {
               "$ref": "#/components/schemas/AppOwnerType"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "deprecated": true,
+            "description": "Deprecated alias of `ownership_scope`, kept for callers of the first published version. When both are set they must name the same mode.",
+            "schema": {
+              "$ref": "#/components/schemas/AppOwnerType"
+            }
+          },
+          {
+            "name": "owner_organization_id",
+            "in": "query",
+            "description": "Restrict the listing to one ownership subject. `0` selects the tenant mode (`TENANT`); a positive value selects the organization mode in exactly that organization. Omitted means no organization filter.\nNamed `owner_organization_id` because the Web Framework's client-context guard rejects a client-supplied `organization_id` query key: that name selects the ambient request context, which comes from the verified principal, not from the client. This is a row attribute filter; the response still reports `organizationId`.",
+            "schema": {
+              "type": "string",
+              "format": "int64",
+              "pattern": "^-?[0-9]+$",
+              "x-sdkwork-int64-string": true
+            }
+          },
+          {
+            "name": "app_kind",
+            "in": "query",
+            "description": "Restrict the listing to one or more endpoint kinds. Omitted means every kind; repeated values are OR-ed together.",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AppKind"
+              }
             }
           }
         ],
@@ -14899,15 +14932,19 @@
       },
       "AppKind": {
         "type": "string",
+        "description": "The endpoint kind an application is registered as. One application is one endpoint: H5, PC, mini-program, Flutter, iOS, Android, HarmonyOS, desktop, and API are separate applications, not variants of one application. `STATIC_WEB` and `SPA_WEB` are the legacy rendering-model kinds; `H5_WEB` and `PC_WEB` are the endpoint-accurate web kinds.",
         "enum": [
           "STATIC_WEB",
           "SPA_WEB",
+          "H5_WEB",
+          "PC_WEB",
           "API_SERVICE",
           "WECHAT_MINIPROGRAM",
           "DOUYIN_MINIPROGRAM",
           "IOS_APP",
           "ANDROID_APP",
           "HARMONYOS_APP",
+          "FLUTTER_APP",
           "DESKTOP_APP"
         ]
       },
@@ -15112,7 +15149,7 @@
           },
           "ownerType": {
             "$ref": "#/components/schemas/AppOwnerType",
-            "description": "Ownership level for the new application. Absent derives it from the request principal — `USER` when a user subject is present, which is the normal case, otherwise `TENANT`. `PLATFORM` is rejected: no permission in this surface distinguishes a platform operator from any other tenant member, so honouring it would let a member publish an app visible to every tenant."
+            "description": "Ownership mode for the new application. Absent means `TENANT` with `organizationId = 0`: an application that was not registered against an organization is the current tenant's application, not the creating user's personal one. `PLATFORM` is rejected — no permission in this surface distinguishes a platform operator from any other tenant member, so honouring it would let a member publish an app visible to every tenant. `ORGANIZATION` requires the caller to belong to an organization; `USER` requires an authenticated user subject."
           },
           "description": {
             "type": "string",
@@ -15168,6 +15205,8 @@
           "appStatus",
           "defaultEnvironment",
           "ownerType",
+          "ownershipScope",
+          "organizationId",
           "tenantId",
           "nginxConfigOverridden",
           "createdAt",
@@ -15252,6 +15291,10 @@
           "ownerType": {
             "$ref": "#/components/schemas/AppOwnerType"
           },
+          "ownershipScope": {
+            "$ref": "#/components/schemas/AppOwnerType",
+            "description": "The ownership mode under its product name — `TENANT` (`organizationId` `\"0\"`), `ORGANIZATION` (`organizationId` > `0`), or `USER` (`ownerUserId` present). The same fact as `ownerType`, which is kept for compatibility; the two are always equal and are not a second stored column."
+          },
           "ownerUserId": {
             "type": "string",
             "format": "int64",
@@ -15273,8 +15316,9 @@
           "organizationId": {
             "type": "string",
             "format": "int64",
+            "pattern": "^-?[0-9]+$",
             "x-sdkwork-int64-string": true,
-            "description": "Organization scope. The column stores `0` for \"none\", which is reported as absent rather than as an organization numbered zero."
+            "description": "Organization scope. `\"0\"` is the tenant-level encoding (the `TENANT` mode), a positive value is the organization the `ORGANIZATION` mode belongs to, and `USER` rows report `\"0\"` with `ownerUserId` present. Always returned, so the three modes are distinguishable without a second lookup."
           },
           "createdBy": {
             "type": "string",

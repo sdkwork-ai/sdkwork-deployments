@@ -7,7 +7,7 @@ use crate::app_resource_link::*;
 use crate::app_source::*;
 use crate::app_source_spec::*;
 use crate::dto::*;
-use crate::problem::DeployServiceResult;
+use crate::problem::{DeployServiceError, DeployServiceResult};
 use crate::usage::{IngestUsageEventsRequest, UsageIngestResult};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +97,11 @@ pub struct UsageEventQuery {
 /// accepts), so an integer status could only ever have produced filters the
 /// database rejects. Nothing deserialized this struct, and it is not declared in
 /// the published contract, so removing them is invisible on the wire.
+///
+/// Every member here is a **facet, not a grant**: omitted widens the answer to
+/// everything the caller can already reach, and setting one can only narrow
+/// that set. Reach itself is decided by the owner gate in the repository and is
+/// always conjunctive with these filters.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ListAppsQuery {
     #[serde(default = "crate::dto::default_page")]
@@ -106,15 +111,187 @@ pub struct ListAppsQuery {
     /// Case-insensitive match on the app name or slug.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyword: Option<String>,
-    /// Narrow the listing to one ownership level — the vocabulary
-    /// [`crate::app_delivery::AppOwnerType`] names.
+    /// Deprecated alias of [`Self::ownership_scope`], kept because the first
+    /// published version of this filter used the shorter name. A request that
+    /// sets both must set them to the same value; `ownership_scope` is what new
+    /// callers send.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<crate::app_delivery::AppOwnerType>,
+    /// Narrow the listing to one ownership mode: `TENANT`, `ORGANIZATION`, or
+    /// `USER` (`PLATFORM` is reachable for an operator that can already read
+    /// platform applications).
     ///
     /// This is a **facet, not a grant**: omitting it widens the answer to every
-    /// level the caller can already reach, and setting it can only narrow that
+    /// mode the caller can already reach, and setting it can only narrow that
     /// set. Reach itself is decided by the owner gate in the repository, which
     /// is conjunctive with this filter.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ownership_scope: Option<crate::app_delivery::AppOwnerType>,
+    /// Narrow the listing to one ownership subject, interpreted as the
+    /// ownership mode's own pointer:
+    ///
+    /// - absent: no organization filter;
+    /// - `0`: the **tenant** mode (`owner_type = 'TENANT'`);
+    /// - positive: the **organization** mode in exactly that organization
+    ///   (`owner_type = 'ORGANIZATION' AND organization_id = n`).
+    ///
+    /// The parameter is `owner_organization_id`, **not** `organization_id`: the
+    /// Web Framework's client-context guard (`API_SPEC.md` §10, catalog B12)
+    /// rejects a client-supplied `organization_id`/`org_id` query key outright,
+    /// because those name the *ambient request context* and must come from the
+    /// verified principal. This filter names a row attribute, so it needs a
+    /// name the guard does not reserve. The response field is still
+    /// `organizationId` — that direction is a value, not a selector.
+    ///
+    /// The value is a decimal int64 string (`API_SPEC.md` §13.6). Negative,
+    /// non-numeric, and leading-plus values are rejected rather than silently
+    /// matching nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_organization_id: Option<String>,
+    /// Narrow the listing to one or more endpoint kinds (`app_kind`).
+    ///
+    /// Not deserialized by serde: a repeated query key (`app_kind=A&app_kind=B`)
+    /// is not expressible through `serde_urlencoded`'s struct deserializer, so
+    /// the route parses the raw query pairs and fills this field. The wire
+    /// contract declares it as `style: form, explode: true`, which the
+    /// generated SDKs serialize as repeated keys; a single comma-separated
+    /// value is accepted too. Empty means "every kind".
+    #[serde(skip)]
+    pub app_kind: Vec<crate::app_delivery::AppKind>,
+}
+
+impl ListAppsQuery {
+    /// The effective ownership facet, merging the deprecated `scope` alias.
+    ///
+    /// A request that names two different modes is a client bug and is rejected
+    /// instead of silently picking one.
+    pub fn resolved_ownership_scope(
+        &self,
+    ) -> DeployServiceResult<Option<crate::app_delivery::AppOwnerType>> {
+        match (self.scope, self.ownership_scope) {
+            (Some(alias), Some(scope)) if alias != scope => Err(DeployServiceError::validation(
+                "scope and ownership_scope must name the same ownership mode".to_owned(),
+            )),
+            (Some(alias), _) => Ok(Some(alias)),
+            (None, scope) => Ok(scope),
+        }
+    }
+
+    /// Parses [`Self::owner_organization_id`] into the ownership pointer it
+    /// names.
+    ///
+    /// See the field documentation for the `0`/positive split. Returns `None`
+    /// for an absent or blank value, matching every other optional query
+    /// string on this surface.
+    pub fn organization_filter(&self) -> DeployServiceResult<Option<i64>> {
+        let Some(raw) = self
+            .owner_organization_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(None);
+        };
+        // `i64::from_str` accepts a leading `+`, which the contract's
+        // `^-?[0-9]+$` pattern does not declare; rejecting it keeps the query
+        // value and the OpenAPI pattern saying the same thing.
+        if raw.starts_with('+') {
+            return Err(DeployServiceError::validation(
+                "owner_organization_id must be 0 (tenant) or a positive organization id".to_owned(),
+            ));
+        }
+        let parsed: i64 = raw.parse().map_err(|_| {
+            DeployServiceError::validation(format!(
+                "owner_organization_id {raw} is not an int64 organization id"
+            ))
+        })?;
+        if parsed < 0 {
+            return Err(DeployServiceError::validation(
+                "owner_organization_id must be 0 (tenant) or a positive organization id".to_owned(),
+            ));
+        }
+        Ok(Some(parsed))
+    }
+
+    /// The `app_kind` values as the wire strings the repository binds.
+    pub fn app_kind_values(&self) -> Vec<&'static str> {
+        self.app_kind.iter().map(|kind| kind.as_str()).collect()
+    }
+}
+
+/// `apps.list` on the operator (backend) surface.
+///
+/// Same facets as [`ListAppsQuery`], plus the one thing only an operator view
+/// needs: the tenant to look at. The fields are duplicated rather than flattened
+/// because `serde_urlencoded` does not deserialize a struct through `flatten`;
+/// [`Self::filter`] is the single place the mapping back to [`ListAppsQuery`]
+/// lives.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ListAppsAdminQuery {
+    #[serde(default = "crate::dto::default_page")]
+    pub page: i32,
+    #[serde(default = "crate::dto::default_page_size")]
+    pub page_size: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyword: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<crate::app_delivery::AppOwnerType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ownership_scope: Option<crate::app_delivery::AppOwnerType>,
+    /// See [`ListAppsQuery::owner_organization_id`]; named the same on both
+    /// surfaces so one client shape works for each.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_organization_id: Option<String>,
+    /// Restrict the ledger to one tenant. Absent means the tenant scope of the
+    /// operator's own request context, or — for a platform operator whose
+    /// context carries no tenant — every tenant.
+    ///
+    /// This is **not** an app-api parameter. A tenant member cannot widen their
+    /// reach by naming a tenant: the app-api route never reads this field, and
+    /// the backend route binds the effective tenant inside the permission-
+    /// guarded operator surface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
+    /// See [`ListAppsQuery::app_kind`]; filled from the raw query by the route.
+    #[serde(skip)]
+    pub app_kind: Vec<crate::app_delivery::AppKind>,
+}
+
+impl ListAppsAdminQuery {
+    /// The shared facet set, with the admin-only tenant filter removed.
+    pub fn filter(&self) -> ListAppsQuery {
+        ListAppsQuery {
+            page: self.page,
+            page_size: self.page_size,
+            keyword: self.keyword.clone(),
+            scope: self.scope,
+            ownership_scope: self.ownership_scope,
+            owner_organization_id: self.owner_organization_id.clone(),
+            app_kind: self.app_kind.clone(),
+        }
+    }
+
+    /// Parses [`Self::tenant_id`] into the tenant the ledger is restricted to.
+    pub fn tenant_filter(&self) -> DeployServiceResult<Option<i64>> {
+        parse_optional_subject_id(self.tenant_id.as_deref(), "tenant_id")
+    }
+}
+
+/// Parses an optional decimal int64 subject id, rejecting the shapes an id can
+/// never have.
+fn parse_optional_subject_id(value: Option<&str>, field: &str) -> DeployServiceResult<Option<i64>> {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let parsed: i64 = raw.parse().map_err(|_| {
+        DeployServiceError::validation(format!("{field} {raw} is not an int64 subject id"))
+    })?;
+    if parsed <= 0 {
+        return Err(DeployServiceError::validation(format!(
+            "{field} must be a positive subject id"
+        )));
+    }
+    Ok(Some(parsed))
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1601,6 +1778,19 @@ pub trait DeployAppApi: Send + Sync {
 
 #[async_trait]
 pub trait DeployBackendApi: Send + Sync {
+    /// The operator application ledger: every app in the operator's tenant, or
+    /// across tenants when the request context carries none, narrowed by the
+    /// same ownership/endpoint facets the tenant surface offers.
+    ///
+    /// Unlike `DeployAppApi::list_apps` there is no owner gate: this surface is
+    /// the operator's whole-ledger view, and its reach is bounded by the
+    /// permission declared on the route plus the tenant scope below.
+    async fn list_apps(
+        &self,
+        context: &DeployBackendRequestContext,
+        query: &ListAppsAdminQuery,
+    ) -> DeployServiceResult<AppPage>;
+
     async fn list_nginx_configs(
         &self,
         context: &DeployBackendRequestContext,

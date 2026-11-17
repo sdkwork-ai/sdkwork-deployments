@@ -30,14 +30,16 @@ export interface AppResponse {
   appDomainSuffixes?: string[];
   latestReleaseTag?: string;
   ownerType: AppOwnerType;
+  /** The ownership mode under its product name — `TENANT` (`organizationId` `"0"`), `ORGANIZATION` (`organizationId` > `0`), or `USER` (`ownerUserId` present). The same fact as `ownerType`, which is kept for compatibility; the two are always equal and are not a second stored column. */
+  ownershipScope: AppOwnerType;
   /** The owning user, present only for `ownerType: USER`. An id and not a display name: this service owns no user table, and a stored name drifts on rename. */
   ownerUserId?: string;
   /** The resolved owner subject — `user_id` for `USER`, `organization_id` for `ORGANIZATION`, absent for the two tenant-wide levels whose scope is the tenant itself. */
   ownerId?: string;
   /** Tenant scope. Exposed so a platform operator can locate an app; a tenant member only ever sees their own. */
   tenantId: string;
-  /** Organization scope. The column stores `0` for "none", which is reported as absent rather than as an organization numbered zero. */
-  organizationId?: string;
+  /** Organization scope. `"0"` is the tenant-level encoding (the `TENANT` mode), a positive value is the organization the `ORGANIZATION` mode belongs to, and `USER` rows report `"0"` with `ownerUserId` present. Always returned, so the three modes are distinguishable without a second lookup. */
+  organizationId: string;
   createdBy?: string;
   updatedBy?: string;
   /** When the app last entered `ACTIVE`. */

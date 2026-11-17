@@ -22,6 +22,160 @@
     }
   ],
   "paths": {
+    "/backend/v3/api/apps": {
+      "get": {
+        "operationId": "apps.list",
+        "summary": "获取应用台账列表",
+        "description": "The operator application ledger: every application in the operator's tenant, or across tenants when the request context carries no tenant. Ownership (`ownership_scope`, `owner_organization_id`, `scope`) and endpoint kind (`app_kind`) are filters, never grants: reach is bounded by the route permission and by the tenant scope of the operator context.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "Case-insensitive match on the app name or slug.",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "description": "Restrict the ledger to one tenant. Absent uses the operator context's tenant, or every tenant when the context carries none. A tenant-scoped operator naming a different tenant is rejected.",
+            "schema": {
+              "type": "string",
+              "format": "int64",
+              "pattern": "^-?[0-9]+$",
+              "x-sdkwork-int64-string": true
+            }
+          },
+          {
+            "name": "ownership_scope",
+            "in": "query",
+            "description": "Restrict the ledger to one ownership mode: `TENANT` (`organizationId` `\"0\"`), `ORGANIZATION`, or `USER`.",
+            "schema": {
+              "$ref": "#/components/schemas/AppOwnerType"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "deprecated": true,
+            "description": "Deprecated alias of `ownership_scope`.",
+            "schema": {
+              "$ref": "#/components/schemas/AppOwnerType"
+            }
+          },
+          {
+            "name": "owner_organization_id",
+            "in": "query",
+            "description": "`0` selects the tenant mode; a positive value selects the organization mode in exactly that organization. Named `owner_organization_id` (not `organization_id`) so the same facet name works on the app-api surface too, where the client-context guard reserves `organization_id`.",
+            "schema": {
+              "type": "string",
+              "format": "int64",
+              "pattern": "^-?[0-9]+$",
+              "x-sdkwork-int64-string": true
+            }
+          },
+          {
+            "name": "app_kind",
+            "in": "query",
+            "description": "Restrict the ledger to one or more endpoint kinds; repeated values are OR-ed together.",
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/AppKind"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/AppResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "校验错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
+      }
+    },
     "/backend/v3/api/nginx/configs": {
       "get": {
         "operationId": "configs.list",
@@ -5274,6 +5428,201 @@
             "type": "string",
             "format": "int64",
             "x-sdkwork-int64-string": true
+          }
+        }
+      },
+      "AppKind": {
+        "type": "string",
+        "description": "The endpoint kind an application is registered as. One application is one endpoint; `STATIC_WEB` and `SPA_WEB` are the legacy rendering-model kinds and `H5_WEB` / `PC_WEB` are the endpoint-accurate web kinds.",
+        "enum": [
+          "STATIC_WEB",
+          "SPA_WEB",
+          "H5_WEB",
+          "PC_WEB",
+          "API_SERVICE",
+          "WECHAT_MINIPROGRAM",
+          "DOUYIN_MINIPROGRAM",
+          "IOS_APP",
+          "ANDROID_APP",
+          "HARMONYOS_APP",
+          "FLUTTER_APP",
+          "DESKTOP_APP"
+        ]
+      },
+      "AppStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "READY",
+          "ACTIVE",
+          "PAUSED",
+          "ARCHIVED",
+          "FAILED"
+        ]
+      },
+      "AppOwnerType": {
+        "type": "string",
+        "description": "Which level owns an application and therefore who may reach it: `PLATFORM` (platform-internal, tenant-wide readable), `TENANT` (organizationId \"0\"), `ORGANIZATION` (organizationId > 0), or `USER` (ownerUserId present).",
+        "enum": [
+          "PLATFORM",
+          "TENANT",
+          "ORGANIZATION",
+          "USER"
+        ]
+      },
+      "AppResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "deployApplicationId",
+          "name",
+          "slug",
+          "appKind",
+          "appStatus",
+          "defaultEnvironment",
+          "ownerType",
+          "ownershipScope",
+          "organizationId",
+          "tenantId",
+          "nginxConfigOverridden",
+          "createdAt",
+          "updatedAt",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque, stable public address of the application (`deploy_app.uuid`). Distinct from `deployApplicationId`, which is the decimal id IAM anchors on."
+          },
+          "deployApplicationId": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true,
+            "description": "The application's decimal primary key (`deploy_app.id`)."
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "appKind": {
+            "$ref": "#/components/schemas/AppKind"
+          },
+          "appStatus": {
+            "$ref": "#/components/schemas/AppStatus"
+          },
+          "description": {
+            "type": "string"
+          },
+          "type": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Legacy web publishing type (1..6). Reserved; use appKind."
+          },
+          "runtimeConfig": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "currentRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "desiredRevisionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "defaultEnvironment": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "platformTargetCount": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "appDomainLabel": {
+            "type": "string"
+          },
+          "appDomainSuffixes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "latestReleaseTag": {
+            "type": "string"
+          },
+          "ownerType": {
+            "$ref": "#/components/schemas/AppOwnerType"
+          },
+          "ownershipScope": {
+            "$ref": "#/components/schemas/AppOwnerType",
+            "description": "The same ownership mode as `ownerType`, under its product name."
+          },
+          "ownerUserId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true,
+            "description": "\"0\" is the tenant-level encoding (the TENANT mode), a positive value is the ORGANIZATION mode's organization, and USER rows report \"0\" with `ownerUserId` present."
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "updatedBy": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true
+          },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pausedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nginxConfigOverridden": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string"
           }
         }
       },

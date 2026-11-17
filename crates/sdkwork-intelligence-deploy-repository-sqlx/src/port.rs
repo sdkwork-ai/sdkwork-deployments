@@ -774,6 +774,14 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn list_apps_admin(
+        &self,
+        tenant_filter: Option<i64>,
+        query: &ListAppsQuery,
+    ) -> DeployServiceResult<AppPage> {
+        self.list_apps_admin_repo(tenant_filter, query).await
+    }
+
     async fn retrieve_app(&self, tenant_id: i64, app_id: &str) -> DeployServiceResult<AppResponse> {
         self.retrieve_app_repo(tenant_id, app_id).await
     }
@@ -782,10 +790,11 @@ impl DeployRepositoryPort for DeployRepository {
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
+        organization_id: Option<i64>,
         app_id: &str,
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
-        self.update_app_repo(tenant_id, actor_id, app_id, request)
+        self.update_app_repo(tenant_id, actor_id, organization_id, app_id, request)
             .await
     }
 

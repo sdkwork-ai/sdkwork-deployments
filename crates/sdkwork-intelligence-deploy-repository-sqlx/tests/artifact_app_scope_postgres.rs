@@ -45,7 +45,7 @@ async fn seed_two_applications(
             "INSERT INTO deploy_app
                 (id, uuid, tenant_id, organization_id, name, slug, app_kind, app_status,
                  owner_type, created_by, created_at, updated_at, version)
-             VALUES ($1, $2, $3, 9, $4, $5, 'STATIC_WEB', 'ACTIVE', 'TENANT', 11, NOW(), NOW(), 1)",
+             VALUES ($1, $2, $3, 0, $4, $5, 'STATIC_WEB', 'ACTIVE', 'TENANT', 11, NOW(), NOW(), 1)",
         )
         .bind(id)
         .bind(uuid)

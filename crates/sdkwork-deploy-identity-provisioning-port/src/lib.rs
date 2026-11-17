@@ -59,6 +59,26 @@ pub fn normalize_application_type(value: &str) -> &'static str {
     }
 }
 
+/// The ownership scopes IAM accepts on an installation
+/// (`TENANT` | `ORGANIZATION` | `USER`).
+pub const OWNERSHIP_SCOPES: &[&str] = &["TENANT", "ORGANIZATION", "USER"];
+
+/// Normalises a deploy ownership level onto IAM's installation scopes.
+///
+/// Deploy has a fourth, platform-internal level (`PLATFORM`) that IAM does not
+/// model on an installation: a platform application is readable by every tenant
+/// and has no per-tenant owner, which is exactly IAM's `TENANT` scope. The
+/// mapping is therefore explicit and total, never a pass-through of a value the
+/// receiver would have to reinterpret.
+#[must_use]
+pub fn normalize_ownership_scope(value: &str) -> &'static str {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "ORGANIZATION" => "ORGANIZATION",
+        "USER" => "USER",
+        _ => "TENANT",
+    }
+}
+
 /// One deploy application, expressed as the inputs IAM's provisioning service
 /// accepts.
 ///
@@ -84,6 +104,13 @@ pub struct DeployApplicationProvisioningCommand {
     /// IAM's closed vocabulary (`api` | `h5` | `pc` | `flutter` | `other`) by the
     /// adapters. IAM requires the field; there is no template to fall back to.
     pub application_type: String,
+    /// The deploy application's ownership level (`TENANT`, `ORGANIZATION`,
+    /// `USER`, or the platform-internal `PLATFORM`). The adapters normalise it
+    /// onto [`OWNERSHIP_SCOPES`], so the installation's stored scope always
+    /// agrees with the application's own.
+    pub ownership_scope: String,
+    /// The owning user, required for `USER` and absent otherwise.
+    pub owner_user_id: Option<String>,
     /// `deploy_app.id` (BIGINT) as a decimal string. IAM stores it in
     /// `iam_tenant_application.deploy_application_id` under a unique index, so
     /// one deploy application can never own two installations.
@@ -177,6 +204,8 @@ mod tests {
             display_name: "Shop".to_owned(),
             environment: "production".to_owned(),
             application_type: "pc".to_owned(),
+            ownership_scope: "TENANT".to_owned(),
+            owner_user_id: None,
             deploy_application_id: "1845123456789012345".to_owned(),
             provisioning_idempotency_key: "deploy:1845123456789012345".to_owned(),
         }
@@ -193,6 +222,19 @@ mod tests {
         assert_eq!(normalize_application_type(""), "other");
         assert_eq!(normalize_application_type("  PC "), "pc");
         assert_eq!(normalize_application_type("flutter"), "flutter");
+    }
+
+    #[test]
+    fn ownership_scope_is_normalised_onto_iams_installation_scopes() {
+        for accepted in OWNERSHIP_SCOPES {
+            assert_eq!(normalize_ownership_scope(accepted), *accepted);
+        }
+        assert_eq!(normalize_ownership_scope(" organization "), "ORGANIZATION");
+        assert_eq!(normalize_ownership_scope("user"), "USER");
+        // The deploy-only platform level has no per-tenant owner; its honest IAM
+        // representation is the tenant-wide scope.
+        assert_eq!(normalize_ownership_scope("PLATFORM"), "TENANT");
+        assert_eq!(normalize_ownership_scope(""), "TENANT");
     }
 
     #[tokio::test]

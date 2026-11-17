@@ -1,10 +1,13 @@
 //! Shared Deploy router auth wiring for sdkwork-web-framework integration.
 
+pub mod app_filter;
 pub mod correlation;
 pub mod envelope;
 pub mod pagination;
 pub mod problem;
 pub mod response;
+
+pub use app_filter::app_kind_filter;
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{

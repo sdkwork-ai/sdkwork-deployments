@@ -3,6 +3,8 @@
 use sdkwork_web_core::{HttpMethod, HttpRoute, HttpRouteManifest};
 
 const HTTP_ROUTES: &[HttpRoute] = &[
+    HttpRoute::dual_token(HttpMethod::Get, "/backend/v3/api/apps", "app", "apps.list")
+        .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/nginx/configs",

@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query, RawQuery, State},
     http::HeaderMap,
     response::Response,
     routing::{get, patch, post, put},
@@ -23,7 +23,8 @@ use sdkwork_deploy_contract::{
     UpdateBuildStateRequest, UpsertAppResourceLinkRequest, UsageEventQuery,
 };
 use sdkwork_routes_deploy_common::{
-    envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
+    app_kind_filter, envelope, finish_api_json, finish_created_api_json, finish_no_content,
+    ok_json, service_result,
 };
 use sdkwork_web_core::WebRequestContext;
 use serde::Deserialize;
@@ -423,17 +424,22 @@ async fn list_apps(
     State(state): State<AppState>,
     context: Option<Extension<DeployAppRequestContext>>,
     Query(query): Query<ListAppsQuery>,
+    RawQuery(raw_query): RawQuery,
 ) -> Response {
     finish_api_json(
         &ctx,
         async {
             let context = require_app_context(context)?;
             // The query is forwarded whole rather than unpacked into
-            // `page`/`page_size` here: `scope` and `keyword` are part of the
-            // caller's request, and `ListAppsQuery` carries the defaulting. Note
-            // that the *served* `/openapi.json` drops authored parameters from
-            // `.list` routes, so this extractor — not the YAML — is what actually
-            // accepts the parameters.
+            // `page`/`page_size` here: the ownership/endpoint facets are part of
+            // the caller's request, and `ListAppsQuery` carries the defaulting.
+            // `app_kind` is multi-valued, which `serde_urlencoded` cannot bind
+            // to a struct field, so it is read from the raw query and filled in
+            // here. Note that the *served* `/openapi.json` drops authored
+            // parameters from `.list` routes, so this extractor — not the YAML —
+            // is what actually accepts the parameters.
+            let mut query = query;
+            query.app_kind = app_kind_filter(raw_query.as_deref())?;
             let result = state.api.list_apps(&context, &query).await?;
             ok_json(envelope::app_page(result))
         }

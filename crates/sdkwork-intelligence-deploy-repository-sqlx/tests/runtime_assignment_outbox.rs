@@ -259,7 +259,7 @@ async fn site_revision_activates_only_after_all_frozen_targets_are_active() {
         "INSERT INTO deploy_app (
             id, uuid, tenant_id, name, slug, app_kind, app_status, runtime_config, metadata,
             default_environment, created_at, updated_at, version
-         ) VALUES (100, 'site-100', 7, 'Site 100', 'site-100', 'WEB', 'ACTIVE', '{}', '{}',
+         ) VALUES (100, 'site-100', 7, 'Site 100', 'site-100', 'SPA_WEB', 'ACTIVE', '{}', '{}',
                    'production', '2026-07-22T00:00:00Z', '2026-07-22T00:00:00Z', 1)",
     )
     .execute(&pool)

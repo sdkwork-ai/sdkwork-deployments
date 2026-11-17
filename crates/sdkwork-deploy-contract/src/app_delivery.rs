@@ -11,31 +11,91 @@ use crate::app_source_spec::AppSourceSpecDefinition;
 // Enums (canonical string vocabulary; no ad hoc integer meanings)
 // ---------------------------------------------------------------------------
 
+/// The **endpoint kind** an application is registered as.
+///
+/// One application is one endpoint. H5, PC, mini-program, Flutter, iOS,
+/// Android, HarmonyOS, desktop, and API are therefore separate
+/// `deploy_app` rows, not variants of one row; a cross-endpoint product is a
+/// set of applications that share a product name, not one application with
+/// several endpoints.
+///
+/// # Vocabulary and its mapping onto the pre-existing values
+///
+/// The product language names nine endpoint types. Six of them already had a
+/// value in this enum, so they are **mapped rather than re-invented**:
+///
+/// | Endpoint type | `app_kind` | `platform` | IAM `applicationType` |
+/// | --- | --- | --- | --- |
+/// | H5 | `H5_WEB` (added) | `WEB` | `h5` |
+/// | PC web | `PC_WEB` (added) | `WEB` | `pc` |
+/// | Mini program | `WECHAT_MINIPROGRAM` / `DOUYIN_MINIPROGRAM` | `WECHAT` / `DOUYIN` | `other` |
+/// | Flutter | `FLUTTER_APP` (added) | iOS/Android/HarmonyOS/desktop/web targets | `flutter` |
+/// | iOS | `IOS_APP` | `IOS` | `other` |
+/// | Android | `ANDROID_APP` | `ANDROID` | `other` |
+/// | HarmonyOS | `HARMONYOS_APP` | `HARMONYOS` | `other` |
+/// | API / service | `API_SERVICE` | `API` | `api` |
+/// | Desktop | `DESKTOP_APP` | `WINDOWS` / `MACOS` / `LINUX` | `pc` |
+///
+/// `STATIC_WEB` and `SPA_WEB` are the **legacy** rendering-model kinds: they
+/// say how a web surface is built, not which endpoint it is, and they cannot
+/// distinguish H5 from PC. They are kept so existing rows, templates, and
+/// clients keep working; new registrations that need an endpoint-accurate type
+/// use `H5_WEB` or `PC_WEB`. `FLUTTER_APP` exists because IAM's own
+/// `applicationType` vocabulary already carries `flutter`; the *platform
+/// target* rows still say which stores a Flutter build is delivered to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AppKind {
+    /// Legacy static web surface. See the type-level mapping table.
     StaticWeb,
+    /// Legacy single-page web application. See the type-level mapping table.
     SpaWeb,
+    /// H5 endpoint: a web surface rendered for mobile browsers/containers.
+    H5Web,
+    /// PC web endpoint: a web surface rendered for desktop browsers.
+    PcWeb,
     ApiService,
     WechatMiniprogram,
     DouyinMiniprogram,
     IosApp,
     AndroidApp,
     HarmonyosApp,
+    FlutterApp,
     DesktopApp,
 }
 
 impl AppKind {
+    /// Every canonical value, in the order the console presents them: web
+    /// endpoints first, then mini programs, then native/cross-platform mobile,
+    /// then desktop and API.
+    pub const ALL: [Self; 12] = [
+        Self::H5Web,
+        Self::PcWeb,
+        Self::StaticWeb,
+        Self::SpaWeb,
+        Self::WechatMiniprogram,
+        Self::DouyinMiniprogram,
+        Self::FlutterApp,
+        Self::IosApp,
+        Self::AndroidApp,
+        Self::HarmonyosApp,
+        Self::DesktopApp,
+        Self::ApiService,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::StaticWeb => "STATIC_WEB",
             Self::SpaWeb => "SPA_WEB",
+            Self::H5Web => "H5_WEB",
+            Self::PcWeb => "PC_WEB",
             Self::ApiService => "API_SERVICE",
             Self::WechatMiniprogram => "WECHAT_MINIPROGRAM",
             Self::DouyinMiniprogram => "DOUYIN_MINIPROGRAM",
             Self::IosApp => "IOS_APP",
             Self::AndroidApp => "ANDROID_APP",
             Self::HarmonyosApp => "HARMONYOS_APP",
+            Self::FlutterApp => "FLUTTER_APP",
             Self::DesktopApp => "DESKTOP_APP",
         }
     }
@@ -44,19 +104,56 @@ impl AppKind {
         match value {
             "STATIC_WEB" => Some(Self::StaticWeb),
             "SPA_WEB" => Some(Self::SpaWeb),
+            "H5_WEB" => Some(Self::H5Web),
+            "PC_WEB" => Some(Self::PcWeb),
             "API_SERVICE" => Some(Self::ApiService),
             "WECHAT_MINIPROGRAM" => Some(Self::WechatMiniprogram),
             "DOUYIN_MINIPROGRAM" => Some(Self::DouyinMiniprogram),
             "IOS_APP" => Some(Self::IosApp),
             "ANDROID_APP" => Some(Self::AndroidApp),
             "HARMONYOS_APP" => Some(Self::HarmonyosApp),
+            "FLUTTER_APP" => Some(Self::FlutterApp),
             "DESKTOP_APP" => Some(Self::DesktopApp),
             _ => None,
         }
     }
 
+    /// Whether the kind is delivered as a web surface. Covers both the
+    /// endpoint-accurate values and the two legacy rendering-model values.
     pub fn is_web(self) -> bool {
-        matches!(self, Self::StaticWeb | Self::SpaWeb)
+        matches!(
+            self,
+            Self::StaticWeb | Self::SpaWeb | Self::H5Web | Self::PcWeb
+        )
+    }
+
+    /// Parse a multi-valued `app_kind` filter.
+    ///
+    /// Accepts the values a repeated query parameter or a comma-separated list
+    /// produces; blank entries are ignored (a cleared form field submits the
+    /// empty string). Every non-blank entry must be a canonical value — an
+    /// unknown kind is a validation error rather than a filter that silently
+    /// matches nothing.
+    pub fn parse_filter<'a, I>(values: I) -> Result<Vec<Self>, String>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        let mut parsed = Vec::new();
+        for value in values {
+            for part in value.split(',') {
+                let part = part.trim();
+                if part.is_empty() {
+                    continue;
+                }
+                let Some(kind) = Self::parse(&part.to_ascii_uppercase()) else {
+                    return Err(format!("unknown app kind {part}"));
+                };
+                if !parsed.contains(&kind) {
+                    parsed.push(kind);
+                }
+            }
+        }
+        Ok(parsed)
     }
 }
 
@@ -76,8 +173,26 @@ impl AppKind {
 /// §6.7 requires `owner_type` values to come from a documented enum.
 ///
 /// Stored in `deploy_app.owner_type` and constrained there by
-/// `chk_deploy_app_owner_pointer`, which keeps the level and its pointer in
-/// agreement.
+/// `chk_deploy_app_ownership_alignment`, which keeps the level and its pointers
+/// in agreement.
+///
+/// # The three tenant-addressable modes
+///
+/// `PLATFORM` is platform-internal (provisioned by the platform, readable by
+/// every tenant, never selectable through `apps.create`/`apps.update`). The
+/// product's three registration modes are the other three, and the database
+/// CHECK makes them mutually exclusive:
+///
+/// | `ownershipScope` | `organization_id` | `user_id` | Mode |
+/// | --- | --- | --- | --- |
+/// | `TENANT` | `0` | `NULL` | 租户应用 |
+/// | `ORGANIZATION` | `> 0` | `NULL` | 组织应用 |
+/// | `USER` | `0` | required | 个人应用 |
+///
+/// `PLATFORM` shares the tenant row shape (`organization_id = 0`,
+/// `user_id IS NULL`) because its scope is the platform, not an organization.
+/// Among the three tenant-addressable modes, `organization_id = 0` and
+/// `TENANT` are therefore equivalent.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AppOwnerType {
@@ -621,15 +736,16 @@ pub struct CreateAppRequest {
     pub app_kind: AppKind,
     /// Ownership level for the new application.
     ///
-    /// Absent means the repository derives it from the request principal:
-    /// [`AppOwnerType::User`] when a user subject is present — the normal case,
-    /// since a console create is always somebody's app — and
-    /// [`AppOwnerType::Tenant`] otherwise. `PLATFORM` and `ORGANIZATION` are
-    /// never inferred; a caller that wants them must say so, because a tenant
-    /// member cannot be allowed to promote their own app to platform visibility.
+    /// Absent means [`AppOwnerType::Tenant`] with `organization_id = 0`: an
+    /// application that was not registered against an organization belongs to
+    /// the current tenant, not to the creating user. `PLATFORM` is never
+    /// inferred and is refused outright — a tenant member cannot be allowed to
+    /// promote their own app to platform visibility. `ORGANIZATION` requires the
+    /// caller to belong to an organization; `USER` requires an authenticated
+    /// user subject.
     ///
-    /// The level and the owner pointer are kept in agreement by
-    /// `chk_deploy_app_owner_pointer`.
+    /// The level and the owner pointers are kept in agreement by
+    /// `chk_deploy_app_ownership_alignment`.
     #[serde(rename = "ownerType", default)]
     pub owner_type: Option<AppOwnerType>,
     #[serde(default)]
@@ -701,10 +817,11 @@ pub struct UpdateAppRequest {
     /// operation, whereas `deploy_app.owner_type` is `NOT NULL` and every app
     /// always has exactly one level, so there is no clear to express.
     ///
-    /// Changing the level rewrites the owner pointer in the same statement,
-    /// because `chk_deploy_app_owner_pointer` requires the two to agree: `USER`
-    /// takes `ownerUserId`, `ORGANIZATION` uses the app's organization, and
-    /// `PLATFORM` / `TENANT` clear `user_id`.
+    /// Changing the level rewrites every owner pointer in the same statement,
+    /// because `chk_deploy_app_ownership_alignment` accepts only three shapes:
+    /// `USER` takes `ownerUserId` and clears `organization_id`, `ORGANIZATION`
+    /// takes the caller's organization, and `PLATFORM` / `TENANT` clear both
+    /// pointers (with `PLATFORM`, as everywhere else on this surface, refused).
     #[serde(rename = "ownerType", default)]
     pub owner_type: Option<AppOwnerType>,
     /// The user that should own the app when moving it to `USER`. Absent means
@@ -808,8 +925,22 @@ pub struct AppResponse {
     /// Which level owns the application. Drives both the ledger's ownership
     /// column and the reachability predicate in `list_apps_repo`; see
     /// [`AppOwnerType`].
+    ///
+    /// Kept as the original wire name for compatibility. New readers should
+    /// use [`Self::ownership_scope`], which carries the same value under the
+    /// product's name for the same fact.
     #[serde(rename = "ownerType")]
     pub owner_type: AppOwnerType,
+    /// The ownership mode under its product name: `TENANT` (`organizationId`
+    /// `"0"`), `ORGANIZATION` (`organizationId` > `0`), or `USER`
+    /// (`ownerUserId` present).
+    ///
+    /// Same value as [`Self::owner_type`]; it is a second wire name, not a
+    /// second column, so the two can never disagree. `PLATFORM` is the
+    /// platform-internal fourth level and is never selectable through a
+    /// tenant command.
+    #[serde(rename = "ownershipScope")]
+    pub ownership_scope: AppOwnerType,
     /// The owning user, present only for [`AppOwnerType::User`].
     ///
     /// Deliberately an id and not a display name: this database owns no user
@@ -828,10 +959,13 @@ pub struct AppResponse {
     /// tenants; a tenant member only ever sees their own.
     #[serde(rename = "tenantId")]
     pub tenant_id: String,
-    /// Organization scope. `0` in the column means "none" and reads as absent,
-    /// never as an organization whose id happens to be zero.
-    #[serde(rename = "organizationId", skip_serializing_if = "Option::is_none")]
-    pub organization_id: Option<String>,
+    /// Organization scope. `0` means "tenant-level" — the honest encoding of
+    /// the `TENANT` mode — and is therefore reported as `"0"` rather than
+    /// omitted, so the three ownership modes are losslessly distinguishable on
+    /// the wire (`TENANT` ⇒ `"0"`, `ORGANIZATION` ⇒ positive id, `USER` ⇒ `"0"`
+    /// with `ownerUserId` present).
+    #[serde(rename = "organizationId")]
+    pub organization_id: String,
     #[serde(rename = "createdBy", skip_serializing_if = "Option::is_none")]
     pub created_by: Option<String>,
     #[serde(rename = "updatedBy", skip_serializing_if = "Option::is_none")]

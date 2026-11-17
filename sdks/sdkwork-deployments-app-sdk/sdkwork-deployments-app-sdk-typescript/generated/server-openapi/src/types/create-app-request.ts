@@ -6,7 +6,7 @@ export interface CreateAppRequest {
   name: string;
   slug?: string;
   appKind: AppKind;
-  /** Ownership level for the new application. Absent derives it from the request principal — `USER` when a user subject is present, which is the normal case, otherwise `TENANT`. `PLATFORM` is rejected: no permission in this surface distinguishes a platform operator from any other tenant member, so honouring it would let a member publish an app visible to every tenant. */
+  /** Ownership mode for the new application. Absent means `TENANT` with `organizationId = 0`: an application that was not registered against an organization is the current tenant's application, not the creating user's personal one. `PLATFORM` is rejected — no permission in this surface distinguishes a platform operator from any other tenant member, so honouring it would let a member publish an app visible to every tenant. `ORGANIZATION` requires the caller to belong to an organization; `USER` requires an authenticated user subject. */
   ownerType?: AppOwnerType;
   description?: string;
   defaultEnvironment?: string;

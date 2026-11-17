@@ -44,10 +44,10 @@ for (const operation of [
   'sourceRepositories.create',
   'buildTemplates.create',
   'builds.create',
-  'builds.stateUpdate',
-  'packages.register',
+  'builds.update',
+  'packages.create',
   'releases.create',
-  'channels.promote',
+  'channels.create',
   'channels.rollouts.list',
   'deployments.create',
   'signingIdentities.create',
@@ -55,18 +55,25 @@ for (const operation of [
   assert.ok(operations.has(operation), `missing OpenAPI operation ${operation}`);
 }
 
-// App kind vocabulary matches the design.
+// App kind vocabulary matches the design: one application is one endpoint, so
+// the endpoint-accurate web kinds (`H5_WEB`, `PC_WEB`) and the cross-platform
+// `FLUTTER_APP` are part of the closed set beside the legacy `STATIC_WEB` /
+// `SPA_WEB` rendering kinds.
 const appKind = appApi.components?.schemas?.AppKind;
 assert.ok(appKind, 'AppKind schema is missing');
 assert.deepEqual(appKind.enum, [
   'STATIC_WEB',
   'SPA_WEB',
+  'H5_WEB',
+  'PC_WEB',
   'API_SERVICE',
   'WECHAT_MINIPROGRAM',
   'DOUYIN_MINIPROGRAM',
   'IOS_APP',
   'ANDROID_APP',
   'HARMONYOS_APP',
+  'FLUTTER_APP',
+  'DESKTOP_APP',
 ]);
 
 const deploymentKind = appApi.components?.schemas?.DeploymentKind;
@@ -119,10 +126,13 @@ for (const table of expectedTables) {
   );
 }
 
-// Additive compatibility columns on legacy tables.
+// Additive compatibility columns on legacy tables. The greenfield baseline folds
+// the earlier post-baseline migrations, so a column may be declared directly in
+// its `CREATE TABLE` instead of through `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
 for (const column of ['app_id', 'semantic_version', 'deployment_kind']) {
+  const declared = new RegExp(`^\\s*${column}\\s+[A-Z]`, 'm').test(migration);
   assert.ok(
-    migration.includes(`ADD COLUMN IF NOT EXISTS ${column}`),
+    declared || migration.includes(`ADD COLUMN IF NOT EXISTS ${column}`),
     `baseline is missing additive column ${column}`,
   );
 }

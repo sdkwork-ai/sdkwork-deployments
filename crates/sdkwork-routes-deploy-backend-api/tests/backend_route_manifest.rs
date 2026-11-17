@@ -18,6 +18,21 @@ use sdkwork_web_core::HttpMethod;
 const IDENTITY_PROVISION_PATH: &str = "/backend/v3/api/apps/{appId}/identity_provision";
 
 #[test]
+fn app_ledger_route_requires_deploy_apps_read() {
+    let manifest = backend_route_manifest();
+    let route = manifest
+        .routes()
+        .iter()
+        .find(|route| route.path == "/backend/v3/api/apps")
+        .expect("apps.list must be materialized into the backend route manifest");
+
+    assert_eq!(route.method, HttpMethod::Get);
+    assert_eq!(route.operation_id, "apps.list");
+    // A listing is a read: it must never demand `deploy.apps.write`.
+    assert_eq!(route.required_permission, Some("deploy.apps.read"));
+}
+
+#[test]
 fn identity_provision_route_requires_deploy_apps_write() {
     let manifest = backend_route_manifest();
     let route = manifest

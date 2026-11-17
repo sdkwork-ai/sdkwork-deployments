@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, Query, RawQuery, State},
     response::Response,
     routing::{get, post, put},
     Extension, Json, Router,
@@ -8,13 +8,14 @@ use sdkwork_deploy_contract::{
     AuditLogQuery, ChallengeResultRequest, CreateAcmeAccountRequest, CreateNginxConfigRequest,
     CreateNodeClusterRequest, CreateServerRequest, CreateTemplateCategoryRequest, DeployBackendApi,
     DeployBackendRequestContext, FailCertificateOrderRequest, IngestUsageEventsRequest,
-    ListAppTemplatesAdminQuery, ListNginxConfigsQuery, RequestCertificateOrderRequest,
-    RetentionRunRequest, StoreCertificateVersionRequest, UpdateAppTemplateAdminRequest,
-    UpdateNginxConfigRequest, UpdateNodeClusterRequest, UpdateServerRequest,
-    UpdateTemplateCategoryRequest, UsageReconciliationRequest,
+    ListAppTemplatesAdminQuery, ListAppsAdminQuery, ListNginxConfigsQuery,
+    RequestCertificateOrderRequest, RetentionRunRequest, StoreCertificateVersionRequest,
+    UpdateAppTemplateAdminRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
+    UpdateServerRequest, UpdateTemplateCategoryRequest, UsageReconciliationRequest,
 };
 use sdkwork_routes_deploy_common::{
-    envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
+    app_kind_filter, envelope, finish_api_json, finish_created_api_json, finish_no_content,
+    ok_json, service_result,
 };
 use sdkwork_web_core::WebRequestContext;
 use serde::Deserialize;
@@ -36,6 +37,7 @@ where
 
 pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> Router {
     Router::new()
+        .route(paths::APPS, get(list_apps))
         .route(
             paths::NGINX_CONFIGS,
             get(list_nginx_configs).post(create_nginx_config),
@@ -154,6 +156,28 @@ fn default_page() -> i32 {
 
 fn default_page_size() -> i32 {
     20
+}
+
+async fn list_apps(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+    Query(query): Query<ListAppsAdminQuery>,
+    RawQuery(raw_query): RawQuery,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            // `app_kind` is multi-valued; see `app_kind_filter` for why it is
+            // read from the raw query rather than through the struct.
+            let mut query = query;
+            query.app_kind = app_kind_filter(raw_query.as_deref())?;
+            let page = state.api.list_apps(&context, &query).await?;
+            ok_json(envelope::app_page(page))
+        }
+        .await,
+    )
 }
 
 async fn list_nginx_configs(

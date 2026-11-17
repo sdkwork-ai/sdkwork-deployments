@@ -1,4 +1,4 @@
-﻿# REQ-2026-0002 Unified App Delivery Platform
+# REQ-2026-0002 Unified App Delivery Platform
 
 ```yaml
 id: REQ-2026-0002
@@ -76,9 +76,24 @@ RELEASE_SPEC.md, MIGRATION_SPEC.md
 
 ## Functional Requirements
 
-1. `deploy_app` shall be the tenant-owned application aggregate. Supported `app_kind` values are
-   `STATIC_WEB`, `SPA_WEB`, `API_SERVICE`, `WECHAT_MINIPROGRAM`, `DOUYIN_MINIPROGRAM`,
-   `IOS_APP`, `ANDROID_APP`, and `HARMONYOS_APP`.
+1. `deploy_app` shall be the tenant-owned application aggregate. One application is
+   one **endpoint**: H5, PC, mini-program, Flutter, iOS, Android, HarmonyOS, API, and
+   desktop applications are separate `deploy_app` rows, not variants of one row.
+   Supported `app_kind` values are
+   `STATIC_WEB`, `SPA_WEB`, `H5_WEB`, `PC_WEB`, `API_SERVICE`, `WECHAT_MINIPROGRAM`,
+   `DOUYIN_MINIPROGRAM`, `IOS_APP`, `ANDROID_APP`, `HARMONYOS_APP`, `FLUTTER_APP`, and
+   `DESKTOP_APP`. `STATIC_WEB`/`SPA_WEB` are the legacy rendering-model kinds;
+   `H5_WEB`/`PC_WEB` are the endpoint-accurate web kinds; `FLUTTER_APP` is the
+   cross-platform kind whose platform targets name the stores it ships to. A value
+   outside this set is rejected by the database.
+
+   Each application belongs to exactly one ownership mode:
+   `TENANT` (`organization_id = 0`, the default when no organization is named),
+   `ORGANIZATION` (`organization_id` = the owning organization), or `USER`
+   (`owner_user_id` = the owning person, `organization_id = 0`). `PLATFORM` is the
+   platform-internal fourth level and is never selectable through a tenant command.
+   The modes are mutually exclusive in the database, and `apps.list` can filter by
+   mode, organization, and endpoint kind.
 2. Every App shall own one or more `deploy_app_platform_target` rows. A platform target carries the
    platform (`WEB`, `API`, `WECHAT`, `DOUYIN`, `IOS`, `ANDROID`, `HARMONYOS`), the tech stack
    (`FLUTTER`, `NATIVE`, `UNI_APP`, or web/API stacks), the platform identity (bundle id, package

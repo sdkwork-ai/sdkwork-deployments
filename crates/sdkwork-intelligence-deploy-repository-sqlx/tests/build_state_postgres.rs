@@ -43,7 +43,7 @@ async fn terminal_build_state_is_final_and_duration_is_derived() {
     sqlx::query(
         "INSERT INTO deploy_app (id, uuid, tenant_id, organization_id, name, slug, app_kind,
              app_status, created_at, updated_at)
-         VALUES ($1, '00000000-0000-4000-8000-0000000000a1', 7, 9, 'build-state-app',
+         VALUES ($1, '00000000-0000-4000-8000-0000000000a1', 7, 0, 'build-state-app',
                  'build-state-app', 'API_SERVICE', 'ACTIVE', NOW(), NOW())",
     )
     .bind(APP_ID)

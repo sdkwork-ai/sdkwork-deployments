@@ -5531,10 +5531,11 @@ class AppResponse {
   final List<String>? appDomainSuffixes;
   final String? latestReleaseTag;
   final String ownerType;
+  final String ownershipScope;
   final String? ownerUserId;
   final String? ownerId;
   final String tenantId;
-  final String? organizationId;
+  final String organizationId;
   final String? createdBy;
   final String? updatedBy;
   final String? activatedAt;
@@ -5564,10 +5565,11 @@ class AppResponse {
     this.appDomainSuffixes,
     this.latestReleaseTag,
     required this.ownerType,
+    required this.ownershipScope,
     this.ownerUserId,
     this.ownerId,
     required this.tenantId,
-    this.organizationId,
+    required this.organizationId,
     this.createdBy,
     this.updatedBy,
     this.activatedAt,
@@ -5656,6 +5658,13 @@ class AppResponse {
         }
         return value;
       })(),
+      ownershipScope: (() {
+        final value = json['ownershipScope']?.toString();
+        if (value == null) {
+          throw FormatException('AppResponse.ownershipScope is required');
+        }
+        return value;
+      })(),
       ownerUserId: json['ownerUserId']?.toString(),
       ownerId: json['ownerId']?.toString(),
       tenantId: (() {
@@ -5665,7 +5674,13 @@ class AppResponse {
         }
         return value;
       })(),
-      organizationId: json['organizationId']?.toString(),
+      organizationId: (() {
+        final value = json['organizationId']?.toString();
+        if (value == null) {
+          throw FormatException('AppResponse.organizationId is required');
+        }
+        return value;
+      })(),
       createdBy: json['createdBy']?.toString(),
       updatedBy: json['updatedBy']?.toString(),
       activatedAt: json['activatedAt']?.toString(),
@@ -5722,6 +5737,7 @@ class AppResponse {
       'appDomainSuffixes': appDomainSuffixes?.map((item) => item).toList(),
       'latestReleaseTag': latestReleaseTag,
       'ownerType': ownerType,
+      'ownershipScope': ownershipScope,
       'ownerUserId': ownerUserId,
       'ownerId': ownerId,
       'tenantId': tenantId,

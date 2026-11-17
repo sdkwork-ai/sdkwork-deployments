@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppCompositionResponse, AppDomainResponse, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResourceKind, AppResourceLinkResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpsertAppResourceLinkRequest } from '../types';
+import type { AppCompositionResponse, AppDomainResponse, AppKind, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResourceKind, AppResourceLinkResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, BindAppSourceSpecSourceRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, PageInfo, PlatformTargetResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpsertAppResourceLinkRequest } from '../types';
 
 
 export interface AppSourceRepositoriesCreateParams {
@@ -267,7 +267,10 @@ export interface AppListParams {
   page?: number;
   pageSize?: number;
   keyword?: string;
+  ownershipScope?: AppOwnerType;
   scope?: AppOwnerType;
+  ownerOrganizationId?: string;
+  appKind?: AppKind[];
 }
 
 export interface AppCreateParams {
@@ -312,7 +315,10 @@ export class AppApi {
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
       { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
+      { name: 'ownership_scope', value: params?.ownershipScope, style: 'form', explode: true, allowReserved: false },
       { name: 'scope', value: params?.scope, style: 'form', explode: true, allowReserved: false },
+      { name: 'owner_organization_id', value: params?.ownerOrganizationId, style: 'form', explode: true, allowReserved: false },
+      { name: 'app_kind', value: params?.appKind, style: 'form', explode: true, allowReserved: false },
     ]);
     return this.client.request<{ items: AppResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
