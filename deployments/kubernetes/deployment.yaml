@@ -69,10 +69,14 @@ spec:
               value: "false"
             - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL
               value: https://drive-internal.sdkwork.com
+            - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE
+              value: /run/secrets/sdkwork/deploy-drive-internal-app-access-token
             - name: SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE
               value: /run/secrets/sdkwork/deploy-drive-internal-ingress-token
             - name: SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL
               value: https://knowledgebase.sdkwork.com
+            - name: SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE
+              value: /run/secrets/sdkwork/deploy-knowledgebase-internal-app-access-token
             - name: SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE
               value: /run/secrets/sdkwork/deploy-knowledgebase-internal-ingress-token
             - name: SDKWORK_DEPLOY_WEB_INTERNAL_API_URL

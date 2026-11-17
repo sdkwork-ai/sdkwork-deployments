@@ -24,6 +24,10 @@ SDKWORK_DRIVE_FACADE_URL=<drive-app-api-url>
 # (SDKWORK_DEPLOY_CONTENT_PROVIDER_MODE=http):
 SDKWORK_DEPLOY_DRIVE_INTERNAL_API_URL=<drive-internal-api-url>
 SDKWORK_DEPLOY_DRIVE_INTERNAL_API_INGRESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-drive-internal-ingress-token
+# IAM application access tokens for the Internal API machine profile.
+# SDKWORK_DEPLOY_DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-drive-internal-app-access-token
+# SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-knowledgebase-internal-app-access-token
+
 SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL=<knowledgebase-internal-api-url>
 SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE=/run/secrets/sdkwork/deploy-knowledgebase-internal-ingress-token
 SDKWORK_DEPLOY_WEB_INTERNAL_API_URL=<web-internal-api-url>

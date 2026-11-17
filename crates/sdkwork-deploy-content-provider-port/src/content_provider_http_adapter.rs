@@ -12,6 +12,10 @@
 //!
 //! The default deployment never loads it. The in-process ports in
 //! [`crate::in_process`] are the default path.
+//!
+//! identity:service - the content provider calls sibling Internal APIs with this
+//! deployment's declared machine identity (ingress token + IAM application access
+//! token); there is no end-user request at this boundary to borrow tokens from.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -32,6 +36,9 @@ use sdkwork_drive_app_sdk_generated_rust::{
 use sdkwork_drive_internal_sdk_generated_rust::SdkworkCustomClient as DriveInternalClient;
 use sdkwork_knowledgebase_internal_sdk::SdkworkCustomClient as KnowledgebaseInternalClient;
 use sdkwork_utils_rust::service_base_url::registry_base_url_or;
+use sdkwork_utils_rust::service_identity::{
+    missing_service_credentials, ServiceCredentials, ServiceTokenKind,
+};
 
 use crate::support::{
     map_provider_error, non_blank, provider_unavailable, read_secret_file, required_env,
@@ -50,6 +57,17 @@ pub const KNOWLEDGEBASE_INTERNAL_API_URL_ENV: &str =
     "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_URL";
 pub const KNOWLEDGEBASE_INTERNAL_TOKEN_FILE_ENV: &str =
     "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_INGRESS_TOKEN_FILE";
+/// IAM application access token files required alongside the ingress tokens.
+///
+/// The Internal API profile authenticates `X-SDKWork-Ingress-Token` plus an
+/// `Access-Token` carrying the application/tenant scope
+/// (`APP_SDK_INTEGRATION_SPEC.md` §5.2.1); an ingress token alone fails
+/// `missing-access-token` and a generated client's default `X-Api-Key` is
+/// rejected as credential-profile contamination.
+pub const DRIVE_INTERNAL_ACCESS_TOKEN_FILE_ENV: &str =
+    "SDKWORK_DEPLOY_DRIVE_INTERNAL_API_ACCESS_TOKEN_FILE";
+pub const KNOWLEDGEBASE_INTERNAL_ACCESS_TOKEN_FILE_ENV: &str =
+    "SDKWORK_DEPLOY_KNOWLEDGEBASE_INTERNAL_API_ACCESS_TOKEN_FILE";
 
 /// Split-deployment content provider: Drive App API + Drive/Knowledgebase
 /// Internal APIs over HTTP. Never the default.
@@ -60,6 +78,8 @@ pub struct HttpContentProviderAdapter {
     drive_internal_token_file: PathBuf,
     knowledgebase_internal_url: String,
     knowledgebase_internal_token_file: PathBuf,
+    drive_internal_access_token_file: Option<PathBuf>,
+    knowledgebase_internal_access_token_file: Option<PathBuf>,
 }
 
 impl HttpContentProviderAdapter {
@@ -97,17 +117,67 @@ impl HttpContentProviderAdapter {
             drive_internal_token_file,
             knowledgebase_internal_url,
             knowledgebase_internal_token_file,
+            drive_internal_access_token_file: None,
+            knowledgebase_internal_access_token_file: None,
         })
     }
 
+    /// Declares the IAM application access token files that scope the two
+    /// Internal API machine callers.
+    #[must_use]
+    pub fn with_internal_access_token_files(
+        mut self,
+        drive_internal_access_token_file: PathBuf,
+        knowledgebase_internal_access_token_file: PathBuf,
+    ) -> Self {
+        self.drive_internal_access_token_file = Some(drive_internal_access_token_file);
+        self.knowledgebase_internal_access_token_file =
+            Some(knowledgebase_internal_access_token_file);
+        self
+    }
+
     pub fn from_env() -> Result<Self, String> {
-        Self::new(
+        let drive_internal_access_token_file =
+            PathBuf::from(required_env(DRIVE_INTERNAL_ACCESS_TOKEN_FILE_ENV)?);
+        let knowledgebase_internal_access_token_file =
+            PathBuf::from(required_env(KNOWLEDGEBASE_INTERNAL_ACCESS_TOKEN_FILE_ENV)?);
+        Ok(Self::new(
             required_env(DRIVE_APP_API_URL_ENV)?,
             required_env(DRIVE_INTERNAL_API_URL_ENV)?,
             PathBuf::from(required_env(DRIVE_INTERNAL_TOKEN_FILE_ENV)?),
             required_env(KNOWLEDGEBASE_INTERNAL_API_URL_ENV)?,
             PathBuf::from(required_env(KNOWLEDGEBASE_INTERNAL_TOKEN_FILE_ENV)?),
-        )
+        )?
+        .with_internal_access_token_files(
+            drive_internal_access_token_file,
+            knowledgebase_internal_access_token_file,
+        ))
+    }
+
+    /// Reads one half of the declared machine identity, failing closed with the
+    /// settings that are missing.
+    fn internal_credentials(
+        &self,
+        ingress_token_file: &std::path::Path,
+        access_token_file: Option<&PathBuf>,
+        surface: &str,
+        ingress_token_key: &str,
+        access_token_key: &str,
+    ) -> DeployServiceResult<ServiceCredentials> {
+        let ingress_token = read_secret_file(ingress_token_file, surface)?;
+        let access_token = match access_token_file {
+            Some(path) => read_secret_file(path, surface)?,
+            None => String::new(),
+        };
+        let credentials = ServiceCredentials::new(ingress_token, access_token);
+        if !credentials.is_complete() {
+            return Err(DeployServiceError::Internal(missing_service_credentials(
+                surface,
+                ingress_token_key,
+                access_token_key,
+            )));
+        }
+        Ok(credentials)
     }
 
     fn drive_app_client(
@@ -131,7 +201,16 @@ impl HttpContentProviderAdapter {
         let base_url = registry_base_url_or("sdkwork-drive", &self.drive_internal_url);
         let client = DriveInternalClient::new_with_base_url(&base_url)
             .map_err(|_| provider_unavailable("Drive Internal API"))?;
-        client.set_api_key(read_secret_file(&self.drive_internal_token_file, "Drive")?);
+        let credentials = self.internal_credentials(
+            &self.drive_internal_token_file,
+            self.drive_internal_access_token_file.as_ref(),
+            "sdkwork-drive internal-api (deploy content provider)",
+            DRIVE_INTERNAL_TOKEN_FILE_ENV,
+            DRIVE_INTERNAL_ACCESS_TOKEN_FILE_ENV,
+        )?;
+        for (name, value) in credentials.wire_headers(ServiceTokenKind::Ingress) {
+            client.set_header(name, value);
+        }
         Ok(client)
     }
 
@@ -140,10 +219,16 @@ impl HttpContentProviderAdapter {
             registry_base_url_or("sdkwork-knowledgebase", &self.knowledgebase_internal_url);
         let client = KnowledgebaseInternalClient::new_with_base_url(&base_url)
             .map_err(|_| provider_unavailable("Knowledgebase Internal API"))?;
-        client.set_api_key(read_secret_file(
+        let credentials = self.internal_credentials(
             &self.knowledgebase_internal_token_file,
-            "Knowledgebase",
-        )?);
+            self.knowledgebase_internal_access_token_file.as_ref(),
+            "sdkwork-knowledgebase internal-api (deploy content provider)",
+            KNOWLEDGEBASE_INTERNAL_TOKEN_FILE_ENV,
+            KNOWLEDGEBASE_INTERNAL_ACCESS_TOKEN_FILE_ENV,
+        )?;
+        for (name, value) in credentials.wire_headers(ServiceTokenKind::Ingress) {
+            client.set_header(name, value);
+        }
         Ok(client)
     }
 }
@@ -390,6 +475,87 @@ mod tests {
             assert_eq!(resource.capabilities.wiki_search, search_enabled);
             assert!(resource.capabilities.wiki_routes);
             assert!(!resource.capabilities.static_content);
+        }
+    }
+}
+
+#[cfg(test)]
+mod machine_identity_tests {
+    use std::fs;
+
+    use super::*;
+
+    fn write_token(name: &str, value: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "deploy-content-provider-{name}-{}",
+            std::process::id()
+        ));
+        fs::write(&path, format!("{value}\n")).unwrap();
+        path
+    }
+
+    #[test]
+    fn a_missing_access_token_fails_closed_with_the_required_setting() {
+        let drive = write_token("drive", "0123456789abcdef");
+        let knowledgebase = write_token("kb", "fedcba9876543210");
+        let adapter = HttpContentProviderAdapter::new(
+            "http://127.0.0.1:1".to_owned(),
+            "http://127.0.0.1:2".to_owned(),
+            drive.clone(),
+            "http://127.0.0.1:3".to_owned(),
+            knowledgebase.clone(),
+        )
+        .unwrap();
+
+        let error = adapter
+            .drive_internal_client()
+            .err()
+            .expect("an incomplete machine identity must not dispatch");
+        let message = error.to_string();
+        assert!(
+            message.contains(DRIVE_INTERNAL_ACCESS_TOKEN_FILE_ENV),
+            "the diagnostic names the missing setting: {message}"
+        );
+        let error = adapter
+            .knowledgebase_internal_client()
+            .err()
+            .expect("an incomplete machine identity must not dispatch");
+        assert!(
+            error
+                .to_string()
+                .contains(KNOWLEDGEBASE_INTERNAL_ACCESS_TOKEN_FILE_ENV),
+            "the diagnostic names the missing setting"
+        );
+
+        fs::remove_file(drive).unwrap();
+        fs::remove_file(knowledgebase).unwrap();
+    }
+
+    #[test]
+    fn a_complete_pair_renders_the_ingress_headers() {
+        let drive = write_token("drive-ok", "0123456789abcdef");
+        let knowledgebase = write_token("kb-ok", "fedcba9876543210");
+        let drive_access = write_token("drive-access", "a1b2c3d4e5f6a7b8");
+        let knowledgebase_access = write_token("kb-access", "b1c2d3e4f5a6b7c8");
+        let adapter = HttpContentProviderAdapter::new(
+            "http://127.0.0.1:1".to_owned(),
+            "http://127.0.0.1:2".to_owned(),
+            drive.clone(),
+            "http://127.0.0.1:3".to_owned(),
+            knowledgebase.clone(),
+        )
+        .unwrap()
+        .with_internal_access_token_files(drive_access.clone(), knowledgebase_access.clone());
+
+        adapter
+            .drive_internal_client()
+            .expect("a complete pair builds the client");
+        adapter
+            .knowledgebase_internal_client()
+            .expect("a complete pair builds the client");
+
+        for path in [drive, knowledgebase, drive_access, knowledgebase_access] {
+            fs::remove_file(path).unwrap();
         }
     }
 }
