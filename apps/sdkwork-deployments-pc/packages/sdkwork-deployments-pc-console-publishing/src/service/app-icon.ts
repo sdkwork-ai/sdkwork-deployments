@@ -94,12 +94,15 @@ export function appAvatarGradientClass(seed: string): string {
 const APP_AVATAR_ICON_KEYS: Readonly<Record<AppKind, DeployAppTypeIconId>> = {
   STATIC_WEB: "static",
   SPA_WEB: "pc",
+  H5_WEB: "h5",
+  PC_WEB: "pc",
   API_SERVICE: "api",
   WECHAT_MINIPROGRAM: "mini-program",
   DOUYIN_MINIPROGRAM: "mini-program",
   IOS_APP: "ios",
   ANDROID_APP: "android",
   HARMONYOS_APP: "harmony",
+  FLUTTER_APP: "android",
   DESKTOP_APP: "desktop",
 };
 

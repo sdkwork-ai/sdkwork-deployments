@@ -153,6 +153,7 @@ const en = {
   typeDouyinMiniProgram: "Douyin mini program",
   typeFlutterIos: "Flutter iOS",
   typeFlutterAndroid: "Flutter Android",
+  typeFlutterApp: "Flutter app",
   typeNativeIos: "Native iOS",
   typeNativeAndroid: "Native Android",
   typeHarmonyos: "HarmonyOS app",
@@ -1132,6 +1133,7 @@ const zh: Record<keyof typeof en, string> = {
   typeDouyinMiniProgram: "抖音小程序",
   typeFlutterIos: "Flutter iOS",
   typeFlutterAndroid: "Flutter 安卓",
+  typeFlutterApp: "Flutter 应用",
   typeNativeIos: "原生 iOS",
   typeNativeAndroid: "原生安卓",
   typeHarmonyos: "鸿蒙应用",
@@ -1980,12 +1982,15 @@ export const APP_SURFACE_LABEL_KEYS: Readonly<Record<AppSurfaceId, PublishingMes
 export const APP_KIND_LABEL_KEYS: Readonly<Record<AppKind, PublishingMessageKey>> = {
   STATIC_WEB: "typeStaticWeb",
   SPA_WEB: "typeSpaWeb",
+  H5_WEB: "typeH5",
+  PC_WEB: "typePcWeb",
   API_SERVICE: "typeApiService",
   WECHAT_MINIPROGRAM: "typeWechatMiniProgram",
   DOUYIN_MINIPROGRAM: "typeDouyinMiniProgram",
   IOS_APP: "typeIos",
   ANDROID_APP: "typeAndroid",
   HARMONYOS_APP: "typeHarmonyos",
+  FLUTTER_APP: "typeFlutterApp",
   DESKTOP_APP: "typeDesktop",
 };
 
