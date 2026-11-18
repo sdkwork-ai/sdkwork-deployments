@@ -40,6 +40,48 @@
 
 BEGIN;
 
+-- The table was folded into the baseline after schemas were already baselined,
+-- so an already-initialized database does not have it. Create it verbatim from
+-- `database/ddl/baseline/postgres/0001_deploy_baseline.sql` before reconciling;
+-- fresh installs already created it and this is a no-op there.
+CREATE TABLE IF NOT EXISTS deploy_application_resource_link (
+    id              VARCHAR(36)  NOT NULL,
+    tenant_id       BIGINT       NOT NULL,
+    organization_id BIGINT       NOT NULL DEFAULT 0,
+    app_id          BIGINT       NOT NULL,
+    env_key         VARCHAR(32)  NOT NULL,
+    resource_kind   VARCHAR(24)  NOT NULL,
+    resource_ref    VARCHAR(128) NOT NULL,
+    provider_code   VARCHAR(32),
+    is_default      BOOLEAN      NOT NULL DEFAULT FALSE,
+    binding_status  VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    metadata        JSONB        NOT NULL DEFAULT '{}',
+    created_by      BIGINT,
+    updated_by      BIGINT,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ,
+    version         BIGINT       NOT NULL DEFAULT 1,
+    CONSTRAINT pk_deploy_application_resource_link PRIMARY KEY (id),
+    CONSTRAINT fk_deploy_application_resource_link_app
+        FOREIGN KEY (app_id) REFERENCES deploy_app(id),
+    CONSTRAINT chk_deploy_application_resource_link_kind
+        CHECK (resource_kind IN ('official_account', 'mini_program', 'payment_account')),
+    CONSTRAINT chk_deploy_application_resource_link_status
+        CHECK (binding_status IN ('ACTIVE', 'DISABLED'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_resource_link_ref
+    ON deploy_application_resource_link (app_id, env_key, resource_kind, resource_ref)
+    WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_resource_link_single
+    ON deploy_application_resource_link (app_id, env_key, resource_kind)
+    WHERE resource_kind IN ('official_account', 'mini_program') AND deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_deploy_application_resource_link_app
+    ON deploy_application_resource_link (tenant_id, app_id, env_key, resource_kind, deleted_at, id);
+
 -- A row written before this migration cannot be repaired by guesswork: the table
 -- had no writer, so any row in it was hand-written and its intent is unknown.
 -- Refuse loudly instead of silently coercing data, and say what to do. This is a
