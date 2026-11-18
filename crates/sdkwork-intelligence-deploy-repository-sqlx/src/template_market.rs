@@ -95,6 +95,7 @@ fn map_category_row(row: &PgRow) -> Result<TemplateCategoryResponse, sqlx::Error
 /// Broadest store total (App Store). The client applies the narrower
 /// per-app-type shelf limits; the repository keeps one safe upper bound.
 const MAX_TEMPLATE_SCREENSHOTS: usize = 30;
+const TEMPLATE_CATEGORY_MAX_DEPTH: i32 = 5;
 
 /// Normalize and validate the author-provided sample pages before they reach
 /// JSONB. Empty media references and duplicate pages are refused because the
@@ -388,6 +389,16 @@ impl DeployRepository {
                     .await?,
             ),
         };
+        if let Some(parent_internal) = parent_id {
+            let parent_depth = self
+                .template_category_depth(tenant_id, parent_internal)
+                .await?;
+            if parent_depth >= TEMPLATE_CATEGORY_MAX_DEPTH {
+                return Err(DeployServiceError::validation(
+                    "template category depth cannot exceed 5 levels",
+                ));
+            }
+        }
         let category_id = next_id(self.id_generator())?;
         let category_uuid = new_uuid();
         sqlx::query(
@@ -452,13 +463,31 @@ impl DeployRepository {
                 let parent_internal = self
                     .resolve_category_internal_id(tenant_id, parent_uuid)
                     .await?;
-                if parent_internal
-                    == self
-                        .resolve_category_internal_id(tenant_id, category_uuid)
-                        .await?
-                {
+                let category_internal = self
+                    .resolve_category_internal_id(tenant_id, category_uuid)
+                    .await?;
+                if parent_internal == category_internal {
                     return Err(DeployServiceError::validation(
                         "a category cannot be its own parent",
+                    ));
+                }
+                if self
+                    .template_category_is_ancestor(tenant_id, parent_internal, category_internal)
+                    .await?
+                {
+                    return Err(DeployServiceError::validation(
+                        "a category cannot be moved below its own descendant",
+                    ));
+                }
+                let parent_depth = self
+                    .template_category_depth(tenant_id, parent_internal)
+                    .await?;
+                let subtree_height = self
+                    .template_category_subtree_height(tenant_id, category_internal)
+                    .await?;
+                if parent_depth + subtree_height > TEMPLATE_CATEGORY_MAX_DEPTH {
+                    return Err(DeployServiceError::validation(
+                        "template category depth cannot exceed 5 levels",
                     ));
                 }
                 Some(parent_internal)
@@ -577,6 +606,90 @@ impl DeployRepository {
         }
         row.try_get("id")
             .map_err(|error| DeployServiceError::Internal(format!("read id: {error}")))
+    }
+
+    /// Depth of a template category (root = 1), bounded to avoid loops on
+    /// legacy corrupt data.
+    async fn template_category_depth(
+        &self,
+        tenant_id: i64,
+        category_id: i64,
+    ) -> DeployServiceResult<i32> {
+        let depth: Option<i32> = sqlx::query_scalar(
+            "WITH RECURSIVE chain AS (
+                SELECT id, parent_id, 1 AS depth
+                  FROM deploy_application_scaffold_category
+                 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+                UNION ALL
+                SELECT c.id, c.parent_id, chain.depth + 1
+                  FROM deploy_application_scaffold_category c
+                  JOIN chain ON c.id = chain.parent_id
+                 WHERE c.tenant_id = $1 AND c.deleted_at IS NULL AND chain.depth < 10
+            )
+            SELECT MAX(depth) FROM chain",
+        )
+        .bind(tenant_id)
+        .bind(category_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("read template category depth", error))?;
+        depth.ok_or_else(|| DeployServiceError::validation("template category not found"))
+    }
+
+    /// Height of a template category subtree (a leaf has height 1).
+    async fn template_category_subtree_height(
+        &self,
+        tenant_id: i64,
+        category_id: i64,
+    ) -> DeployServiceResult<i32> {
+        let height: Option<i32> = sqlx::query_scalar(
+            "WITH RECURSIVE tree AS (
+                SELECT id, 1 AS depth
+                  FROM deploy_application_scaffold_category
+                 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+                UNION ALL
+                SELECT c.id, tree.depth + 1
+                  FROM deploy_application_scaffold_category c
+                  JOIN tree ON c.parent_id = tree.id
+                 WHERE c.tenant_id = $1 AND c.deleted_at IS NULL AND tree.depth < 10
+            )
+            SELECT MAX(depth) FROM tree",
+        )
+        .bind(tenant_id)
+        .bind(category_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("read template category subtree height", error))?;
+        height.ok_or_else(|| DeployServiceError::validation("template category not found"))
+    }
+
+    /// `true` when `ancestor_id` appears on `category_id`'s parent chain.
+    async fn template_category_is_ancestor(
+        &self,
+        tenant_id: i64,
+        category_id: i64,
+        ancestor_id: i64,
+    ) -> DeployServiceResult<bool> {
+        let is_ancestor: bool = sqlx::query_scalar(
+            "WITH RECURSIVE chain AS (
+                SELECT id, parent_id, 1 AS depth
+                  FROM deploy_application_scaffold_category
+                 WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+                UNION ALL
+                SELECT c.id, c.parent_id, chain.depth + 1
+                  FROM deploy_application_scaffold_category c
+                  JOIN chain ON c.id = chain.parent_id
+                 WHERE c.tenant_id = $1 AND c.deleted_at IS NULL AND chain.depth < 10
+            )
+            SELECT EXISTS(SELECT 1 FROM chain WHERE id = $3)",
+        )
+        .bind(tenant_id)
+        .bind(category_id)
+        .bind(ancestor_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| store_error("read template category ancestor chain", error))?;
+        Ok(is_ancestor)
     }
 
     // -- marketplace browse ------------------------------------------------------
