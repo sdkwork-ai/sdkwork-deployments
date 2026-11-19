@@ -7,6 +7,7 @@ members = [
   "crates/sdkwork-deploy-cloud-account-port",
   "crates/sdkwork-deploy-content-provider-port",
   "crates/sdkwork-deploy-identity-provisioning-port",
+  "crates/sdkwork-deploy-app-token",
   "crates/sdkwork-deploy-runtime-compiler",
   "crates/sdkwork-deploy-runtime-assignment-worker",
   "crates/sdkwork-deploy-service-host",
@@ -95,6 +96,7 @@ sdkwork-deploy-drive-port = { path = "crates/sdkwork-deploy-drive-port" }
 sdkwork-deploy-cloud-account-port = { path = "crates/sdkwork-deploy-cloud-account-port" }
 sdkwork-deploy-content-provider-port = { path = "crates/sdkwork-deploy-content-provider-port" }
 sdkwork-deploy-identity-provisioning-port = { path = "crates/sdkwork-deploy-identity-provisioning-port" }
+sdkwork-deploy-app-token = { path = "crates/sdkwork-deploy-app-token" }
 sdkwork-deploy-runtime-compiler = { path = "crates/sdkwork-deploy-runtime-compiler" }
 sdkwork-deploy-service-host = { path = "crates/sdkwork-deploy-service-host" }
 sdkwork-deploy-web-port = { path = "crates/sdkwork-deploy-web-port" }

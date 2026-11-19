@@ -4024,6 +4024,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-deploy-app-token"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sdkwork-deploy-archive"
 version = "0.1.0"
 dependencies = [
