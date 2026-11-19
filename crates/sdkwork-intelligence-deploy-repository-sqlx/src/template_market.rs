@@ -231,6 +231,40 @@ fn map_template_row(row: &PgRow) -> Result<AppTemplateResponse, sqlx::Error> {
     })
 }
 
+async fn load_git_source_snapshot(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: i64,
+    app_uuid: &str,
+) -> DeployServiceResult<Option<serde_json::Value>> {
+    let row = sqlx::query(
+        "SELECT r.repo_provider, r.repo_url, r.default_branch, r.clone_mode,
+                r.credential_secret_ref
+         FROM deploy_source_repository r
+         JOIN deploy_app a ON a.id = r.app_id
+         WHERE a.tenant_id = $1 AND a.uuid = $2
+           AND a.deleted_at IS NULL AND r.deleted_at IS NULL
+         ORDER BY r.id DESC
+         LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(app_uuid)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|error| store_error("load template source snapshot", error))?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    Ok(Some(serde_json::json!({
+        "git": {
+            "repoProvider": row.try_get::<String, _>("repo_provider").unwrap_or_default(),
+            "repoUrl": row.try_get::<String, _>("repo_url").unwrap_or_default(),
+            "repoRef": row.try_get::<String, _>("default_branch").unwrap_or_default(),
+            "cloneMode": row.try_get::<String, _>("clone_mode").unwrap_or_default(),
+            "credentialSecretRef": row.try_get::<Option<String>, _>("credential_secret_ref").ok().flatten(),
+        }
+    })))
+}
+
 fn map_template_summary_row(row: &PgRow) -> Result<AppTemplateSummaryResponse, sqlx::Error> {
     let metadata: serde_json::Value = row.try_get("metadata")?;
     Ok(AppTemplateSummaryResponse {
@@ -1078,6 +1112,8 @@ impl DeployRepository {
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("insert deploy_application_scaffold", error))?;
+        let initial_version_snapshot =
+            load_git_source_snapshot(&mut transaction, tenant_id, &request.app_uuid).await?;
         if let Some(initial) = request.initial_version.as_ref() {
             self.insert_template_version(
                 &mut transaction,
@@ -1087,6 +1123,7 @@ impl DeployRepository {
                 actor_id,
                 initial,
                 TEMPLATE_VERSION_STATUS_DRAFT,
+                initial_version_snapshot,
             )
             .await?;
         }
@@ -1653,7 +1690,7 @@ impl DeployRepository {
             store_error("begin create deploy_application_scaffold_version", error)
         })?;
         let row = sqlx::query(
-            "SELECT id, status, organization_id FROM deploy_application_scaffold
+            "SELECT id, status, organization_id, app_uuid FROM deploy_application_scaffold
              WHERE tenant_id = $1 AND uuid = $2 AND author_user_id = $3 AND deleted_at IS NULL
              FOR UPDATE",
         )
@@ -1670,6 +1707,9 @@ impl DeployRepository {
         let organization_id: i64 = row
             .try_get("organization_id")
             .map_err(|error| DeployServiceError::Internal(format!("read organization: {error}")))?;
+        let app_uuid: String = row
+            .try_get("app_uuid")
+            .map_err(|error| DeployServiceError::Internal(format!("read app_uuid: {error}")))?;
         let template_status: String = row
             .try_get("status")
             .map_err(|error| DeployServiceError::Internal(format!("read status: {error}")))?;
@@ -1685,6 +1725,8 @@ impl DeployRepository {
         } else {
             TEMPLATE_VERSION_STATUS_DRAFT
         };
+        let version_snapshot =
+            load_git_source_snapshot(&mut transaction, tenant_id, &app_uuid).await?;
         let version_uuid = self
             .insert_template_version(
                 &mut transaction,
@@ -1694,6 +1736,7 @@ impl DeployRepository {
                 Some(author_user_id),
                 request,
                 version_status,
+                version_snapshot,
             )
             .await?;
         if version_status == TEMPLATE_VERSION_STATUS_PUBLISHED {
@@ -1716,6 +1759,23 @@ impl DeployRepository {
             .await
     }
 
+    pub(super) async fn retrieve_app_template_version_source_snapshot_repo(
+        &self,
+        tenant_id: i64,
+        version_uuid: &str,
+    ) -> DeployServiceResult<Option<serde_json::Value>> {
+        let row = sqlx::query(
+            "SELECT metadata FROM deploy_application_scaffold_version
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(version_uuid)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read template version source snapshot", error))?;
+        Ok(row.and_then(|row| row.try_get::<serde_json::Value, _>("metadata").ok()))
+    }
+
     /// Shared version insert used by template creation (initial version) and
     /// `create_app_template_version`. Returns the new version's uuid.
     #[allow(clippy::too_many_arguments)]
@@ -1728,6 +1788,7 @@ impl DeployRepository {
         actor_id: Option<i64>,
         request: &CreateAppTemplateVersionRequest,
         status: &str,
+        metadata: Option<serde_json::Value>,
     ) -> DeployServiceResult<String> {
         let template_version = require_text(&request.version, "version", 64)?;
         let package_size = parse_package_size(request.package_size_bytes.as_deref())?;
@@ -1742,8 +1803,8 @@ impl DeployRepository {
             "INSERT INTO deploy_application_scaffold_version (
                 id, uuid, tenant_id, organization_id, template_id, template_version, changelog,
                 artifact_uuid, source_app_version, platform_targets_json, package_size_bytes,
-                checksum_sha256, status, published_at, created_by, updated_by
-            ) VALUES ($1, $2, $3, COALESCE($4, 0), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)",
+                checksum_sha256, status, published_at, metadata, created_by, updated_by
+            ) VALUES ($1, $2, $3, COALESCE($4, 0), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)",
         )
         .bind(version_id)
         .bind(&version_uuid)
@@ -1764,6 +1825,7 @@ impl DeployRepository {
         .bind(request.checksum_sha256.as_deref())
         .bind(status)
         .bind(published_at)
+        .bind(metadata.unwrap_or_else(|| serde_json::json!({})))
         .bind(actor_id)
         .execute(&mut **transaction)
         .await

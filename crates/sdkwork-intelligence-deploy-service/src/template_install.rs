@@ -8,8 +8,9 @@
 //! refused until the order/payment entitlement is verified at install time.
 
 use sdkwork_deploy_contract::{
-    AppKind, AppSourceArchiveInput, AppSourceGitInput, AppSourceKind, AppTemplateInstallResponse,
-    CreateAppRequest, DeployAppApi, DeployAppRequestContext, DeployServiceError, DeployServiceResult,
+    AppKind, AppSourceArchiveInput, AppSourceGitInput, AppSourceGitResponse, AppSourceKind,
+    AppTemplateInstallResponse, CreateAppRequest, DeployAppApi, DeployAppRequestContext,
+    DeployServiceError, DeployServiceResult,
     InstallAppTemplateRequest, UpdateAppSourceRequest, TEMPLATE_PRICING_FREE, TEMPLATE_TYPE_APP,
 };
 
@@ -61,8 +62,22 @@ impl DeployService {
         } else {
             None
         };
+        let version_git_snapshot = if let Some(latest_version_uuid) =
+            template.latest_version_uuid.as_deref()
+        {
+            self.repository
+                .retrieve_app_template_version_source_snapshot(
+                    Self::tenant_id(context)?,
+                    latest_version_uuid,
+                )
+                .await?
+                .as_ref()
+                .and_then(git_input_from_snapshot)
+        } else {
+            None
+        };
         let (git, archive_artifact_id) = match source.source_kind {
-            Some(AppSourceKind::Git) => (source.git, None),
+            Some(AppSourceKind::Git) => (source.git.map(git_input_from_source), None),
             Some(AppSourceKind::Archive) => (
                 None,
                 version_artifact.or_else(|| {
@@ -83,6 +98,10 @@ impl DeployService {
                 "template source application has an incomplete source",
             ));
         }
+        // A version-owned Git snapshot wins over the source application's
+        // current declaration; older versions without a snapshot keep the
+        // current-source fallback.
+        let git = version_git_snapshot.or(git);
 
         let create_request = CreateAppRequest {
             name: request
@@ -129,10 +148,10 @@ impl DeployService {
                 git: Some(AppSourceGitInput {
                     repo_provider: git.repo_provider,
                     repo_url: git.repo_url,
-                    repo_ref: Some(git.repo_ref),
+                    repo_ref: git.repo_ref,
                     sub_path: git.sub_path,
                     credential_secret_ref: git.credential_secret_ref,
-                    clone_mode: Some(git.clone_mode),
+                    clone_mode: git.clone_mode,
                 }),
                 archive: None,
             }
@@ -208,9 +227,62 @@ pub(crate) fn ensure_template_installable(
     Ok(())
 }
 
+fn git_input_from_source(git: AppSourceGitResponse) -> AppSourceGitInput {
+    AppSourceGitInput {
+        repo_provider: git.repo_provider,
+        repo_url: git.repo_url,
+        repo_ref: Some(git.repo_ref),
+        sub_path: git.sub_path,
+        credential_secret_ref: git.credential_secret_ref,
+        clone_mode: Some(git.clone_mode),
+    }
+}
+
+fn git_input_from_snapshot(snapshot: &serde_json::Value) -> Option<AppSourceGitInput> {
+    let git = snapshot.get("git")?;
+    let repo_url = git.get("repoUrl")?.as_str()?.trim();
+    if repo_url.is_empty() {
+        return None;
+    }
+    let text = |key: &str| {
+        git.get(key)
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    Some(AppSourceGitInput {
+        repo_provider: text("repoProvider").unwrap_or_else(|| "GITHUB".to_owned()),
+        repo_url: repo_url.to_owned(),
+        repo_ref: text("repoRef"),
+        sub_path: text("subPath"),
+        credential_secret_ref: text("credentialSecretRef"),
+        clone_mode: text("cloneMode"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::ensure_template_installable;
+    use super::{ensure_template_installable, git_input_from_snapshot};
+
+    #[test]
+    fn a_version_git_snapshot_becomes_an_install_source() {
+        let input = git_input_from_snapshot(&serde_json::json!({
+            "git": {
+                "repoProvider": "GITHUB",
+                "repoUrl": "https://github.com/sdkwork/demo",
+                "repoRef": "v1.2.0",
+                "cloneMode": "FULL",
+                "credentialSecretRef": "vault://git/demo"
+            }
+        }))
+        .expect("snapshot");
+        assert_eq!(input.repo_provider, "GITHUB");
+        assert_eq!(input.repo_url, "https://github.com/sdkwork/demo");
+        assert_eq!(input.repo_ref.as_deref(), Some("v1.2.0"));
+        assert_eq!(input.clone_mode.as_deref(), Some("FULL"));
+        assert!(git_input_from_snapshot(&serde_json::json!({})).is_none());
+    }
 
     #[test]
     fn only_free_app_templates_with_a_source_are_installable() {

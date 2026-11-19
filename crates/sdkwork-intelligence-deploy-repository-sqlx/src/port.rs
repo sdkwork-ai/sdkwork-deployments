@@ -2112,6 +2112,15 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn retrieve_app_template_version_source_snapshot(
+        &self,
+        tenant_id: i64,
+        version_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<Option<serde_json::Value>> {
+        self.retrieve_app_template_version_source_snapshot_repo(tenant_id, version_uuid)
+            .await
+    }
+
     async fn review_app_template(
         &self,
         tenant_id: Option<i64>,

@@ -1911,6 +1911,13 @@ pub trait DeployRepositoryPort:
         request: &CreateAppTemplateVersionRequest,
     ) -> DeployServiceResult<AppTemplateVersionResponse>;
 
+    /// The version-owned source snapshot captured at publish time.
+    async fn retrieve_app_template_version_source_snapshot(
+        &self,
+        tenant_id: i64,
+        version_uuid: &str,
+    ) -> DeployServiceResult<Option<serde_json::Value>>;
+
     /// Backend moderation: moves `status` / `review_note` / `is_featured`. An
     /// approval publishes the newest draft version; see the service layer for
     /// the transition rules.
