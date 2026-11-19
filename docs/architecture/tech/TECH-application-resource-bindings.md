@@ -2,7 +2,7 @@
 
 Status: active
 Owner: SDKWork Deploy maintainers
-Updated: 2026-11-17
+Updated: 2026-11-19
 Specs: DATABASE_SPEC.md, API_SPEC.md, SDK_SPEC.md, APPLICATION_IDENTITY_SPEC.md, TEST_SPEC.md
 
 ## 1. The Problem
