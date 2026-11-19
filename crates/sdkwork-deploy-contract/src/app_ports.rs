@@ -1689,6 +1689,18 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    async fn install_app_template(
+        &self,
+        _context: &DeployAppRequestContext,
+        _template_uuid: &str,
+        _idempotency_key: &str,
+        _request: &crate::template_market::InstallAppTemplateRequest,
+    ) -> DeployServiceResult<crate::template_market::AppTemplateInstallResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "install_app_template API is not implemented".to_owned(),
+        ))
+    }
+
     async fn list_app_templates(
         &self,
         _context: &DeployAppRequestContext,

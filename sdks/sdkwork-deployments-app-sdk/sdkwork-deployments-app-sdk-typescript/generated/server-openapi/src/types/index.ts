@@ -3,6 +3,8 @@ export type { TemplateCategoryResponse } from './template-category-response';
 export type { AppTemplateScreenshot } from './app-template-screenshot';
 export type { AppTemplateSummaryResponse } from './app-template-summary-response';
 export type { AppTemplateResponse } from './app-template-response';
+export type { InstallAppTemplateRequest } from './install-app-template-request';
+export type { AppTemplateInstallResponse } from './app-template-install-response';
 export type { AppTemplateVersionResponse } from './app-template-version-response';
 export type { CreateAppTemplateRequest } from './create-app-template-request';
 export type { UpdateAppTemplateRequest } from './update-app-template-request';
@@ -252,6 +254,7 @@ export type { AppEnvironmentsCreatePostResponse201 } from './app-environments-cr
 export type { TemplateCategoriesListResponse } from './template-categories-list-response';
 export type { MarketplaceTemplatesListResponse } from './marketplace-templates-list-response';
 export type { MarketplaceTemplatesRetrieveResponse } from './marketplace-templates-retrieve-response';
+export type { MarketplaceTemplatesInstallResponse201 } from './marketplace-templates-install-response201';
 export type { AppTemplatesListResponse } from './app-templates-list-response';
 export type { AppTemplatesCreateResponse201 } from './app-templates-create-response201';
 export type { AppTemplatesRetrieveResponse } from './app-templates-retrieve-response';

@@ -606,6 +606,66 @@ class AppTemplateResponse {
   }
 }
 
+class InstallAppTemplateRequest {
+  final String? name;
+  final String? slug;
+
+  InstallAppTemplateRequest({
+    this.name,
+    this.slug
+  });
+
+  factory InstallAppTemplateRequest.fromJson(Map<String, dynamic> json) {
+    return InstallAppTemplateRequest(
+      name: json['name']?.toString(),
+      slug: json['slug']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'name': name,
+      'slug': slug,
+    };
+  }
+}
+
+class AppTemplateInstallResponse {
+  final AppResponse app;
+  final String templateUuid;
+
+  AppTemplateInstallResponse({
+    required this.app,
+    required this.templateUuid
+  });
+
+  factory AppTemplateInstallResponse.fromJson(Map<String, dynamic> json) {
+    return AppTemplateInstallResponse(
+      app: (() {
+        final map = _sdkworkAsMap(json['app']);
+        if (map == null) {
+          throw FormatException('AppTemplateInstallResponse.app is required');
+        }
+        return AppResponse.fromJson(map);
+      })(),
+      templateUuid: (() {
+        final value = json['templateUuid']?.toString();
+        if (value == null) {
+          throw FormatException('AppTemplateInstallResponse.templateUuid is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'app': app.toJson(),
+      'templateUuid': templateUuid,
+    };
+  }
+}
+
 class AppTemplateVersionResponse {
   final String id;
   final String templateUuid;
@@ -14467,6 +14527,52 @@ class MarketplaceTemplatesRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('MarketplaceTemplatesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class MarketplaceTemplatesInstallResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  MarketplaceTemplatesInstallResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory MarketplaceTemplatesInstallResponse201.fromJson(Map<String, dynamic> json) {
+    return MarketplaceTemplatesInstallResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('MarketplaceTemplatesInstallResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('MarketplaceTemplatesInstallResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('MarketplaceTemplatesInstallResponse201.traceId is required');
         }
         return value;
       })()

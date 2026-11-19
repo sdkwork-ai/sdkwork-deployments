@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppTemplateResponse, AppTemplateSummaryResponse, AppTemplateVersionResponse, CreateAppTemplateRequest, CreateAppTemplateVersionRequest, PageInfo, TemplateCategoryResponse, UpdateAppTemplateRequest } from '../types';
+import type { AppTemplateInstallResponse, AppTemplateResponse, AppTemplateSummaryResponse, AppTemplateVersionResponse, CreateAppTemplateRequest, CreateAppTemplateVersionRequest, InstallAppTemplateRequest, PageInfo, TemplateCategoryResponse, UpdateAppTemplateRequest } from '../types';
 
 
 export interface TemplateAppTemplateVersionsListParams {
@@ -124,6 +124,10 @@ export interface TemplateMarketplaceTemplatesListParams {
   sort?: 'NEWEST' | 'POPULAR';
 }
 
+export interface TemplateMarketplaceTemplatesInstallParams {
+  idempotencyKey: string;
+}
+
 export class TemplateMarketplaceTemplatesApi {
   private client: HttpClient;
 
@@ -149,6 +153,17 @@ export class TemplateMarketplaceTemplatesApi {
 /** Retrieve a marketplace app template */
   async retrieve(templateUuid: string, requestOptions?: ApiRequestOptions): Promise<AppTemplateResponse> {
     return this.client.request<AppTemplateResponse>(appApiPath(`/marketplace/templates/${serializePathParameter(templateUuid, { name: 'templateUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Install a free, Git-backed template as a new application */
+  async install(templateUuid: string, body: InstallAppTemplateRequest, params: TemplateMarketplaceTemplatesInstallParams, requestOptions?: ApiRequestOptions): Promise<AppTemplateInstallResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<AppTemplateInstallResponse>(appApiPath(`/marketplace/templates/${serializePathParameter(templateUuid, { name: 'templateUuid', style: 'simple', explode: false })}/install`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 }
 

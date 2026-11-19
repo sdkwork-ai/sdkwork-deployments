@@ -810,6 +810,13 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_required_permission("deploy.marketplaceTemplates.read"),
     HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/marketplace/templates/{templateUuid}/install",
+        "template",
+        "marketplaceTemplates.install",
+    )
+    .with_required_permission("deploy.marketplaceTemplates.write"),
+    HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/app_templates",
         "template",

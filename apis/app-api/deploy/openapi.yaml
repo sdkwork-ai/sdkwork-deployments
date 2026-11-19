@@ -5565,6 +5565,66 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
+  /app/v3/api/marketplace/templates/{templateUuid}/install:
+    parameters:
+    - name: templateUuid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: marketplaceTemplates.install
+      summary: Install a free, Git-backed template as a new application
+      description: >-
+        Creates a new application of the template's source kind and copies the
+        source application's Git remix declaration onto it. Paid templates and
+        archive-backed templates are refused until order/payment entitlement and
+        artifact sharing are available; the call never creates an app whose
+        source it cannot deliver.
+      tags:
+      - template
+      security:
+      - AuthToken: []
+        AccessToken: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstallAppTemplateRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppTemplateInstallResponse'
+        '409':
+          description: Template is not installable in the current state
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/app_templates:
     get:
       operationId: appTemplates.list
@@ -6485,6 +6545,29 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
+    InstallAppTemplateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        slug:
+          type: string
+          maxLength: 120
+          pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+    AppTemplateInstallResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - app
+      - templateUuid
+      properties:
+        app:
+          $ref: '#/components/schemas/AppResponse'
+        templateUuid:
+          type: string
+          format: uuid
     AppTemplateVersionResponse:
       type: object
       additionalProperties: false

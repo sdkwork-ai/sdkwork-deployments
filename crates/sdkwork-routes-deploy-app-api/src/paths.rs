@@ -127,6 +127,8 @@ pub const APP_ENVIRONMENT_PROMOTIONS: &str =
 pub const TEMPLATE_CATEGORIES: &str = "/app/v3/api/template_categories";
 pub const MARKETPLACE_TEMPLATES: &str = "/app/v3/api/marketplace/templates";
 pub const MARKETPLACE_TEMPLATE: &str = "/app/v3/api/marketplace/templates/{templateUuid}";
+pub const MARKETPLACE_TEMPLATE_INSTALL: &str =
+    "/app/v3/api/marketplace/templates/{templateUuid}/install";
 pub const APP_TEMPLATES: &str = "/app/v3/api/app_templates";
 pub const APP_TEMPLATE: &str = "/app/v3/api/app_templates/{templateUuid}";
 pub const APP_TEMPLATE_SUBMIT: &str = "/app/v3/api/app_templates/{templateUuid}/submit";

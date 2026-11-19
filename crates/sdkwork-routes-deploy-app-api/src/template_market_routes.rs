@@ -10,7 +10,8 @@ use axum::{
 };
 use sdkwork_deploy_contract::{
     CreateAppTemplateRequest, CreateAppTemplateVersionRequest, DeployAppRequestContext,
-    ListAppTemplatesQuery, ListMarketplaceTemplatesQuery, UpdateAppTemplateRequest,
+    InstallAppTemplateRequest, ListAppTemplatesQuery, ListMarketplaceTemplatesQuery,
+    UpdateAppTemplateRequest,
 };
 use sdkwork_routes_deploy_common::{
     envelope, finish_api_json, finish_created_api_json, finish_no_content, ok_json, service_result,
@@ -47,6 +48,10 @@ pub fn build_template_market_router() -> Router<AppState> {
         .route(
             paths::MARKETPLACE_TEMPLATE,
             get(retrieve_marketplace_template),
+        )
+        .route(
+            paths::MARKETPLACE_TEMPLATE_INSTALL,
+            post(install_marketplace_template),
         )
         .route(
             paths::APP_TEMPLATES,
@@ -121,6 +126,29 @@ async fn retrieve_marketplace_template(
             let item = state
                 .api
                 .retrieve_marketplace_template(&context, &template_uuid)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn install_marketplace_template(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(template_uuid): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<InstallAppTemplateRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let idempotency_key = required_header(&headers, "idempotency-key")?;
+            let item = state
+                .api
+                .install_app_template(&context, &template_uuid, &idempotency_key, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }

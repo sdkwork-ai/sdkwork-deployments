@@ -2274,6 +2274,17 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn install_app_template(
+        &self,
+        context: &DeployAppRequestContext,
+        template_uuid: &str,
+        idempotency_key: &str,
+        request: &sdkwork_deploy_contract::InstallAppTemplateRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateInstallResponse> {
+        DeployService::install_app_template(self, context, template_uuid, idempotency_key, request)
+            .await
+    }
+
     async fn list_app_templates(
         &self,
         context: &DeployAppRequestContext,

@@ -22,6 +22,7 @@ pub mod entitlement;
 pub mod git_repository_probe;
 pub mod repository;
 pub mod runtime_publication;
+mod template_install;
 pub mod template_market_access;
 pub mod verification_file;
 

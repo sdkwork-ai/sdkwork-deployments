@@ -10,6 +10,30 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Install a template as a new application.
+///
+/// This is the **free, Git-backed** install path. Archive-backed and paid
+/// templates are refused until artifact sharing and order/payment entitlement
+/// are wired, so the API never creates an app whose source it cannot deliver.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InstallAppTemplateRequest {
+    /// Name of the created application; defaults to the template's display name.
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Optional slug of the created application.
+    #[serde(default)]
+    pub slug: Option<String>,
+}
+
+/// The application created from a template.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppTemplateInstallResponse {
+    pub app: crate::AppResponse,
+    #[serde(rename = "templateUuid")]
+    pub template_uuid: String,
+}
 /// Wire vocabulary for `deploy_application_scaffold.visibility`.
 pub const TEMPLATE_VISIBILITY_PUBLIC: &str = "PUBLIC";
 pub const TEMPLATE_VISIBILITY_PRIVATE: &str = "PRIVATE";
