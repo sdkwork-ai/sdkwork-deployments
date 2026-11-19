@@ -6,7 +6,6 @@
 
 mod common;
 
-use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
 
 const TENANT_ID: i64 = 7;
