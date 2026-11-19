@@ -442,8 +442,10 @@ export function resolveDeployAppType(cardId: string | undefined, frameworkId?: s
  * 取回表面根。它们必须互为逆映射，否则应用类型会在发布阶段被静默改写
  * （例如把 `STATIC_WEB` 的应用发布到 `SPA_WEB` 的表面目录上）。
  *
- * v6 只登记 **surface 互不重叠** 的卡片：一张卡 = 一个 appKind + 一个表面根。
- * 9 张卡与 `deploy_app.app_kind` 的一对一关系因此是确定的，反查无需猜测。
+ * 卡片与 appKind 的对应关系由 {@link CARD_APP_KIND} 显式登记，未登记的卡片不做反查。
+ * 多目标类型（Flutter）在创建阶段仍落 `FLUTTER_APP`，发布阶段再按平台目标展开；
+ * 因此卡片与 `deploy_app.app_kind` 不是“一卡一 kind”的机械映射，而是有意的、
+ * 可测试的登记表。
  */
 export const CARD_APP_KIND: Readonly<Record<string, DeployAppKind>> = {
   h5: "H5_WEB",
