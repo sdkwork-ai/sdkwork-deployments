@@ -236,7 +236,12 @@ async fn load_git_source_snapshot(
     tenant_id: i64,
     app_uuid: &str,
 ) -> DeployServiceResult<Option<serde_json::Value>> {
-    let row = sqlx::query(
+    let has_app_source: bool =
+        sqlx::query_scalar("SELECT to_regclass('deploy_app_source') IS NOT NULL")
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(|error| store_error("probe deploy_app_source", error))?;
+    let sql = if has_app_source {
         "SELECT r.repo_provider, r.repo_url, r.default_branch, r.clone_mode,
                 r.credential_secret_ref, s.source_ref, s.sub_path
          FROM deploy_source_repository r
@@ -246,13 +251,24 @@ async fn load_git_source_snapshot(
          WHERE a.tenant_id = $1 AND a.uuid = $2
            AND a.deleted_at IS NULL AND r.deleted_at IS NULL
          ORDER BY r.id DESC
-         LIMIT 1",
-    )
-    .bind(tenant_id)
-    .bind(app_uuid)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(|error| store_error("load template source snapshot", error))?;
+         LIMIT 1"
+    } else {
+        "SELECT r.repo_provider, r.repo_url, r.default_branch, r.clone_mode,
+                r.credential_secret_ref,
+                NULL::text AS source_ref, NULL::text AS sub_path
+         FROM deploy_source_repository r
+         JOIN deploy_app a ON a.id = r.app_id
+         WHERE a.tenant_id = $1 AND a.uuid = $2
+           AND a.deleted_at IS NULL AND r.deleted_at IS NULL
+         ORDER BY r.id DESC
+         LIMIT 1"
+    };
+    let row = sqlx::query(sql)
+        .bind(tenant_id)
+        .bind(app_uuid)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(|error| store_error("load template source snapshot", error))?;
     let Some(row) = row else {
         return Ok(None);
     };
