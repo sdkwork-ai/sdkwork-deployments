@@ -400,6 +400,26 @@ describe("DEPLOY_APP_TYPE_OPTIONS", () => {
     expect(byId.get("desktop-tauri")).toMatchObject({ appKind: "DESKTOP_APP", surface: "desktop" });
     expect(byId.get("uniapp-wechat-mini-program")).toMatchObject({ appKind: "WECHAT_MINIPROGRAM", techStack: "UNI_APP" });
   });
+
+  it("reaches every app kind the deployment contract supports", () => {
+    const kinds = [
+      "STATIC_WEB",
+      "H5_WEB",
+      "PC_WEB",
+      "API_SERVICE",
+      "WECHAT_MINIPROGRAM",
+      "DOUYIN_MINIPROGRAM",
+      "IOS_APP",
+      "ANDROID_APP",
+      "HARMONYOS_APP",
+      "FLUTTER_APP",
+      "DESKTOP_APP",
+    ] as const;
+    const reachable = new Set(DEPLOY_APP_TYPE_OPTIONS.map((option) => option.appKind));
+    for (const kind of kinds) {
+      expect(reachable.has(kind), `${kind} has no create-app option`).toBe(true);
+    }
+  });
 });
 
 describe("resolveDeployAppType", () => {
