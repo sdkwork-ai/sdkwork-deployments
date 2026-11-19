@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import {
   APP_CLIENT_CLASSES,
+  APP_PUBLISH_ENVIRONMENTS,
   CLIENT_ARCHITECTURES,
   CLIENT_ARCHITECTURE_LABEL_KEYS,
   EMPTY_SOURCE_SPEC_DRAFT,
@@ -34,6 +35,7 @@ import {
   planClientClassDefault,
   preferenceFor,
   projectSourceSpecLedger,
+  resolveAppEnvironment,
   sortRoutes,
   specServes,
   splitIndexFiles,
@@ -696,5 +698,19 @@ describe("projectSourceSpecLedger", () => {
       }),
     ]);
     expect(ledger[0]?.routes[0]).toMatchObject({ serves: false, isEffective: false });
+  });
+});
+
+describe("app publish environment vocabulary", () => {
+  it("exposes every lifecycle environment the source-spec CHECK accepts", () => {
+    expect(APP_PUBLISH_ENVIRONMENTS).toEqual([
+      "development",
+      "test",
+      "staging",
+      "demo",
+      "production",
+    ]);
+    expect(resolveAppEnvironment({ defaultEnvironment: "demo" })).toBe("demo");
+    expect(resolveAppEnvironment({ defaultEnvironment: "prod" })).toBe("production");
   });
 });

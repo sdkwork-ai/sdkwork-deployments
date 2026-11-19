@@ -58,27 +58,24 @@ import type { PublishingMessageKey } from "../i18n.ts";
  *
  * `satisfies` rather than a partial map: the spec's `environment` column carries
  * the same CHECK, so a member added to the contract is a compile error here
- * until this list grows with it — **and so is a member that is not there**. That
- * second half is not hypothetical: this list previously read
- * `development/test/staging/demo/production` under a comment claiming it matched
- * the contract, and the fifth entry was simply wrong. The spec's `environment`
- * column CHECK has no `demo`; the drawer was offering a value every create
- * request would have been rejected for. The write path could not fail loudly
- * because the list was typed `readonly string[]` at the point of use, so nothing
- * compared it to the contract at all.
+ * until this list grows with it — **and so is a member that is not there**.
+ *
+ * The source-spec CHECKs (`chk_deploy_app_source_spec_environment`,
+ * `chk_deploy_app_source_spec_route_environment`) are the five-value lifecycle
+ * set including `demo`, matching `sdkwork-deploy-contract::AppPublishEnvironment`.
  *
  * ⚠️ **Two environment vocabularies, and they are not the same set.**
  * `AppPublishEnvironment` here is the **publish** axis — where an app is
  * published, which is what a source spec is scoped by. `DeployEnvironmentId`
  * (see `project-detection.ts`) and `DeploymentsEnvironment` (`pc-core`) are the
- * **build** axis and do carry `demo`. Do not "unify" them: a build can target
- * `demo` while no publish environment by that name exists, and swapping one list
- * for the other is how the defect above was introduced.
+ * **build** axis. Both carry `demo`; do not unify them by dropping a lifecycle
+ * value, because a source spec can legitimately be scoped to `demo`.
  */
 export const APP_PUBLISH_ENVIRONMENTS = [
   "development",
   "test",
   "staging",
+  "demo",
   "production",
 ] as const satisfies readonly AppPublishEnvironment[];
 
