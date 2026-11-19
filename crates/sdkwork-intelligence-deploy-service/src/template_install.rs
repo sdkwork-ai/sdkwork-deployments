@@ -77,7 +77,10 @@ impl DeployService {
             None
         };
         let (git, archive_artifact_id) = match source.source_kind {
-            Some(AppSourceKind::Git) => (source.git.map(git_input_from_source), None),
+            Some(AppSourceKind::Git) => (
+                version_git_snapshot.or_else(|| source.git.map(git_input_from_source)),
+                None,
+            ),
             Some(AppSourceKind::Archive) => (
                 None,
                 version_artifact.or_else(|| {
@@ -98,10 +101,6 @@ impl DeployService {
                 "template source application has an incomplete source",
             ));
         }
-        // A version-owned Git snapshot wins over the source application's
-        // current declaration; older versions without a snapshot keep the
-        // current-source fallback.
-        let git = version_git_snapshot.or(git);
 
         let create_request = CreateAppRequest {
             name: request
