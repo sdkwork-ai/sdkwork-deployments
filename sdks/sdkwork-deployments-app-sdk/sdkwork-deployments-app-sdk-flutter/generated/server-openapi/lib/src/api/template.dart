@@ -51,7 +51,7 @@ class TemplateApi {
   }
 
   /// Install a free, Git-backed template as a new application
-  Future<MarketplaceTemplatesInstallResponse201?> marketplaceTemplatesInstall(String templateUuid, InstallAppTemplateRequest body, String idempotencyKey) async {
+  Future<MarketplaceTemplatesInstallResponse?> marketplaceTemplatesInstall(String templateUuid, InstallAppTemplateRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -62,7 +62,7 @@ class TemplateApi {
     final response = await _client.post(ApiPaths.appPath('/marketplace/templates/${serializePathParameter(templateUuid, const PathParameterSpec('templateUuid', 'simple', false))}/install'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : MarketplaceTemplatesInstallResponse201.fromJson(map);
+      return map == null ? null : MarketplaceTemplatesInstallResponse.fromJson(map);
     })();
   }
 

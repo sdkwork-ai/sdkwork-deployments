@@ -14542,37 +14542,37 @@ class MarketplaceTemplatesRetrieveResponse {
   }
 }
 
-class MarketplaceTemplatesInstallResponse201 {
+class MarketplaceTemplatesInstallResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  MarketplaceTemplatesInstallResponse201({
+  MarketplaceTemplatesInstallResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory MarketplaceTemplatesInstallResponse201.fromJson(Map<String, dynamic> json) {
-    return MarketplaceTemplatesInstallResponse201(
+  factory MarketplaceTemplatesInstallResponse.fromJson(Map<String, dynamic> json) {
+    return MarketplaceTemplatesInstallResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('MarketplaceTemplatesInstallResponse201.code is required');
+          throw FormatException('MarketplaceTemplatesInstallResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('MarketplaceTemplatesInstallResponse201.data is required');
+          throw FormatException('MarketplaceTemplatesInstallResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('MarketplaceTemplatesInstallResponse201.traceId is required');
+          throw FormatException('MarketplaceTemplatesInstallResponse.traceId is required');
         }
         return value;
       })()

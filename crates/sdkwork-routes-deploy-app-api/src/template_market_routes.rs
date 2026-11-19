@@ -141,7 +141,7 @@ async fn install_marketplace_template(
     headers: HeaderMap,
     Json(request): Json<InstallAppTemplateRequest>,
 ) -> Response {
-    finish_created_api_json(
+    finish_api_json(
         &ctx,
         async {
             let context = require_app_context(context)?;

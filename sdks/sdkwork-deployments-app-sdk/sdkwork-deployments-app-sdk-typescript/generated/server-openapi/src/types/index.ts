@@ -254,7 +254,7 @@ export type { AppEnvironmentsCreatePostResponse201 } from './app-environments-cr
 export type { TemplateCategoriesListResponse } from './template-categories-list-response';
 export type { MarketplaceTemplatesListResponse } from './marketplace-templates-list-response';
 export type { MarketplaceTemplatesRetrieveResponse } from './marketplace-templates-retrieve-response';
-export type { MarketplaceTemplatesInstallResponse201 } from './marketplace-templates-install-response201';
+export type { MarketplaceTemplatesInstallResponse } from './marketplace-templates-install-response';
 export type { AppTemplatesListResponse } from './app-templates-list-response';
 export type { AppTemplatesCreateResponse201 } from './app-templates-create-response201';
 export type { AppTemplatesRetrieveResponse } from './app-templates-retrieve-response';

@@ -5575,6 +5575,7 @@ paths:
         format: uuid
     post:
       operationId: marketplaceTemplates.install
+      x-sdkwork-idempotent: true
       summary: Install a free, Git-backed template as a new application
       description: >-
         Creates a new application of the template's source kind and copies the
@@ -5593,6 +5594,7 @@ paths:
         required: true
         schema:
           type: string
+          minLength: 1
           maxLength: 128
       requestBody:
         required: true
@@ -5601,8 +5603,8 @@ paths:
             schema:
               $ref: '#/components/schemas/InstallAppTemplateRequest'
       responses:
-        '201':
-          description: Created
+        '200':
+          description: Installed
           content:
             application/json:
               schema:

@@ -9808,6 +9808,7 @@
       ],
       "post": {
         "operationId": "marketplaceTemplates.install",
+        "x-sdkwork-idempotent": true,
         "summary": "Install a free, Git-backed template as a new application",
         "description": "Creates a new application of the template's source kind and copies the source application's Git remix declaration onto it. Paid templates and archive-backed templates are refused until order/payment entitlement and artifact sharing are available; the call never creates an app whose source it cannot deliver.",
         "tags": [
@@ -9826,6 +9827,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
               "maxLength": 128
             }
           }
@@ -9841,8 +9843,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": "Created",
+          "200": {
+            "description": "Installed",
             "content": {
               "application/json": {
                 "schema": {
