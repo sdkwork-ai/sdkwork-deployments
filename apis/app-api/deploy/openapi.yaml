@@ -6804,10 +6804,12 @@ components:
           $ref: '#/components/schemas/AppObservabilityPolicy'
     AppPublishEnvironment:
       type: string
+      description: The five lifecycle environments of the SDKWork fleet, in promotion order (`sdkwork-deploy-contract::AppPublishEnvironment`). `demo` is a real publish target, so a binding may be environment-scoped to it.
       enum:
       - development
       - test
       - staging
+      - demo
       - production
     CompositionKey:
       type: string

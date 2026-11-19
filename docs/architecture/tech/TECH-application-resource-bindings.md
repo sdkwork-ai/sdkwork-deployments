@@ -33,7 +33,7 @@ authority for account selection; it is the build/release identity.
 | Which mini program an app environment represents | `deploy_application_resource_link` (`resource_kind = 'mini_program'`) | app-api, runtime resolution, console | platform target, legacy document |
 | Which payment accounts an app environment can settle through, and which one is the default per provider | `deploy_application_resource_link` (`resource_kind = 'payment_account'`) | app-api, payment routing, console | platform target, legacy document |
 | Which platform targets an app delivers to, and the platform-side identifier of each delivery unit | `deploy_app_platform_target` (`platform`, `target_key`, `app_id_value`, …) | build/package/release/channel APIs, build runner | resource link |
-| The cross-system anchor (`linkedApplications`) and the pre-migration binding document | `deploy_app.metadata.integrations` | **read-only legacy input** | the platform (no writer after this change) |
+| The cross-system anchor (`linkedApplications`) and the pre-migration binding document | `deploy_app.metadata.integrations` | console (anchor), migration/reconciliation (bindings) | account-binding writers |
 | Display snapshot / provider facts a binding was approved with | `deploy_application_resource_link.metadata` | console | any derived reader |
 
 Rules:
@@ -44,9 +44,11 @@ Rules:
 2. **Deployment targets are owned by `deploy_app_platform_target`.** A target answers "which platform
    does this app deliver to and under which platform-side identifier is the artifact produced". It
    never answers "which account does the published environment act as".
-3. **`deploy_app.metadata.integrations` is a legacy input, not an authority.** It is read exactly once
-   by the ordered migration `0013_deploy_application_resource_link_backfill` and thereafter only by
-   the reconciliation report. It is never rewritten by that migration.
+3. **`deploy_app.metadata.integrations` is a legacy input, not a binding authority.** Its
+   `environments` half is read exactly once by the ordered migration
+   `0013_deploy_application_resource_link_backfill` and thereafter only by the reconciliation report
+   and the console's migration seed; it is never rewritten. The `linkedApplications` half remains the
+   cross-system anchor and is the only part the console writes.
 4. **No component writes two of them.** The three writers are disjoint: the resource-link API writes
    only `deploy_application_resource_link`; the platform-target API writes only
    `deploy_app_platform_target`; the backfill writes only bindings that do not exist yet and never
@@ -198,13 +200,21 @@ node <sdkwork-specs>/tools/check-api-response-envelope.mjs --workspace .
 
 ## 8. Open Items
 
-- **The console still writes `deploy_app.metadata.integrations`.** It must move to
-  `apps.resourceLinks.update` / `...delete`. Until it does, the document remains a write target outside
-  the Deploy authority and must be re-normalized with `0013` (idempotent by construction) after it
-  changes.
+- **The console write path is migrated (2026-11-19).** `sdkwork-cloudrouter`'s admin
+  Application Center now reads and writes bindings through
+  `apps.resourceLinks.list|update|delete`; it writes only `linkedApplications` into
+  `deploy_app.metadata.integrations` and reads the legacy `environments` document once as a
+  migration seed, leaving it untouched. The reconciliation report remains useful until every
+  tenant has opened and saved the drawer once.
 - **`platform_target.app_id_value` is not validated against the mini program binding.** The
   consistency check is a report query, not a constraint: the two rows can legitimately be created at
   different times, so a hard constraint would make "create the target, then bind the account" illegal.
+- **Anonymous cashier WeChat OAuth is not application-scoped end to end.** The cashier capability
+  token carries the tenant and order but no deploy application id, so the IAM payment OAuth start and
+  callback resolve the tenant-wide WeChat integration. A tenant with several official accounts
+  should mint an app-scoped cashier token before relying on anonymous JSAPI payment; the
+  signed-in cashier path is app-scoped. This spans `sdkwork-utils-rust` (claims), the order/payment
+  minting calls, and IAM, so it is tracked as its own change.
 - **No runtime consumer reads bindings yet.** The table is the authority as of this change, but the
   publishing path still resolves accounts elsewhere; wiring it is a separate change with its own
   evidence.
