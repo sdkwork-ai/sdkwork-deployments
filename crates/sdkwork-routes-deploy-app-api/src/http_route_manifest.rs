@@ -815,7 +815,8 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "template",
         "marketplaceTemplates.install",
     )
-    .with_required_permission("deploy.marketplaceTemplates.write"),
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/app/v3/api/app_templates",

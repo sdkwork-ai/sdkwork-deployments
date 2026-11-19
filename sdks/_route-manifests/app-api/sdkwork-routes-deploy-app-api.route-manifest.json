@@ -2700,7 +2700,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "app-api",
-      "permission": "deploy.marketplaceTemplates.write",
+      "permission": "deploy.apps.write",
       "idempotent": true
     },
     {

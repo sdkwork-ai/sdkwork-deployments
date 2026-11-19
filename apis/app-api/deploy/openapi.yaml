@@ -5576,6 +5576,7 @@ paths:
     post:
       operationId: marketplaceTemplates.install
       x-sdkwork-idempotent: true
+      x-sdkwork-permission: deploy.apps.write
       summary: Install a free, Git-backed template as a new application
       description: >-
         Creates a new application of the template's source kind and copies the
