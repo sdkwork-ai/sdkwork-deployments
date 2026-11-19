@@ -1,8 +1,9 @@
 //! Resolve a caller-facing selector into a deploy application.
 //!
-//! The lookup reads deploy-owned columns only (`deploy_app`). It never reads IAM
-//! tables: the release scope, the owner, and the entitlement decision belong to the
-//! installation, which IAM resolves on its side.
+//! The lookup reads deploy-owned columns first (`deploy_app`). For an app
+//! installed from a **paid template**, it also reads the recorded order's
+//! payment status so a refund/chargeback stops issuing app tokens; the order
+//! row itself is owned by the order center and is never written here.
 
 use async_trait::async_trait;
 use sqlx::{PgPool, Row};
@@ -40,6 +41,44 @@ impl PgDeployApplicationLookup {
     #[must_use]
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// `true` when the recorded paid order has been refunded/reversed.
+    ///
+    /// The order center owns `commerce_order`; a schema without it (a focused
+    /// deploy test database) has no refund signal, so issuance stays unchanged.
+    async fn order_is_refunded(
+        &self,
+        tenant_id: &str,
+        order_id: &str,
+    ) -> Result<bool, AppTokenError> {
+        let present: Option<String> = sqlx::query_scalar(
+            "SELECT to_regclass('commerce_order')::text",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| AppTokenError::Storage(error.to_string()))?;
+        if present.is_none() {
+            return Ok(false);
+        }
+        let status: Option<String> = sqlx::query_scalar(
+            "SELECT payment_status FROM commerce_order \
+             WHERE tenant_id = $1 AND id = $2 LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(order_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| AppTokenError::Storage(error.to_string()))?;
+        Ok(status
+            .as_deref()
+            .map(|value| {
+                matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "refunded" | "refund" | "chargeback" | "charged_back" | "reversed"
+                )
+            })
+            .unwrap_or(false))
     }
 }
 
@@ -81,7 +120,8 @@ impl DeployApplicationLookup for PgDeployApplicationLookup {
         };
         let row = sqlx::query(
             "SELECT a.uuid, a.id::text AS deploy_application_id, a.tenant_id, a.slug, \
-                    a.app_kind, a.owner_type, a.user_id \
+                    a.app_kind, a.owner_type, a.user_id, \
+                    a.metadata #>> '{template,orderId}' AS template_order_id \
              FROM deploy_app a \
              WHERE a.tenant_id = $1 \
                AND a.deleted_at IS NULL AND a.archived_at IS NULL \
@@ -100,6 +140,14 @@ impl DeployApplicationLookup for PgDeployApplicationLookup {
         let Some(row) = row else {
             return Ok(None);
         };
+        let order_id: Option<String> = row
+            .try_get("template_order_id")
+            .map_err(|error| AppTokenError::Storage(error.to_string()))?;
+        if let Some(order_id) = order_id.filter(|value| !value.trim().is_empty()) {
+            if self.order_is_refunded(tenant_id, order_id.as_str()).await? {
+                return Ok(None);
+            }
+        }
         Ok(Some(DeployApplicationRef {
             uuid: row
                 .try_get::<String, _>("uuid")
