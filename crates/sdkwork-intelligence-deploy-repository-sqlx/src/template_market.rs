@@ -1508,10 +1508,113 @@ impl DeployRepository {
         Ok(())
     }
 
-    /// A consumer reaches an artifact only through the product the marketplace
-    /// sells: a published version of a marketplace-visible listing in the same
-    /// tenant must reference it. Anything else — a draft version, a private or
-    /// disabled listing — is refused as not found.
+    /// Clones a published template artifact for an installed application.
+    ///
+    /// A template's artifact belongs to the author's application. Installing it
+    /// must not point the new app at a foreign artifact row (`apps.source.update`
+    /// rejects that), and the Drive node is immutable, so this copies the
+    /// artifact/session metadata under the target app and keeps the same Drive
+    /// node and checksum. The session idempotency key makes a replay reuse the
+    /// cloned artifact instead of creating a second one.
+    pub(super) async fn clone_marketplace_artifact_for_app_repo(
+        &self,
+        tenant_id: i64,
+        source_artifact_uuid: &str,
+        target_app_uuid: &str,
+    ) -> DeployServiceResult<String> {
+        let target_app_id = resolve_app_internal_id(&self.pool, tenant_id, target_app_uuid).await?;
+        let row = sqlx::query(
+            "SELECT a.package_type, a.file_name, a.content_type, a.content_length,
+                    a.checksum_sha256, a.drive_node_id, a.drive_space_id, a.drive_path,
+                    a.status AS artifact_status,
+                    s.drive_upload_session_id, s.drive_upload_item_id, s.checksum,
+                    s.status AS session_status
+             FROM deploy_artifact a
+             JOIN deploy_upload_session_ref s ON s.id = a.upload_session_ref_id
+             WHERE a.tenant_id = $1 AND a.uuid = $2 AND a.status = 1
+             LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(source_artifact_uuid)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("load template artifact for clone", error))?
+        .ok_or_else(|| DeployServiceError::not_found("template artifact not found"))?;
+
+        let idempotency_key = format!("template-install:{target_app_uuid}:{source_artifact_uuid}");
+        let session_id: Option<i64> = sqlx::query_scalar(
+            "INSERT INTO deploy_upload_session_ref (
+                id, uuid, tenant_id, app_id, drive_upload_session_id, drive_upload_item_id,
+                drive_space_id, drive_node_id, package_type, file_name, content_type,
+                content_length, checksum, status, idempotency_key, created_at, updated_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
+             ON CONFLICT DO NOTHING
+             RETURNING id",
+        )
+        .bind(next_id(self.id_generator())?)
+        .bind(new_uuid())
+        .bind(tenant_id)
+        .bind(target_app_id)
+        .bind(row.try_get::<String, _>("drive_upload_session_id").unwrap_or_default())
+        .bind(row.try_get::<Option<String>, _>("drive_upload_item_id").ok().flatten())
+        .bind(row.try_get::<Option<String>, _>("drive_space_id").ok().flatten())
+        .bind(row.try_get::<String, _>("drive_node_id").unwrap_or_default())
+        .bind(row.try_get::<i32, _>("package_type").unwrap_or(1))
+        .bind(row.try_get::<String, _>("file_name").unwrap_or_default())
+        .bind(row.try_get::<String, _>("content_type").unwrap_or_default())
+        .bind(row.try_get::<i64, _>("content_length").unwrap_or(0))
+        .bind(row.try_get::<Option<String>, _>("checksum").ok().flatten())
+        .bind(row.try_get::<i32, _>("session_status").unwrap_or(1))
+        .bind(&idempotency_key)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("clone template upload session", error))?;
+
+        let Some(session_id) = session_id else {
+            let existing: Option<String> = sqlx::query_scalar(
+                "SELECT a.uuid FROM deploy_artifact a
+                 JOIN deploy_upload_session_ref s ON s.id = a.upload_session_ref_id
+                 WHERE a.tenant_id = $1 AND s.idempotency_key = $2 AND a.status = 1
+                 LIMIT 1",
+            )
+            .bind(tenant_id)
+            .bind(&idempotency_key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| store_error("resolve cloned template artifact", error))?;
+            return existing.ok_or_else(|| {
+                DeployServiceError::conflict("template artifact clone is already in progress")
+            });
+        };
+
+        let artifact_uuid = new_uuid();
+        sqlx::query(
+            "INSERT INTO deploy_artifact (
+                id, uuid, tenant_id, app_id, upload_session_ref_id, package_type,
+                file_name, content_type, content_length, checksum_sha256, drive_node_id,
+                drive_space_id, drive_path, status, metadata, created_at, updated_at, version
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, '{}', NOW(), NOW(), 0)",
+        )
+        .bind(next_id(self.id_generator())?)
+        .bind(&artifact_uuid)
+        .bind(tenant_id)
+        .bind(target_app_id)
+        .bind(session_id)
+        .bind(row.try_get::<i32, _>("package_type").unwrap_or(1))
+        .bind(row.try_get::<String, _>("file_name").unwrap_or_default())
+        .bind(row.try_get::<String, _>("content_type").unwrap_or_default())
+        .bind(row.try_get::<i64, _>("content_length").unwrap_or(0))
+        .bind(row.try_get::<Option<String>, _>("checksum_sha256").ok().flatten())
+        .bind(row.try_get::<String, _>("drive_node_id").unwrap_or_default())
+        .bind(row.try_get::<Option<String>, _>("drive_space_id").ok().flatten())
+        .bind(row.try_get::<String, _>("drive_path").unwrap_or_default())
+        .bind(row.try_get::<i32, _>("artifact_status").unwrap_or(1))
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("clone template artifact", error))?;
+        Ok(artifact_uuid)
+    }
+
     pub(super) async fn assert_marketplace_artifact_readable_repo(
         &self,
         tenant_id: i64,

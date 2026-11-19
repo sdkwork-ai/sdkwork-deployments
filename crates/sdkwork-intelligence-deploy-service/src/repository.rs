@@ -1799,6 +1799,19 @@ pub trait DeployRepositoryPort:
         page_size: i32,
     ) -> DeployServiceResult<AppTemplateVersionPage>;
 
+    /// Clones a published template artifact under an installed application.
+    ///
+    /// Returns the new artifact uuid. The source artifact belongs to the
+    /// template's author application; the clone keeps the same Drive node and
+    /// checksum but attributes the row to the installed app so `apps.source.update`
+    /// accepts it.
+    async fn clone_marketplace_artifact_for_app(
+        &self,
+        tenant_id: i64,
+        source_artifact_uuid: &str,
+        target_app_uuid: &str,
+    ) -> DeployServiceResult<String>;
+
     /// Increments the marketplace install counter after a successful install.
     ///
     /// `app_id` makes the counter idempotent per installed application: a

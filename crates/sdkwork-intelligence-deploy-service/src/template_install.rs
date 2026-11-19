@@ -1,15 +1,15 @@
-//! Free, Git-backed template installation.
+//! Free template installation.
 //!
 //! A marketplace listing names a source application (`app_uuid`). Installing it
-//! creates a new application of the same kind and copies the source
-//! application's Git remix declaration onto it. The copy is a *current source*
-//! remix, not a frozen artifact: archive-backed and paid templates are refused
-//! until artifact sharing and order/payment entitlement are designed, so this
-//! entry never creates an app whose source it cannot deliver.
+//! creates a new application of the same kind and copies the source:
+//! a Git source is remixed as the source application's **current** declaration;
+//! an archive source is cloned into a new artifact attributed to the installed
+//! app while keeping the same Drive node/checksum. Paid templates are still
+//! refused until the order/payment entitlement is verified at install time.
 
 use sdkwork_deploy_contract::{
-    AppKind, AppSourceGitInput, AppSourceKind, AppTemplateInstallResponse, CreateAppRequest,
-    DeployAppApi, DeployAppRequestContext, DeployServiceError, DeployServiceResult,
+    AppKind, AppSourceArchiveInput, AppSourceGitInput, AppSourceKind, AppTemplateInstallResponse,
+    CreateAppRequest, DeployAppApi, DeployAppRequestContext, DeployServiceError, DeployServiceResult,
     InstallAppTemplateRequest, UpdateAppSourceRequest, TEMPLATE_PRICING_FREE, TEMPLATE_TYPE_APP,
 };
 
@@ -50,22 +50,39 @@ impl DeployService {
         let source = self
             .retrieve_app_source(context, template.app_uuid.as_str())
             .await?;
-        let git = match source.source_kind {
-            Some(AppSourceKind::Git) => source.git,
-            Some(AppSourceKind::Archive) => {
-                return Err(DeployServiceError::conflict(
-                    "archive-backed templates cannot be installed until artifact sharing is available; use a Git-backed template",
-                ))
-            }
+        let version_artifact = if let Some(latest_version_uuid) = template.latest_version_uuid.as_deref() {
+            DeployAppApi::list_app_template_versions(self, context, template_uuid, 1, 100)
+                .await?
+                .items
+                .into_iter()
+                .find(|version| version.id == latest_version_uuid)
+                .and_then(|version| version.artifact_uuid)
+                .filter(|value| !value.trim().is_empty())
+        } else {
+            None
+        };
+        let (git, archive_artifact_id) = match source.source_kind {
+            Some(AppSourceKind::Git) => (source.git, None),
+            Some(AppSourceKind::Archive) => (
+                None,
+                version_artifact.or_else(|| {
+                    source
+                        .archive
+                        .map(|archive| archive.artifact_id)
+                        .filter(|value| !value.trim().is_empty())
+                }),
+            ),
             None => {
                 return Err(DeployServiceError::conflict(
                     "template source application has no configured source",
                 ))
             }
         };
-        let git = git.ok_or_else(|| {
-            DeployServiceError::conflict("template source application has an incomplete Git source")
-        })?;
+        if git.is_none() && archive_artifact_id.is_none() {
+            return Err(DeployServiceError::conflict(
+                "template source application has an incomplete source",
+            ));
+        }
 
         let create_request = CreateAppRequest {
             name: request
@@ -106,17 +123,38 @@ impl DeployService {
             .create_app(context, Some(idempotency_key), &create_request)
             .await?;
 
-        let update = UpdateAppSourceRequest {
-            kind: AppSourceKind::Git,
-            git: Some(AppSourceGitInput {
-                repo_provider: git.repo_provider,
-                repo_url: git.repo_url,
-                repo_ref: Some(git.repo_ref),
-                sub_path: git.sub_path,
-                credential_secret_ref: git.credential_secret_ref,
-                clone_mode: Some(git.clone_mode),
-            }),
-            archive: None,
+        let update = if let Some(git) = git {
+            UpdateAppSourceRequest {
+                kind: AppSourceKind::Git,
+                git: Some(AppSourceGitInput {
+                    repo_provider: git.repo_provider,
+                    repo_url: git.repo_url,
+                    repo_ref: Some(git.repo_ref),
+                    sub_path: git.sub_path,
+                    credential_secret_ref: git.credential_secret_ref,
+                    clone_mode: Some(git.clone_mode),
+                }),
+                archive: None,
+            }
+        } else {
+            let source_artifact_id = archive_artifact_id.ok_or_else(|| {
+                DeployServiceError::conflict("template source archive has no artifact")
+            })?;
+            let cloned = self
+                .repository
+                .clone_marketplace_artifact_for_app(
+                    Self::tenant_id(context)?,
+                    source_artifact_id.as_str(),
+                    app.id.as_str(),
+                )
+                .await?;
+            UpdateAppSourceRequest {
+                kind: AppSourceKind::Archive,
+                git: None,
+                archive: Some(AppSourceArchiveInput {
+                    artifact_id: cloned,
+                }),
+            }
         };
         self.update_app_source(context, &app.id, &update)
             .await
