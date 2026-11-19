@@ -23,6 +23,12 @@ fn block_paths() -> Vec<(HttpMethod, &'static str)> {
         (HttpMethod::Delete, paths::DOMAIN_ZONE_HOSTNAME),
         (HttpMethod::Post, paths::DOMAIN_ZONE_HOSTNAME_VERIFY),
         (HttpMethod::Post, paths::DOMAIN_ZONE_HOSTNAME_CLAIMS),
+        // Domain-ownership verification files are part of the zone block: the
+        // block registers and serves them, so the inventory must list them.
+        (HttpMethod::Get, paths::DOMAIN_ZONE_VERIFICATION_FILES),
+        (HttpMethod::Post, paths::DOMAIN_ZONE_VERIFICATION_FILES),
+        (HttpMethod::Delete, paths::DOMAIN_ZONE_VERIFICATION_FILE),
+        (HttpMethod::Post, paths::DOMAIN_ZONE_VERIFICATION_FILE_CHECK),
         // The resolution-records read and its provider sync are zone-block
         // routes like the hostname routes beside them: the detail page reads
         // the snapshot through the block, and the sync is its one provider
