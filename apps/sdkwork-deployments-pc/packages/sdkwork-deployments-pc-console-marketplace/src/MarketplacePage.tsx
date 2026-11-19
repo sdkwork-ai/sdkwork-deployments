@@ -136,6 +136,27 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     [service, t],
   );
 
+  const installOwned = useCallback(
+    async (templateUuid: string): Promise<void> => {
+      setActionError(undefined);
+      setInstalledName(undefined);
+      setAcquiring(true);
+      try {
+        const paidOrder = orders.find(
+          (order) => order.templateUuid === templateUuid && order.status === "paid",
+        );
+        const installed = await service.install(templateUuid, undefined, paidOrder?.orderId);
+        setInstalledName(installed.appName);
+        setDetail(undefined);
+        await load();
+      } catch {
+        setActionError(t("marketplace.acquireFailed"));
+      } finally {
+        setAcquiring(false);
+      }
+    },
+    [orders, service, load, t],
+  );
   const acquire = useCallback(
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
@@ -383,12 +404,12 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
               </button>
               <button
                 className="command-button"
-                disabled={ownedTemplates.has(detail.id) || acquiring}
+                disabled={acquiring}
                 type="button"
-                onClick={() => void acquire(detail.id)}
+                onClick={() => void (ownedTemplates.has(detail.id) ? installOwned(detail.id) : acquire(detail.id))}
               >
                 {ownedTemplates.has(detail.id)
-                  ? t("marketplace.acquired")
+                  ? t("marketplace.createApp")
                   : detail.pricingModel === "PAID"
                     ? t("marketplace.acquirePaid")
                     : t("marketplace.acquire")}
