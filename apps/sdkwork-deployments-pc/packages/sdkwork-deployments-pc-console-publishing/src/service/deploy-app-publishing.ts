@@ -685,6 +685,12 @@ export interface CreateAppRecordInput {
   readonly slug?: string | undefined
   /** 应用类型 → deploy_app.app_kind。 */
   readonly appKind: DeployAppKind
+  /**
+   * Ownership level the application is created at. Absent means `TENANT`.
+   * `USER` is the self-service case: the app belongs to its creator rather
+   * than to every member of the tenant.
+   */
+  readonly ownerType?: AppOwnerType | undefined
   /** 应用描述（deploy_app.description）。 */
   readonly description?: string | undefined
   /** 多级分类（deploy_app.metadata.category）。 */
@@ -1008,6 +1014,7 @@ export function createDeployAppPublishingService(
         name,
         appKind: toSdkAppKind(input.appKind),
         idempotencyKey,
+        ...(input.ownerType === undefined ? {} : { ownerType: input.ownerType }),
         ...(slug === undefined ? {} : { slug }),
         ...(description === undefined ? {} : { description }),
         ...(Object.keys(metadata).length === 0 ? {} : { metadata }),

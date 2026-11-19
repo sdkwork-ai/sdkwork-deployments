@@ -240,6 +240,22 @@ describe("createAppRecord (v5 create-only lifecycle step)", () => {
     return { calls, client };
   }
 
+  it("forwards personal ownership so a user can deploy their own app", async () => {
+    const { calls, client } = spyDeployClient();
+    const service = createDeployAppPublishingService({
+      deployClient: client as never,
+      driveClient: undefined as never,
+      createIdempotencyKey: () => "idem-owner",
+    });
+
+    await service.createAppRecord({ name: "Personal App", appKind: "H5_WEB", ownerType: "USER" });
+    expect(calls.create[0]).toMatchObject({
+      name: "Personal App",
+      appKind: "H5_WEB",
+      ownerType: "USER",
+    });
+  });
+
   it("registers only the application record — no platform target is written", async () => {
     const { calls, client } = spyDeployClient();
     const service = createDeployAppPublishingService({

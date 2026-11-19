@@ -90,6 +90,7 @@ export function CreateAppDialog({
 
   const [cardId, setCardId] = useState<string>()
   const [name, setName] = useState("")
+  const [ownerType, setOwnerType] = useState<"TENANT" | "USER">("TENANT")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState<DeployAppCategorySelection>()
   const [media, setMedia] = useState<DeployAppMediaFiles>({ screenshots: {} })
@@ -175,6 +176,7 @@ export function CreateAppDialog({
       const created = await service.createAppRecord({
         name,
         appKind,
+        ownerType,
         ...(description.trim() === "" ? {} : { description: description.trim() }),
         ...(category === undefined ? {} : { category }),
       })
@@ -238,6 +240,19 @@ export function CreateAppDialog({
               placeholder={t("applicationNamePlaceholder")}
               onChange={(event) => { setName(event.target.value) }}
             />
+          </div>
+
+          <div className={css.field}>
+            <span className={css.fieldLabel}>{t("ownerType")}</span>
+            <span className={css.fieldHint}>{t("ownerTypeHint")}</span>
+            <select
+              className={css.input}
+              value={ownerType}
+              onChange={(event) => { setOwnerType(event.target.value === "USER" ? "USER" : "TENANT") }}
+            >
+              <option value="TENANT">{t("ownerTypeTenant")}</option>
+              <option value="USER">{t("ownerTypeUser")}</option>
+            </select>
           </div>
 
           <div className={css.field}>
