@@ -1,0 +1,22 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-refund-revocation-worker"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "sdkwork_deploy_refund_revocation_worker"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sdkwork-deploy-refund-revocation-worker"
+path = "src/main.rs"
+
+[dependencies]
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

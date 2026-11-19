@@ -10,6 +10,7 @@ members = [
   "crates/sdkwork-deploy-app-token",
   "crates/sdkwork-deploy-runtime-compiler",
   "crates/sdkwork-deploy-runtime-assignment-worker",
+  "crates/sdkwork-deploy-refund-revocation-worker",
   "crates/sdkwork-deploy-service-host",
   "crates/sdkwork-deploy-web-port",
   "crates/sdkwork-routes-deploy-common",

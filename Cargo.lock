@@ -4242,6 +4242,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-deploy-refund-revocation-worker"
+version = "0.1.0"
+dependencies = [
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "sdkwork-deploy-runtime-assignment-worker"
 version = "0.1.0"
 dependencies = [
