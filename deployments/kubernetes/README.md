@@ -20,19 +20,21 @@ Apply order:
 2. `kubectl apply -f migration-job.yaml` and wait for completion.
 3. `kubectl apply -f deployment.yaml`.
 4. `kubectl apply -f runtime-assignment-worker.yaml`.
-5. `kubectl apply -f certificate-renewal-worker.yaml`.
-6. `kubectl apply -f certificate-worker.yaml`.
-7. `kubectl apply -f service.yaml`.
+5. `kubectl apply -f refund-revocation-worker.yaml`.
+6. `kubectl apply -f certificate-renewal-worker.yaml`.
+7. `kubectl apply -f certificate-worker.yaml`.
+8. `kubectl apply -f service.yaml`.
 
 Gateway health endpoints:
 
 - `GET /healthz` - gateway process liveness.
 - `GET /readyz` - gateway database readiness.
 
-The runtime-assignment, certificate-renewal, and certificate-issuance workers have no HTTP
-surface. Kubernetes treats a running process as ready; each exits on invalid production
-configuration and uses an expiring database lease so abandoned work can be reclaimed by another
-replica.
+The runtime-assignment, refund-revocation, certificate-renewal, and certificate-issuance workers
+have no HTTP surface. Kubernetes treats a running process as ready; the refund-revocation worker
+runs one archive sweep per `SDKWORK_DEPLOY_REFUND_REVOCATION_INTERVAL_SECONDS` (default 3600),
+skips a schema without `commerce_order`, and only archives apps whose recorded paid order is
+refunded/reversed.
 
 The certificate renewal worker claims the certificates inside their renewal window and opens one
 renewal order per claim; issuance stays with the ACME flow. Like the issuance worker — and no

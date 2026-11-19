@@ -1,9 +1,10 @@
 # =============================================================================
 # SDKWork Deploy — standalone gateway stack (external dependency mode)
 # =============================================================================
-# Four single-process containers share one immutable image digest:
+# Five single-process containers share one immutable image digest:
 #   gateway   sdkwork-api-deployments-standalone-gateway       (public application API)
 #   worker    sdkwork-deploy-runtime-assignment-worker         (runtime assignment worker)
+#   refund    sdkwork-deploy-refund-revocation-worker          (refunded order cleanup)
 #   certs     sdkwork-deploy-certificate-renewal-worker        (certificate renewal planner)
 #   certs-issue sdkwork-deploy-certificate-worker              (certificate issuance executor)
 #
@@ -53,6 +54,17 @@ services:
     image: ${GATEWAY_IMAGE:-sdkwork-api-deployments-standalone-gateway:local}
     container_name: ${GATEWAY_ENVIRONMENT:-development}-worker
     command: ["sdkwork-deploy-runtime-assignment-worker"]
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  # Refund cleanup is a separate process: it reads the order table and archives
+  # apps whose paid template order was refunded. Running it beside the gateway
+  # keeps the catalog consistent without coupling request latency to the sweep.
+  refund-revocation:
+    image: ${GATEWAY_IMAGE:-sdkwork-api-deployments-standalone-gateway:local}
+    container_name: ${GATEWAY_ENVIRONMENT:-development}-refund-revocation
+    command: ["sdkwork-deploy-refund-revocation-worker"]
     restart: unless-stopped
     stop_grace_period: 30s
     logging: *default-logging

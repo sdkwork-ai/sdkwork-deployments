@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdkwork-deploy-refund-revocation-worker
+  labels:
+    app.kubernetes.io/name: sdkwork-deploy
+    app.kubernetes.io/component: refund-revocation-worker
+    app.kubernetes.io/part-of: sdkwork-deploy
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sdkwork-deploy
+      app.kubernetes.io/component: refund-revocation-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sdkwork-deploy
+        app.kubernetes.io/component: refund-revocation-worker
+        app.kubernetes.io/part-of: sdkwork-deploy
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: refund-revocation-worker
+          image: sdkwork-api-deployments-standalone-gateway:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - sdkwork-deploy-refund-revocation-worker
+          env:
+            - name: SDKWORK_DEPLOY_ENVIRONMENT
+              value: production
+            - name: SDKWORK_ENVIRONMENT
+              value: production
+            - name: SDKWORK_DEPLOY_DEPLOYMENT_PROFILE
+              value: cloud
+            - name: SDKWORK_DEPLOY_PROFILE_ID
+              value: cloud.production
+            - name: SDKWORK_DATABASE_AUTO_MIGRATE
+              value: "false"
+            - name: SDKWORK_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sdkwork-deploy-database
+                  key: database-url
+            - name: SDKWORK_DEPLOY_REFUND_REVOCATION_INTERVAL_SECONDS
+              value: "3600"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
