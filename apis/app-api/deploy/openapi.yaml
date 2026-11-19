@@ -6559,6 +6559,12 @@ components:
           type: string
           maxLength: 120
           pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
+        orderId:
+          type: string
+          maxLength: 64
+          description: >-
+            Settled order that owns a paid listing. Required for PAID templates;
+            the server verifies buyer, payment state and template before install.
     AppTemplateInstallResponse:
       type: object
       additionalProperties: false

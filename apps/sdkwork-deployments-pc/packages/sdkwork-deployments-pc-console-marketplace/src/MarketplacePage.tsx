@@ -145,14 +145,9 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
       try {
         const order = await service.acquire(templateUuid);
         if (order.status === "paid") {
-          // A free listing is owned immediately; create the app in the same
-          // click. Paid listings need the entitlement-aware install endpoint,
-          // so the page says what is pending instead of failing after payment.
-          if (detail?.pricingModel === "PAID") {
-            setActionError(t("marketplace.paidInstallPending"));
-            return;
-          }
-          const installed = await service.install(templateUuid);
+          // The settled order is the entitlement; the server verifies it before
+          // creating a paid app. Free listings carry no payment requirement.
+          const installed = await service.install(templateUuid, undefined, order.orderId);
           setInstalledName(installed.appName);
           setDetail(undefined);
           await load();
@@ -167,7 +162,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
         setAcquiring(false);
       }
     },
-    [service, load, detail, t],
+    [service, load, t],
   );
 
   const columns = useMemo<DataTableColumn<AppTemplateSummaryResponse>[]>(

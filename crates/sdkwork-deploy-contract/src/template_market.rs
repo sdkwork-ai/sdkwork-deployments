@@ -24,6 +24,10 @@ pub struct InstallAppTemplateRequest {
     /// Optional slug of the created application.
     #[serde(default)]
     pub slug: Option<String>,
+    /// Paid order that owns this listing. Required for `PAID` templates; the
+    /// repository verifies it against `commerce_order` before creating an app.
+    #[serde(default, rename = "orderId")]
+    pub order_id: Option<String>,
 }
 
 /// The application created from a template.

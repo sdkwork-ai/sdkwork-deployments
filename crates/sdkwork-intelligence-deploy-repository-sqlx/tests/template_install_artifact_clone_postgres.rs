@@ -117,5 +117,8 @@ async fn cloning_a_template_artifact_reattributes_it_and_is_idempotent() {
     .fetch_one(&pool)
     .await
     .expect("count target artifacts");
-    assert_eq!(artifact_count, 1, "a replay must not create a second artifact");
+    assert_eq!(
+        artifact_count, 1,
+        "a replay must not create a second artifact"
+    );
 }

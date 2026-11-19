@@ -609,16 +609,19 @@ class AppTemplateResponse {
 class InstallAppTemplateRequest {
   final String? name;
   final String? slug;
+  final String? orderId;
 
   InstallAppTemplateRequest({
     this.name,
-    this.slug
+    this.slug,
+    this.orderId
   });
 
   factory InstallAppTemplateRequest.fromJson(Map<String, dynamic> json) {
     return InstallAppTemplateRequest(
       name: json['name']?.toString(),
-      slug: json['slug']?.toString()
+      slug: json['slug']?.toString(),
+      orderId: json['orderId']?.toString()
     );
   }
 
@@ -626,6 +629,7 @@ class InstallAppTemplateRequest {
     return <String, dynamic>{
       'name': name,
       'slug': slug,
+      'orderId': orderId,
     };
   }
 }

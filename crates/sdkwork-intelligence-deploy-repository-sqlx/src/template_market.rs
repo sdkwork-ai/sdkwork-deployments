@@ -1553,12 +1553,63 @@ impl DeployRepository {
         Ok(())
     }
 
-    /// Clones a published template artifact for an installed application.
+    /// Read-only verification that `order_id` is a settled app-template order
+    /// for this buyer and listing. The order center owns the row; Deploy never
+    /// writes it.
+    pub(super) async fn verify_paid_app_template_order_repo(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        order_id: &str,
+        template_uuid: &str,
+    ) -> DeployServiceResult<bool> {
+        let exists: Option<String> =
+            sqlx::query_scalar("SELECT to_regclass('commerce_order')::text")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|error| store_error("probe commerce order table", error))?;
+        if exists.is_none() {
+            return Ok(false);
+        }
+        let found: Option<i32> = sqlx::query_scalar(
+            "SELECT 1
+             FROM commerce_order o
+             JOIN commerce_order_item i
+               ON i.order_id = o.id AND i.tenant_id = o.tenant_id
+             WHERE o.tenant_id = CAST($1 AS TEXT)
+               AND o.id = CAST($2 AS TEXT)
+               AND COALESCE(o.owner_user_id, '') = CAST($3 AS TEXT)
+               AND LOWER(COALESCE(o.payment_status, '')) IN ('paid', 'success', 'succeeded')
+               AND COALESCE(o.subject, '') = 'app_template'
+               AND COALESCE(
+                     NULLIF(
+                       COALESCE(
+                         NULLIF(to_jsonb(i) ->> 'sku_snapshot_json', ''),
+                         '{}'
+                       )::jsonb ->> 'templateUuid',
+                       ''
+                     ),
+                     NULLIF(to_jsonb(i) ->> 'sku_id', '')
+                   ) = $4
+             LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(order_id)
+        .bind(user_id)
+        .bind(template_uuid)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("verify paid app template order", error))?;
+        Ok(found.is_some())
+    }
+
     ///
     /// A template's artifact belongs to the author's application. Installing it
     /// must not point the new app at a foreign artifact row (`apps.source.update`
     /// rejects that), and the Drive node is immutable, so this copies the
     /// artifact/session metadata under the target app and keeps the same Drive
+    /// Clones a published template artifact for an installed application.
+    ///
     /// node and checksum. The session idempotency key makes a replay reuse the
     /// cloned artifact instead of creating a second one.
     pub(super) async fn clone_marketplace_artifact_for_app_repo(

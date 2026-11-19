@@ -1957,14 +1957,29 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn verify_paid_app_template_order(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        order_id: &str,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<bool> {
+        self.verify_paid_app_template_order_repo(tenant_id, user_id, order_id, template_uuid)
+            .await
+    }
+
     async fn clone_marketplace_artifact_for_app(
         &self,
         tenant_id: i64,
         source_artifact_uuid: &str,
         target_app_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<String> {
-        self.clone_marketplace_artifact_for_app_repo(tenant_id, source_artifact_uuid, target_app_uuid)
-            .await
+        self.clone_marketplace_artifact_for_app_repo(
+            tenant_id,
+            source_artifact_uuid,
+            target_app_uuid,
+        )
+        .await
     }
 
     async fn record_app_template_install(

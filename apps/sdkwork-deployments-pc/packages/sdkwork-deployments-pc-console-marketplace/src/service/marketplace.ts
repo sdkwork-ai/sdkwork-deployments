@@ -105,11 +105,16 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient, o
      * pricing model before calling this so a paid order never turns into a
      * failed install without explanation.
      */
-    async install(templateUuid: string, name?: string): Promise<{ appId: string; appName: string }> {
+    async install(templateUuid: string, name?: string, orderId?: string): Promise<{ appId: string; appName: string }> {
       const result = await deployClient.template.marketplaceTemplates.install(
         templateUuid,
-        name?.trim() ? { name: name.trim() } : {},
-        { idempotencyKey: uuid() },
+        name?.trim() || orderId?.trim()
+          ? {
+              ...(name?.trim() ? { name: name.trim() } : {}),
+              ...(orderId?.trim() ? { orderId: orderId.trim() } : {}),
+            }
+          : {},
+        { idempotencyKey: orderId?.trim() || uuid() },
       );
       return { appId: result.app.id, appName: result.app.name };
     },

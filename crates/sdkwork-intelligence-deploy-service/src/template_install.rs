@@ -10,8 +10,8 @@
 use sdkwork_deploy_contract::{
     AppKind, AppSourceArchiveInput, AppSourceGitInput, AppSourceGitResponse, AppSourceKind,
     AppTemplateInstallResponse, CreateAppRequest, DeployAppApi, DeployAppRequestContext,
-    DeployServiceError, DeployServiceResult,
-    InstallAppTemplateRequest, UpdateAppSourceRequest, TEMPLATE_PRICING_FREE, TEMPLATE_TYPE_APP,
+    DeployServiceError, DeployServiceResult, InstallAppTemplateRequest, UpdateAppSourceRequest,
+    TEMPLATE_PRICING_PAID, TEMPLATE_TYPE_APP,
 };
 
 use crate::DeployService;
@@ -42,6 +42,37 @@ impl DeployService {
             template.pricing_model.as_str(),
             template.app_uuid.as_str(),
         )?;
+        let paid = template.pricing_model == TEMPLATE_PRICING_PAID;
+        let paid_order_id = if paid {
+            let order_id = request
+                .order_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    DeployServiceError::conflict(
+                        "a paid template install requires the settled order id",
+                    )
+                })?;
+            let buyer = Self::require_actor(context)?;
+            if !self
+                .repository
+                .verify_paid_app_template_order(
+                    Self::tenant_id(context)?,
+                    buyer,
+                    order_id,
+                    template.id.as_str(),
+                )
+                .await?
+            {
+                return Err(DeployServiceError::conflict(
+                    "the order is not a settled app-template purchase for this buyer and listing",
+                ));
+            }
+            Some(order_id.to_owned())
+        } else {
+            None
+        };
 
         // Validate the source before creating anything: a created app whose
         // source cannot be copied is a dead application in the catalog.
@@ -51,31 +82,31 @@ impl DeployService {
         let source = self
             .retrieve_app_source(context, template.app_uuid.as_str())
             .await?;
-        let version_artifact = if let Some(latest_version_uuid) = template.latest_version_uuid.as_deref() {
-            DeployAppApi::list_app_template_versions(self, context, template_uuid, 1, 100)
-                .await?
-                .items
-                .into_iter()
-                .find(|version| version.id == latest_version_uuid)
-                .and_then(|version| version.artifact_uuid)
-                .filter(|value| !value.trim().is_empty())
-        } else {
-            None
-        };
-        let version_git_snapshot = if let Some(latest_version_uuid) =
-            template.latest_version_uuid.as_deref()
-        {
-            self.repository
-                .retrieve_app_template_version_source_snapshot(
-                    Self::tenant_id(context)?,
-                    latest_version_uuid,
-                )
-                .await?
-                .as_ref()
-                .and_then(git_input_from_snapshot)
-        } else {
-            None
-        };
+        let version_artifact =
+            if let Some(latest_version_uuid) = template.latest_version_uuid.as_deref() {
+                DeployAppApi::list_app_template_versions(self, context, template_uuid, 1, 100)
+                    .await?
+                    .items
+                    .into_iter()
+                    .find(|version| version.id == latest_version_uuid)
+                    .and_then(|version| version.artifact_uuid)
+                    .filter(|value| !value.trim().is_empty())
+            } else {
+                None
+            };
+        let version_git_snapshot =
+            if let Some(latest_version_uuid) = template.latest_version_uuid.as_deref() {
+                self.repository
+                    .retrieve_app_template_version_source_snapshot(
+                        Self::tenant_id(context)?,
+                        latest_version_uuid,
+                    )
+                    .await?
+                    .as_ref()
+                    .and_then(git_input_from_snapshot)
+            } else {
+                None
+            };
         let (git, archive_artifact_id) = match source.source_kind {
             Some(AppSourceKind::Git) => (
                 version_git_snapshot.or_else(|| source.git.map(git_input_from_source)),
@@ -138,7 +169,11 @@ impl DeployService {
             idempotency_key: None,
         };
         let app = self
-            .create_app(context, Some(idempotency_key), &create_request)
+            .create_app(
+                context,
+                Some(paid_order_id.as_deref().unwrap_or(idempotency_key)),
+                &create_request,
+            )
             .await?;
 
         let update = if let Some(git) = git {
@@ -182,13 +217,17 @@ impl DeployService {
                     app.id
                 ))
             })?;
-        self.repository
-            .record_app_template_install(
-                Self::tenant_id(context)?,
-                template.id.as_str(),
-                app.id.as_str(),
-            )
-            .await?;
+        // A paid order was already counted by the order fulfillment; counting
+        // again here would double the marketplace metric.
+        if !paid {
+            self.repository
+                .record_app_template_install(
+                    Self::tenant_id(context)?,
+                    template.id.as_str(),
+                    app.id.as_str(),
+                )
+                .await?;
+        }
         self.audit_app_action(context, "app.template.install", &app.id)
             .await?;
 
@@ -201,21 +240,16 @@ impl DeployService {
 
 /// Refuses a listing this install path cannot deliver.
 ///
-/// Extracted so the commercial refusal (paid, non-APP, missing source) is
-/// testable without a database, and so the service cannot drift from it.
+/// Only the artifact shape is checked here; a paid listing's order entitlement
+/// is verified separately against `commerce_order`.
 pub(crate) fn ensure_template_installable(
     template_type: &str,
-    pricing_model: &str,
+    _pricing_model: &str,
     app_uuid: &str,
 ) -> DeployServiceResult<()> {
     if template_type != TEMPLATE_TYPE_APP {
         return Err(DeployServiceError::validation(
             "only APP templates can be installed as an application",
-        ));
-    }
-    if pricing_model != TEMPLATE_PRICING_FREE {
-        return Err(DeployServiceError::conflict(
-            "paid template installation requires the order/payment entitlement flow and is not available yet",
         ));
     }
     if app_uuid.trim().is_empty() {
@@ -284,11 +318,11 @@ mod tests {
     }
 
     #[test]
-    fn only_free_app_templates_with_a_source_are_installable() {
+    fn only_app_templates_with_a_source_are_installable() {
         assert!(ensure_template_installable("APP", "FREE", "app-1").is_ok());
+        assert!(ensure_template_installable("APP", "PAID", "app-1").is_ok());
         assert!(ensure_template_installable("PPT", "FREE", "app-1").is_err());
         assert!(ensure_template_installable("VIDEO", "FREE", "app-1").is_err());
-        assert!(ensure_template_installable("APP", "PAID", "app-1").is_err());
         assert!(ensure_template_installable("APP", "FREE", "  ").is_err());
     }
 }

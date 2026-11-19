@@ -184,4 +184,12 @@ describe("my-templates author service", () => {
     expect(bodyOf(recorded.install, 1)).toEqual({ name: "My app" });
     expect(paramsOf(recorded.install, 2).idempotencyKey).toBeTruthy();
   });
+
+  it("carries the settled order into a paid install and keys idempotency on it", async () => {
+    const { deployClient, orderClient, recorded } = stubClients();
+    await createMarketplaceService(deployClient, orderClient)
+      .install("template-1", undefined, " order-42 ");
+    expect(bodyOf(recorded.install, 1)).toEqual({ orderId: "order-42" });
+    expect(paramsOf(recorded.install, 2).idempotencyKey).toBe("order-42");
+  });
 });

@@ -1799,6 +1799,20 @@ pub trait DeployRepositoryPort:
         page_size: i32,
     ) -> DeployServiceResult<AppTemplateVersionPage>;
 
+    /// Verifies a paid `commerce_order` for one app-template listing.
+    ///
+    /// Read-only cross-module check: the order center owns payment/fulfillment;
+    /// Deploy only reads the settled order to decide whether install may run.
+    /// `false` covers every non-qualifying shape (missing order, other buyer,
+    /// unpaid, different template).
+    async fn verify_paid_app_template_order(
+        &self,
+        tenant_id: i64,
+        user_id: i64,
+        order_id: &str,
+        template_uuid: &str,
+    ) -> DeployServiceResult<bool>;
+
     /// Clones a published template artifact under an installed application.
     ///
     /// Returns the new artifact uuid. The source artifact belongs to the
