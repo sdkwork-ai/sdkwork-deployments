@@ -70,12 +70,16 @@ export type DeployPlatform = Platform | "WINDOWS" | "MACOS" | "LINUX";
 const SDK_APP_KINDS = [
   "STATIC_WEB",
   "SPA_WEB",
+  "H5_WEB",
+  "PC_WEB",
   "API_SERVICE",
   "WECHAT_MINIPROGRAM",
   "DOUYIN_MINIPROGRAM",
   "IOS_APP",
   "ANDROID_APP",
   "HARMONYOS_APP",
+  "FLUTTER_APP",
+  "DESKTOP_APP",
 ] as const satisfies readonly AppKind[];
 const SDK_PLATFORMS = ["WEB", "API", "WECHAT", "DOUYIN", "IOS", "ANDROID", "HARMONYOS"] as const satisfies readonly Platform[];
 /** Contract members the Rust authority accepts but the generated union lacks. */
@@ -135,9 +139,14 @@ export interface DeployAppTypeOption {
  */
 export const DEPLOY_APP_TYPE_OPTIONS: readonly DeployAppTypeOption[] = [
   // Web surfaces.
-  { id: "h5", appKind: "SPA_WEB", platform: "WEB", surface: "h5", labelKey: "typeH5", hintKey: "appTypeHint" },
-  { id: "uniapp-h5", appKind: "SPA_WEB", platform: "WEB", techStack: "UNI_APP", surface: "h5", labelKey: "typeH5", hintKey: "appTypeHint" },
-  { id: "pc-web", appKind: "SPA_WEB", platform: "WEB", surface: "pc", labelKey: "typePcWeb", hintKey: "appTypeHint" },
+  { id: "h5", appKind: "H5_WEB", platform: "WEB", surface: "h5", labelKey: "typeH5", hintKey: "appTypeHint" },
+  { id: "uniapp-h5", appKind: "H5_WEB", platform: "WEB", techStack: "UNI_APP", surface: "h5", labelKey: "typeH5", hintKey: "appTypeHint" },
+  { id: "pc-web", appKind: "PC_WEB", platform: "WEB", surface: "pc", labelKey: "typePcWeb", hintKey: "appTypeHint" },
+  // Flutter: one codebase, several native targets. The app kind stays
+  // `FLUTTER_APP`; the platform target is chosen per publish run.
+  { id: "flutter-app-android", appKind: "FLUTTER_APP", platform: "ANDROID", techStack: "FLUTTER", surface: "android", labelKey: "typeFlutterApp", hintKey: "appTypeHint" },
+  { id: "flutter-app-ios", appKind: "FLUTTER_APP", platform: "IOS", techStack: "FLUTTER", surface: "ios", labelKey: "typeFlutterApp", hintKey: "appTypeHint" },
+  { id: "flutter-app-harmonyos", appKind: "FLUTTER_APP", platform: "HARMONYOS", techStack: "FLUTTER", surface: "harmony", labelKey: "typeFlutterApp", hintKey: "appTypeHint" },
   // PC desktop (contract extension; see DeployAppKind above).
   { id: "desktop", appKind: "DESKTOP_APP", platform: "WINDOWS", surface: "desktop", labelKey: "typeDesktop", hintKey: "appTypeHint" },
   { id: "desktop-electron", appKind: "DESKTOP_APP", platform: "WINDOWS", surface: "desktop", labelKey: "typeDesktop", hintKey: "appTypeHint" },
@@ -178,6 +187,7 @@ export type DeployAppTypeIconId =
   | "pc"
   | "desktop"
   | "mini-program"
+  | "flutter"
   | "android"
   | "ios"
   | "harmony"
@@ -258,6 +268,18 @@ export const DEPLOY_APP_TYPE_CARDS: readonly DeployAppTypeCard[] = [
     ],
   },
   {
+    id: "flutter",
+    iconKey: "flutter",
+    labelKey: "typeFlutterApp",
+    hintKey: "typeFlutterHint",
+    defaultFrameworkId: "flutter-android",
+    frameworks: [
+      { id: "flutter-android", optionId: "flutter-app-android", labelKey: "fwFlutter", buildOutputPath: "build/app/outputs/flutter-apk", detectDirectories: [".dart_tool"] },
+      { id: "flutter-ios", optionId: "flutter-app-ios", labelKey: "fwFlutter", buildOutputPath: "build/ios/iphoneos" },
+      { id: "flutter-harmonyos", optionId: "flutter-app-harmonyos", labelKey: "fwFlutter", buildOutputPath: "build" },
+    ],
+  },
+  {
     id: "desktop",
     iconKey: "desktop",
     labelKey: "typeDesktop",
@@ -280,9 +302,19 @@ export const DEPLOY_APP_TYPE_CARDS: readonly DeployAppTypeCard[] = [
     defaultFrameworkId: "wechat-native",
     frameworks: [
       { id: "wechat-native", optionId: "wechat-mini-program", labelKey: "fwWechatNative", buildOutputPath: "dist" },
-      { id: "douyin-native", optionId: "douyin-mini-program", labelKey: "fwDouyinNative", buildOutputPath: "dist" },
       { id: "taro", optionId: "taro-wechat-mini-program", labelKey: "fwTaro", buildOutputPath: "dist" },
       { id: "uniapp", optionId: "uniapp-wechat-mini-program", labelKey: "fwUniapp", buildOutputPath: "unpackage/dist/build/mp-weixin", detectDirectories: ["unpackage"] },
+    ],
+  },
+  {
+    id: "douyin-mini-program",
+    iconKey: "mini-program",
+    labelKey: "typeDouyinMiniProgram",
+    hintKey: "typeMiniProgramHint",
+    surface: "mini-program",
+    defaultFrameworkId: "douyin-native",
+    frameworks: [
+      { id: "douyin-native", optionId: "douyin-mini-program", labelKey: "fwDouyinNative", buildOutputPath: "dist" },
     ],
   },
   {
@@ -414,11 +446,13 @@ export function resolveDeployAppType(cardId: string | undefined, frameworkId?: s
  * 9 张卡与 `deploy_app.app_kind` 的一对一关系因此是确定的，反查无需猜测。
  */
 export const CARD_APP_KIND: Readonly<Record<string, DeployAppKind>> = {
-  h5: "SPA_WEB",
-  "pc-web": "SPA_WEB",
+  h5: "H5_WEB",
+  "pc-web": "PC_WEB",
   "static-web": "STATIC_WEB",
   "api-service": "API_SERVICE",
   "mini-program": "WECHAT_MINIPROGRAM",
+  "douyin-mini-program": "DOUYIN_MINIPROGRAM",
+  flutter: "FLUTTER_APP",
   android: "ANDROID_APP",
   ios: "IOS_APP",
   harmonyos: "HARMONYOS_APP",

@@ -10,6 +10,8 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import {
+  appKindOfCard,
+  cardsOfAppKind,
   classifyAppTypeCards,
   classifyFrameworks,
   createDeployAppPublishingService,
@@ -364,8 +366,8 @@ describe("DEPLOY_APP_TYPE_OPTIONS", () => {
 
   it("adds the v2 h5 / pc-web / desktop targets with sdkwork surfaces", () => {
     const byId = new Map(DEPLOY_APP_TYPE_OPTIONS.map((option) => [option.id, option]));
-    expect(byId.get("h5")).toMatchObject({ appKind: "SPA_WEB", platform: "WEB", surface: "h5" });
-    expect(byId.get("pc-web")).toMatchObject({ appKind: "SPA_WEB", platform: "WEB", surface: "pc" });
+    expect(byId.get("h5")).toMatchObject({ appKind: "H5_WEB", platform: "WEB", surface: "h5" });
+    expect(byId.get("pc-web")).toMatchObject({ appKind: "PC_WEB", platform: "WEB", surface: "pc" });
     // Rust 契约已定义 DESKTOP_APP；生成 TS SDK 滞后，由 DeployAppKind 本地扩宽。
     expect(byId.get("desktop")).toMatchObject({ appKind: "DESKTOP_APP", surface: "desktop" });
   });
@@ -374,7 +376,7 @@ describe("DEPLOY_APP_TYPE_OPTIONS", () => {
     const byId = new Map(DEPLOY_APP_TYPE_OPTIONS.map((option) => [option.id, option]));
     expect(byId.get("react-native-android")).toMatchObject({ appKind: "ANDROID_APP", platform: "ANDROID", techStack: "OTHER" });
     expect(byId.get("uniapp-android")).toMatchObject({ appKind: "ANDROID_APP", platform: "ANDROID", techStack: "UNI_APP" });
-    expect(byId.get("uniapp-h5")).toMatchObject({ appKind: "SPA_WEB", platform: "WEB", techStack: "UNI_APP" });
+    expect(byId.get("uniapp-h5")).toMatchObject({ appKind: "H5_WEB", platform: "WEB", techStack: "UNI_APP" });
     expect(byId.get("api-service-rust")).toMatchObject({ appKind: "API_SERVICE", platform: "API", techStack: "RUST" });
     expect(byId.get("api-service-node")).toMatchObject({ techStack: "NODE" });
     expect(byId.get("api-service-go")).toMatchObject({ techStack: "GO" });
@@ -387,9 +389,10 @@ describe("DEPLOY_APP_TYPE_OPTIONS", () => {
 describe("resolveDeployAppType", () => {
   it("resolves framework-selected cards onto the concrete option rows", () => {
     expect(resolveDeployAppType("mini-program", "wechat-native")?.id).toBe("wechat-mini-program");
-    expect(resolveDeployAppType("mini-program", "douyin-native")?.id).toBe("douyin-mini-program");
+    expect(resolveDeployAppType("douyin-mini-program", "douyin-native")?.id).toBe("douyin-mini-program");
     expect(resolveDeployAppType("mini-program", "uniapp")?.id).toBe("uniapp-wechat-mini-program");
     expect(resolveDeployAppType("android", "flutter")?.id).toBe("flutter-android");
+    expect(resolveDeployAppType("flutter", "flutter-ios")?.id).toBe("flutter-app-ios");
     expect(resolveDeployAppType("android", "react-native")?.id).toBe("react-native-android");
     expect(resolveDeployAppType("ios", "swift")?.id).toBe("native-ios");
     expect(resolveDeployAppType("ios", "uniapp")?.id).toBe("uniapp-ios");
@@ -698,5 +701,22 @@ describe("listApps ownership facet", () => {
     const { list, service } = serviceWithSpy();
     await service.listApps({ page: 3, pageSize: 20, keyword: "store", scope: "USER" });
     expect(list.mock.calls[0]?.[0]).toEqual({ page: 3, pageSize: 20, keyword: "store", scope: "USER" });
+  });
+});
+
+describe("application type card mapping", () => {
+  it("writes endpoint-accurate web kinds instead of collapsing to SPA_WEB", () => {
+    expect(appKindOfCard("h5")).toBe("H5_WEB");
+    expect(appKindOfCard("pc-web")).toBe("PC_WEB");
+  });
+
+  it("offers Flutter and Douyin as first-class create cards", () => {
+    expect(appKindOfCard("flutter")).toBe("FLUTTER_APP");
+    expect(appKindOfCard("douyin-mini-program")).toBe("DOUYIN_MINIPROGRAM");
+    expect(cardsOfAppKind("FLUTTER_APP").map((card) => card.id)).toContain("flutter");
+    expect(cardsOfAppKind("DOUYIN_MINIPROGRAM").map((card) => card.id)).toContain("douyin-mini-program");
+    // A Flutter target must resolve to the cross-platform kind, not one store.
+    expect(resolveDeployAppType("flutter", "flutter-ios")?.appKind).toBe("FLUTTER_APP");
+    expect(resolveDeployAppType("flutter", "flutter-android")?.platform).toBe("ANDROID");
   });
 });

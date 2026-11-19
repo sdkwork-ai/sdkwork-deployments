@@ -111,20 +111,25 @@ fn identity_status_after_attempt(
 
 /// IAM's `applicationType` view of a deploy app kind.
 ///
-/// IAM's own vocabulary is `api` | `h5` | `pc` | `flutter` | `other`, which is
-/// not the deploy app kind set (`AppKind::as_str`). IAM now requires the field
-/// (the application templates that used to supply it are retired), so every kind
-/// maps onto a member of that closed set. The endpoint-accurate kinds map onto
-/// their IAM counterpart (`H5_WEB` → `h5`, `PC_WEB` → `pc`, `FLUTTER_APP` →
-/// `flutter`); the legacy web kinds stay `pc`, an API service is `api`, and
-/// everything else — including an unrecognised or empty kind — is `other`
-/// rather than a value IAM would have to reinterpret.
+/// IAM's vocabulary is `api` | `h5` | `pc` | `flutter` | `miniprogram` | `ios` |
+/// `android` | `harmonyos` | `desktop` | `other`, which is not the deploy app kind
+/// set (`AppKind::as_str`). Every endpoint-accurate kind maps onto its IAM
+/// counterpart (`H5_WEB` → `h5`, `PC_WEB` → `pc`, `WECHAT_MINIPROGRAM`/
+/// `DOUYIN_MINIPROGRAM` → `miniprogram`, `IOS_APP`/`ANDROID_APP`/`HARMONYOS_APP`
+/// → their native types, `FLUTTER_APP` → `flutter`, `DESKTOP_APP` → `desktop`).
+/// The legacy web kinds stay `pc`, an API service is `api`, and an unrecognised
+/// or empty kind is `other` rather than a value IAM would have to reinterpret.
 fn identity_application_type(app_kind: &str) -> String {
     let application_type = match app_kind.trim().to_ascii_uppercase().as_str() {
         "API_SERVICE" => "api",
         "H5_WEB" => "h5",
-        "PC_WEB" | "STATIC_WEB" | "SPA_WEB" | "DESKTOP_APP" => "pc",
+        "PC_WEB" | "STATIC_WEB" | "SPA_WEB" => "pc",
         "FLUTTER_APP" => "flutter",
+        "WECHAT_MINIPROGRAM" | "DOUYIN_MINIPROGRAM" => "miniprogram",
+        "IOS_APP" => "ios",
+        "ANDROID_APP" => "android",
+        "HARMONYOS_APP" => "harmonyos",
+        "DESKTOP_APP" => "desktop",
         _ => "other",
     };
     application_type.to_owned()
@@ -1586,15 +1591,13 @@ mod identity_provisioning_tests {
             ("PC_WEB", "pc"),
             ("STATIC_WEB", "pc"),
             ("SPA_WEB", "pc"),
-            ("DESKTOP_APP", "pc"),
+            ("DESKTOP_APP", "desktop"),
             ("FLUTTER_APP", "flutter"),
-            // Kinds with no honest IAM counterpart are reported as `other`
-            // rather than being mapped onto a web type they are not.
-            ("WECHAT_MINIPROGRAM", "other"),
-            ("DOUYIN_MINIPROGRAM", "other"),
-            ("IOS_APP", "other"),
-            ("ANDROID_APP", "other"),
-            ("HARMONYOS_APP", "other"),
+            ("WECHAT_MINIPROGRAM", "miniprogram"),
+            ("DOUYIN_MINIPROGRAM", "miniprogram"),
+            ("IOS_APP", "ios"),
+            ("ANDROID_APP", "android"),
+            ("HARMONYOS_APP", "harmonyos"),
             // IAM requires the field now that templates are retired, so even an
             // empty kind must resolve to a member of the closed set.
             ("", "other"),

@@ -79,6 +79,13 @@ export function DeployAppTypeIcon({ iconKey, size = 26, className }: DeployAppTy
           <path d="M8 9.2c2.6-1.7 5.4-1.7 8 0M8 14.8c2.6 1.7 5.4 1.7 8 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
       );
+    case "flutter":
+      return (
+        <svg {...common}>
+          <path d="M4.5 12.5 12 5h6.5l-6 6 6 6H12l-7.5-7.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          <path d="M10 15.5 12.5 18H19l-3.5-3.5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+        </svg>
+      );
     case "api":
       return (
         <svg {...common}>

@@ -40,8 +40,20 @@ pub use settings::{
     IAM_PROVISIONING_TIMEOUT_MS_ENV,
 };
 
-/// The application types IAM accepts (`api` | `h5` | `pc` | `flutter` | `other`).
-pub const APPLICATION_TYPES: &[&str] = &["api", "h5", "pc", "flutter", "other"];
+/// The application types IAM accepts (`api` | `h5` | `pc` | `flutter` |
+/// `miniprogram` | `ios` | `android` | `harmonyos` | `desktop` | `other`).
+pub const APPLICATION_TYPES: &[&str] = &[
+    "api",
+    "h5",
+    "pc",
+    "flutter",
+    "miniprogram",
+    "ios",
+    "android",
+    "harmonyos",
+    "desktop",
+    "other",
+];
 
 /// Normalises an application type onto IAM's closed vocabulary.
 ///
@@ -55,6 +67,11 @@ pub fn normalize_application_type(value: &str) -> &'static str {
         "h5" => "h5",
         "pc" => "pc",
         "flutter" => "flutter",
+        "miniprogram" => "miniprogram",
+        "ios" => "ios",
+        "android" => "android",
+        "harmonyos" => "harmonyos",
+        "desktop" => "desktop",
         _ => "other",
     }
 }

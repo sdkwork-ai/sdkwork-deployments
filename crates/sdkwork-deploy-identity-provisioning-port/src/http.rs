@@ -329,9 +329,16 @@ mod tests {
     #[test]
     fn request_body_normalises_the_application_type() {
         let mut unknown = command();
-        unknown.application_type = "WECHAT_MINIPROGRAM".to_owned();
+        unknown.application_type = "NOT_A_TYPE".to_owned();
         let body = provision_request_body("token-value", &unknown);
         assert_eq!(body["applicationType"], "other");
+
+        let mut mini = command();
+        mini.application_type = "MINIPROGRAM".to_owned();
+        assert_eq!(
+            provision_request_body("token-value", &mini)["applicationType"],
+            "miniprogram"
+        );
 
         let mut api = command();
         api.application_type = " API ".to_owned();

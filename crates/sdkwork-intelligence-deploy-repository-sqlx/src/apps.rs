@@ -634,7 +634,8 @@ impl DeployRepository {
         let query = format!(
             "SELECT {APP_SELECT}
              FROM deploy_app a
-             WHERE a.tenant_id = $1 AND a.uuid = $2 AND a.deleted_at IS NULL"
+             WHERE a.tenant_id = $1 AND (a.uuid = $2 OR a.id::text = $2)
+               AND a.deleted_at IS NULL"
         );
         let row = sqlx::query(AssertSqlSafe(&*query))
             .bind(tenant_id)

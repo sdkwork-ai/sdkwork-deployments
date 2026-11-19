@@ -168,10 +168,19 @@ mod tests {
         assert!(mapped.access_permissions.is_empty());
 
         let mut unknown = command();
-        unknown.application_type = "SPA_WEB".to_owned();
+        unknown.application_type = "NOT_A_TYPE".to_owned();
         assert_eq!(
             provision_command(&unknown).application_type.as_deref(),
             Some("other")
         );
+
+        for accepted in ["miniprogram", "ios", "android", "harmonyos", "desktop"] {
+            let mut typed = command();
+            typed.application_type = accepted.to_owned();
+            assert_eq!(
+                provision_command(&typed).application_type.as_deref(),
+                Some(accepted)
+            );
+        }
     }
 }
