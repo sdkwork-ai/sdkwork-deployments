@@ -1799,6 +1799,13 @@ pub trait DeployRepositoryPort:
         page_size: i32,
     ) -> DeployServiceResult<AppTemplateVersionPage>;
 
+    /// Increments the marketplace install counter after a successful install.
+    async fn record_app_template_install(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<()>;
+
     /// Asserts a consumer may read one artifact because a published version of
     /// a marketplace-visible listing references it. Anything else — a draft
     /// version, a private or disabled listing — is refused as not found.

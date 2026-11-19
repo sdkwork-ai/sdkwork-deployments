@@ -1477,6 +1477,25 @@ impl DeployRepository {
         })
     }
 
+    /// Increments the marketplace install counter after a successful install.
+    pub(super) async fn record_app_template_install_repo(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> DeployServiceResult<()> {
+        sqlx::query(
+            "UPDATE deploy_application_scaffold
+             SET install_count = install_count + 1, updated_at = NOW()
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(template_uuid)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("record deploy_application_scaffold install", error))?;
+        Ok(())
+    }
+
     /// A consumer reaches an artifact only through the product the marketplace
     /// sells: a published version of a marketplace-visible listing in the same
     /// tenant must reference it. Anything else — a draft version, a private or

@@ -1957,6 +1957,15 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn record_app_template_install(
+        &self,
+        tenant_id: i64,
+        template_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
+        self.record_app_template_install_repo(tenant_id, template_uuid)
+            .await
+    }
+
     async fn assert_marketplace_artifact_readable(
         &self,
         tenant_id: i64,
