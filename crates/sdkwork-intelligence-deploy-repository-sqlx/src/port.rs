@@ -1961,8 +1961,9 @@ impl DeployRepositoryPort for DeployRepository {
         &self,
         tenant_id: i64,
         template_uuid: &str,
+        app_id: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
-        self.record_app_template_install_repo(tenant_id, template_uuid)
+        self.record_app_template_install_repo(tenant_id, template_uuid, app_id)
             .await
     }
 

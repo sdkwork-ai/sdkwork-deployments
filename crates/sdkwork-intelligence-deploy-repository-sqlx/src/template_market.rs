@@ -1478,18 +1478,30 @@ impl DeployRepository {
     }
 
     /// Increments the marketplace install counter after a successful install.
+    ///
+    /// The `NOT EXISTS` guard keys the increment to the installed application's
+    /// audit entry, so an idempotent replay (which returns the same app) does
+    /// not inflate the counter.
     pub(super) async fn record_app_template_install_repo(
         &self,
         tenant_id: i64,
         template_uuid: &str,
+        app_id: &str,
     ) -> DeployServiceResult<()> {
         sqlx::query(
             "UPDATE deploy_application_scaffold
              SET install_count = install_count + 1, updated_at = NOW()
-             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL
+               AND NOT EXISTS (
+                 SELECT 1 FROM deploy_audit_log a
+                 WHERE a.tenant_id = $1
+                   AND a.action = 'app.template.install'
+                   AND a.target_uuid = $3
+               )",
         )
         .bind(tenant_id)
         .bind(template_uuid)
+        .bind(app_id)
         .execute(&self.pool)
         .await
         .map_err(|error| store_error("record deploy_application_scaffold install", error))?;

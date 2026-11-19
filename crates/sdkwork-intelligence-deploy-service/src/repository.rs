@@ -1800,10 +1800,16 @@ pub trait DeployRepositoryPort:
     ) -> DeployServiceResult<AppTemplateVersionPage>;
 
     /// Increments the marketplace install counter after a successful install.
+    ///
+    /// `app_id` makes the counter idempotent per installed application: a
+    /// replay of the same install command returns the same app and must not
+    /// count it twice. The audit entry (`app.template.install` on that app) is
+    /// the durable marker; the increment is skipped when it already exists.
     async fn record_app_template_install(
         &self,
         tenant_id: i64,
         template_uuid: &str,
+        app_id: &str,
     ) -> DeployServiceResult<()>;
 
     /// Asserts a consumer may read one artifact because a published version of

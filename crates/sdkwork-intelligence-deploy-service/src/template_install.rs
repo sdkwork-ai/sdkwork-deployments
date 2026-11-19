@@ -127,7 +127,11 @@ impl DeployService {
                 ))
             })?;
         self.repository
-            .record_app_template_install(Self::tenant_id(context)?, template.id.as_str())
+            .record_app_template_install(
+                Self::tenant_id(context)?,
+                template.id.as_str(),
+                app.id.as_str(),
+            )
             .await?;
         self.audit_app_action(context, "app.template.install", &app.id)
             .await?;
