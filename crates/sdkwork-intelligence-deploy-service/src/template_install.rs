@@ -90,7 +90,12 @@ impl DeployService {
             description: Some(template.summary.clone()).filter(|value| !value.trim().is_empty()),
             app_type: None,
             runtime_config: None,
-            metadata: None,
+            metadata: Some(serde_json::json!({
+                "template": {
+                    "uuid": template.id,
+                    "versionUuid": template.latest_version_uuid,
+                }
+            })),
             default_environment: Some(source_app.default_environment.clone()),
             app_domain_label: None,
             app_domain_suffixes: None,
@@ -123,6 +128,8 @@ impl DeployService {
             })?;
         self.repository
             .record_app_template_install(Self::tenant_id(context)?, template.id.as_str())
+            .await?;
+        self.audit_app_action(context, "app.template.install", &app.id)
             .await?;
 
         Ok(AppTemplateInstallResponse {
