@@ -119,11 +119,11 @@ impl DeployApplicationLookup for PgDeployApplicationLookup {
             SelectorColumn::DeployApplicationId => (None, None, Some(selector.value())),
         };
         let row = sqlx::query(
-            "SELECT a.uuid, a.id::text AS deploy_application_id, a.tenant_id, a.slug, \
+            "SELECT a.uuid, a.id::text AS deploy_application_id, a.tenant_id::text AS tenant_id, a.slug, \
                     a.app_kind, a.owner_type, a.user_id, \
                     a.metadata #>> '{template,orderId}' AS template_order_id \
              FROM deploy_app a \
-             WHERE a.tenant_id = $1 \
+             WHERE a.tenant_id::text = $1 \
                AND a.deleted_at IS NULL AND a.archived_at IS NULL \
                AND (($2::text IS NOT NULL AND a.slug = $2) \
                  OR ($3::text IS NOT NULL AND a.uuid = $3) \
