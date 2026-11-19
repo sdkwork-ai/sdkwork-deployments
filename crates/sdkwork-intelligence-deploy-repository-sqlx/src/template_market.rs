@@ -238,9 +238,11 @@ async fn load_git_source_snapshot(
 ) -> DeployServiceResult<Option<serde_json::Value>> {
     let row = sqlx::query(
         "SELECT r.repo_provider, r.repo_url, r.default_branch, r.clone_mode,
-                r.credential_secret_ref
+                r.credential_secret_ref, s.source_ref, s.sub_path
          FROM deploy_source_repository r
          JOIN deploy_app a ON a.id = r.app_id
+         LEFT JOIN deploy_app_source s
+           ON s.app_id = a.id AND s.tenant_id = a.tenant_id AND s.deleted_at IS NULL
          WHERE a.tenant_id = $1 AND a.uuid = $2
            AND a.deleted_at IS NULL AND r.deleted_at IS NULL
          ORDER BY r.id DESC
@@ -258,7 +260,13 @@ async fn load_git_source_snapshot(
         "git": {
             "repoProvider": row.try_get::<String, _>("repo_provider").unwrap_or_default(),
             "repoUrl": row.try_get::<String, _>("repo_url").unwrap_or_default(),
-            "repoRef": row.try_get::<String, _>("default_branch").unwrap_or_default(),
+            "repoRef": row
+                .try_get::<Option<String>, _>("source_ref")
+                .ok()
+                .flatten()
+                .or_else(|| row.try_get::<String, _>("default_branch").ok())
+                .unwrap_or_default(),
+            "subPath": row.try_get::<Option<String>, _>("sub_path").ok().flatten(),
             "cloneMode": row.try_get::<String, _>("clone_mode").unwrap_or_default(),
             "credentialSecretRef": row.try_get::<Option<String>, _>("credential_secret_ref").ok().flatten(),
         }
