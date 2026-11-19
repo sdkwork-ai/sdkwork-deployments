@@ -158,6 +158,14 @@ impl fmt::Debug for CallerSession {
 pub struct AppTokenRequest {
     /// How the caller named the application.
     pub selector: DeployApplicationSelector,
+    /// Exact installation lifecycle to initialize (`development`, `production`, ...).
+    ///
+    /// Omitted means IAM resolves it: the caller's session environment when the
+    /// installation registered it, otherwise the installation's only active
+    /// environment. An operator can name a lifecycle that differs from its own
+    /// session environment, which is what the app factory needs right after
+    /// provisioning an application.
+    pub environment: Option<String>,
 }
 
 impl AppTokenRequest {
@@ -165,7 +173,21 @@ impl AppTokenRequest {
     /// @returns the request.
     #[must_use]
     pub fn new(selector: DeployApplicationSelector) -> Self {
-        Self { selector }
+        Self {
+            selector,
+            environment: None,
+        }
+    }
+
+    /// Names the installation lifecycle to initialize.
+    /// @param environment - lifecycle key (`development`, `production`, ...).
+    /// @returns the request.
+    #[must_use]
+    pub fn with_environment(mut self, environment: impl Into<String>) -> Self {
+        let value = environment.into();
+        let trimmed = value.trim();
+        self.environment = (!trimmed.is_empty()).then(|| trimmed.to_owned());
+        self
     }
 }
 
@@ -195,6 +217,9 @@ pub struct AppAccessToken {
     /// Release scope of the installation.
     #[serde(rename = "ownershipScope")]
     pub ownership_scope: String,
+    /// Installation lifecycle environment the credential was gated on.
+    #[serde(rename = "environment", default)]
+    pub environment: String,
     /// Revocable session id.
     #[serde(rename = "sessionId", default)]
     pub session_id: String,
@@ -211,6 +236,7 @@ impl fmt::Debug for AppAccessToken {
             .field("tenant_application_id", &self.tenant_application_id)
             .field("organization_id", &self.organization_id)
             .field("ownership_scope", &self.ownership_scope)
+            .field("environment", &self.environment)
             .field("session_id", &self.session_id)
             .finish()
     }
@@ -247,6 +273,7 @@ mod tests {
             tenant_application_id: "tapp_1".to_owned(),
             organization_id: "0".to_owned(),
             ownership_scope: "TENANT".to_owned(),
+            environment: "production".to_owned(),
             session_id: "session".to_owned(),
         };
         let rendered = format!("{token:?}");

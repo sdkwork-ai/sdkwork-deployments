@@ -1,4 +1,4 @@
-﻿//! Composition: resolve the application, then exchange the session.
+//! Composition: resolve the application, then exchange the session.
 //!
 //! The service holds no state and performs no I/O of its own; it is the seam an
 //! application wires its own repository and HTTP client into. That keeps the
@@ -34,7 +34,8 @@ where
     /// Order matters: the session is checked before the inventory is read, the
     /// lookup is always scoped to the caller's tenant, and IAM receives the
     /// resolved anchor rather than the caller's raw selector. IAM then applies the
-    /// entitlement matrix (owner / organization membership / tenant membership) 鈥?    /// this service never decides it.
+    /// entitlement matrix (owner / organization membership / tenant membership) — this
+    /// service never decides it.
     /// @param tenant_id - the caller's tenant, from its session.
     /// @param session - the caller's authenticated session pair.
     /// @param request - the selector the caller supplied.
@@ -58,7 +59,7 @@ where
                 AppTokenError::application_not_found(tenant_id, request.selector.to_string())
             })?;
         self.exchange
-            .exchange(session, application.anchor())
+            .exchange(session, application.anchor(), request.environment.as_deref())
             .await
     }
 }
@@ -102,6 +103,7 @@ mod tests {
             &self,
             _session: &CallerSession,
             deploy_application_id: &str,
+            environment: Option<&str>,
         ) -> Result<AppAccessToken, AppTokenError> {
             self.calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -116,6 +118,7 @@ mod tests {
                 tenant_application_id: "tapp_1".to_owned(),
                 organization_id: "0".to_owned(),
                 ownership_scope: "TENANT".to_owned(),
+                environment: environment.unwrap_or("production").to_owned(),
                 session_id: "session".to_owned(),
             })
         }
@@ -211,6 +214,28 @@ mod tests {
         assert!(matches!(outcome, Err(AppTokenError::Unauthorized)));
         assert!(seen_tenant.lock().expect("tenant").is_none());
         assert_eq!(exchange.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn environment_hint_reaches_the_exchange() {
+        let service = DeployAppTokenService::new(
+            FakeLookup {
+                found: Some(application()),
+                seen_tenant: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            },
+            FakeExchange::default(),
+        );
+        let issued = runtime()
+            .block_on(service.issue(
+                "100001",
+                &CallerSession::new("access", "auth"),
+                &AppTokenRequest::new(DeployApplicationSelector::slug(
+                    "sdkwork-cloudrouter-pc",
+                ))
+                .with_environment("development"),
+            ))
+            .expect("issued");
+        assert_eq!(issued.environment, "development");
     }
 
     #[test]

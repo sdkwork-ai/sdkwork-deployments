@@ -18,12 +18,15 @@ pub trait AppTokenExchange: Send + Sync {
     ///
     /// @param session - the caller's authenticated session.
     /// @param deploy_application_id - deployment anchor to request.
+    /// @param environment - installation lifecycle to initialize, or `None` to let
+    ///   IAM resolve it from the session and the installation's registered rows.
     /// @returns the issued credential.
     /// @throws [`AppTokenError`] typed by IAM's status class.
     async fn exchange(
         &self,
         session: &CallerSession,
         deploy_application_id: &str,
+        environment: Option<&str>,
     ) -> Result<AppAccessToken, AppTokenError>;
 }
 
@@ -74,6 +77,7 @@ impl AppTokenExchange for HttpAppTokenExchange {
         &self,
         session: &CallerSession,
         deploy_application_id: &str,
+        environment: Option<&str>,
     ) -> Result<AppAccessToken, AppTokenError> {
         if !session.is_complete() {
             return Err(AppTokenError::Unauthorized);
@@ -91,7 +95,7 @@ impl AppTokenExchange for HttpAppTokenExchange {
             .client
             .post(self.endpoint())
             .headers(headers)
-            .json(&json!({ "appId": deploy_application_id }))
+            .json(&exchange_request_body(deploy_application_id, environment))
             .send()
             .await
             .map_err(|error| AppTokenError::Transport(error.to_string()))?;
@@ -105,6 +109,25 @@ impl AppTokenExchange for HttpAppTokenExchange {
         }
         parse_envelope(&body)
     }
+}
+
+/// Builds the `appAccessTokens.create` body.
+///
+/// `environment` is omitted when the caller did not choose one, so IAM resolves it
+/// from the session and the installation's registered rows.
+/// @param deploy_application_id - deployment anchor.
+/// @param environment - installation lifecycle, when chosen.
+/// @returns the JSON body.
+#[must_use]
+pub fn exchange_request_body(
+    deploy_application_id: &str,
+    environment: Option<&str>,
+) -> Value {
+    let mut body = json!({ "appId": deploy_application_id });
+    if let Some(environment) = environment.map(str::trim).filter(|value| !value.is_empty()) {
+        body["environment"] = Value::String(environment.to_owned());
+    }
+    body
 }
 
 /// Reads `detail` from a `ProblemDetail`, falling back to a compact rendering.
@@ -164,6 +187,23 @@ mod tests {
     }
 
     #[test]
+    fn request_body_carries_the_anchor_and_an_optional_environment() {
+        assert_eq!(
+            exchange_request_body("381", None),
+            json!({ "appId": "381" })
+        );
+        assert_eq!(
+            exchange_request_body("381", Some(" production ")),
+            json!({ "appId": "381", "environment": "production" })
+        );
+        assert_eq!(
+            exchange_request_body("381", Some("  ")),
+            json!({ "appId": "381" }),
+            "a blank environment is omitted, not sent empty"
+        );
+    }
+
+    #[test]
     fn envelope_parses_the_credential() {
         let token = parse_envelope(&json!({
             "code": 0,
@@ -194,7 +234,7 @@ mod tests {
             .enable_all()
             .build()
             .expect("runtime");
-        let outcome = runtime.block_on(exchange.exchange(&session, "381"));
+        let outcome = runtime.block_on(exchange.exchange(&session, "381", None));
         assert!(matches!(outcome, Err(AppTokenError::Unauthorized)));
     }
 }
