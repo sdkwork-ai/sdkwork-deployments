@@ -59,7 +59,11 @@ where
                 AppTokenError::application_not_found(tenant_id, request.selector.to_string())
             })?;
         self.exchange
-            .exchange(session, application.anchor(), request.environment.as_deref())
+            .exchange(
+                session,
+                application.anchor(),
+                request.environment.as_deref(),
+            )
             .await
     }
 }
@@ -105,8 +109,7 @@ mod tests {
             deploy_application_id: &str,
             environment: Option<&str>,
         ) -> Result<AppAccessToken, AppTokenError> {
-            self.calls
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if let Ok(mut guard) = self.seen_anchor.lock() {
                 *guard = Some(deploy_application_id.to_owned());
             }
@@ -157,18 +160,12 @@ mod tests {
             .block_on(service.issue(
                 "100001",
                 &CallerSession::new("access", "auth"),
-                &AppTokenRequest::new(DeployApplicationSelector::slug(
-                    "sdkwork-cloudrouter-pc",
-                )),
+                &AppTokenRequest::new(DeployApplicationSelector::slug("sdkwork-cloudrouter-pc")),
             ))
             .expect("issued");
         assert_eq!(issued.app_id, "381764687714324480");
         assert_eq!(
-            exchange
-                .seen_anchor
-                .lock()
-                .expect("anchor")
-                .as_deref(),
+            exchange.seen_anchor.lock().expect("anchor").as_deref(),
             Some("381764687714324480")
         );
     }
@@ -226,14 +223,16 @@ mod tests {
             FakeExchange::default(),
         );
         let issued = runtime()
-            .block_on(service.issue(
-                "100001",
-                &CallerSession::new("access", "auth"),
-                &AppTokenRequest::new(DeployApplicationSelector::slug(
-                    "sdkwork-cloudrouter-pc",
-                ))
-                .with_environment("development"),
-            ))
+            .block_on(
+                service.issue(
+                    "100001",
+                    &CallerSession::new("access", "auth"),
+                    &AppTokenRequest::new(DeployApplicationSelector::slug(
+                        "sdkwork-cloudrouter-pc",
+                    ))
+                    .with_environment("development"),
+                ),
+            )
             .expect("issued");
         assert_eq!(issued.environment, "development");
     }

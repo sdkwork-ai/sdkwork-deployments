@@ -105,7 +105,10 @@ impl AppTokenExchange for HttpAppTokenExchange {
             .await
             .map_err(|error| AppTokenError::Protocol(error.to_string()))?;
         if !(200..300).contains(&status) {
-            return Err(AppTokenError::from_iam_status(status, problem_detail(&body)));
+            return Err(AppTokenError::from_iam_status(
+                status,
+                problem_detail(&body),
+            ));
         }
         parse_envelope(&body)
     }
@@ -119,10 +122,7 @@ impl AppTokenExchange for HttpAppTokenExchange {
 /// @param environment - installation lifecycle, when chosen.
 /// @returns the JSON body.
 #[must_use]
-pub fn exchange_request_body(
-    deploy_application_id: &str,
-    environment: Option<&str>,
-) -> Value {
+pub fn exchange_request_body(deploy_application_id: &str, environment: Option<&str>) -> Value {
     let mut body = json!({ "appId": deploy_application_id });
     if let Some(environment) = environment.map(str::trim).filter(|value| !value.is_empty()) {
         body["environment"] = Value::String(environment.to_owned());
@@ -151,8 +151,7 @@ pub fn parse_envelope(body: &Value) -> Result<AppAccessToken, AppTokenError> {
         .ok_or_else(|| {
             AppTokenError::Protocol("response has no data.item credential".to_owned())
         })?;
-    serde_json::from_value(item.clone())
-        .map_err(|error| AppTokenError::Protocol(error.to_string()))
+    serde_json::from_value(item.clone()).map_err(|error| AppTokenError::Protocol(error.to_string()))
 }
 
 #[cfg(test)]
@@ -170,8 +169,8 @@ mod tests {
 
     #[test]
     fn endpoint_has_no_double_slash() {
-        let exchange = HttpAppTokenExchange::try_new("https://api.example.com/")
-            .expect("valid origin");
+        let exchange =
+            HttpAppTokenExchange::try_new("https://api.example.com/").expect("valid origin");
         assert_eq!(
             exchange.endpoint(),
             "https://api.example.com/app/v3/api/iam/app_access_tokens"
@@ -227,8 +226,8 @@ mod tests {
 
     #[test]
     fn empty_session_is_refused_before_any_request() {
-        let exchange = HttpAppTokenExchange::try_new("https://api.example.com")
-            .expect("valid origin");
+        let exchange =
+            HttpAppTokenExchange::try_new("https://api.example.com").expect("valid origin");
         let session = CallerSession::new("", "b");
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

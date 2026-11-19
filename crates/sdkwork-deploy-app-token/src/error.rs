@@ -59,7 +59,10 @@ impl AppTokenError {
     /// @param selector - selector as supplied by the caller.
     /// @returns the typed error.
     #[must_use]
-    pub fn application_not_found(tenant_id: impl Into<String>, selector: impl Into<String>) -> Self {
+    pub fn application_not_found(
+        tenant_id: impl Into<String>,
+        selector: impl Into<String>,
+    ) -> Self {
         Self::ApplicationNotFound {
             tenant_id: tenant_id.into(),
             selector: selector.into(),
