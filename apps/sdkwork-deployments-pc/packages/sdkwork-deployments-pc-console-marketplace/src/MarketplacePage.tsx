@@ -1,4 +1,4 @@
-import { RefreshCw, Search, X } from "lucide-react";
+﻿import { RefreshCw, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
@@ -15,7 +15,7 @@ import type {
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 
 import { marketplaceTranslator, type MarketplaceMessageKey } from "./i18n.ts";
-import { createMarketplaceService, type MarketplacePage as MarketplaceLedger, type TemplateType } from "./service/marketplace.ts";
+import { createMarketplaceService, isSettledTemplateOrderStatus, type MarketplacePage as MarketplaceLedger, type TemplateType } from "./service/marketplace.ts";
 
 export interface MarketplacePageProps {
   readonly deployClient: SdkworkDeployAppClient;
@@ -27,13 +27,6 @@ const PAGE_SIZE = 20;
 
 /** The degraded ledger for a host without the order center (see `load`). */
 const EMPTY_ORDERS: MarketplaceLedger<AppTemplateOrderSummary> = { items: [], total: 0, hasMore: false };
-
-/** Order-center statuses that mean the buyer owns the listing. */
-const SETTLED_ORDER_STATUSES = new Set(["paid", "fulfilled", "completed", "finished"]);
-
-function isSettledOrderStatus(status: string): boolean {
-  return SETTLED_ORDER_STATUSES.has(status.trim().toLowerCase());
-}
 
 /**
  * An order the buyer still has to pay, held in component state so the dialog can
@@ -87,7 +80,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   // Ownership is the order center's verdict: a `paid` order for a listing is
   // that listing's install entitlement, keyed by the template it was bought for.
   const ownedTemplates = useMemo(
-    () => new Set(orders.filter((order) => isSettledOrderStatus(order.status)).map((order) => order.templateUuid)),
+    () => new Set(orders.filter((order) => isSettledTemplateOrderStatus(order.status)).map((order) => order.templateUuid)),
     [orders],
   );
 
@@ -99,7 +92,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
       // platform order center answers 404 for `app_template_orders`, and that
       // gap must not take the storefront down with it. The catalog calls stay
       // page-fatal; the ledger degrades to an empty set, which only clears the
-      // "owned" acquire state — an acquire attempt still reports its own
+      // "owned" acquire state 鈥?an acquire attempt still reports its own
       // failure through `actionError`.
       const [categoryList, listings, ownership] = await Promise.all([
         service.listCategories(),
@@ -150,7 +143,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
       setAcquiring(true);
       try {
         const paidOrder = orders.find(
-          (order) => order.templateUuid === templateUuid && isSettledOrderStatus(order.status),
+          (order) => order.templateUuid === templateUuid && isSettledTemplateOrderStatus(order.status),
         );
         const installed = await service.install(templateUuid, undefined, paidOrder?.orderId);
         setInstalledName(installed.appName);
@@ -172,7 +165,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
       setAcquiring(true);
       try {
         const order = await service.acquire(templateUuid);
-        if (isSettledOrderStatus(order.status)) {
+        if (isSettledTemplateOrderStatus(order.status)) {
           // The settled order is the entitlement; the server verifies it before
           // creating a paid app. Free listings carry no payment requirement.
           const installed = await service.install(templateUuid, undefined, order.orderId);

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { SdkworkDeployAppClient, SdkworkOrderAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 
-import { createMarketplaceService, createMyTemplatesService } from "../src/service/marketplace.ts";
+import { createMarketplaceService, createMyTemplatesService, isSettledTemplateOrderStatus } from "../src/service/marketplace.ts";
 
 interface Recorded {
   readonly browse: ReturnType<typeof vi.fn>;
@@ -191,5 +191,14 @@ describe("my-templates author service", () => {
       .install("template-1", undefined, " order-42 ");
     expect(bodyOf(recorded.install, 1)).toEqual({ orderId: "order-42" });
     expect(paramsOf(recorded.install, 2).idempotencyKey).toBe("order-42");
+  });
+
+  it("treats every settled order-center status as owned", () => {
+    for (const status of ["paid", "FULFILLED", "completed", " finished "]) {
+      expect(isSettledTemplateOrderStatus(status)).toBe(true);
+    }
+    for (const status of ["pending_payment", "closed", "unpaid", ""]) {
+      expect(isSettledTemplateOrderStatus(status)).toBe(false);
+    }
   });
 });

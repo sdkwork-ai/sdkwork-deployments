@@ -23,6 +23,19 @@ import type {
 
 export type TemplateType = "APP" | "PPT" | "VIDEO";
 
+/** Order-center statuses that mean the buyer already owns the listing. */
+const SETTLED_ORDER_STATUSES: ReadonlySet<string> = new Set([
+  "paid",
+  "fulfilled",
+  "completed",
+  "finished",
+]);
+
+/** Normalizes an order status and answers whether it is settled/owned. */
+export function isSettledTemplateOrderStatus(status: string): boolean {
+  return SETTLED_ORDER_STATUSES.has(status.trim().toLowerCase());
+}
+
 export interface MarketplaceBrowseParams {
   readonly page: number;
   readonly pageSize: number;
