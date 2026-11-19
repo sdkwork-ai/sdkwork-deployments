@@ -75,6 +75,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   const [acquiring, setAcquiring] = useState(false);
   const [error, setError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
+  const [installedName, setInstalledName] = useState<string>();
 
   // Ownership is the order center's verdict: a `paid` order for a listing is
   // that listing's install entitlement, keyed by the template it was bought for.
@@ -139,10 +140,20 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     async (templateUuid: string): Promise<void> => {
       setActionError(undefined);
       setPendingPayment(undefined);
+      setInstalledName(undefined);
       setAcquiring(true);
       try {
         const order = await service.acquire(templateUuid);
         if (order.status === "paid") {
+          // A free listing is owned immediately; create the app in the same
+          // click. Paid listings need the entitlement-aware install endpoint,
+          // so the page says what is pending instead of failing after payment.
+          if (detail?.pricingModel === "PAID") {
+            setActionError(t("marketplace.paidInstallPending"));
+            return;
+          }
+          const installed = await service.install(templateUuid);
+          setInstalledName(installed.appName);
           setDetail(undefined);
           await load();
           return;
@@ -156,7 +167,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
         setAcquiring(false);
       }
     },
-    [service, load, t],
+    [service, load, detail, t],
   );
 
   const columns = useMemo<DataTableColumn<AppTemplateSummaryResponse>[]>(
@@ -286,6 +297,11 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
           <button className="icon-button" type="button" title={t("common.close")} onClick={() => setError(undefined)}>
             <X size={16} />
           </button>
+        </div>
+      )}
+      {installedName && (
+        <div className="warning" role="status">
+          {t("marketplace.installSucceeded", { name: installedName })}
         </div>
       )}
       <DataTable<AppTemplateSummaryResponse>

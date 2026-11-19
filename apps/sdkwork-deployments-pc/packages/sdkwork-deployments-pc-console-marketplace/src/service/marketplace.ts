@@ -97,6 +97,22 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient, o
         hasMore: result.pageInfo.hasMore ?? false,
       };
     },
+    /**
+     * Creates the application from a paid/owned listing.
+     *
+     * The server installs only free, Git-backed listings today; paid listings
+     * need an entitlement-aware install endpoint. The page checks the listing's
+     * pricing model before calling this so a paid order never turns into a
+     * failed install without explanation.
+     */
+    async install(templateUuid: string, name?: string): Promise<{ appId: string; appName: string }> {
+      const result = await deployClient.template.marketplaceTemplates.install(
+        templateUuid,
+        name?.trim() ? { name: name.trim() } : {},
+        { idempotencyKey: uuid() },
+      );
+      return { appId: result.app.id, appName: result.app.name };
+    },
   };
 }
 

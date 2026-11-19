@@ -7,6 +7,7 @@ import { createMarketplaceService, createMyTemplatesService } from "../src/servi
 interface Recorded {
   readonly browse: ReturnType<typeof vi.fn>;
   readonly categoryList: ReturnType<typeof vi.fn>;
+  readonly install: ReturnType<typeof vi.fn>;
   readonly orderCreate: ReturnType<typeof vi.fn>;
   readonly orderList: ReturnType<typeof vi.fn>;
   readonly templateCreate: ReturnType<typeof vi.fn>;
@@ -25,6 +26,7 @@ function stubClients(recorded: Partial<Recorded> = {}) {
   const fn = <T>(value: T): ReturnType<typeof vi.fn> => vi.fn().mockResolvedValue(value);
   const browse = recorded.browse ?? fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } });
   const categoryList = recorded.categoryList ?? fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } });
+  const install = recorded.install ?? fn({ app: { id: "app-installed", name: "Installed app" }, templateUuid: "template-1" });
   const orderCreate = recorded.orderCreate ?? fn({ orderId: "order-1", status: "pending_payment" });
   const orderList = recorded.orderList ?? fn({ items: [], pageInfo: { totalItems: "0", hasMore: false } });
   const templateCreate = recorded.templateCreate ?? fn({ id: "template-1" });
@@ -43,7 +45,7 @@ function stubClients(recorded: Partial<Recorded> = {}) {
         submit: fn({ id: "template-1" }),
         update: templateUpdate,
       },
-      marketplaceTemplates: { list: browse, retrieve: fn({ id: "template-1" }) },
+      marketplaceTemplates: { install, list: browse, retrieve: fn({ id: "template-1" }) },
       templateCategories: { list: categoryList },
     },
   };
@@ -51,7 +53,7 @@ function stubClients(recorded: Partial<Recorded> = {}) {
   return {
     deployClient: deploy as unknown as SdkworkDeployAppClient,
     orderClient: order as unknown as SdkworkOrderAppClient,
-    recorded: { browse, categoryList, orderCreate, orderList, templateCreate, templateRetrieve, templateUpdate, versionCreate },
+    recorded: { browse, categoryList, install, orderCreate, orderList, templateCreate, templateRetrieve, templateUpdate, versionCreate },
   };
 }
 
@@ -172,5 +174,14 @@ describe("my-templates author service", () => {
       platformTargets: ["pc", "h5"],
       packageSizeBytes: "4096",
     });
+  });
+
+  it("installs an owned listing through the marketplace command", async () => {
+    const { deployClient, orderClient, recorded } = stubClients();
+    const result = await createMarketplaceService(deployClient, orderClient)
+      .install("template-1", "  My app  ");
+    expect(result).toEqual({ appId: "app-installed", appName: "Installed app" });
+    expect(bodyOf(recorded.install, 1)).toEqual({ name: "My app" });
+    expect(paramsOf(recorded.install, 2).idempotencyKey).toBeTruthy();
   });
 });
