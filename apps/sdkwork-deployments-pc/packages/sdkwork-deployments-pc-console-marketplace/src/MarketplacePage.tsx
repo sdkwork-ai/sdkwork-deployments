@@ -28,6 +28,13 @@ const PAGE_SIZE = 20;
 /** The degraded ledger for a host without the order center (see `load`). */
 const EMPTY_ORDERS: MarketplaceLedger<AppTemplateOrderSummary> = { items: [], total: 0, hasMore: false };
 
+/** Order-center statuses that mean the buyer owns the listing. */
+const SETTLED_ORDER_STATUSES = new Set(["paid", "fulfilled", "completed", "finished"]);
+
+function isSettledOrderStatus(status: string): boolean {
+  return SETTLED_ORDER_STATUSES.has(status.trim().toLowerCase());
+}
+
 /**
  * An order the buyer still has to pay, held in component state so the dialog can
  * show what to do next. The listings are free or paid: a free one is owned the
@@ -80,7 +87,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   // Ownership is the order center's verdict: a `paid` order for a listing is
   // that listing's install entitlement, keyed by the template it was bought for.
   const ownedTemplates = useMemo(
-    () => new Set(orders.filter((order) => order.status === "paid").map((order) => order.templateUuid)),
+    () => new Set(orders.filter((order) => isSettledOrderStatus(order.status)).map((order) => order.templateUuid)),
     [orders],
   );
 
@@ -143,7 +150,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
       setAcquiring(true);
       try {
         const paidOrder = orders.find(
-          (order) => order.templateUuid === templateUuid && order.status === "paid",
+          (order) => order.templateUuid === templateUuid && isSettledOrderStatus(order.status),
         );
         const installed = await service.install(templateUuid, undefined, paidOrder?.orderId);
         setInstalledName(installed.appName);
@@ -165,7 +172,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
       setAcquiring(true);
       try {
         const order = await service.acquire(templateUuid);
-        if (order.status === "paid") {
+        if (isSettledOrderStatus(order.status)) {
           // The settled order is the entitlement; the server verifies it before
           // creating a paid app. Free listings carry no payment requirement.
           const installed = await service.install(templateUuid, undefined, order.orderId);
