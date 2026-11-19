@@ -1,4 +1,4 @@
-﻿# SDKWork Cloud Site Publishing Control-Plane Architecture
+# SDKWork Cloud Site Publishing Control-Plane Architecture
 
 Status: implementation in progress
 Owner: SDKWork Deploy maintainers
@@ -237,7 +237,7 @@ Specific columns:
 | --- | --- |
 | `name`, `slug` | tenant display name and unique tenant slug |
 | `site_kind` | `STATIC`, `SPA`, `WIKI`, `HYBRID` |
-| `environment` | `development`, `test`, `staging`, `production` |
+| `environment` | `development`, `test`, `staging`, `demo`, `production` |
 | `site_status` | `DRAFT`, `VALIDATING`, `READY`, `ACTIVE`, `DEGRADED`, `PAUSED`, `ARCHIVED`, `FAILED` |
 | `default_variant_id` | nullable until ready; references a Site-owned Variant |
 | `current_revision_id` | nullable immutable revision pointer |

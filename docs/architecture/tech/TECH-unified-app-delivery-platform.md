@@ -138,7 +138,7 @@ Purpose: tenant-owned application aggregate.
 | `description` | bounded description |
 | `app_status` | `DRAFT`, `READY`, `ACTIVE`, `PAUSED`, `ARCHIVED`, `FAILED` |
 | `app_id` | nullable link to `deploy_app` for web-kind Apps |
-| `default_environment` | `development`, `test`, `staging`, `production` |
+| `default_environment` | `development`, `test`, `staging`, `demo`, `production` |
 | `activated_at`, `paused_at`, `archived_at` | lifecycle observations |
 
 Unique: `(tenant_id, slug)`. Index: `(tenant_id, app_status, updated_at)`.
