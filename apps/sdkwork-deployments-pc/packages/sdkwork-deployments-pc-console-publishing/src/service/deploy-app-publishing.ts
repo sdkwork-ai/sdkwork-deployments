@@ -476,6 +476,13 @@ export function appKindOfCard(cardId: string): DeployAppKind | undefined {
  * 反查必须由调用方提供首选顺序（见 {@link cardsOfAppKind}），不能武断取第一个。
  */
 export function cardIdsOfAppKind(appKind: DeployAppKind): readonly string[] {
+  // `SPA_WEB` is the legacy single web kind. Apps created before the endpoint-
+  // accurate split still carry it, so publish must keep offering both web
+  // surfaces instead of showing an unknown type. New creates write H5_WEB or
+  // PC_WEB and therefore map to exactly one card.
+  if (appKind === "SPA_WEB") {
+    return ["h5", "pc-web"];
+  }
   return Object.entries(CARD_APP_KIND)
     .filter(([, kind]) => kind === appKind)
     .map(([cardId]) => cardId);
@@ -484,9 +491,9 @@ export function cardIdsOfAppKind(appKind: DeployAppKind): readonly string[] {
 /**
  * 契约 `AppKind` → 该应用类型对应的卡片集合（按网格展示顺序）。
  *
- * 返回数组而非单个卡片，是因为 `SPA_WEB` 有两张卡。调用方（发布对话框）在
- * 只有一个候选时直接锁定；多于一个时保持未选状态、由用户在第 2 步前的
- * 应用类型只读区里补齐 —— 这样既不臆测表面根，也不把用户堵死。
+ * 返回数组而非单个卡片，是因为 legacy `SPA_WEB` 仍有两张等价卡（H5/PC 表面）。
+ * 调用方（发布对话框）在只有一个候选时直接锁定；多于一个时保持未选状态、由
+ * 用户在第 2 步前的应用类型只读区里补齐 —— 这样既不臆测表面根，也不把用户堵死。
  */
 export function cardsOfAppKind(appKind: DeployAppKind | undefined): readonly DeployAppTypeCard[] {
   if (appKind === undefined) return [];

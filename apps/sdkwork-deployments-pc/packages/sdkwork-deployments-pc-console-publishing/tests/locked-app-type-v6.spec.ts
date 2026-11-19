@@ -88,20 +88,23 @@ describe("v6 应用类型反查（appKind → 卡片）", () => {
     }
   });
 
-  it("SPA_WEB 对应 h5 与 pc-web 两张卡（契约分不清表面，必须让用户指明）", () => {
+  it("legacy SPA_WEB 对应 h5 与 pc-web 两张卡（旧应用仍可选择表面）", () => {
     const spa = cardsOfAppKind("SPA_WEB");
     expect(spa.map((card) => card.id).sort()).toEqual(["h5", "pc-web"]);
-    // 两张卡的 appKind 相同（所以在只读区里切换它们**不是**改应用类型），
-    // 但表面根不同 —— 这正是必须保留这个选择的原因。
+    // 新卡片各自落 endpoint-accurate 的 H5_WEB / PC_WEB；legacy SPA_WEB 只是
+    // 旧应用的反查兼容，不再作为新建应用的 kind。
+    const kinds = new Set(spa.map((card) => appKindOfCard(card.id)));
+    expect(kinds).toEqual(new Set(["H5_WEB", "PC_WEB"]));
     const surfaces = new Set(spa.map((card) => card.surface));
     expect(surfaces.size).toBe(2);
   });
 
   it("未识别 / 缺省的 appKind 反查为空，而不是猜一张卡", () => {
     expect(cardsOfAppKind(undefined)).toEqual([]);
-    // DOUYIN_MINIPROGRAM 在契约里存在，但发布器的 9 张卡里没有对应卡片：
-    // 猜测一张会把抖音小程序发到微信小程序的表面根上。
-    expect(cardsOfAppKind("DOUYIN_MINIPROGRAM")).toEqual([]);
+    // 抖音小程序已有独立卡片，必须反查得到，不能落到微信表面根。
+    expect(cardsOfAppKind("DOUYIN_MINIPROGRAM").map((card) => card.id))
+      .toContain("douyin-mini-program");
+    expect(cardsOfAppKind("WATCHOS_APP" as DeployAppKind)).toEqual([]);
   });
 });
 
@@ -122,24 +125,23 @@ describe("v6 只读类型区不提供写入路径", () => {
     expect(html).not.toContain("role=\"radio\"");
   });
 
-  it("SPA_WEB 渲染两张等价卡（表面选择），但都不改 appKind", () => {
+  it("legacy SPA_WEB 渲染两张等价卡（表面选择），但都不改 appKind", () => {
     const html = renderLocked("SPA_WEB", "h5");
     // 两张卡都在，供用户指明表面。
     expect(html).toContain(zh("typeH5"));
     expect(html).toContain(zh("typePcWeb"));
     expect(html).toContain(zh("appTypeLockedAmbiguous"));
     // 表面选择是 radiogroup 的 radio（两张等价卡之间二选一），
-    // 但它选择的单位是卡片 id（= 表面根），不是 appKind。
+    // 但它选择的单位是卡片 id（= 表面根），不是 appKind 本身。
     expect(html).toContain("radiogroup");
     const spa = cardsOfAppKind("SPA_WEB");
-    for (const card of spa) {
-      expect(appKindOfCard(card.id)).toBe("SPA_WEB");
-    }
+    const kinds = new Set(spa.map((card) => appKindOfCard(card.id)));
+    expect(kinds).toEqual(new Set(["H5_WEB", "PC_WEB"]));
   });
 
   it("未识别的 appKind 展示原始枚举并提示重建，且不渲染卡片", () => {
-    const html = renderLocked("DOUYIN_MINIPROGRAM");
-    expect(html).toContain("DOUYIN_MINIPROGRAM");
+    const html = renderLocked("WATCHOS_APP" as DeployAppKind);
+    expect(html).toContain("WATCHOS_APP");
     expect(html).toContain(zh("appTypeLockedUnknown"));
     expect(html).not.toContain("<button");
   });

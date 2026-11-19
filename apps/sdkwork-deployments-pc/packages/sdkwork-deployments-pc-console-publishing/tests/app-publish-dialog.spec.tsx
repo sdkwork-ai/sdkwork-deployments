@@ -179,7 +179,7 @@ describe("AppPublishDialog refusals", () => {
   });
 
   it("refuses when the kind maps to no publishable surface at all", async () => {
-    const harness = await mount({ appKind: "DOUYIN_MINIPROGRAM", packages: [PACKAGE] });
+    const harness = await mount({ appKind: "WATCHOS_APP" as never, packages: [PACKAGE] });
 
     expect(harness.container.textContent).toContain("no publishable surface is registered for its kind");
     expect(button(harness.container, "Publish")?.disabled).toBe(true);
