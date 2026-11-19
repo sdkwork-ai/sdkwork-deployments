@@ -21,11 +21,53 @@
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
-use sdkwork_deploy_contract::DeployAppApi;
-use sdkwork_routes_deploy_app_api::{app_route_manifest, build_router_with_shared_app_api};
+use sdkwork_deploy_contract::{
+    DeployAppApi, DeployDownloadsReadApi, DeployServiceError, DeployServiceResult,
+    DownloadArtifactTarget, DownloadFeedDocument, DownloadUpdateConfigDocument,
+    PublicDownloadArtifactQuery, PublicDownloadCatalogDocument, PublicDownloadCatalogQuery,
+    PublicDownloadFeedQuery, PublicDownloadUpdateQuery,
+};
+use sdkwork_routes_deploy_app_api::{
+    app_route_manifest, build_downloads_public_router, build_router_with_shared_app_api,
+};
 use sdkwork_web_core::HttpMethod;
 use std::sync::Arc;
 use tower::util::ServiceExt;
+
+/// The public download surface is merged by the assembly; the manifest probe
+/// must mount it too or it reports a false 404 for the dependency routes.
+struct StubDownloads;
+
+#[async_trait]
+impl DeployDownloadsReadApi for StubDownloads {
+    async fn public_download_catalog(
+        &self,
+        _query: &PublicDownloadCatalogQuery,
+    ) -> DeployServiceResult<PublicDownloadCatalogDocument> {
+        Err(DeployServiceError::Internal("download stub".to_owned()))
+    }
+
+    async fn public_download_update_config(
+        &self,
+        _query: &PublicDownloadUpdateQuery,
+    ) -> DeployServiceResult<DownloadUpdateConfigDocument> {
+        Err(DeployServiceError::Internal("download stub".to_owned()))
+    }
+
+    async fn public_download_feed(
+        &self,
+        _query: &PublicDownloadFeedQuery,
+    ) -> DeployServiceResult<DownloadFeedDocument> {
+        Err(DeployServiceError::Internal("download stub".to_owned()))
+    }
+
+    async fn public_download_artifact(
+        &self,
+        _query: &PublicDownloadArtifactQuery,
+    ) -> DeployServiceResult<DownloadArtifactTarget> {
+        Err(DeployServiceError::Internal("download stub".to_owned()))
+    }
+}
 
 fn http_method(method: HttpMethod) -> Method {
     match method {
@@ -53,7 +95,8 @@ fn concrete_path(path: &str) -> String {
 }
 
 async fn probe(method: Method, path: &str) -> StatusCode {
-    let router = build_router_with_shared_app_api(Arc::new(StubAppApi));
+    let router = build_router_with_shared_app_api(Arc::new(StubAppApi))
+        .merge(build_downloads_public_router(Arc::new(StubDownloads)));
     let request = Request::builder()
         .method(method)
         .uri(path)
