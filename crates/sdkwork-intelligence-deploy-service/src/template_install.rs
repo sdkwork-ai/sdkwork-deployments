@@ -160,6 +160,7 @@ impl DeployService {
                 "template": {
                     "uuid": template.id,
                     "versionUuid": template.latest_version_uuid,
+                    "orderId": paid_order_id,
                 }
             })),
             default_environment: Some(source_app.default_environment.clone()),
