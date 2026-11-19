@@ -402,6 +402,8 @@ describe("DEPLOY_APP_TYPE_OPTIONS", () => {
   });
 
   it("reaches every app kind the deployment contract supports", () => {
+    // SPA_WEB is a legacy publishable kind (existing rows still deploy); new
+    // apps are created as H5_WEB or PC_WEB, so it has no create option.
     const kinds = [
       "STATIC_WEB",
       "H5_WEB",
