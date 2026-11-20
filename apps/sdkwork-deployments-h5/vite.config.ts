@@ -21,6 +21,10 @@ export default defineConfig(({ mode }) => {
     // One React instance, whichever repo a module is authored in — same dedupe
     // list `apps/sdkwork-deployments-pc/vite.config.ts` carries.
     resolve: {
+      // Workspace SDKs are consumed as TypeScript sources; a stale gitignored
+      // `tsc` artifact under `generated/server-openapi/src` must not shadow the
+      // regenerated source.
+      extensions: [".mts", ".ts", ".tsx", ".mjs", ".js", ".jsx", ".json"],
       dedupe: ["react", "react-dom", "react-router", "react-router-dom"],
     },
     server: { port: 5182, strictPort: false },

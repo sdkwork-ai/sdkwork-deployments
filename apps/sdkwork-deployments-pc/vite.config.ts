@@ -33,6 +33,11 @@ export default defineConfig(({ mode }) => {
     // The list is the same one `apps/sdkwork-webserver-pc/vite.config.ts` carries,
     // which is the closest sibling: same workspace-link shape, same framework.
     resolve: {
+      // Workspace SDKs are consumed as TypeScript sources through
+      // `package.json#exports`. Vite's default order tries `.js` before `.ts`,
+      // so a gitignored `tsc` artifact left inside `generated/server-openapi/src`
+      // would shadow the regenerated source. TypeScript is the authority.
+      extensions: [".mts", ".ts", ".tsx", ".mjs", ".js", ".jsx", ".json"],
       dedupe: ["react", "react-dom", "react-router", "react-router-dom"],
     },
     server: { port: 5181, strictPort: false },

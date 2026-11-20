@@ -1,5 +1,5 @@
 /**
- * Console service layer for the app template marketplace.
+ * Console service layer for the app scaffold marketplace.
  *
  * Two injected clients arrive from the host (clients-as-props, same contract as
  * the publishing package): the deploy app client reads the module-owned catalog
@@ -13,15 +13,15 @@ import { uuid } from "@sdkwork/utils/id";
 import type {
   AppTemplateOrderCreateResult,
   AppTemplateOrderSummary,
-  AppTemplateResponse,
-  AppTemplateSummaryResponse,
-  AppTemplateVersionResponse,
+  ApplicationScaffoldResponse,
+  ApplicationScaffoldSummaryResponse,
+  ApplicationScaffoldVersionResponse,
   SdkworkDeployAppClient,
   SdkworkOrderAppClient,
-  TemplateCategoryResponse,
+  ScaffoldCategoryResponse,
 } from "@sdkwork/deployments-pc-console-core/sdk";
 
-export type TemplateType = "APP" | "PPT" | "VIDEO";
+export type ScaffoldType = "APP" | "PPT" | "VIDEO";
 
 /** Order-center statuses that mean the buyer already owns the listing. */
 const SETTLED_ORDER_STATUSES: ReadonlySet<string> = new Set([
@@ -42,7 +42,7 @@ export interface MarketplaceBrowseParams {
   readonly categoryUuid?: string | undefined;
   readonly keyword?: string | undefined;
   readonly pricingModel?: "FREE" | "PAID" | undefined;
-  readonly templateType?: TemplateType | undefined;
+  readonly templateType?: ScaffoldType | undefined;
   readonly sort?: "NEWEST" | "POPULAR" | undefined;
 }
 
@@ -60,12 +60,12 @@ function omitBlank<T extends object>(value: T): T {
 
 export function createMarketplaceService(deployClient: SdkworkDeployAppClient, orderClient: SdkworkOrderAppClient) {
   return {
-    async listCategories(): Promise<readonly TemplateCategoryResponse[]> {
-      const page = await deployClient.template.templateCategories.list({ includeDisabled: false });
+    async listCategories(): Promise<readonly ScaffoldCategoryResponse[]> {
+      const page = await deployClient.app.scaffolds.categories.list({ includeDisabled: false });
       return page.items;
     },
-    async browse(params: MarketplaceBrowseParams): Promise<MarketplacePage<AppTemplateSummaryResponse>> {
-      const page = await deployClient.template.marketplaceTemplates.list(
+    async browse(params: MarketplaceBrowseParams): Promise<MarketplacePage<ApplicationScaffoldSummaryResponse>> {
+      const page = await deployClient.app.marketplace.scaffolds.list(
         omitBlank({
           page: params.page,
           pageSize: params.pageSize,
@@ -82,8 +82,8 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient, o
         hasMore: page.pageInfo.hasMore ?? false,
       };
     },
-    async retrieve(templateUuid: string): Promise<AppTemplateResponse> {
-      return deployClient.template.marketplaceTemplates.retrieve(templateUuid);
+    async retrieve(templateUuid: string): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.marketplace.scaffolds.retrieve(templateUuid);
     },
     /**
      * Starts (or reuses) the order-center purchase of one listing.
@@ -101,7 +101,7 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient, o
         { idempotencyKey: uuid() },
       );
     },
-    /** The caller's app-template orders; the order center's `paid` is the install entitlement. */
+    /** The caller's app-scaffold orders; the order center's `paid` is the install entitlement. */
     async myPurchases(page: number, pageSize: number): Promise<MarketplacePage<AppTemplateOrderSummary>> {
       const result = await orderClient.orderAppTemplates.appTemplateOrders.list({ page, pageSize });
       return {
@@ -119,7 +119,7 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient, o
      * failed install without explanation.
      */
     async install(templateUuid: string, name?: string, orderId?: string): Promise<{ appId: string; appName: string }> {
-      const result = await deployClient.template.marketplaceTemplates.install(
+      const result = await deployClient.app.marketplace.scaffolds.install(
         templateUuid,
         name?.trim() || orderId?.trim()
           ? {
@@ -136,9 +136,9 @@ export function createMarketplaceService(deployClient: SdkworkDeployAppClient, o
 
 export type MarketplaceService = ReturnType<typeof createMarketplaceService>;
 
-export interface CreateTemplateDraft {
+export interface CreateScaffoldDraft {
   readonly appUuid: string;
-  readonly templateType: TemplateType;
+  readonly templateType: ScaffoldType;
   readonly categoryUuid: string;
   readonly templateKey: string;
   readonly displayName: string;
@@ -151,7 +151,7 @@ export interface CreateTemplateDraft {
   readonly initialVersion?: string | undefined;
 }
 
-export interface CreateTemplateVersionDraft {
+export interface CreateScaffoldVersionDraft {
   readonly version: string;
   readonly changelog?: string | undefined;
   readonly artifactUuid?: string | undefined;
@@ -177,10 +177,10 @@ export interface UpdateTemplateDraft {
   readonly currency?: string | undefined;
 }
 
-export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
+export function createMyScaffoldsService(deployClient: SdkworkDeployAppClient) {
   return {
-    async list(page: number, pageSize: number, keyword?: string | undefined): Promise<MarketplacePage<AppTemplateResponse>> {
-      const result = await deployClient.template.appTemplates.list(
+    async list(page: number, pageSize: number, keyword?: string | undefined): Promise<MarketplacePage<ApplicationScaffoldResponse>> {
+      const result = await deployClient.app.scaffolds.list(
         omitBlank({ page, pageSize, ...(keyword === undefined || keyword.trim() === "" ? {} : { keyword: keyword.trim() }) }),
       );
       return {
@@ -193,8 +193,8 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
       const page = await deployClient.app.list({ page: 1, pageSize: 100 });
       return page.items.map((app) => ({ id: app.id, name: app.name }));
     },
-    async create(draft: CreateTemplateDraft): Promise<AppTemplateResponse> {
-      return deployClient.template.appTemplates.create(
+    async create(draft: CreateScaffoldDraft): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.scaffolds.create(
         {
           appUuid: draft.appUuid,
           templateType: draft.templateType,
@@ -217,14 +217,14 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
       );
     },
     remove(templateUuid: string): Promise<void> {
-      return deployClient.template.appTemplates.delete(templateUuid);
+      return deployClient.app.scaffolds.delete(templateUuid);
     },
-    retrieve(templateUuid: string): Promise<AppTemplateResponse> {
-      return deployClient.template.appTemplates.retrieve(templateUuid);
+    retrieve(templateUuid: string): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.scaffolds.retrieve(templateUuid);
     },
     /** Patches a listing; the API keeps every omitted field at its stored value. */
-    update(templateUuid: string, draft: UpdateTemplateDraft): Promise<AppTemplateResponse> {
-      return deployClient.template.appTemplates.update(
+    update(templateUuid: string, draft: UpdateTemplateDraft): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.scaffolds.update(
         templateUuid,
         omitBlank({
           ...(draft.displayName === undefined ? {} : { displayName: draft.displayName.trim() }),
@@ -239,15 +239,15 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
         { idempotencyKey: uuid() },
       );
     },
-    submit(templateUuid: string): Promise<AppTemplateResponse> {
-      return deployClient.template.appTemplates.submit(templateUuid);
+    submit(templateUuid: string): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.scaffolds.submit(templateUuid);
     },
-    async listVersions(templateUuid: string): Promise<readonly AppTemplateVersionResponse[]> {
-      const page = await deployClient.template.appTemplateVersions.list(templateUuid, { page: 1, pageSize: 100 });
+    async listVersions(templateUuid: string): Promise<readonly ApplicationScaffoldVersionResponse[]> {
+      const page = await deployClient.app.scaffolds.versions.list(templateUuid, { page: 1, pageSize: 100 });
       return page.items;
     },
-    async createVersion(templateUuid: string, draft: CreateTemplateVersionDraft): Promise<AppTemplateVersionResponse> {
-      return deployClient.template.appTemplateVersions.create(
+    async createVersion(templateUuid: string, draft: CreateScaffoldVersionDraft): Promise<ApplicationScaffoldVersionResponse> {
+      return deployClient.app.scaffolds.versions.create(
         templateUuid,
         {
           version: draft.version.trim(),
@@ -264,4 +264,4 @@ export function createMyTemplatesService(deployClient: SdkworkDeployAppClient) {
   };
 }
 
-export type MyTemplatesService = ReturnType<typeof createMyTemplatesService>;
+export type MyScaffoldsService = ReturnType<typeof createMyScaffoldsService>;

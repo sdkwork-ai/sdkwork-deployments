@@ -6,12 +6,12 @@ use axum::{
 };
 use sdkwork_deploy_contract::{
     AuditLogQuery, ChallengeResultRequest, CreateAcmeAccountRequest, CreateNginxConfigRequest,
-    CreateNodeClusterRequest, CreateServerRequest, CreateTemplateCategoryRequest, DeployBackendApi,
+    CreateNodeClusterRequest, CreateScaffoldCategoryRequest, CreateServerRequest, DeployBackendApi,
     DeployBackendRequestContext, FailCertificateOrderRequest, IngestUsageEventsRequest,
-    ListAppTemplatesAdminQuery, ListAppsAdminQuery, ListNginxConfigsQuery,
+    ListApplicationScaffoldsAdminQuery, ListAppsAdminQuery, ListNginxConfigsQuery,
     RequestCertificateOrderRequest, RetentionRunRequest, StoreCertificateVersionRequest,
-    UpdateAppTemplateAdminRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
-    UpdateServerRequest, UpdateTemplateCategoryRequest, UsageReconciliationRequest,
+    UpdateApplicationScaffoldAdminRequest, UpdateNginxConfigRequest, UpdateNodeClusterRequest,
+    UpdateScaffoldCategoryRequest, UpdateServerRequest, UsageReconciliationRequest,
 };
 use sdkwork_routes_deploy_common::{
     app_kind_filter, envelope, finish_api_json, finish_created_api_json, finish_no_content,
@@ -95,29 +95,29 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> R
             get(list_source_events).post(ingest_source_event),
         )
         .route(
-            paths::TEMPLATE_CATEGORIES,
-            get(list_template_categories).post(create_template_category),
+            paths::SCAFFOLD_CATEGORIES,
+            get(list_scaffold_categories).post(create_scaffold_category),
         )
         .route(
-            paths::TEMPLATE_CATEGORY,
-            get(retrieve_template_category)
-                .patch(update_template_category)
-                .delete(delete_template_category),
+            paths::SCAFFOLD_CATEGORY,
+            get(retrieve_scaffold_category)
+                .patch(update_scaffold_category)
+                .delete(delete_scaffold_category),
         )
-        .route(paths::APP_TEMPLATES, get(list_app_templates_admin))
+        .route(paths::SCAFFOLDS, get(list_application_scaffolds_admin))
         .route(
-            paths::APP_TEMPLATE,
-            get(retrieve_app_template_admin)
-                .patch(update_app_template_admin)
-                .delete(delete_app_template_admin),
-        )
-        .route(
-            paths::APP_TEMPLATE_VERSIONS,
-            get(list_app_template_versions_admin),
+            paths::SCAFFOLD,
+            get(retrieve_application_scaffold_admin)
+                .patch(update_application_scaffold_admin)
+                .delete(delete_application_scaffold_admin),
         )
         .route(
-            paths::APP_TEMPLATE_VERSION,
-            get(retrieve_app_template_version_admin),
+            paths::SCAFFOLD_VERSIONS,
+            get(list_application_scaffold_versions_admin),
+        )
+        .route(
+            paths::SCAFFOLD_VERSION,
+            get(retrieve_application_scaffold_version_admin),
         )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
@@ -899,9 +899,9 @@ async fn list_source_events(
     )
 }
 
-// -- app template marketplace (admin) -------------------------------------------
+// -- app scaffold marketplace (admin) -------------------------------------------
 
-async fn list_template_categories(
+async fn list_scaffold_categories(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
@@ -913,24 +913,24 @@ async fn list_template_categories(
             let context = require_backend_context(context)?;
             let page = state
                 .api
-                .list_template_categories(
+                .list_scaffold_categories(
                     &context,
                     query.include_disabled.unwrap_or(false),
                     query.page,
                     query.page_size,
                 )
                 .await?;
-            ok_json(envelope::template_category_page(page))
+            ok_json(envelope::scaffold_category_page(page))
         }
         .await,
     )
 }
 
-async fn create_template_category(
+async fn create_scaffold_category(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Json(request): Json<CreateTemplateCategoryRequest>,
+    Json(request): Json<CreateScaffoldCategoryRequest>,
 ) -> Response {
     finish_created_api_json(
         &ctx,
@@ -938,7 +938,7 @@ async fn create_template_category(
             let context = require_backend_context(context)?;
             let item = state
                 .api
-                .create_template_category(&context, &request)
+                .create_scaffold_category(&context, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -946,7 +946,7 @@ async fn create_template_category(
     )
 }
 
-async fn retrieve_template_category(
+async fn retrieve_scaffold_category(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
@@ -958,7 +958,7 @@ async fn retrieve_template_category(
             let context = require_backend_context(context)?;
             let item = state
                 .api
-                .retrieve_template_category(&context, &category_uuid)
+                .retrieve_scaffold_category(&context, &category_uuid)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -966,12 +966,12 @@ async fn retrieve_template_category(
     )
 }
 
-async fn update_template_category(
+async fn update_scaffold_category(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
     Path(category_uuid): Path<String>,
-    Json(request): Json<UpdateTemplateCategoryRequest>,
+    Json(request): Json<UpdateScaffoldCategoryRequest>,
 ) -> Response {
     finish_api_json(
         &ctx,
@@ -979,7 +979,7 @@ async fn update_template_category(
             let context = require_backend_context(context)?;
             let item = state
                 .api
-                .update_template_category(&context, &category_uuid, &request)
+                .update_scaffold_category(&context, &category_uuid, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -987,7 +987,7 @@ async fn update_template_category(
     )
 }
 
-async fn delete_template_category(
+async fn delete_scaffold_category(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
@@ -1000,7 +1000,7 @@ async fn delete_template_category(
             service_result(
                 state
                     .api
-                    .delete_template_category(&context, &category_uuid)
+                    .delete_scaffold_category(&context, &category_uuid)
                     .await,
             )
         }
@@ -1008,28 +1008,31 @@ async fn delete_template_category(
     )
 }
 
-async fn list_app_templates_admin(
+async fn list_application_scaffolds_admin(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Query(query): Query<ListAppTemplatesAdminQuery>,
+    Query(query): Query<ListApplicationScaffoldsAdminQuery>,
 ) -> Response {
     finish_api_json(
         &ctx,
         async {
             let context = require_backend_context(context)?;
-            let page = state.api.list_app_templates(&context, &query).await?;
-            ok_json(envelope::app_template_page(page))
+            let page = state
+                .api
+                .list_application_scaffolds(&context, &query)
+                .await?;
+            ok_json(envelope::application_scaffold_page(page))
         }
         .await,
     )
 }
 
-async fn retrieve_app_template_admin(
+async fn retrieve_application_scaffold_admin(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Path(template_uuid): Path<String>,
+    Path(scaffold_uuid): Path<String>,
 ) -> Response {
     finish_api_json(
         &ctx,
@@ -1037,7 +1040,7 @@ async fn retrieve_app_template_admin(
             let context = require_backend_context(context)?;
             let item = state
                 .api
-                .retrieve_app_template(&context, &template_uuid)
+                .retrieve_application_scaffold(&context, &scaffold_uuid)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -1045,12 +1048,12 @@ async fn retrieve_app_template_admin(
     )
 }
 
-async fn update_app_template_admin(
+async fn update_application_scaffold_admin(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Path(template_uuid): Path<String>,
-    Json(request): Json<UpdateAppTemplateAdminRequest>,
+    Path(scaffold_uuid): Path<String>,
+    Json(request): Json<UpdateApplicationScaffoldAdminRequest>,
 ) -> Response {
     finish_api_json(
         &ctx,
@@ -1058,7 +1061,7 @@ async fn update_app_template_admin(
             let context = require_backend_context(context)?;
             let item = state
                 .api
-                .update_app_template(&context, &template_uuid, &request)
+                .update_application_scaffold(&context, &scaffold_uuid, &request)
                 .await?;
             ok_json(envelope::resource(item))
         }
@@ -1066,11 +1069,11 @@ async fn update_app_template_admin(
     )
 }
 
-async fn delete_app_template_admin(
+async fn delete_application_scaffold_admin(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Path(template_uuid): Path<String>,
+    Path(scaffold_uuid): Path<String>,
 ) -> Response {
     finish_no_content(
         &ctx,
@@ -1079,7 +1082,7 @@ async fn delete_app_template_admin(
             service_result(
                 state
                     .api
-                    .delete_app_template(&context, &template_uuid)
+                    .delete_application_scaffold(&context, &scaffold_uuid)
                     .await,
             )
         }
@@ -1087,11 +1090,11 @@ async fn delete_app_template_admin(
     )
 }
 
-async fn list_app_template_versions_admin(
+async fn list_application_scaffold_versions_admin(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Path(template_uuid): Path<String>,
+    Path(scaffold_uuid): Path<String>,
     Query(query): Query<VersionsAdminPageQuery>,
 ) -> Response {
     finish_api_json(
@@ -1100,19 +1103,24 @@ async fn list_app_template_versions_admin(
             let context = require_backend_context(context)?;
             let page = state
                 .api
-                .list_app_template_versions(&context, &template_uuid, query.page, query.page_size)
+                .list_application_scaffold_versions(
+                    &context,
+                    &scaffold_uuid,
+                    query.page,
+                    query.page_size,
+                )
                 .await?;
-            ok_json(envelope::app_template_version_page(page))
+            ok_json(envelope::application_scaffold_version_page(page))
         }
         .await,
     )
 }
 
-async fn retrieve_app_template_version_admin(
+async fn retrieve_application_scaffold_version_admin(
     ctx: WebRequestContext,
     State(state): State<BackendState>,
     context: Option<Extension<DeployBackendRequestContext>>,
-    Path((template_uuid, version_uuid)): Path<(String, String)>,
+    Path((scaffold_uuid, version_uuid)): Path<(String, String)>,
 ) -> Response {
     finish_api_json(
         &ctx,
@@ -1120,7 +1128,7 @@ async fn retrieve_app_template_version_admin(
             let context = require_backend_context(context)?;
             let item = state
                 .api
-                .retrieve_app_template_version(&context, &template_uuid, &version_uuid)
+                .retrieve_application_scaffold_version(&context, &scaffold_uuid, &version_uuid)
                 .await?;
             ok_json(envelope::resource(item))
         }

@@ -8,6 +8,7 @@ pub mod certificate_key_algorithm;
 pub mod certificate_validity;
 pub mod database_profile;
 pub mod factory_readiness;
+pub mod mini_program_projection;
 pub mod package_manifest;
 pub mod runtime_env;
 pub mod util;
@@ -64,6 +65,11 @@ pub use factory_readiness::{
     derive_factory_readiness, FactoryReadinessFacts, FactoryReadinessVerdict, FactoryStage,
     FactoryStageVerdict, READINESS_STATUS_BLOCKED, READINESS_STATUS_EXTERNAL,
     READINESS_STATUS_NOT_APPLICABLE, READINESS_STATUS_PENDING, READINESS_STATUS_READY,
+};
+pub use mini_program_projection::{
+    plan_mini_program_projection, plan_mini_program_projection_with_ceilings, project_config_json,
+    MiniProgramProjectionError, MiniProgramProjectionPlan, ProjectedEntry, ProjectionEntry,
+    DEPLOY_PACKAGE_MANIFEST, MINI_PROGRAM_APP_JSON, PROJECT_CONFIG_FILE,
 };
 pub use package_manifest::{
     canonical_manifest_sha256, validate_package_manifest, validate_sha256_hex,

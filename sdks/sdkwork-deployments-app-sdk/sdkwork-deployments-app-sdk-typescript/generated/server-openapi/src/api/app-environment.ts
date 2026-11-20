@@ -1,8 +1,46 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppEnvironmentResponse, CreateAppEnvironmentRequest, PageInfo, UpdateAppEnvironmentRequest } from '../types';
+import type { AppEnvironmentResponse, CreateAppEnvironmentRequest, EnvironmentPromotionResponse, PageInfo, PromoteEnvironmentRequest, UpdateAppEnvironmentRequest } from '../types';
 
+
+export interface AppEnvironmentAppEnvironmentPromotionsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AppEnvironmentAppEnvironmentPromotionsCreateParams {
+  idempotencyKey: string;
+}
+
+export class AppEnvironmentAppEnvironmentPromotionsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List the immutable promotion history of an environment */
+  async list(appId: string, environmentId: string, params?: AppEnvironmentAppEnvironmentPromotionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: EnvironmentPromotionResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: EnvironmentPromotionResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/environments/${serializePathParameter(environmentId, { name: 'environmentId', style: 'simple', explode: false })}/promotions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Promote a release into the environment */
+  async create(appId: string, environmentId: string, body: PromoteEnvironmentRequest, params: AppEnvironmentAppEnvironmentPromotionsCreateParams, requestOptions?: ApiRequestOptions): Promise<EnvironmentPromotionResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<EnvironmentPromotionResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/environments/${serializePathParameter(environmentId, { name: 'environmentId', style: 'simple', explode: false })}/promotions`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
 
 export interface AppEnvironmentListParams {
   page?: number;
@@ -19,9 +57,11 @@ export interface AppEnvironmentUpdateParams {
 
 export class AppEnvironmentApi {
   private client: HttpClient;
+  public readonly appEnvironmentPromotions: AppEnvironmentAppEnvironmentPromotionsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.appEnvironmentPromotions = new AppEnvironmentAppEnvironmentPromotionsApi(client);
   }
 
 

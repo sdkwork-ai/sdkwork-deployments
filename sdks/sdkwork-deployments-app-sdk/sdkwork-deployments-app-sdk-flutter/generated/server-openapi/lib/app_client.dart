@@ -15,7 +15,6 @@ import 'src/api/signing.dart';
 import 'src/api/usage.dart';
 import 'src/api/app_database.dart';
 import 'src/api/app_environment.dart';
-import 'src/api/template.dart';
 import 'src/api/downloads.dart';
 
 class SdkworkAppClient {
@@ -36,7 +35,6 @@ class SdkworkAppClient {
   late final UsageApi usage;
   late final AppDatabaseApi appDatabase;
   late final AppEnvironmentApi appEnvironment;
-  late final TemplateApi template;
   late final DownloadsApi downloads;
 
   SdkworkAppClient({
@@ -57,7 +55,6 @@ class SdkworkAppClient {
     usage = UsageApi(_httpClient);
     appDatabase = AppDatabaseApi(_httpClient);
     appEnvironment = AppEnvironmentApi(_httpClient);
-    template = TemplateApi(_httpClient);
     downloads = DownloadsApi(_httpClient);
   }
 

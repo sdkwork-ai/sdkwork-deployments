@@ -1,4 +1,4 @@
-import type { SdkworkMiniMarketplacePort, TemplateCategory, TemplateOrder, TemplateSummary } from '../../services/marketplace';
+import type { SdkworkMiniMarketplacePort, ScaffoldCategory, TemplateOrder, ScaffoldSummary } from '../../services/marketplace';
 import { paymentRequirement } from '../../services/marketplace';
 
 interface MarketplaceGlobals {
@@ -9,8 +9,8 @@ const PAGE_SIZE = 20;
 
 Page({
   data: {
-    categories: [] as TemplateCategory[],
-    items: [] as TemplateSummary[],
+    categories: [] as ScaffoldCategory[],
+    items: [] as ScaffoldSummary[],
     // A plain lookup object, not a Set: page data crosses into WXML as JSON, so
     // a Set would arrive as `{}` and every `entitledMap[item.id]` test would be
     // falsy — the acquired badge would never render.

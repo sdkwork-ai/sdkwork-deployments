@@ -12,7 +12,7 @@ class AppEnvironmentApi {
   AppEnvironmentApi(this._client);
 
   /// List the environments of an app
-  Future<AppEnvironmentsListResponse?> getAppEnvironmentsList(String appId, [int? page, int? pageSize]) async {
+  Future<AppEnvironmentsListResponse?> appEnvironmentsList(String appId, [int? page, int? pageSize]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
@@ -25,7 +25,7 @@ class AppEnvironmentApi {
   }
 
   /// Create an environment in the promotion chain
-  Future<AppEnvironmentsCreateResponse201?> createAppEnvironmentsCreate(String appId, CreateAppEnvironmentRequest body, String idempotencyKey) async {
+  Future<AppEnvironmentsCreateResponse201?> appEnvironmentsCreate(String appId, CreateAppEnvironmentRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -66,7 +66,7 @@ class AppEnvironmentApi {
   }
 
   /// List the immutable promotion history of an environment
-  Future<AppEnvironmentsListGetResponse?> getAppEnvironmentsListPromotions(String appId, String environmentId, [int? page, int? pageSize]) async {
+  Future<AppEnvironmentPromotionsListResponse?> promotionsList(String appId, String environmentId, [int? page, int? pageSize]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
@@ -74,12 +74,12 @@ class AppEnvironmentApi {
     final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/environments/${serializePathParameter(environmentId, const PathParameterSpec('environmentId', 'simple', false))}/promotions'), query));
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : AppEnvironmentsListGetResponse.fromJson(map);
+      return map == null ? null : AppEnvironmentPromotionsListResponse.fromJson(map);
     })();
   }
 
   /// Promote a release into the environment
-  Future<AppEnvironmentsCreatePostResponse201?> createAppEnvironmentsCreatePromotions(String appId, String environmentId, PromoteEnvironmentRequest body, String idempotencyKey) async {
+  Future<AppEnvironmentPromotionsCreateResponse201?> promotionsCreate(String appId, String environmentId, PromoteEnvironmentRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
@@ -90,7 +90,7 @@ class AppEnvironmentApi {
     final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/environments/${serializePathParameter(environmentId, const PathParameterSpec('environmentId', 'simple', false))}/promotions'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : AppEnvironmentsCreatePostResponse201.fromJson(map);
+      return map == null ? null : AppEnvironmentPromotionsCreateResponse201.fromJson(map);
     })();
   }
 }

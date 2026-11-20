@@ -225,11 +225,11 @@ function resourceIcon(resource: DeploymentsResourceKey): ReactNode {
     sourceSpecs: Layers,
     // Template catalog family: the taxonomy, the moderated listings, the
     // per-listing version history, the storefront, and the author workbench.
-    templateCategories: ListTree,
-    appTemplates: Shapes,
-    appTemplateVersions: Boxes,
+    scaffoldCategories: ListTree,
+    scaffolds: Shapes,
+    scaffoldVersions: Boxes,
     marketplace: Store,
-    myTemplates: PackageOpen,
+    myScaffolds: PackageOpen,
     downloadCatalog: Download,
   } satisfies Record<DeploymentsResourceKey, typeof AppWindow>;
   const Icon = icons[resource];

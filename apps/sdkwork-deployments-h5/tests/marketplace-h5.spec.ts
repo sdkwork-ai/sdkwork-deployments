@@ -22,14 +22,14 @@ describe("h5 marketplace i18n", () => {
     const samples: DeploymentsH5MessageKey[] = [
       "app.title",
       "tab.marketplace",
-      "tab.myTemplates",
+      "tab.myScaffolds",
       "marketplace.acquire",
       "marketplace.acquirePaid",
       "marketplace.acquired",
       "marketplace.openCashier",
       "marketplace.versions",
       "marketplace.versions.empty",
-      "myTemplates.submit",
+      "myScaffolds.submit",
       "common.retry",
     ];
     for (const key of samples) {
@@ -82,12 +82,16 @@ describe("h5 marketplace service", () => {
     });
     let browseArgs: unknown;
     const deploy = {
-      template: {
-        templateCategories: { list: async () => ({ items: [], pageInfo: { totalItems: "0", hasMore: false } }) },
-        marketplaceTemplates: {
-          list: async (params?: unknown, options?: unknown) => {
-            browseArgs = params;
-            return marketplaceList(params, options);
+      app: {
+        scaffolds: {
+          categories: { list: async () => ({ items: [], pageInfo: { totalItems: "0", hasMore: false } }) },
+        },
+        marketplace: {
+          scaffolds: {
+            list: async (params?: unknown, options?: unknown) => {
+              browseArgs = params;
+              return marketplaceList(params, options);
+            },
           },
         },
       },
@@ -121,28 +125,30 @@ describe("h5 marketplace version and acquisition reads", () => {
     let acquireArgs: unknown[] | undefined;
     let versionArgs: unknown[] | undefined;
     const deploy = {
-      template: {
-        appTemplateVersions: {
-          list: async (...args: unknown[]) => {
-            versionArgs = args;
-            return {
-              items: [
-                {
-                  id: "v-2",
-                  templateUuid: "tmpl-1",
-                  templateVersion: "1.2.0",
-                  changelog: "",
-                  platformTargets: [],
-                  packageSizeBytes: "0",
-                  status: "PUBLISHED",
-                  publishedAt: "2026-10-01T00:00:00Z",
-                  createdAt: "2026-10-01T00:00:00Z",
-                  updatedAt: "2026-10-01T00:00:00Z",
-                  version: "1",
-                },
-              ],
-              pageInfo: { totalItems: "1", hasMore: false },
-            };
+      app: {
+        scaffolds: {
+          versions: {
+            list: async (...args: unknown[]) => {
+              versionArgs = args;
+              return {
+                items: [
+                  {
+                    id: "v-2",
+                    scaffoldUuid: "tmpl-1",
+                    templateVersion: "1.2.0",
+                    changelog: "",
+                    platformTargets: [],
+                    packageSizeBytes: "0",
+                    status: "PUBLISHED",
+                    publishedAt: "2026-10-01T00:00:00Z",
+                    createdAt: "2026-10-01T00:00:00Z",
+                    updatedAt: "2026-10-01T00:00:00Z",
+                    version: "1",
+                  },
+                ],
+                pageInfo: { totalItems: "1", hasMore: false },
+              };
+            },
           },
         },
       },

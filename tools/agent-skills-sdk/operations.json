@@ -48,19 +48,33 @@
     "path": "/app/v3/api/apps/{appId}/database_profiles/{profileId}",
     "summary": "Update a database structure contract"
   },
+  "app:appEnvironmentPromotions.create": {
+    "api": "app",
+    "operationId": "appEnvironmentPromotions.create",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
+    "summary": "Promote a release into the environment"
+  },
+  "app:appEnvironmentPromotions.list": {
+    "api": "app",
+    "operationId": "appEnvironmentPromotions.list",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
+    "summary": "List the immutable promotion history of an environment"
+  },
   "app:appEnvironments.create": {
     "api": "app",
     "operationId": "appEnvironments.create",
     "method": "POST",
-    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
-    "summary": "Promote a release into the environment"
+    "path": "/app/v3/api/apps/{appId}/environments",
+    "summary": "Create an environment in the promotion chain"
   },
   "app:appEnvironments.list": {
     "api": "app",
     "operationId": "appEnvironments.list",
     "method": "GET",
-    "path": "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
-    "summary": "List the immutable promotion history of an environment"
+    "path": "/app/v3/api/apps/{appId}/environments",
+    "summary": "List the environments of an app"
   },
   "app:appEnvironments.retrieve": {
     "api": "app",
@@ -146,6 +160,13 @@
     "path": "/app/v3/api/apps/{appId}/pause",
     "summary": "暂停应用"
   },
+  "app:apps.readiness.retrieve": {
+    "api": "app",
+    "operationId": "apps.readiness.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/apps/{appId}/readiness",
+    "summary": "Derived application factory readiness"
+  },
   "app:apps.remix.retrieve": {
     "api": "app",
     "operationId": "apps.remix.retrieve",
@@ -216,13 +237,6 @@
     "path": "/app/v3/api/apps/{appId}/source/validate",
     "summary": "Validate the application's Git source repository"
   },
-  "app:apps.sourceSpecs.source.update": {
-    "api": "app",
-    "operationId": "apps.sourceSpecs.source.update",
-    "method": "PUT",
-    "path": "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
-    "summary": "Register the uploaded source behind a spec"
-  },
   "app:apps.sourceSpecs.create": {
     "api": "app",
     "operationId": "apps.sourceSpecs.create",
@@ -251,6 +265,13 @@
     "path": "/app/v3/api/apps/{appId}/source_specs/{specId}",
     "summary": "Retrieve a source spec"
   },
+  "app:apps.sourceSpecs.source.update": {
+    "api": "app",
+    "operationId": "apps.sourceSpecs.source.update",
+    "method": "PUT",
+    "path": "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
+    "summary": "Register the uploaded source behind a spec"
+  },
   "app:apps.sourceSpecs.update": {
     "api": "app",
     "operationId": "apps.sourceSpecs.update",
@@ -258,68 +279,19 @@
     "path": "/app/v3/api/apps/{appId}/source_specs/{specId}",
     "summary": "Update a source spec"
   },
+  "app:apps.uninstall": {
+    "api": "app",
+    "operationId": "apps.uninstall",
+    "method": "POST",
+    "path": "/app/v3/api/apps/{appId}/uninstall",
+    "summary": "Forward-only application uninstall"
+  },
   "app:apps.update": {
     "api": "app",
     "operationId": "apps.update",
     "method": "PATCH",
     "path": "/app/v3/api/apps/{appId}",
     "summary": "Update a tenant app"
-  },
-  "app:appTemplates.create": {
-    "api": "app",
-    "operationId": "appTemplates.create",
-    "method": "POST",
-    "path": "/app/v3/api/app_templates",
-    "summary": "Publish an app as a template listing"
-  },
-  "app:appTemplates.delete": {
-    "api": "app",
-    "operationId": "appTemplates.delete",
-    "method": "DELETE",
-    "path": "/app/v3/api/app_templates/{templateUuid}",
-    "summary": "Withdraw the caller's app template"
-  },
-  "app:appTemplates.list": {
-    "api": "app",
-    "operationId": "appTemplates.list",
-    "method": "GET",
-    "path": "/app/v3/api/app_templates",
-    "summary": "List the caller's app templates"
-  },
-  "app:appTemplates.retrieve": {
-    "api": "app",
-    "operationId": "appTemplates.retrieve",
-    "method": "GET",
-    "path": "/app/v3/api/app_templates/{templateUuid}",
-    "summary": "Retrieve the caller's app template"
-  },
-  "app:appTemplates.submit": {
-    "api": "app",
-    "operationId": "appTemplates.submit",
-    "method": "POST",
-    "path": "/app/v3/api/app_templates/{templateUuid}/submit",
-    "summary": "Submit an app template for review"
-  },
-  "app:appTemplates.update": {
-    "api": "app",
-    "operationId": "appTemplates.update",
-    "method": "PATCH",
-    "path": "/app/v3/api/app_templates/{templateUuid}",
-    "summary": "Update the caller's app template listing"
-  },
-  "app:appTemplateVersions.create": {
-    "api": "app",
-    "operationId": "appTemplateVersions.create",
-    "method": "POST",
-    "path": "/app/v3/api/app_templates/{templateUuid}/versions",
-    "summary": "Add a version to the caller's app template"
-  },
-  "app:appTemplateVersions.list": {
-    "api": "app",
-    "operationId": "appTemplateVersions.list",
-    "method": "GET",
-    "path": "/app/v3/api/app_templates/{templateUuid}/versions",
-    "summary": "List versions of the caller's app template"
   },
   "app:artifacts.create": {
     "api": "app",
@@ -563,7 +535,7 @@
     "api": "app",
     "operationId": "domainZones.hostnameClaims.ensure",
     "method": "POST",
-    "path": "/app/v3/api/domain_zones/{zoneId}/hostname_claims",
+    "path": "/app/v3/api/domain_zones/{zoneId}/hostname_claims/ensure",
     "summary": "Ensure ownership of a set of hostnames"
   },
   "app:domainZones.hostnames.create": {
@@ -664,9 +636,9 @@
     "path": "/app/v3/api/downloads/artifact/{itemUuid}",
     "summary": "Stable redirect to the installer's current download location"
   },
-  "app:downloadCatalog.publicRetrieve": {
+  "app:downloadCatalog.public.retrieve": {
     "api": "app",
-    "operationId": "downloadCatalog.publicRetrieve",
+    "operationId": "downloadCatalog.public.retrieve",
     "method": "GET",
     "path": "/app/v3/api/downloads/catalog/{catalogKey}",
     "summary": "Published download catalog rendered by the download page"
@@ -685,19 +657,26 @@
     "path": "/app/v3/api/downloads/feed/{productKey}/{platform}/{architecture}/{channelFile}",
     "summary": "electron-updater channel file generated from the published release"
   },
-  "app:marketplaceTemplates.list": {
+  "app:marketplace.scaffolds.install": {
     "api": "app",
-    "operationId": "marketplaceTemplates.list",
-    "method": "GET",
-    "path": "/app/v3/api/marketplace/templates",
-    "summary": "Browse the tenant app template marketplace"
+    "operationId": "marketplace.scaffolds.install",
+    "method": "POST",
+    "path": "/app/v3/api/marketplace/scaffolds/{scaffoldUuid}/install",
+    "summary": "Install a free, Git-backed template as a new application"
   },
-  "app:marketplaceTemplates.retrieve": {
+  "app:marketplace.scaffolds.list": {
     "api": "app",
-    "operationId": "marketplaceTemplates.retrieve",
+    "operationId": "marketplace.scaffolds.list",
     "method": "GET",
-    "path": "/app/v3/api/marketplace/templates/{templateUuid}",
-    "summary": "Retrieve a marketplace app template"
+    "path": "/app/v3/api/marketplace/scaffolds",
+    "summary": "Browse the tenant application scaffold marketplace"
+  },
+  "app:marketplace.scaffolds.retrieve": {
+    "api": "app",
+    "operationId": "marketplace.scaffolds.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/marketplace/scaffolds/{scaffoldUuid}",
+    "summary": "Retrieve a marketplace application scaffold"
   },
   "app:packages.create": {
     "api": "app",
@@ -762,6 +741,69 @@
     "path": "/app/v3/api/apps/{appId}/releases/{releaseId}",
     "summary": "Retrieve an app release"
   },
+  "app:scaffolds.categories.list": {
+    "api": "app",
+    "operationId": "scaffolds.categories.list",
+    "method": "GET",
+    "path": "/app/v3/api/scaffold_categories",
+    "summary": "List template categories"
+  },
+  "app:scaffolds.create": {
+    "api": "app",
+    "operationId": "scaffolds.create",
+    "method": "POST",
+    "path": "/app/v3/api/scaffolds",
+    "summary": "Publish an application as a scaffold listing"
+  },
+  "app:scaffolds.delete": {
+    "api": "app",
+    "operationId": "scaffolds.delete",
+    "method": "DELETE",
+    "path": "/app/v3/api/scaffolds/{scaffoldUuid}",
+    "summary": "Withdraw the caller's application scaffold"
+  },
+  "app:scaffolds.list": {
+    "api": "app",
+    "operationId": "scaffolds.list",
+    "method": "GET",
+    "path": "/app/v3/api/scaffolds",
+    "summary": "List the caller's application scaffolds"
+  },
+  "app:scaffolds.retrieve": {
+    "api": "app",
+    "operationId": "scaffolds.retrieve",
+    "method": "GET",
+    "path": "/app/v3/api/scaffolds/{scaffoldUuid}",
+    "summary": "Retrieve the caller's application scaffold"
+  },
+  "app:scaffolds.submit": {
+    "api": "app",
+    "operationId": "scaffolds.submit",
+    "method": "POST",
+    "path": "/app/v3/api/scaffolds/{scaffoldUuid}/submit",
+    "summary": "Submit an application scaffold for review"
+  },
+  "app:scaffolds.update": {
+    "api": "app",
+    "operationId": "scaffolds.update",
+    "method": "PATCH",
+    "path": "/app/v3/api/scaffolds/{scaffoldUuid}",
+    "summary": "Update the caller's application scaffold listing"
+  },
+  "app:scaffolds.versions.create": {
+    "api": "app",
+    "operationId": "scaffolds.versions.create",
+    "method": "POST",
+    "path": "/app/v3/api/scaffolds/{scaffoldUuid}/versions",
+    "summary": "Add a version to the caller's application scaffold"
+  },
+  "app:scaffolds.versions.list": {
+    "api": "app",
+    "operationId": "scaffolds.versions.list",
+    "method": "GET",
+    "path": "/app/v3/api/scaffolds/{scaffoldUuid}/versions",
+    "summary": "List versions of the caller's application scaffold"
+  },
   "app:signingIdentities.create": {
     "api": "app",
     "operationId": "signingIdentities.create",
@@ -804,13 +846,6 @@
     "path": "/app/v3/api/apps/{appId}/source_repositories/{sourceRepositoryId}",
     "summary": "Retrieve a source repository"
   },
-  "app:templateCategories.list": {
-    "api": "app",
-    "operationId": "templateCategories.list",
-    "method": "GET",
-    "path": "/app/v3/api/template_categories",
-    "summary": "List template categories"
-  },
   "app:uploadSessions.cancel": {
     "api": "app",
     "operationId": "uploadSessions.cancel",
@@ -846,6 +881,13 @@
     "path": "/app/v3/api/usage_events",
     "summary": "List tenant usage metering events"
   },
+  "backend:apps.factoryReconciliation.list": {
+    "api": "backend",
+    "operationId": "apps.factoryReconciliation.list",
+    "method": "GET",
+    "path": "/backend/v3/api/apps/factory_reconciliation",
+    "summary": "工厂跨模块引用对账"
+  },
   "backend:apps.identityProvision": {
     "api": "backend",
     "operationId": "apps.identityProvision",
@@ -853,47 +895,12 @@
     "path": "/backend/v3/api/apps/{appId}/identity_provision",
     "summary": "重试应用身份开通"
   },
-  "backend:appTemplates.delete": {
+  "backend:apps.list": {
     "api": "backend",
-    "operationId": "appTemplates.delete",
-    "method": "DELETE",
-    "path": "/backend/v3/api/app_templates/{templateUuid}",
-    "summary": "删除应用模板"
-  },
-  "backend:appTemplates.list": {
-    "api": "backend",
-    "operationId": "appTemplates.list",
+    "operationId": "apps.list",
     "method": "GET",
-    "path": "/backend/v3/api/app_templates",
-    "summary": "获取应用模板列表（全状态）"
-  },
-  "backend:appTemplates.retrieve": {
-    "api": "backend",
-    "operationId": "appTemplates.retrieve",
-    "method": "GET",
-    "path": "/backend/v3/api/app_templates/{templateUuid}",
-    "summary": "获取应用模板详情"
-  },
-  "backend:appTemplates.update": {
-    "api": "backend",
-    "operationId": "appTemplates.update",
-    "method": "PATCH",
-    "path": "/backend/v3/api/app_templates/{templateUuid}",
-    "summary": "审核或调整应用模板"
-  },
-  "backend:appTemplateVersions.list": {
-    "api": "backend",
-    "operationId": "appTemplateVersions.list",
-    "method": "GET",
-    "path": "/backend/v3/api/app_templates/{templateUuid}/versions",
-    "summary": "获取应用模板版本列表"
-  },
-  "backend:appTemplateVersions.retrieve": {
-    "api": "backend",
-    "operationId": "appTemplateVersions.retrieve",
-    "method": "GET",
-    "path": "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}",
-    "summary": "获取应用模板版本详情"
+    "path": "/backend/v3/api/apps",
+    "summary": "获取应用台账列表"
   },
   "backend:auditLogs.list": {
     "api": "backend",
@@ -979,9 +986,9 @@
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
     "summary": "Delete one card and its installers"
   },
-  "backend:downloadCard.upsert": {
+  "backend:downloadCard.update": {
     "api": "backend",
-    "operationId": "downloadCard.upsert",
+    "operationId": "downloadCard.update",
     "method": "PUT",
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
     "summary": "Create or patch one card of a download catalog"
@@ -1007,9 +1014,9 @@
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}",
     "summary": "Read one download catalog with cards, installers and update configurations"
   },
-  "backend:downloadCatalog.upsert": {
+  "backend:downloadCatalog.update": {
     "api": "backend",
-    "operationId": "downloadCatalog.upsert",
+    "operationId": "downloadCatalog.update",
     "method": "PUT",
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}",
     "summary": "Create or patch a download catalog"
@@ -1021,16 +1028,16 @@
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
     "summary": "Delete one installer and its update configuration"
   },
-  "backend:downloadItem.upsert": {
+  "backend:downloadItem.update": {
     "api": "backend",
-    "operationId": "downloadItem.upsert",
+    "operationId": "downloadItem.update",
     "method": "PUT",
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
     "summary": "Create or patch one installer of a card"
   },
-  "backend:downloadUpdate.upsert": {
+  "backend:downloadUpdate.update": {
     "api": "backend",
-    "operationId": "downloadUpdate.upsert",
+    "operationId": "downloadUpdate.update",
     "method": "PUT",
     "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update",
     "summary": "Create or replace one installer's update configuration"
@@ -1070,6 +1077,83 @@
     "path": "/backend/v3/api/nginx/status",
     "summary": "获取 Nginx 状态"
   },
+  "backend:scaffolds.categories.create": {
+    "api": "backend",
+    "operationId": "scaffolds.categories.create",
+    "method": "POST",
+    "path": "/backend/v3/api/scaffold_categories",
+    "summary": "创建脚手架分类"
+  },
+  "backend:scaffolds.categories.delete": {
+    "api": "backend",
+    "operationId": "scaffolds.categories.delete",
+    "method": "DELETE",
+    "path": "/backend/v3/api/scaffold_categories/{categoryUuid}",
+    "summary": "删除脚手架分类"
+  },
+  "backend:scaffolds.categories.list": {
+    "api": "backend",
+    "operationId": "scaffolds.categories.list",
+    "method": "GET",
+    "path": "/backend/v3/api/scaffold_categories",
+    "summary": "获取脚手架分类列表"
+  },
+  "backend:scaffolds.categories.retrieve": {
+    "api": "backend",
+    "operationId": "scaffolds.categories.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/scaffold_categories/{categoryUuid}",
+    "summary": "获取脚手架分类详情"
+  },
+  "backend:scaffolds.categories.update": {
+    "api": "backend",
+    "operationId": "scaffolds.categories.update",
+    "method": "PATCH",
+    "path": "/backend/v3/api/scaffold_categories/{categoryUuid}",
+    "summary": "更新脚手架分类"
+  },
+  "backend:scaffolds.delete": {
+    "api": "backend",
+    "operationId": "scaffolds.delete",
+    "method": "DELETE",
+    "path": "/backend/v3/api/scaffolds/{scaffoldUuid}",
+    "summary": "删除应用脚手架"
+  },
+  "backend:scaffolds.list": {
+    "api": "backend",
+    "operationId": "scaffolds.list",
+    "method": "GET",
+    "path": "/backend/v3/api/scaffolds",
+    "summary": "获取应用脚手架列表（全状态）"
+  },
+  "backend:scaffolds.retrieve": {
+    "api": "backend",
+    "operationId": "scaffolds.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/scaffolds/{scaffoldUuid}",
+    "summary": "获取应用脚手架详情"
+  },
+  "backend:scaffolds.update": {
+    "api": "backend",
+    "operationId": "scaffolds.update",
+    "method": "PATCH",
+    "path": "/backend/v3/api/scaffolds/{scaffoldUuid}",
+    "summary": "审核或调整应用脚手架"
+  },
+  "backend:scaffolds.versions.list": {
+    "api": "backend",
+    "operationId": "scaffolds.versions.list",
+    "method": "GET",
+    "path": "/backend/v3/api/scaffolds/{scaffoldUuid}/versions",
+    "summary": "获取应用脚手架版本列表"
+  },
+  "backend:scaffolds.versions.retrieve": {
+    "api": "backend",
+    "operationId": "scaffolds.versions.retrieve",
+    "method": "GET",
+    "path": "/backend/v3/api/scaffolds/{scaffoldUuid}/versions/{versionUuid}",
+    "summary": "获取应用脚手架版本详情"
+  },
   "backend:servers.create": {
     "api": "backend",
     "operationId": "servers.create",
@@ -1097,41 +1181,6 @@
     "method": "GET",
     "path": "/backend/v3/api/signing_identity_health",
     "summary": "List signing identity expiry health"
-  },
-  "backend:templateCategories.create": {
-    "api": "backend",
-    "operationId": "templateCategories.create",
-    "method": "POST",
-    "path": "/backend/v3/api/template_categories",
-    "summary": "创建模板分类"
-  },
-  "backend:templateCategories.delete": {
-    "api": "backend",
-    "operationId": "templateCategories.delete",
-    "method": "DELETE",
-    "path": "/backend/v3/api/template_categories/{categoryUuid}",
-    "summary": "删除模板分类"
-  },
-  "backend:templateCategories.list": {
-    "api": "backend",
-    "operationId": "templateCategories.list",
-    "method": "GET",
-    "path": "/backend/v3/api/template_categories",
-    "summary": "获取模板分类列表"
-  },
-  "backend:templateCategories.retrieve": {
-    "api": "backend",
-    "operationId": "templateCategories.retrieve",
-    "method": "GET",
-    "path": "/backend/v3/api/template_categories/{categoryUuid}",
-    "summary": "获取模板分类详情"
-  },
-  "backend:templateCategories.update": {
-    "api": "backend",
-    "operationId": "templateCategories.update",
-    "method": "PATCH",
-    "path": "/backend/v3/api/template_categories/{categoryUuid}",
-    "summary": "更新模板分类"
   },
   "backend:tlsAccounts.create": {
     "api": "backend",

@@ -9,53 +9,53 @@
  */
 
 /** Listing template type accepted by the author command. */
-export type DeploymentsAppTemplateType = "APP" | "PPT" | "VIDEO";
+export type DeploymentsApplicationScaffoldType = "APP" | "PPT" | "VIDEO";
 
 /** Listing visibility accepted by the author command. */
-export type DeploymentsAppTemplateVisibility = "PUBLIC" | "PRIVATE";
+export type DeploymentsApplicationScaffoldVisibility = "PUBLIC" | "PRIVATE";
 
 /** Listing pricing model accepted by the author command. */
-export type DeploymentsAppTemplatePricingModel = "FREE" | "PAID";
+export type DeploymentsApplicationScaffoldPricingModel = "FREE" | "PAID";
 
 /** One screenshot entry of the listing gallery. */
-export interface DeploymentsAppTemplateScreenshot {
+export interface DeploymentsApplicationScaffoldScreenshot {
   mediaRef: string;
   device?: string;
   caption?: string;
   sortOrder?: number;
 }
 
-/** Payload of the app-plane `template.appTemplates.create` command. */
-export interface DeploymentsAppTemplateCreateBody {
+/** Payload of the app-plane `app.scaffolds.create` command. */
+export interface DeploymentsApplicationScaffoldCreateBody {
   appUuid: string;
   categoryUuid: string;
   templateKey: string;
   displayName: string;
   summary: string;
-  templateType?: DeploymentsAppTemplateType;
-  visibility?: DeploymentsAppTemplateVisibility;
-  pricingModel?: DeploymentsAppTemplatePricingModel;
+  templateType?: DeploymentsApplicationScaffoldType;
+  visibility?: DeploymentsApplicationScaffoldVisibility;
+  pricingModel?: DeploymentsApplicationScaffoldPricingModel;
   description?: string;
   priceMinor?: string;
   currency?: string;
   iconMediaRef?: string;
   coverMediaRef?: string;
-  screenshots?: DeploymentsAppTemplateScreenshot[];
+  screenshots?: DeploymentsApplicationScaffoldScreenshot[];
 }
 
-/** Payload of the app-plane `template.appTemplates.update` editable-copy patch. */
-export interface DeploymentsAppTemplateUpdateBody {
+/** Payload of the app-plane `app.scaffolds.update` editable-copy patch. */
+export interface DeploymentsApplicationScaffoldUpdateBody {
   displayName?: string;
   summary?: string;
   description?: string;
   categoryUuid?: string;
-  visibility?: DeploymentsAppTemplateVisibility;
-  pricingModel?: DeploymentsAppTemplatePricingModel;
+  visibility?: DeploymentsApplicationScaffoldVisibility;
+  pricingModel?: DeploymentsApplicationScaffoldPricingModel;
   priceMinor?: string;
   currency?: string;
   iconMediaRef?: string;
   coverMediaRef?: string;
-  screenshots?: DeploymentsAppTemplateScreenshot[];
+  screenshots?: DeploymentsApplicationScaffoldScreenshot[];
 }
 
 /** Idempotency parameters shared by the author commands. */
@@ -63,17 +63,17 @@ export interface DeploymentsAppIdempotencyParams {
   idempotencyKey: string;
 }
 
-/** The app-plane template client surface the admin registry consumes. */
+/** The app-plane application-scaffold client surface the admin registry consumes. */
 export interface DeploymentsAppPlaneClient {
-  template: {
-    appTemplates: {
+  app: {
+    scaffolds: {
       create(
-        body: DeploymentsAppTemplateCreateBody,
+        body: DeploymentsApplicationScaffoldCreateBody,
         params: DeploymentsAppIdempotencyParams,
       ): Promise<unknown>;
       update(
-        templateId: string,
-        body: DeploymentsAppTemplateUpdateBody,
+        scaffoldId: string,
+        body: DeploymentsApplicationScaffoldUpdateBody,
         params: DeploymentsAppIdempotencyParams,
       ): Promise<unknown>;
     };

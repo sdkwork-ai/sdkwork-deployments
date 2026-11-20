@@ -1,7 +1,7 @@
 # SDKWork Deployments H5
 
 Mobile web (H5) client root of `sdkwork-deployments`. Ships the template
-catalog user surface (`docs/domains/APP_TEMPLATE_MARKETPLACE.md`):
+catalog user surface (`docs/domains/APPLICATION_SCAFFOLD_MARKETPLACE.md`):
 
 - **Marketplace tab** — category chips and keyword search over `PUBLIC` +
   `PUBLISHED` listings, a bottom-sheet detail view, and the acquire command.

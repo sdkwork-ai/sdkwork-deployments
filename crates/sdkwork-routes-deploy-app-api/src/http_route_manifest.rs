@@ -293,6 +293,21 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/readiness",
+        "app",
+        "apps.readiness.retrieve",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/uninstall",
+        "app",
+        "apps.uninstall",
+    )
+    .with_required_permission("deploy.apps.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/apps/{appId}",
         "app",
         "apps.retrieve",
@@ -777,104 +792,104 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         HttpMethod::Get,
         "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
         "appEnvironment",
-        "appEnvironments.list",
+        "appEnvironmentPromotions.list",
     )
-    .with_required_permission("deploy.appEnvironments.read"),
+    .with_required_permission("deploy.appEnvironmentPromotions.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions",
         "appEnvironment",
-        "appEnvironments.create",
+        "appEnvironmentPromotions.create",
     )
-    .with_required_permission("deploy.appEnvironments.write")
+    .with_required_permission("deploy.appEnvironmentPromotions.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/template_categories",
-        "template",
-        "templateCategories.list",
+        "/app/v3/api/scaffold_categories",
+        "app",
+        "scaffolds.categories.list",
     )
-    .with_required_permission("deploy.templateCategories.read"),
+    .with_required_permission("deploy.scaffoldCategories.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/marketplace/templates",
-        "template",
-        "marketplaceTemplates.list",
+        "/app/v3/api/marketplace/scaffolds",
+        "app",
+        "marketplace.scaffolds.list",
     )
-    .with_required_permission("deploy.marketplaceTemplates.read"),
+    .with_required_permission("deploy.marketplaceScaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/marketplace/templates/{templateUuid}",
-        "template",
-        "marketplaceTemplates.retrieve",
+        "/app/v3/api/marketplace/scaffolds/{scaffoldUuid}",
+        "app",
+        "marketplace.scaffolds.retrieve",
     )
-    .with_required_permission("deploy.marketplaceTemplates.read"),
+    .with_required_permission("deploy.marketplaceScaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/marketplace/templates/{templateUuid}/install",
-        "template",
-        "marketplaceTemplates.install",
+        "/app/v3/api/marketplace/scaffolds/{scaffoldUuid}/install",
+        "app",
+        "marketplace.scaffolds.install",
     )
     .with_required_permission("deploy.apps.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/app_templates",
-        "template",
-        "appTemplates.list",
+        "/app/v3/api/scaffolds",
+        "app",
+        "scaffolds.list",
     )
-    .with_required_permission("deploy.appTemplates.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/app_templates",
-        "template",
-        "appTemplates.create",
+        "/app/v3/api/scaffolds",
+        "app",
+        "scaffolds.create",
     )
-    .with_required_permission("deploy.appTemplates.write")
+    .with_required_permission("deploy.scaffolds.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/app_templates/{templateUuid}",
-        "template",
-        "appTemplates.retrieve",
+        "/app/v3/api/scaffolds/{scaffoldUuid}",
+        "app",
+        "scaffolds.retrieve",
     )
-    .with_required_permission("deploy.appTemplates.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
-        "/app/v3/api/app_templates/{templateUuid}",
-        "template",
-        "appTemplates.update",
+        "/app/v3/api/scaffolds/{scaffoldUuid}",
+        "app",
+        "scaffolds.update",
     )
-    .with_required_permission("deploy.appTemplates.write")
+    .with_required_permission("deploy.scaffolds.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
-        "/app/v3/api/app_templates/{templateUuid}",
-        "template",
-        "appTemplates.delete",
+        "/app/v3/api/scaffolds/{scaffoldUuid}",
+        "app",
+        "scaffolds.delete",
     )
-    .with_required_permission("deploy.appTemplates.write"),
+    .with_required_permission("deploy.scaffolds.write"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/app_templates/{templateUuid}/submit",
-        "template",
-        "appTemplates.submit",
+        "/app/v3/api/scaffolds/{scaffoldUuid}/submit",
+        "app",
+        "scaffolds.submit",
     )
-    .with_required_permission("deploy.appTemplates.write"),
+    .with_required_permission("deploy.scaffolds.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/app/v3/api/app_templates/{templateUuid}/versions",
-        "template",
-        "appTemplateVersions.list",
+        "/app/v3/api/scaffolds/{scaffoldUuid}/versions",
+        "app",
+        "scaffolds.versions.list",
     )
-    .with_required_permission("deploy.appTemplateVersions.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/app_templates/{templateUuid}/versions",
-        "template",
-        "appTemplateVersions.create",
+        "/app/v3/api/scaffolds/{scaffoldUuid}/versions",
+        "app",
+        "scaffolds.versions.create",
     )
-    .with_required_permission("deploy.appTemplateVersions.write")
+    .with_required_permission("deploy.scaffolds.write")
     .with_idempotent(true),
     HttpRoute::public(
         HttpMethod::Get,

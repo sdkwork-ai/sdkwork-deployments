@@ -28,15 +28,9 @@ client.setAccessToken('your-access-token');
 
 // Use the SDK
 const params = {
-  page: 1,
-  page_size: 2,
-  keyword: 'keyword',
-  ownership_scope: 'PLATFORM',
-  scope: 'PLATFORM',
-  owner_organization_id: 'owner_organization_id',
-  app_kind: 'app_kind',
+  include_disabled: true,
 };
-const result = await client.app.list(params);
+const result = await client.app.scaffolds.categories.list(params);
 ```
 
 ## Authentication
@@ -78,7 +72,6 @@ const client = new SdkworkDeployAppClient({
 - `client.usage` - usage API
 - `client.appDatabase` - app_database API
 - `client.appEnvironment` - app_environment API
-- `client.template` - template API
 - `client.downloads` - downloads API
 
 ## Usage Examples
@@ -131,17 +124,11 @@ const result = await client.artifact.list(params);
 ### app
 
 ```typescript
-// List the apps the caller may reach
+// List template categories
 const params = {
-  page: 1,
-  page_size: 2,
-  keyword: 'keyword',
-  ownership_scope: 'PLATFORM',
-  scope: 'PLATFORM',
-  owner_organization_id: 'owner_organization_id',
-  app_kind: 'app_kind',
+  include_disabled: true,
 };
-const result = await client.app.list(params);
+const result = await client.app.scaffolds.categories.list(params);
 ```
 
 ### env_variable
@@ -252,16 +239,6 @@ const params = {
 const result = await client.appEnvironment.list(appId, params);
 ```
 
-### template
-
-```typescript
-// List template categories
-const params = {
-  include_disabled: true,
-};
-const result = await client.template.templateCategories.list(params);
-```
-
 ### downloads
 
 ```typescript
@@ -277,15 +254,9 @@ import { SdkworkDeployAppClient, NetworkError, TimeoutError, AuthenticationError
 
 try {
   const params = {
-    page: 1,
-    page_size: 2,
-    keyword: 'keyword',
-    ownership_scope: 'PLATFORM',
-    scope: 'PLATFORM',
-    owner_organization_id: 'owner_organization_id',
-    app_kind: 'app_kind',
+    include_disabled: true,
   };
-  const result = await client.app.list(params);
+  const result = await client.app.scaffolds.categories.list(params);
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

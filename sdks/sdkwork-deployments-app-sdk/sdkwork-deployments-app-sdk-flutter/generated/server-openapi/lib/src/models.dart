@@ -12,7 +12,7 @@ List<dynamic>? _sdkworkAsList(dynamic value) {
   return value is List ? value : null;
 }
 
-class TemplateCategoryResponse {
+class ScaffoldCategoryResponse {
   final String id;
   final String categoryKey;
   final String? parentId;
@@ -24,7 +24,7 @@ class TemplateCategoryResponse {
   final String updatedAt;
   final String version;
 
-  TemplateCategoryResponse({
+  ScaffoldCategoryResponse({
     required this.id,
     required this.categoryKey,
     this.parentId,
@@ -37,19 +37,19 @@ class TemplateCategoryResponse {
     required this.version
   });
 
-  factory TemplateCategoryResponse.fromJson(Map<String, dynamic> json) {
-    return TemplateCategoryResponse(
+  factory ScaffoldCategoryResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldCategoryResponse(
       id: (() {
         final value = json['id']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.id is required');
+          throw FormatException('ScaffoldCategoryResponse.id is required');
         }
         return value;
       })(),
       categoryKey: (() {
         final value = json['categoryKey']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.categoryKey is required');
+          throw FormatException('ScaffoldCategoryResponse.categoryKey is required');
         }
         return value;
       })(),
@@ -57,7 +57,7 @@ class TemplateCategoryResponse {
       displayName: (() {
         final value = json['displayName']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.displayName is required');
+          throw FormatException('ScaffoldCategoryResponse.displayName is required');
         }
         return value;
       })(),
@@ -65,35 +65,35 @@ class TemplateCategoryResponse {
       sortOrder: (() {
         final value = json['sortOrder'];
         if (value is! int) {
-          throw FormatException('TemplateCategoryResponse.sortOrder is required');
+          throw FormatException('ScaffoldCategoryResponse.sortOrder is required');
         }
         return value;
       })(),
       status: (() {
         final value = json['status']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.status is required');
+          throw FormatException('ScaffoldCategoryResponse.status is required');
         }
         return value;
       })(),
       createdAt: (() {
         final value = json['createdAt']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.createdAt is required');
+          throw FormatException('ScaffoldCategoryResponse.createdAt is required');
         }
         return value;
       })(),
       updatedAt: (() {
         final value = json['updatedAt']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.updatedAt is required');
+          throw FormatException('ScaffoldCategoryResponse.updatedAt is required');
         }
         return value;
       })(),
       version: (() {
         final value = json['version']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoryResponse.version is required');
+          throw FormatException('ScaffoldCategoryResponse.version is required');
         }
         return value;
       })()
@@ -116,25 +116,25 @@ class TemplateCategoryResponse {
   }
 }
 
-class AppTemplateScreenshot {
+class ApplicationScaffoldScreenshot {
   final String mediaRef;
   final String? device;
   final String? caption;
   final int? sortOrder;
 
-  AppTemplateScreenshot({
+  ApplicationScaffoldScreenshot({
     required this.mediaRef,
     this.device,
     this.caption,
     this.sortOrder
   });
 
-  factory AppTemplateScreenshot.fromJson(Map<String, dynamic> json) {
-    return AppTemplateScreenshot(
+  factory ApplicationScaffoldScreenshot.fromJson(Map<String, dynamic> json) {
+    return ApplicationScaffoldScreenshot(
       mediaRef: (() {
         final value = json['mediaRef']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateScreenshot.mediaRef is required');
+          throw FormatException('ApplicationScaffoldScreenshot.mediaRef is required');
         }
         return value;
       })(),
@@ -154,7 +154,7 @@ class AppTemplateScreenshot {
   }
 }
 
-class AppTemplateSummaryResponse {
+class ApplicationScaffoldSummaryResponse {
   final String id;
   final String templateType;
   final String templateKey;
@@ -163,7 +163,7 @@ class AppTemplateSummaryResponse {
   final String categoryUuid;
   final String? iconMediaRef;
   final String? coverMediaRef;
-  final List<AppTemplateScreenshot>? screenshots;
+  final List<ApplicationScaffoldScreenshot>? screenshots;
   final String visibility;
   final String pricingModel;
   final String priceMinor;
@@ -176,7 +176,7 @@ class AppTemplateSummaryResponse {
   final String updatedAt;
   final String version;
 
-  AppTemplateSummaryResponse({
+  ApplicationScaffoldSummaryResponse({
     required this.id,
     required this.templateType,
     required this.templateKey,
@@ -199,47 +199,47 @@ class AppTemplateSummaryResponse {
     required this.version
   });
 
-  factory AppTemplateSummaryResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplateSummaryResponse(
+  factory ApplicationScaffoldSummaryResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationScaffoldSummaryResponse(
       id: (() {
         final value = json['id']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.id is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.id is required');
         }
         return value;
       })(),
       templateType: (() {
         final value = json['templateType']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.templateType is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.templateType is required');
         }
         return value;
       })(),
       templateKey: (() {
         final value = json['templateKey']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.templateKey is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.templateKey is required');
         }
         return value;
       })(),
       displayName: (() {
         final value = json['displayName']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.displayName is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.displayName is required');
         }
         return value;
       })(),
       summary: (() {
         final value = json['summary']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.summary is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.summary is required');
         }
         return value;
       })(),
       categoryUuid: (() {
         final value = json['categoryUuid']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.categoryUuid is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.categoryUuid is required');
         }
         return value;
       })(),
@@ -253,64 +253,64 @@ class AppTemplateSummaryResponse {
         return list
             .map((item) => (() {
         final map = _sdkworkAsMap(item);
-        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+        return map == null ? null : ApplicationScaffoldScreenshot.fromJson(map);
       })())
-            .whereType<AppTemplateScreenshot>()
+            .whereType<ApplicationScaffoldScreenshot>()
             .toList();
       })(),
       visibility: (() {
         final value = json['visibility']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.visibility is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.visibility is required');
         }
         return value;
       })(),
       pricingModel: (() {
         final value = json['pricingModel']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.pricingModel is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.pricingModel is required');
         }
         return value;
       })(),
       priceMinor: (() {
         final value = json['priceMinor']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.priceMinor is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.priceMinor is required');
         }
         return value;
       })(),
       currency: (() {
         final value = json['currency']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.currency is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.currency is required');
         }
         return value;
       })(),
       status: (() {
         final value = json['status']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.status is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.status is required');
         }
         return value;
       })(),
       isFeatured: (() {
         final value = json['isFeatured'];
         if (value is! bool) {
-          throw FormatException('AppTemplateSummaryResponse.isFeatured is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.isFeatured is required');
         }
         return value;
       })(),
       installCount: (() {
         final value = json['installCount']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.installCount is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.installCount is required');
         }
         return value;
       })(),
       viewCount: (() {
         final value = json['viewCount']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.viewCount is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.viewCount is required');
         }
         return value;
       })(),
@@ -318,14 +318,14 @@ class AppTemplateSummaryResponse {
       updatedAt: (() {
         final value = json['updatedAt']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.updatedAt is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.updatedAt is required');
         }
         return value;
       })(),
       version: (() {
         final value = json['version']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateSummaryResponse.version is required');
+          throw FormatException('ApplicationScaffoldSummaryResponse.version is required');
         }
         return value;
       })()
@@ -358,7 +358,7 @@ class AppTemplateSummaryResponse {
   }
 }
 
-class AppTemplateResponse {
+class ApplicationScaffoldResponse {
   final String id;
   final String templateKey;
   final String displayName;
@@ -370,7 +370,7 @@ class AppTemplateResponse {
   final String authorUserId;
   final String? iconMediaRef;
   final String? coverMediaRef;
-  final List<AppTemplateScreenshot>? screenshots;
+  final List<ApplicationScaffoldScreenshot>? screenshots;
   final String visibility;
   final String pricingModel;
   final String priceMinor;
@@ -385,7 +385,7 @@ class AppTemplateResponse {
   final String updatedAt;
   final String version;
 
-  AppTemplateResponse({
+  ApplicationScaffoldResponse({
     required this.id,
     required this.templateKey,
     required this.displayName,
@@ -413,68 +413,68 @@ class AppTemplateResponse {
     required this.version
   });
 
-  factory AppTemplateResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplateResponse(
+  factory ApplicationScaffoldResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationScaffoldResponse(
       id: (() {
         final value = json['id']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.id is required');
+          throw FormatException('ApplicationScaffoldResponse.id is required');
         }
         return value;
       })(),
       templateKey: (() {
         final value = json['templateKey']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.templateKey is required');
+          throw FormatException('ApplicationScaffoldResponse.templateKey is required');
         }
         return value;
       })(),
       displayName: (() {
         final value = json['displayName']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.displayName is required');
+          throw FormatException('ApplicationScaffoldResponse.displayName is required');
         }
         return value;
       })(),
       summary: (() {
         final value = json['summary']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.summary is required');
+          throw FormatException('ApplicationScaffoldResponse.summary is required');
         }
         return value;
       })(),
       description: (() {
         final value = json['description']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.description is required');
+          throw FormatException('ApplicationScaffoldResponse.description is required');
         }
         return value;
       })(),
       appUuid: (() {
         final value = json['appUuid']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.appUuid is required');
+          throw FormatException('ApplicationScaffoldResponse.appUuid is required');
         }
         return value;
       })(),
       templateType: (() {
         final value = json['templateType']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.templateType is required');
+          throw FormatException('ApplicationScaffoldResponse.templateType is required');
         }
         return value;
       })(),
       categoryUuid: (() {
         final value = json['categoryUuid']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.categoryUuid is required');
+          throw FormatException('ApplicationScaffoldResponse.categoryUuid is required');
         }
         return value;
       })(),
       authorUserId: (() {
         final value = json['authorUserId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.authorUserId is required');
+          throw FormatException('ApplicationScaffoldResponse.authorUserId is required');
         }
         return value;
       })(),
@@ -488,43 +488,43 @@ class AppTemplateResponse {
         return list
             .map((item) => (() {
         final map = _sdkworkAsMap(item);
-        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+        return map == null ? null : ApplicationScaffoldScreenshot.fromJson(map);
       })())
-            .whereType<AppTemplateScreenshot>()
+            .whereType<ApplicationScaffoldScreenshot>()
             .toList();
       })(),
       visibility: (() {
         final value = json['visibility']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.visibility is required');
+          throw FormatException('ApplicationScaffoldResponse.visibility is required');
         }
         return value;
       })(),
       pricingModel: (() {
         final value = json['pricingModel']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.pricingModel is required');
+          throw FormatException('ApplicationScaffoldResponse.pricingModel is required');
         }
         return value;
       })(),
       priceMinor: (() {
         final value = json['priceMinor']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.priceMinor is required');
+          throw FormatException('ApplicationScaffoldResponse.priceMinor is required');
         }
         return value;
       })(),
       currency: (() {
         final value = json['currency']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.currency is required');
+          throw FormatException('ApplicationScaffoldResponse.currency is required');
         }
         return value;
       })(),
       status: (() {
         final value = json['status']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.status is required');
+          throw FormatException('ApplicationScaffoldResponse.status is required');
         }
         return value;
       })(),
@@ -532,21 +532,21 @@ class AppTemplateResponse {
       isFeatured: (() {
         final value = json['isFeatured'];
         if (value is! bool) {
-          throw FormatException('AppTemplateResponse.isFeatured is required');
+          throw FormatException('ApplicationScaffoldResponse.isFeatured is required');
         }
         return value;
       })(),
       installCount: (() {
         final value = json['installCount']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.installCount is required');
+          throw FormatException('ApplicationScaffoldResponse.installCount is required');
         }
         return value;
       })(),
       viewCount: (() {
         final value = json['viewCount']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.viewCount is required');
+          throw FormatException('ApplicationScaffoldResponse.viewCount is required');
         }
         return value;
       })(),
@@ -554,21 +554,21 @@ class AppTemplateResponse {
       createdAt: (() {
         final value = json['createdAt']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.createdAt is required');
+          throw FormatException('ApplicationScaffoldResponse.createdAt is required');
         }
         return value;
       })(),
       updatedAt: (() {
         final value = json['updatedAt']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.updatedAt is required');
+          throw FormatException('ApplicationScaffoldResponse.updatedAt is required');
         }
         return value;
       })(),
       version: (() {
         final value = json['version']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateResponse.version is required');
+          throw FormatException('ApplicationScaffoldResponse.version is required');
         }
         return value;
       })()
@@ -606,19 +606,19 @@ class AppTemplateResponse {
   }
 }
 
-class InstallAppTemplateRequest {
+class InstallApplicationScaffoldRequest {
   final String? name;
   final String? slug;
   final String? orderId;
 
-  InstallAppTemplateRequest({
+  InstallApplicationScaffoldRequest({
     this.name,
     this.slug,
     this.orderId
   });
 
-  factory InstallAppTemplateRequest.fromJson(Map<String, dynamic> json) {
-    return InstallAppTemplateRequest(
+  factory InstallApplicationScaffoldRequest.fromJson(Map<String, dynamic> json) {
+    return InstallApplicationScaffoldRequest(
       name: json['name']?.toString(),
       slug: json['slug']?.toString(),
       orderId: json['orderId']?.toString()
@@ -634,28 +634,28 @@ class InstallAppTemplateRequest {
   }
 }
 
-class AppTemplateInstallResponse {
+class ApplicationScaffoldInstallResponse {
   final AppResponse app;
-  final String templateUuid;
+  final String scaffoldUuid;
 
-  AppTemplateInstallResponse({
+  ApplicationScaffoldInstallResponse({
     required this.app,
-    required this.templateUuid
+    required this.scaffoldUuid
   });
 
-  factory AppTemplateInstallResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplateInstallResponse(
+  factory ApplicationScaffoldInstallResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationScaffoldInstallResponse(
       app: (() {
         final map = _sdkworkAsMap(json['app']);
         if (map == null) {
-          throw FormatException('AppTemplateInstallResponse.app is required');
+          throw FormatException('ApplicationScaffoldInstallResponse.app is required');
         }
         return AppResponse.fromJson(map);
       })(),
-      templateUuid: (() {
-        final value = json['templateUuid']?.toString();
+      scaffoldUuid: (() {
+        final value = json['scaffoldUuid']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateInstallResponse.templateUuid is required');
+          throw FormatException('ApplicationScaffoldInstallResponse.scaffoldUuid is required');
         }
         return value;
       })()
@@ -665,14 +665,14 @@ class AppTemplateInstallResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'app': app.toJson(),
-      'templateUuid': templateUuid,
+      'scaffoldUuid': scaffoldUuid,
     };
   }
 }
 
-class AppTemplateVersionResponse {
+class ApplicationScaffoldVersionResponse {
   final String id;
-  final String templateUuid;
+  final String scaffoldUuid;
   final String templateVersion;
   final String changelog;
   final String? artifactUuid;
@@ -686,9 +686,9 @@ class AppTemplateVersionResponse {
   final String updatedAt;
   final String version;
 
-  AppTemplateVersionResponse({
+  ApplicationScaffoldVersionResponse({
     required this.id,
-    required this.templateUuid,
+    required this.scaffoldUuid,
     required this.templateVersion,
     required this.changelog,
     this.artifactUuid,
@@ -703,33 +703,33 @@ class AppTemplateVersionResponse {
     required this.version
   });
 
-  factory AppTemplateVersionResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplateVersionResponse(
+  factory ApplicationScaffoldVersionResponse.fromJson(Map<String, dynamic> json) {
+    return ApplicationScaffoldVersionResponse(
       id: (() {
         final value = json['id']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.id is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.id is required');
         }
         return value;
       })(),
-      templateUuid: (() {
-        final value = json['templateUuid']?.toString();
+      scaffoldUuid: (() {
+        final value = json['scaffoldUuid']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.templateUuid is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.scaffoldUuid is required');
         }
         return value;
       })(),
       templateVersion: (() {
         final value = json['templateVersion']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.templateVersion is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.templateVersion is required');
         }
         return value;
       })(),
       changelog: (() {
         final value = json['changelog']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.changelog is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.changelog is required');
         }
         return value;
       })(),
@@ -738,7 +738,7 @@ class AppTemplateVersionResponse {
       platformTargets: (() {
         final list = _sdkworkAsList(json['platformTargets']);
         if (list == null) {
-          throw FormatException('AppTemplateVersionResponse.platformTargets is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.platformTargets is required');
         }
         return list
             .map((item) => item?.toString())
@@ -748,7 +748,7 @@ class AppTemplateVersionResponse {
       packageSizeBytes: (() {
         final value = json['packageSizeBytes']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.packageSizeBytes is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.packageSizeBytes is required');
         }
         return value;
       })(),
@@ -756,7 +756,7 @@ class AppTemplateVersionResponse {
       status: (() {
         final value = json['status']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.status is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.status is required');
         }
         return value;
       })(),
@@ -764,21 +764,21 @@ class AppTemplateVersionResponse {
       createdAt: (() {
         final value = json['createdAt']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.createdAt is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.createdAt is required');
         }
         return value;
       })(),
       updatedAt: (() {
         final value = json['updatedAt']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.updatedAt is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.updatedAt is required');
         }
         return value;
       })(),
       version: (() {
         final value = json['version']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionResponse.version is required');
+          throw FormatException('ApplicationScaffoldVersionResponse.version is required');
         }
         return value;
       })()
@@ -788,7 +788,7 @@ class AppTemplateVersionResponse {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'id': id,
-      'templateUuid': templateUuid,
+      'scaffoldUuid': scaffoldUuid,
       'templateVersion': templateVersion,
       'changelog': changelog,
       'artifactUuid': artifactUuid,
@@ -805,7 +805,7 @@ class AppTemplateVersionResponse {
   }
 }
 
-class CreateAppTemplateRequest {
+class CreateApplicationScaffoldRequest {
   final String appUuid;
   final String? templateType;
   final String categoryUuid;
@@ -819,10 +819,10 @@ class CreateAppTemplateRequest {
   final String? currency;
   final String? iconMediaRef;
   final String? coverMediaRef;
-  final List<AppTemplateScreenshot>? screenshots;
-  final CreateAppTemplateVersionRequest? initialVersion;
+  final List<ApplicationScaffoldScreenshot>? screenshots;
+  final CreateApplicationScaffoldVersionRequest? initialVersion;
 
-  CreateAppTemplateRequest({
+  CreateApplicationScaffoldRequest({
     required this.appUuid,
     this.templateType,
     required this.categoryUuid,
@@ -840,12 +840,12 @@ class CreateAppTemplateRequest {
     this.initialVersion
   });
 
-  factory CreateAppTemplateRequest.fromJson(Map<String, dynamic> json) {
-    return CreateAppTemplateRequest(
+  factory CreateApplicationScaffoldRequest.fromJson(Map<String, dynamic> json) {
+    return CreateApplicationScaffoldRequest(
       appUuid: (() {
         final value = json['appUuid']?.toString();
         if (value == null) {
-          throw FormatException('CreateAppTemplateRequest.appUuid is required');
+          throw FormatException('CreateApplicationScaffoldRequest.appUuid is required');
         }
         return value;
       })(),
@@ -853,28 +853,28 @@ class CreateAppTemplateRequest {
       categoryUuid: (() {
         final value = json['categoryUuid']?.toString();
         if (value == null) {
-          throw FormatException('CreateAppTemplateRequest.categoryUuid is required');
+          throw FormatException('CreateApplicationScaffoldRequest.categoryUuid is required');
         }
         return value;
       })(),
       templateKey: (() {
         final value = json['templateKey']?.toString();
         if (value == null) {
-          throw FormatException('CreateAppTemplateRequest.templateKey is required');
+          throw FormatException('CreateApplicationScaffoldRequest.templateKey is required');
         }
         return value;
       })(),
       displayName: (() {
         final value = json['displayName']?.toString();
         if (value == null) {
-          throw FormatException('CreateAppTemplateRequest.displayName is required');
+          throw FormatException('CreateApplicationScaffoldRequest.displayName is required');
         }
         return value;
       })(),
       summary: (() {
         final value = json['summary']?.toString();
         if (value == null) {
-          throw FormatException('CreateAppTemplateRequest.summary is required');
+          throw FormatException('CreateApplicationScaffoldRequest.summary is required');
         }
         return value;
       })(),
@@ -893,14 +893,14 @@ class CreateAppTemplateRequest {
         return list
             .map((item) => (() {
         final map = _sdkworkAsMap(item);
-        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+        return map == null ? null : ApplicationScaffoldScreenshot.fromJson(map);
       })())
-            .whereType<AppTemplateScreenshot>()
+            .whereType<ApplicationScaffoldScreenshot>()
             .toList();
       })(),
       initialVersion: (() {
         final map = _sdkworkAsMap(json['initialVersion']);
-        return map == null ? null : CreateAppTemplateVersionRequest.fromJson(map);
+        return map == null ? null : CreateApplicationScaffoldVersionRequest.fromJson(map);
       })()
     );
   }
@@ -926,7 +926,7 @@ class CreateAppTemplateRequest {
   }
 }
 
-class UpdateAppTemplateRequest {
+class UpdateApplicationScaffoldRequest {
   final String? displayName;
   final String? summary;
   final String? description;
@@ -937,9 +937,9 @@ class UpdateAppTemplateRequest {
   final String? currency;
   final String? iconMediaRef;
   final String? coverMediaRef;
-  final List<AppTemplateScreenshot>? screenshots;
+  final List<ApplicationScaffoldScreenshot>? screenshots;
 
-  UpdateAppTemplateRequest({
+  UpdateApplicationScaffoldRequest({
     this.displayName,
     this.summary,
     this.description,
@@ -953,8 +953,8 @@ class UpdateAppTemplateRequest {
     this.screenshots
   });
 
-  factory UpdateAppTemplateRequest.fromJson(Map<String, dynamic> json) {
-    return UpdateAppTemplateRequest(
+  factory UpdateApplicationScaffoldRequest.fromJson(Map<String, dynamic> json) {
+    return UpdateApplicationScaffoldRequest(
       displayName: json['displayName']?.toString(),
       summary: json['summary']?.toString(),
       description: json['description']?.toString(),
@@ -973,9 +973,9 @@ class UpdateAppTemplateRequest {
         return list
             .map((item) => (() {
         final map = _sdkworkAsMap(item);
-        return map == null ? null : AppTemplateScreenshot.fromJson(map);
+        return map == null ? null : ApplicationScaffoldScreenshot.fromJson(map);
       })())
-            .whereType<AppTemplateScreenshot>()
+            .whereType<ApplicationScaffoldScreenshot>()
             .toList();
       })()
     );
@@ -998,7 +998,7 @@ class UpdateAppTemplateRequest {
   }
 }
 
-class CreateAppTemplateVersionRequest {
+class CreateApplicationScaffoldVersionRequest {
   final String version;
   final String? changelog;
   final String? artifactUuid;
@@ -1007,7 +1007,7 @@ class CreateAppTemplateVersionRequest {
   final String? packageSizeBytes;
   final String? checksumSha256;
 
-  CreateAppTemplateVersionRequest({
+  CreateApplicationScaffoldVersionRequest({
     required this.version,
     this.changelog,
     this.artifactUuid,
@@ -1017,12 +1017,12 @@ class CreateAppTemplateVersionRequest {
     this.checksumSha256
   });
 
-  factory CreateAppTemplateVersionRequest.fromJson(Map<String, dynamic> json) {
-    return CreateAppTemplateVersionRequest(
+  factory CreateApplicationScaffoldVersionRequest.fromJson(Map<String, dynamic> json) {
+    return CreateApplicationScaffoldVersionRequest(
       version: (() {
         final value = json['version']?.toString();
         if (value == null) {
-          throw FormatException('CreateAppTemplateVersionRequest.version is required');
+          throw FormatException('CreateApplicationScaffoldVersionRequest.version is required');
         }
         return value;
       })(),
@@ -9866,6 +9866,152 @@ class DownloadUpdateSettingsDocument {
   }
 }
 
+class FactoryReadinessCheck {
+  final String step;
+  final String status;
+  final String? reason;
+  final String? detail;
+
+  FactoryReadinessCheck({
+    required this.step,
+    required this.status,
+    this.reason,
+    this.detail
+  });
+
+  factory FactoryReadinessCheck.fromJson(Map<String, dynamic> json) {
+    return FactoryReadinessCheck(
+      step: (() {
+        final value = json['step']?.toString();
+        if (value == null) {
+          throw FormatException('FactoryReadinessCheck.step is required');
+        }
+        return value;
+      })(),
+      status: (() {
+        final value = json['status']?.toString();
+        if (value == null) {
+          throw FormatException('FactoryReadinessCheck.status is required');
+        }
+        return value;
+      })(),
+      reason: json['reason']?.toString(),
+      detail: json['detail']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'step': step,
+      'status': status,
+      'reason': reason,
+      'detail': detail,
+    };
+  }
+}
+
+class AppFactoryReadiness {
+  final String status;
+  final String? blockingStep;
+  final List<FactoryReadinessCheck> checks;
+
+  AppFactoryReadiness({
+    required this.status,
+    this.blockingStep,
+    required this.checks
+  });
+
+  factory AppFactoryReadiness.fromJson(Map<String, dynamic> json) {
+    return AppFactoryReadiness(
+      status: (() {
+        final value = json['status']?.toString();
+        if (value == null) {
+          throw FormatException('AppFactoryReadiness.status is required');
+        }
+        return value;
+      })(),
+      blockingStep: json['blockingStep']?.toString(),
+      checks: (() {
+        final list = _sdkworkAsList(json['checks']);
+        if (list == null) {
+          throw FormatException('AppFactoryReadiness.checks is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : FactoryReadinessCheck.fromJson(map);
+      })())
+            .whereType<FactoryReadinessCheck>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'status': status,
+      'blockingStep': blockingStep,
+      'checks': checks.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class AppUninstallResponse {
+  final String appId;
+  final String uninstallStatus;
+  final String appStatus;
+  final bool replayed;
+
+  AppUninstallResponse({
+    required this.appId,
+    required this.uninstallStatus,
+    required this.appStatus,
+    required this.replayed
+  });
+
+  factory AppUninstallResponse.fromJson(Map<String, dynamic> json) {
+    return AppUninstallResponse(
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('AppUninstallResponse.appId is required');
+        }
+        return value;
+      })(),
+      uninstallStatus: (() {
+        final value = json['uninstallStatus']?.toString();
+        if (value == null) {
+          throw FormatException('AppUninstallResponse.uninstallStatus is required');
+        }
+        return value;
+      })(),
+      appStatus: (() {
+        final value = json['appStatus']?.toString();
+        if (value == null) {
+          throw FormatException('AppUninstallResponse.appStatus is required');
+        }
+        return value;
+      })(),
+      replayed: (() {
+        final value = json['replayed'];
+        if (value is! bool) {
+          throw FormatException('AppUninstallResponse.replayed is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'appId': appId,
+      'uninstallStatus': uninstallStatus,
+      'appStatus': appStatus,
+      'replayed': replayed,
+    };
+  }
+}
+
 class DomainZonesListResponse {
   final int code;
   final dynamic data;
@@ -11415,6 +11561,98 @@ class AppsCreateResponse201 {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('AppsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsReadinessRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsReadinessRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsReadinessRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return AppsReadinessRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsReadinessRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsReadinessRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsReadinessRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsUninstallResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsUninstallResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsUninstallResponse.fromJson(Map<String, dynamic> json) {
+    return AppsUninstallResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsUninstallResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsUninstallResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsUninstallResponse.traceId is required');
         }
         return value;
       })()
@@ -14328,37 +14566,37 @@ class AppEnvironmentsUpdateResponse {
   }
 }
 
-class AppEnvironmentsListGetResponse {
+class AppEnvironmentPromotionsListResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppEnvironmentsListGetResponse({
+  AppEnvironmentPromotionsListResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppEnvironmentsListGetResponse.fromJson(Map<String, dynamic> json) {
-    return AppEnvironmentsListGetResponse(
+  factory AppEnvironmentPromotionsListResponse.fromJson(Map<String, dynamic> json) {
+    return AppEnvironmentPromotionsListResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppEnvironmentsListGetResponse.code is required');
+          throw FormatException('AppEnvironmentPromotionsListResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppEnvironmentsListGetResponse.data is required');
+          throw FormatException('AppEnvironmentPromotionsListResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppEnvironmentsListGetResponse.traceId is required');
+          throw FormatException('AppEnvironmentPromotionsListResponse.traceId is required');
         }
         return value;
       })()
@@ -14374,37 +14612,37 @@ class AppEnvironmentsListGetResponse {
   }
 }
 
-class AppEnvironmentsCreatePostResponse201 {
+class AppEnvironmentPromotionsCreateResponse201 {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppEnvironmentsCreatePostResponse201({
+  AppEnvironmentPromotionsCreateResponse201({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppEnvironmentsCreatePostResponse201.fromJson(Map<String, dynamic> json) {
-    return AppEnvironmentsCreatePostResponse201(
+  factory AppEnvironmentPromotionsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return AppEnvironmentPromotionsCreateResponse201(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppEnvironmentsCreatePostResponse201.code is required');
+          throw FormatException('AppEnvironmentPromotionsCreateResponse201.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppEnvironmentsCreatePostResponse201.data is required');
+          throw FormatException('AppEnvironmentPromotionsCreateResponse201.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppEnvironmentsCreatePostResponse201.traceId is required');
+          throw FormatException('AppEnvironmentPromotionsCreateResponse201.traceId is required');
         }
         return value;
       })()
@@ -14420,37 +14658,37 @@ class AppEnvironmentsCreatePostResponse201 {
   }
 }
 
-class TemplateCategoriesListResponse {
+class ScaffoldsCategoriesListResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  TemplateCategoriesListResponse({
+  ScaffoldsCategoriesListResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory TemplateCategoriesListResponse.fromJson(Map<String, dynamic> json) {
-    return TemplateCategoriesListResponse(
+  factory ScaffoldsCategoriesListResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsCategoriesListResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('TemplateCategoriesListResponse.code is required');
+          throw FormatException('ScaffoldsCategoriesListResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('TemplateCategoriesListResponse.data is required');
+          throw FormatException('ScaffoldsCategoriesListResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('TemplateCategoriesListResponse.traceId is required');
+          throw FormatException('ScaffoldsCategoriesListResponse.traceId is required');
         }
         return value;
       })()
@@ -14466,37 +14704,37 @@ class TemplateCategoriesListResponse {
   }
 }
 
-class MarketplaceTemplatesListResponse {
+class MarketplaceScaffoldsListResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  MarketplaceTemplatesListResponse({
+  MarketplaceScaffoldsListResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory MarketplaceTemplatesListResponse.fromJson(Map<String, dynamic> json) {
-    return MarketplaceTemplatesListResponse(
+  factory MarketplaceScaffoldsListResponse.fromJson(Map<String, dynamic> json) {
+    return MarketplaceScaffoldsListResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('MarketplaceTemplatesListResponse.code is required');
+          throw FormatException('MarketplaceScaffoldsListResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('MarketplaceTemplatesListResponse.data is required');
+          throw FormatException('MarketplaceScaffoldsListResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('MarketplaceTemplatesListResponse.traceId is required');
+          throw FormatException('MarketplaceScaffoldsListResponse.traceId is required');
         }
         return value;
       })()
@@ -14512,37 +14750,37 @@ class MarketplaceTemplatesListResponse {
   }
 }
 
-class MarketplaceTemplatesRetrieveResponse {
+class MarketplaceScaffoldsRetrieveResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  MarketplaceTemplatesRetrieveResponse({
+  MarketplaceScaffoldsRetrieveResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory MarketplaceTemplatesRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return MarketplaceTemplatesRetrieveResponse(
+  factory MarketplaceScaffoldsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return MarketplaceScaffoldsRetrieveResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('MarketplaceTemplatesRetrieveResponse.code is required');
+          throw FormatException('MarketplaceScaffoldsRetrieveResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('MarketplaceTemplatesRetrieveResponse.data is required');
+          throw FormatException('MarketplaceScaffoldsRetrieveResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('MarketplaceTemplatesRetrieveResponse.traceId is required');
+          throw FormatException('MarketplaceScaffoldsRetrieveResponse.traceId is required');
         }
         return value;
       })()
@@ -14558,37 +14796,37 @@ class MarketplaceTemplatesRetrieveResponse {
   }
 }
 
-class MarketplaceTemplatesInstallResponse {
+class MarketplaceScaffoldsInstallResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  MarketplaceTemplatesInstallResponse({
+  MarketplaceScaffoldsInstallResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory MarketplaceTemplatesInstallResponse.fromJson(Map<String, dynamic> json) {
-    return MarketplaceTemplatesInstallResponse(
+  factory MarketplaceScaffoldsInstallResponse.fromJson(Map<String, dynamic> json) {
+    return MarketplaceScaffoldsInstallResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('MarketplaceTemplatesInstallResponse.code is required');
+          throw FormatException('MarketplaceScaffoldsInstallResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('MarketplaceTemplatesInstallResponse.data is required');
+          throw FormatException('MarketplaceScaffoldsInstallResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('MarketplaceTemplatesInstallResponse.traceId is required');
+          throw FormatException('MarketplaceScaffoldsInstallResponse.traceId is required');
         }
         return value;
       })()
@@ -14604,37 +14842,37 @@ class MarketplaceTemplatesInstallResponse {
   }
 }
 
-class AppTemplatesListResponse {
+class ScaffoldsListResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplatesListResponse({
+  ScaffoldsListResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplatesListResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplatesListResponse(
+  factory ScaffoldsListResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsListResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplatesListResponse.code is required');
+          throw FormatException('ScaffoldsListResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplatesListResponse.data is required');
+          throw FormatException('ScaffoldsListResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplatesListResponse.traceId is required');
+          throw FormatException('ScaffoldsListResponse.traceId is required');
         }
         return value;
       })()
@@ -14650,37 +14888,37 @@ class AppTemplatesListResponse {
   }
 }
 
-class AppTemplatesCreateResponse201 {
+class ScaffoldsCreateResponse201 {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplatesCreateResponse201({
+  ScaffoldsCreateResponse201({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplatesCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return AppTemplatesCreateResponse201(
+  factory ScaffoldsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsCreateResponse201(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplatesCreateResponse201.code is required');
+          throw FormatException('ScaffoldsCreateResponse201.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplatesCreateResponse201.data is required');
+          throw FormatException('ScaffoldsCreateResponse201.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplatesCreateResponse201.traceId is required');
+          throw FormatException('ScaffoldsCreateResponse201.traceId is required');
         }
         return value;
       })()
@@ -14696,37 +14934,37 @@ class AppTemplatesCreateResponse201 {
   }
 }
 
-class AppTemplatesRetrieveResponse {
+class ScaffoldsRetrieveResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplatesRetrieveResponse({
+  ScaffoldsRetrieveResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplatesRetrieveResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplatesRetrieveResponse(
+  factory ScaffoldsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsRetrieveResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplatesRetrieveResponse.code is required');
+          throw FormatException('ScaffoldsRetrieveResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplatesRetrieveResponse.data is required');
+          throw FormatException('ScaffoldsRetrieveResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplatesRetrieveResponse.traceId is required');
+          throw FormatException('ScaffoldsRetrieveResponse.traceId is required');
         }
         return value;
       })()
@@ -14742,37 +14980,37 @@ class AppTemplatesRetrieveResponse {
   }
 }
 
-class AppTemplatesUpdateResponse {
+class ScaffoldsUpdateResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplatesUpdateResponse({
+  ScaffoldsUpdateResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplatesUpdateResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplatesUpdateResponse(
+  factory ScaffoldsUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsUpdateResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplatesUpdateResponse.code is required');
+          throw FormatException('ScaffoldsUpdateResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplatesUpdateResponse.data is required');
+          throw FormatException('ScaffoldsUpdateResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplatesUpdateResponse.traceId is required');
+          throw FormatException('ScaffoldsUpdateResponse.traceId is required');
         }
         return value;
       })()
@@ -14788,37 +15026,37 @@ class AppTemplatesUpdateResponse {
   }
 }
 
-class AppTemplatesSubmitResponse {
+class ScaffoldsSubmitResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplatesSubmitResponse({
+  ScaffoldsSubmitResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplatesSubmitResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplatesSubmitResponse(
+  factory ScaffoldsSubmitResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsSubmitResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplatesSubmitResponse.code is required');
+          throw FormatException('ScaffoldsSubmitResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplatesSubmitResponse.data is required');
+          throw FormatException('ScaffoldsSubmitResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplatesSubmitResponse.traceId is required');
+          throw FormatException('ScaffoldsSubmitResponse.traceId is required');
         }
         return value;
       })()
@@ -14834,37 +15072,37 @@ class AppTemplatesSubmitResponse {
   }
 }
 
-class AppTemplateVersionsListResponse {
+class ScaffoldsVersionsListResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplateVersionsListResponse({
+  ScaffoldsVersionsListResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplateVersionsListResponse.fromJson(Map<String, dynamic> json) {
-    return AppTemplateVersionsListResponse(
+  factory ScaffoldsVersionsListResponse.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsVersionsListResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplateVersionsListResponse.code is required');
+          throw FormatException('ScaffoldsVersionsListResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplateVersionsListResponse.data is required');
+          throw FormatException('ScaffoldsVersionsListResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionsListResponse.traceId is required');
+          throw FormatException('ScaffoldsVersionsListResponse.traceId is required');
         }
         return value;
       })()
@@ -14880,37 +15118,37 @@ class AppTemplateVersionsListResponse {
   }
 }
 
-class AppTemplateVersionsCreateResponse201 {
+class ScaffoldsVersionsCreateResponse201 {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppTemplateVersionsCreateResponse201({
+  ScaffoldsVersionsCreateResponse201({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppTemplateVersionsCreateResponse201.fromJson(Map<String, dynamic> json) {
-    return AppTemplateVersionsCreateResponse201(
+  factory ScaffoldsVersionsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ScaffoldsVersionsCreateResponse201(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppTemplateVersionsCreateResponse201.code is required');
+          throw FormatException('ScaffoldsVersionsCreateResponse201.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppTemplateVersionsCreateResponse201.data is required');
+          throw FormatException('ScaffoldsVersionsCreateResponse201.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppTemplateVersionsCreateResponse201.traceId is required');
+          throw FormatException('ScaffoldsVersionsCreateResponse201.traceId is required');
         }
         return value;
       })()

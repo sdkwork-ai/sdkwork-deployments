@@ -29,12 +29,12 @@
     "tenantId": "100001",
     "organizationId": "0",
     "accessTokenPermissionScope": [
-      "deploy.marketplaceTemplates.read",
-      "deploy.templateCategories.read",
-      "deploy.appTemplates.read",
-      "deploy.appTemplates.write",
-      "deploy.appTemplateVersions.read",
-      "deploy.appTemplateVersions.write"
+      "deploy.marketplaceScaffolds.read",
+      "deploy.scaffoldCategories.read",
+      "deploy.scaffolds.read",
+      "deploy.scaffolds.write",
+      "deploy.scaffolds.read",
+      "deploy.scaffolds.write"
     ]
   },
   "runtime": {

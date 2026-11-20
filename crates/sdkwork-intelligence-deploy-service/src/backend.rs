@@ -722,133 +722,133 @@ impl DeployBackendApi for DeployService {
             .await
     }
 
-    // -- app template marketplace (admin) ---------------------------------------
+    // -- app scaffold marketplace (admin) ---------------------------------------
 
-    async fn list_template_categories(
+    async fn list_scaffold_categories(
         &self,
         context: &DeployBackendRequestContext,
         include_disabled: bool,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryPage> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ScaffoldCategoryPage> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .list_template_categories(tenant_id, include_disabled, page, page_size)
+            .list_scaffold_categories(tenant_id, include_disabled, page, page_size)
             .await
     }
 
-    async fn create_template_category(
+    async fn create_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
-        request: &sdkwork_deploy_contract::CreateTemplateCategoryRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryResponse> {
+        request: &sdkwork_deploy_contract::CreateScaffoldCategoryRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ScaffoldCategoryResponse> {
         let tenant_id = Self::backend_write_tenant(context)?;
         self.repository
-            .create_template_category(tenant_id, context.tenant_id, context.operator_id, request)
+            .create_scaffold_category(tenant_id, context.tenant_id, context.operator_id, request)
             .await
     }
 
-    async fn retrieve_template_category(
+    async fn retrieve_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
         category_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryResponse> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ScaffoldCategoryResponse> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .retrieve_template_category(tenant_id, category_uuid)
+            .retrieve_scaffold_category(tenant_id, category_uuid)
             .await
     }
 
-    async fn update_template_category(
+    async fn update_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
         category_uuid: &str,
-        request: &sdkwork_deploy_contract::UpdateTemplateCategoryRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryResponse> {
+        request: &sdkwork_deploy_contract::UpdateScaffoldCategoryRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ScaffoldCategoryResponse> {
         let tenant_id = Self::backend_write_tenant(context)?;
         self.repository
-            .update_template_category(tenant_id, context.operator_id, category_uuid, request)
+            .update_scaffold_category(tenant_id, context.operator_id, category_uuid, request)
             .await
     }
 
-    async fn delete_template_category(
+    async fn delete_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
         category_uuid: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::backend_write_tenant(context)?;
         self.repository
-            .delete_template_category(tenant_id, category_uuid)
+            .delete_scaffold_category(tenant_id, category_uuid)
             .await
     }
 
-    async fn list_app_templates(
+    async fn list_application_scaffolds(
         &self,
         context: &DeployBackendRequestContext,
-        query: &sdkwork_deploy_contract::ListAppTemplatesAdminQuery,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage> {
+        query: &sdkwork_deploy_contract::ListApplicationScaffoldsAdminQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldPage> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .list_app_templates_admin(tenant_id, query)
+            .list_application_scaffolds_admin(tenant_id, query)
             .await
     }
 
-    async fn retrieve_app_template(
+    async fn retrieve_application_scaffold(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .retrieve_app_template(tenant_id, None, template_uuid)
+            .retrieve_application_scaffold(tenant_id, None, scaffold_uuid)
             .await
     }
 
-    async fn update_app_template(
+    async fn update_application_scaffold(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
-        request: &sdkwork_deploy_contract::UpdateAppTemplateAdminRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        scaffold_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateApplicationScaffoldAdminRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .review_app_template(tenant_id, context.operator_id, template_uuid, request)
+            .review_application_scaffold(tenant_id, context.operator_id, scaffold_uuid, request)
             .await
     }
 
-    async fn delete_app_template(
+    async fn delete_application_scaffold(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .delete_app_template(tenant_id, None, template_uuid)
+            .delete_application_scaffold(tenant_id, None, scaffold_uuid)
             .await
     }
 
-    async fn list_app_template_versions(
+    async fn list_application_scaffold_versions(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldVersionPage> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .list_app_template_versions(tenant_id, None, template_uuid, page, page_size)
+            .list_application_scaffold_versions(tenant_id, None, scaffold_uuid, page, page_size)
             .await
     }
 
-    async fn retrieve_app_template_version(
+    async fn retrieve_application_scaffold_version(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         version_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionResponse> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldVersionResponse> {
         let tenant_id = Self::backend_tenant_scope(context)?;
         self.repository
-            .retrieve_app_template_version(tenant_id, None, template_uuid, version_uuid)
+            .retrieve_application_scaffold_version(tenant_id, None, scaffold_uuid, version_uuid)
             .await
     }
 

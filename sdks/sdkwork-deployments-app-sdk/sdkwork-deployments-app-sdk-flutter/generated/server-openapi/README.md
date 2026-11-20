@@ -22,15 +22,9 @@ client.setAccessToken('your-access-token');
 
 // Use the SDK
 final params = <String, dynamic>{
-  'page': 1,
-  'page_size': 2,
-  'keyword': 'keyword',
-  'ownership_scope': 'PLATFORM',
-  'scope': 'PLATFORM',
-  'owner_organization_id': '1',
-  'app_kind': 'app-kind',
+  'include_disabled': true,
 };
-final result = await client.app.appsList(params);
+final result = await client.app.scaffoldsCategoriesList(params);
 print(result);
 ```
 
@@ -68,7 +62,6 @@ client.setHeader('X-Custom-Header', 'value');
 - `client.usage` - usage API
 - `client.appDatabase` - app_database API
 - `client.appEnvironment` - app_environment API
-- `client.template` - template API
 - `client.downloads` - downloads API
 
 ## Usage Examples
@@ -120,17 +113,11 @@ print(result);
 
 ### app
 ```dart
-// List the apps the caller may reach
+// List template categories
 final params = <String, dynamic>{
-  'page': 1,
-  'page_size': 2,
-  'keyword': 'keyword',
-  'ownership_scope': 'PLATFORM',
-  'scope': 'PLATFORM',
-  'owner_organization_id': '1',
-  'app_kind': 'app-kind',
+  'include_disabled': true,
 };
-final result = await client.app.appsList(params);
+final result = await client.app.scaffoldsCategoriesList(params);
 print(result);
 ```
 
@@ -238,17 +225,7 @@ final params = <String, dynamic>{
   'page': 1,
   'page_size': 2,
 };
-final result = await client.appEnvironment.getAppEnvironmentsList(appId, params);
-print(result);
-```
-
-### template
-```dart
-// List template categories
-final params = <String, dynamic>{
-  'include_disabled': true,
-};
-final result = await client.template.categoriesList(params);
+final result = await client.appEnvironment.appEnvironmentsList(appId, params);
 print(result);
 ```
 
@@ -265,15 +242,9 @@ print(result);
 ```dart
 try {
   final params = <String, dynamic>{
-    'page': 1,
-    'page_size': 2,
-    'keyword': 'keyword',
-    'ownership_scope': 'PLATFORM',
-    'scope': 'PLATFORM',
-    'owner_organization_id': '1',
-    'app_kind': 'app-kind',
+    'include_disabled': true,
   };
-  final result = await client.app.appsList(params);
+  final result = await client.app.scaffoldsCategoriesList(params);
   print(result);
 } catch (e) {
   print('Error: $e');

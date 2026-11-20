@@ -13,6 +13,7 @@ mod audit;
 mod builds;
 mod certificate_renewals;
 mod certificates;
+mod channel_releases;
 mod database_profiles;
 mod domain_dns_records;
 mod domain_zones;
@@ -34,9 +35,9 @@ mod retention;
 mod runtime_assignments;
 mod servers;
 
+mod scaffold_market;
 mod source_events;
 mod support;
-mod template_market;
 mod tls_control;
 mod upload_sessions;
 mod usage;

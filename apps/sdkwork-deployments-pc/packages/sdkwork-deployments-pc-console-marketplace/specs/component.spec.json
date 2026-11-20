@@ -79,12 +79,12 @@
     "events": [],
     "configKeys": [],
     "permissions": [
-      "deploy.marketplaceTemplates.read",
-      "deploy.appTemplates.read",
-      "deploy.appTemplates.write",
-      "deploy.appTemplateVersions.read",
-      "deploy.appTemplateVersions.write",
-      "deploy.templateCategories.read",
+      "deploy.marketplaceScaffolds.read",
+      "deploy.scaffolds.read",
+      "deploy.scaffolds.write",
+      "deploy.scaffolds.read",
+      "deploy.scaffolds.write",
+      "deploy.scaffoldCategories.read",
       "deploy.apps.read"
     ]
   },

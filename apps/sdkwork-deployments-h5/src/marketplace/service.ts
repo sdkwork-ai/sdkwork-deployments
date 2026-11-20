@@ -4,10 +4,10 @@ import type {
   AppTemplateOrderSummary,
 } from "@sdkwork/order-app-sdk";
 import type {
-  AppTemplateResponse,
-  AppTemplateSummaryResponse,
-  AppTemplateVersionResponse,
-  TemplateCategoryResponse,
+  ApplicationScaffoldResponse,
+  ApplicationScaffoldSummaryResponse,
+  ApplicationScaffoldVersionResponse,
+  ScaffoldCategoryResponse,
 } from "@sdkwork/deployments-app-sdk";
 import { uuid } from "@sdkwork/utils/id";
 
@@ -52,12 +52,12 @@ function pageOf<T>(result: { items: T[]; pageInfo: { totalItems?: string; hasMor
 
 export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["deploy"], orderClient: DeploymentsH5Runtime["order"]) {
   return {
-    async listCategories(): Promise<readonly TemplateCategoryResponse[]> {
-      const page = await deployClient.template.templateCategories.list({ includeDisabled: false });
+    async listCategories(): Promise<readonly ScaffoldCategoryResponse[]> {
+      const page = await deployClient.app.scaffolds.categories.list({ includeDisabled: false });
       return page.items;
     },
-    async browse(params: MarketplaceBrowseParams): Promise<MarketplacePage<AppTemplateSummaryResponse>> {
-      const page = await deployClient.template.marketplaceTemplates.list(
+    async browse(params: MarketplaceBrowseParams): Promise<MarketplacePage<ApplicationScaffoldSummaryResponse>> {
+      const page = await deployClient.app.marketplace.scaffolds.list(
         omitBlank({
           page: params.page,
           pageSize: params.pageSize,
@@ -70,8 +70,8 @@ export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["d
       );
       return pageOf(page);
     },
-    async retrieve(templateUuid: string): Promise<AppTemplateResponse> {
-      return deployClient.template.marketplaceTemplates.retrieve(templateUuid);
+    async retrieve(templateUuid: string): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.marketplace.scaffolds.retrieve(templateUuid);
     },
     /**
      * Starts (or reuses) the order-center purchase of one listing.
@@ -88,21 +88,21 @@ export function createH5MarketplaceService(deployClient: DeploymentsH5Runtime["d
         { idempotencyKey: uuid() },
       );
     },
-    /** The caller's app-template orders; the order center's `paid` is the install entitlement. */
+    /** The caller's app-scaffold orders; the order center's `paid` is the install entitlement. */
     async myPurchases(page: number, pageSize: number): Promise<MarketplacePage<AppTemplateOrderSummary>> {
       return pageOf(await orderClient.orderAppTemplates.appTemplateOrders.list({ page, pageSize }));
     },
-    async myTemplates(page: number, pageSize: number): Promise<MarketplacePage<AppTemplateResponse>> {
-      return pageOf(await deployClient.template.appTemplates.list({ page, pageSize }));
+    async myScaffolds(page: number, pageSize: number): Promise<MarketplacePage<ApplicationScaffoldResponse>> {
+      return pageOf(await deployClient.app.scaffolds.list({ page, pageSize }));
     },
-    submit(templateUuid: string): Promise<AppTemplateResponse> {
-      return deployClient.template.appTemplates.submit(templateUuid);
+    submit(templateUuid: string): Promise<ApplicationScaffoldResponse> {
+      return deployClient.app.scaffolds.submit(templateUuid);
     },
     remove(templateUuid: string): Promise<void> {
-      return deployClient.template.appTemplates.delete(templateUuid);
+      return deployClient.app.scaffolds.delete(templateUuid);
     },
-    async listVersions(templateUuid: string): Promise<readonly AppTemplateVersionResponse[]> {
-      const page = await deployClient.template.appTemplateVersions.list(templateUuid, { page: 1, pageSize: 50 });
+    async listVersions(templateUuid: string): Promise<readonly ApplicationScaffoldVersionResponse[]> {
+      const page = await deployClient.app.scaffolds.versions.list(templateUuid, { page: 1, pageSize: 50 });
       return page.items;
     },
   };

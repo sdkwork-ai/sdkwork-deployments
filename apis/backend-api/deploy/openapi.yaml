@@ -1746,12 +1746,13 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /backend/v3/api/template_categories:
+  /backend/v3/api/scaffold_categories:
     get:
-      operationId: templateCategories.list
-      summary: 获取模板分类列表
+      operationId: scaffolds.categories.list
+      x-sdkwork-permission: deploy.scaffoldCategories.read
+      summary: 获取脚手架分类列表
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -1785,7 +1786,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/TemplateCategoryResponse'
+                            $ref: '#/components/schemas/ScaffoldCategoryResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -1795,10 +1796,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
     post:
-      operationId: templateCategories.create
-      summary: 创建模板分类
+      operationId: scaffolds.categories.create
+      x-sdkwork-permission: deploy.scaffoldCategories.write
+      summary: 创建脚手架分类
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -1810,7 +1812,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTemplateCategoryRequest'
+              $ref: '#/components/schemas/CreateScaffoldCategoryRequest'
       responses:
         '201':
           description: 创建成功
@@ -1829,7 +1831,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/TemplateCategoryResponse'
+                          $ref: '#/components/schemas/ScaffoldCategoryResponse'
         '409':
           description: 资源冲突
           content:
@@ -1842,7 +1844,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /backend/v3/api/template_categories/{categoryUuid}:
+  /backend/v3/api/scaffold_categories/{categoryUuid}:
     parameters:
     - name: categoryUuid
       in: path
@@ -1851,10 +1853,11 @@ paths:
         type: string
         format: uuid
     get:
-      operationId: templateCategories.retrieve
-      summary: 获取模板分类详情
+      operationId: scaffolds.categories.retrieve
+      x-sdkwork-permission: deploy.scaffoldCategories.read
+      summary: 获取脚手架分类详情
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -1876,7 +1879,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/TemplateCategoryResponse'
+                          $ref: '#/components/schemas/ScaffoldCategoryResponse'
         '404':
           description: 资源不存在
           content:
@@ -1885,10 +1888,11 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
     patch:
-      operationId: templateCategories.update
-      summary: 更新模板分类
+      operationId: scaffolds.categories.update
+      x-sdkwork-permission: deploy.scaffoldCategories.write
+      summary: 更新脚手架分类
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -1898,7 +1902,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateTemplateCategoryRequest'
+              $ref: '#/components/schemas/UpdateScaffoldCategoryRequest'
       responses:
         '200':
           description: 成功
@@ -1917,7 +1921,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/TemplateCategoryResponse'
+                          $ref: '#/components/schemas/ScaffoldCategoryResponse'
         '422':
           description: 校验错误
           content:
@@ -1933,10 +1937,11 @@ paths:
           minLength: 1
           maxLength: 128
     delete:
-      operationId: templateCategories.delete
-      summary: 删除模板分类
+      operationId: scaffolds.categories.delete
+      x-sdkwork-permission: deploy.scaffoldCategories.write
+      summary: 删除脚手架分类
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -1956,12 +1961,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
-  /backend/v3/api/app_templates:
+  /backend/v3/api/scaffolds:
     get:
-      operationId: appTemplates.list
-      summary: 获取应用模板列表（全状态）
+      operationId: scaffolds.list
+      summary: 获取应用脚手架列表（全状态）
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -2025,7 +2030,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/AppTemplateResponse'
+                            $ref: '#/components/schemas/ApplicationScaffoldResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -2034,19 +2039,19 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /backend/v3/api/app_templates/{templateUuid}:
+  /backend/v3/api/scaffolds/{scaffoldUuid}:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     get:
-      operationId: appTemplates.retrieve
-      summary: 获取应用模板详情
+      operationId: scaffolds.retrieve
+      summary: 获取应用脚手架详情
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -2068,7 +2073,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '404':
           description: 资源不存在
           content:
@@ -2077,10 +2082,10 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
     patch:
-      operationId: appTemplates.update
-      summary: 审核或调整应用模板
+      operationId: scaffolds.update
+      summary: 审核或调整应用脚手架
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -2090,7 +2095,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateAppTemplateAdminRequest'
+              $ref: '#/components/schemas/UpdateApplicationScaffoldAdminRequest'
       responses:
         '200':
           description: 成功
@@ -2109,7 +2114,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '422':
           description: 校验错误
           content:
@@ -2125,10 +2130,10 @@ paths:
           minLength: 1
           maxLength: 128
     delete:
-      operationId: appTemplates.delete
-      summary: 删除应用模板
+      operationId: scaffolds.delete
+      summary: 删除应用脚手架
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -2142,19 +2147,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
-  /backend/v3/api/app_templates/{templateUuid}/versions:
+  /backend/v3/api/scaffolds/{scaffoldUuid}/versions:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     get:
-      operationId: appTemplateVersions.list
-      summary: 获取应用模板版本列表
+      operationId: scaffolds.versions.list
+      summary: 获取应用脚手架版本列表
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -2183,7 +2188,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/AppTemplateVersionResponse'
+                            $ref: '#/components/schemas/ApplicationScaffoldVersionResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -2192,9 +2197,9 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}:
+  /backend/v3/api/scaffolds/{scaffoldUuid}/versions/{versionUuid}:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
@@ -2207,10 +2212,10 @@ paths:
         type: string
         format: uuid
     get:
-      operationId: appTemplateVersions.retrieve
-      summary: 获取应用模板版本详情
+      operationId: scaffolds.versions.retrieve
+      summary: 获取应用脚手架版本详情
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -2232,7 +2237,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateVersionResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldVersionResponse'
         '404':
           description: 资源不存在
           content:
@@ -2599,7 +2604,7 @@ components:
       schema:
         type: string
   schemas:
-    TemplateCategoryResponse:
+    ScaffoldCategoryResponse:
       type: object
       additionalProperties: false
       required:
@@ -2644,7 +2649,7 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    AppTemplateScreenshot:
+    ApplicationScaffoldScreenshot:
       type: object
       additionalProperties: false
       required:
@@ -2663,7 +2668,7 @@ components:
         sortOrder:
           type: integer
           minimum: 0
-    AppTemplateResponse:
+    ApplicationScaffoldResponse:
       type: object
       additionalProperties: false
       required:
@@ -2729,7 +2734,7 @@ components:
           type: array
           maxItems: 30
           items:
-            $ref: '#/components/schemas/AppTemplateScreenshot'
+            $ref: '#/components/schemas/ApplicationScaffoldScreenshot'
         visibility:
           type: string
           enum:
@@ -2784,12 +2789,12 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    AppTemplateVersionResponse:
+    ApplicationScaffoldVersionResponse:
       type: object
       additionalProperties: false
       required:
       - id
-      - templateUuid
+      - scaffoldUuid
       - templateVersion
       - changelog
       - platformTargets
@@ -2802,7 +2807,7 @@ components:
         id:
           type: string
           format: uuid
-        templateUuid:
+        scaffoldUuid:
           type: string
           format: uuid
         templateVersion:
@@ -2846,7 +2851,7 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    CreateTemplateCategoryRequest:
+    CreateScaffoldCategoryRequest:
       type: object
       additionalProperties: false
       required:
@@ -2870,7 +2875,7 @@ components:
         sortOrder:
           type: integer
           minimum: 0
-    UpdateTemplateCategoryRequest:
+    UpdateScaffoldCategoryRequest:
       type: object
       additionalProperties: false
       properties:
@@ -2892,7 +2897,7 @@ components:
           enum:
           - ACTIVE
           - DISABLED
-    UpdateAppTemplateAdminRequest:
+    UpdateApplicationScaffoldAdminRequest:
       type: object
       additionalProperties: false
       properties:

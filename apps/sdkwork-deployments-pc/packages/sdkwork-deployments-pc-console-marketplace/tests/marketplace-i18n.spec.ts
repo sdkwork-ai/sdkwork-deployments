@@ -10,8 +10,8 @@ describe("marketplace i18n", () => {
       "marketplace.acquirePaid",
       "marketplace.acquired",
       "marketplace.openCashier",
-      "myTemplates.create",
-      "myTemplates.submit",
+      "myScaffolds.create",
+      "myScaffolds.submit",
       "common.confirm",
     ];
     for (const key of samples) {

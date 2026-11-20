@@ -1949,6 +1949,99 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/readiness:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      operationId: apps.readiness.retrieve
+      summary: Derived application factory readiness
+      description: Recomputes the six factory stages from the rows that exist and
+        reports the first blocking stage. Never stored; a retired artifact or a
+        disabled installation flips it on the next read.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: deploy.apps.read
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppFactoryReadiness'
+        '404':
+          description: Application not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/apps/{appId}/uninstall:
+    parameters:
+    - name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      operationId: apps.uninstall
+      summary: Forward-only application uninstall
+      description: Disables the IAM installation, then archives the application.
+        There is no DELETE; the durable uninstall stage makes a retried call land on
+        the same state. The Idempotency-Key header is required.
+      tags:
+      - app
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: deploy.apps.write
+      x-sdkwork-idempotent: true
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/AppUninstallResponse'
+        '404':
+          description: Application not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/apps/{appId}:
     parameters:
     - name: appId
@@ -5307,7 +5400,7 @@ paths:
         type: string
         format: uuid
     get:
-      operationId: appEnvironments.list
+      operationId: appEnvironmentPromotions.list
       summary: List the immutable promotion history of an environment
       tags:
       - appEnvironment
@@ -5349,7 +5442,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
     post:
-      operationId: appEnvironments.create
+      operationId: appEnvironmentPromotions.create
       summary: Promote a release into the environment
       description: 'Sets the environment''s current release pointer and appends an
         immutable promotion record. When fromEnvironmentId is provided the release
@@ -5401,12 +5494,13 @@ paths:
           type: string
           minLength: 1
           maxLength: 128
-  /app/v3/api/template_categories:
+  /app/v3/api/scaffold_categories:
     get:
-      operationId: templateCategories.list
+      operationId: scaffolds.categories.list
+      x-sdkwork-permission: deploy.scaffoldCategories.read
       summary: List template categories
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5438,7 +5532,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/TemplateCategoryResponse'
+                            $ref: '#/components/schemas/ScaffoldCategoryResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -5447,12 +5541,13 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/marketplace/templates:
+  /app/v3/api/marketplace/scaffolds:
     get:
-      operationId: marketplaceTemplates.list
-      summary: Browse the tenant app template marketplace
+      operationId: marketplace.scaffolds.list
+      x-sdkwork-permission: deploy.marketplaceScaffolds.read
+      summary: Browse the tenant application scaffold marketplace
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5514,7 +5609,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/AppTemplateSummaryResponse'
+                            $ref: '#/components/schemas/ApplicationScaffoldSummaryResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -5523,19 +5618,20 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/marketplace/templates/{templateUuid}:
+  /app/v3/api/marketplace/scaffolds/{scaffoldUuid}:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     get:
-      operationId: marketplaceTemplates.retrieve
-      summary: Retrieve a marketplace app template
+      operationId: marketplace.scaffolds.retrieve
+      x-sdkwork-permission: deploy.marketplaceScaffolds.read
+      summary: Retrieve a marketplace application scaffold
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5557,7 +5653,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '404':
           description: 资源不存在
           content:
@@ -5565,16 +5661,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
-  /app/v3/api/marketplace/templates/{templateUuid}/install:
+  /app/v3/api/marketplace/scaffolds/{scaffoldUuid}/install:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     post:
-      operationId: marketplaceTemplates.install
+      operationId: marketplace.scaffolds.install
       x-sdkwork-idempotent: true
       x-sdkwork-permission: deploy.apps.write
       summary: Install a free, Git-backed template as a new application
@@ -5585,7 +5681,7 @@ paths:
         artifact sharing are available; the call never creates an app whose
         source it cannot deliver.
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5602,7 +5698,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InstallAppTemplateRequest'
+              $ref: '#/components/schemas/InstallApplicationScaffoldRequest'
       responses:
         '200':
           description: Installed
@@ -5621,19 +5717,19 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateInstallResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldInstallResponse'
         '409':
           description: Template is not installable in the current state
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/app_templates:
+  /app/v3/api/scaffolds:
     get:
-      operationId: appTemplates.list
-      summary: List the caller's app templates
+      operationId: scaffolds.list
+      summary: List the caller's application scaffolds
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5677,7 +5773,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/AppTemplateResponse'
+                            $ref: '#/components/schemas/ApplicationScaffoldResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -5687,10 +5783,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
     post:
-      operationId: appTemplates.create
-      summary: Publish an app as a template listing
+      operationId: scaffolds.create
+      summary: Publish an application as a scaffold listing
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5702,7 +5798,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateAppTemplateRequest'
+              $ref: '#/components/schemas/CreateApplicationScaffoldRequest'
       responses:
         '201':
           description: Created
@@ -5721,26 +5817,26 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '422':
           description: 校验错误
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/app_templates/{templateUuid}:
+  /app/v3/api/scaffolds/{scaffoldUuid}:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     get:
-      operationId: appTemplates.retrieve
-      summary: Retrieve the caller's app template
+      operationId: scaffolds.retrieve
+      summary: Retrieve the caller's application scaffold
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5762,7 +5858,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '404':
           description: 资源不存在
           content:
@@ -5771,10 +5867,10 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
     patch:
-      operationId: appTemplates.update
-      summary: Update the caller's app template listing
+      operationId: scaffolds.update
+      summary: Update the caller's application scaffold listing
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5784,7 +5880,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateAppTemplateRequest'
+              $ref: '#/components/schemas/UpdateApplicationScaffoldRequest'
       responses:
         '200':
           description: Success
@@ -5803,7 +5899,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '422':
           description: 校验错误
           content:
@@ -5819,10 +5915,10 @@ paths:
           minLength: 1
           maxLength: 128
     delete:
-      operationId: appTemplates.delete
-      summary: Withdraw the caller's app template
+      operationId: scaffolds.delete
+      summary: Withdraw the caller's application scaffold
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5842,19 +5938,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       parameters: []
-  /app/v3/api/app_templates/{templateUuid}/submit:
+  /app/v3/api/scaffolds/{scaffoldUuid}/submit:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     post:
-      operationId: appTemplates.submit
-      summary: Submit an app template for review
+      operationId: scaffolds.submit
+      summary: Submit an application scaffold for review
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5876,7 +5972,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldResponse'
         '409':
           description: 资源冲突
           content:
@@ -5889,19 +5985,19 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/app_templates/{templateUuid}/versions:
+  /app/v3/api/scaffolds/{scaffoldUuid}/versions:
     parameters:
-    - name: templateUuid
+    - name: scaffoldUuid
       in: path
       required: true
       schema:
         type: string
         format: uuid
     get:
-      operationId: appTemplateVersions.list
-      summary: List versions of the caller's app template
+      operationId: scaffolds.versions.list
+      summary: List versions of the caller's application scaffold
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5930,7 +6026,7 @@ paths:
                         items:
                           type: array
                           items:
-                            $ref: '#/components/schemas/AppTemplateVersionResponse'
+                            $ref: '#/components/schemas/ApplicationScaffoldVersionResponse'
                         pageInfo:
                           $ref: '#/components/schemas/PageInfo'
         '401':
@@ -5940,10 +6036,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
     post:
-      operationId: appTemplateVersions.create
-      summary: Add a version to the caller's app template
+      operationId: scaffolds.versions.create
+      summary: Add a version to the caller's application scaffold
       tags:
-      - template
+      - app
       security:
       - AuthToken: []
         AccessToken: []
@@ -5955,7 +6051,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateAppTemplateVersionRequest'
+              $ref: '#/components/schemas/CreateApplicationScaffoldVersionRequest'
       responses:
         '201':
           description: Created
@@ -5974,7 +6070,7 @@ paths:
                       - item
                       properties:
                         item:
-                          $ref: '#/components/schemas/AppTemplateVersionResponse'
+                          $ref: '#/components/schemas/ApplicationScaffoldVersionResponse'
         '422':
           description: 校验错误
           content:
@@ -6262,7 +6358,7 @@ components:
       schema:
         type: string
   schemas:
-    TemplateCategoryResponse:
+    ScaffoldCategoryResponse:
       type: object
       additionalProperties: false
       required:
@@ -6307,7 +6403,7 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    AppTemplateScreenshot:
+    ApplicationScaffoldScreenshot:
       type: object
       additionalProperties: false
       required:
@@ -6326,7 +6422,7 @@ components:
         sortOrder:
           type: integer
           minimum: 0
-    AppTemplateSummaryResponse:
+    ApplicationScaffoldSummaryResponse:
       type: object
       additionalProperties: false
       required:
@@ -6378,7 +6474,7 @@ components:
           type: array
           maxItems: 30
           items:
-            $ref: '#/components/schemas/AppTemplateScreenshot'
+            $ref: '#/components/schemas/ApplicationScaffoldScreenshot'
         visibility:
           type: string
           enum:
@@ -6427,7 +6523,7 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    AppTemplateResponse:
+    ApplicationScaffoldResponse:
       type: object
       additionalProperties: false
       required:
@@ -6493,7 +6589,7 @@ components:
           type: array
           maxItems: 30
           items:
-            $ref: '#/components/schemas/AppTemplateScreenshot'
+            $ref: '#/components/schemas/ApplicationScaffoldScreenshot'
         visibility:
           type: string
           enum:
@@ -6548,7 +6644,7 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    InstallAppTemplateRequest:
+    InstallApplicationScaffoldRequest:
       type: object
       additionalProperties: false
       properties:
@@ -6565,24 +6661,24 @@ components:
           description: >-
             Settled order that owns a paid listing. Required for PAID templates;
             the server verifies buyer, payment state and template before install.
-    AppTemplateInstallResponse:
+    ApplicationScaffoldInstallResponse:
       type: object
       additionalProperties: false
       required:
       - app
-      - templateUuid
+      - scaffoldUuid
       properties:
         app:
           $ref: '#/components/schemas/AppResponse'
-        templateUuid:
+        scaffoldUuid:
           type: string
           format: uuid
-    AppTemplateVersionResponse:
+    ApplicationScaffoldVersionResponse:
       type: object
       additionalProperties: false
       required:
       - id
-      - templateUuid
+      - scaffoldUuid
       - templateVersion
       - changelog
       - platformTargets
@@ -6595,7 +6691,7 @@ components:
         id:
           type: string
           format: uuid
-        templateUuid:
+        scaffoldUuid:
           type: string
           format: uuid
         templateVersion:
@@ -6639,7 +6735,7 @@ components:
         version:
           type: string
           pattern: ^[0-9]+$
-    CreateAppTemplateRequest:
+    CreateApplicationScaffoldRequest:
       type: object
       additionalProperties: false
       required:
@@ -6707,10 +6803,10 @@ components:
           type: array
           maxItems: 30
           items:
-            $ref: '#/components/schemas/AppTemplateScreenshot'
+            $ref: '#/components/schemas/ApplicationScaffoldScreenshot'
         initialVersion:
-          $ref: '#/components/schemas/CreateAppTemplateVersionRequest'
-    UpdateAppTemplateRequest:
+          $ref: '#/components/schemas/CreateApplicationScaffoldVersionRequest'
+    UpdateApplicationScaffoldRequest:
       type: object
       additionalProperties: false
       properties:
@@ -6756,8 +6852,8 @@ components:
           type: array
           maxItems: 30
           items:
-            $ref: '#/components/schemas/AppTemplateScreenshot'
-    CreateAppTemplateVersionRequest:
+            $ref: '#/components/schemas/ApplicationScaffoldScreenshot'
+    CreateApplicationScaffoldVersionRequest:
       type: object
       additionalProperties: false
       required:
@@ -11762,6 +11858,82 @@ components:
           type: integer
         releaseNotesUrl:
           type: string
+    FactoryReadinessCheck:
+      type: object
+      additionalProperties: false
+      required:
+      - step
+      - status
+      properties:
+        step:
+          type: string
+          enum:
+          - REGISTRATION
+          - PLATFORM_TARGET
+          - ENVIRONMENT
+          - IDENTITY
+          - SOURCE
+          - HOSTING_CARRIER
+        status:
+          type: string
+          enum:
+          - READY
+          - PENDING
+          - BLOCKED
+          - EXTERNAL
+          - NOT_APPLICABLE
+        reason:
+          type: string
+        detail:
+          type: string
+    AppFactoryReadiness:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - checks
+      properties:
+        status:
+          type: string
+          enum:
+          - READY
+          - PENDING
+          - BLOCKED
+        blockingStep:
+          type: string
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryReadinessCheck'
+    AppUninstallResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - appId
+      - uninstallStatus
+      - appStatus
+      - replayed
+      properties:
+        appId:
+          type: string
+        uninstallStatus:
+          type: string
+          enum:
+          - not_started
+          - pending_identity_disable
+          - identity_disabled
+          - complete
+          - failed
+        appStatus:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - PAUSED
+          - ARCHIVED
+        replayed:
+          type: boolean
+
   responses:
     BadRequest:
       description: 请求参数错误

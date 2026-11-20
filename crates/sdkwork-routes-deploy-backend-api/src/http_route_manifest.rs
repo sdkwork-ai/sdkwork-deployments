@@ -246,84 +246,84 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.apps.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/template_categories",
-        "template",
-        "templateCategories.list",
+        "/backend/v3/api/scaffold_categories",
+        "app",
+        "scaffolds.categories.list",
     )
-    .with_required_permission("deploy.templateCategories.read"),
+    .with_required_permission("deploy.scaffoldCategories.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/backend/v3/api/template_categories",
-        "template",
-        "templateCategories.create",
+        "/backend/v3/api/scaffold_categories",
+        "app",
+        "scaffolds.categories.create",
     )
-    .with_required_permission("deploy.templateCategories.write")
+    .with_required_permission("deploy.scaffoldCategories.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/template_categories/{categoryUuid}",
-        "template",
-        "templateCategories.retrieve",
+        "/backend/v3/api/scaffold_categories/{categoryUuid}",
+        "app",
+        "scaffolds.categories.retrieve",
     )
-    .with_required_permission("deploy.templateCategories.read"),
+    .with_required_permission("deploy.scaffoldCategories.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
-        "/backend/v3/api/template_categories/{categoryUuid}",
-        "template",
-        "templateCategories.update",
+        "/backend/v3/api/scaffold_categories/{categoryUuid}",
+        "app",
+        "scaffolds.categories.update",
     )
-    .with_required_permission("deploy.templateCategories.write")
+    .with_required_permission("deploy.scaffoldCategories.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
-        "/backend/v3/api/template_categories/{categoryUuid}",
-        "template",
-        "templateCategories.delete",
+        "/backend/v3/api/scaffold_categories/{categoryUuid}",
+        "app",
+        "scaffolds.categories.delete",
     )
-    .with_required_permission("deploy.templateCategories.write"),
+    .with_required_permission("deploy.scaffoldCategories.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/app_templates",
-        "template",
-        "appTemplates.list",
+        "/backend/v3/api/scaffolds",
+        "app",
+        "scaffolds.list",
     )
-    .with_required_permission("deploy.appTemplates.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/app_templates/{templateUuid}",
-        "template",
-        "appTemplates.retrieve",
+        "/backend/v3/api/scaffolds/{scaffoldUuid}",
+        "app",
+        "scaffolds.retrieve",
     )
-    .with_required_permission("deploy.appTemplates.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Patch,
-        "/backend/v3/api/app_templates/{templateUuid}",
-        "template",
-        "appTemplates.update",
+        "/backend/v3/api/scaffolds/{scaffoldUuid}",
+        "app",
+        "scaffolds.update",
     )
-    .with_required_permission("deploy.appTemplates.write")
+    .with_required_permission("deploy.scaffolds.write")
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
-        "/backend/v3/api/app_templates/{templateUuid}",
-        "template",
-        "appTemplates.delete",
+        "/backend/v3/api/scaffolds/{scaffoldUuid}",
+        "app",
+        "scaffolds.delete",
     )
-    .with_required_permission("deploy.appTemplates.write"),
+    .with_required_permission("deploy.scaffolds.write"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/app_templates/{templateUuid}/versions",
-        "template",
-        "appTemplateVersions.list",
+        "/backend/v3/api/scaffolds/{scaffoldUuid}/versions",
+        "app",
+        "scaffolds.versions.list",
     )
-    .with_required_permission("deploy.appTemplateVersions.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
-        "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}",
-        "template",
-        "appTemplateVersions.retrieve",
+        "/backend/v3/api/scaffolds/{scaffoldUuid}/versions/{versionUuid}",
+        "app",
+        "scaffolds.versions.retrieve",
     )
-    .with_required_permission("deploy.appTemplateVersions.read"),
+    .with_required_permission("deploy.scaffolds.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/downloads/catalogs",

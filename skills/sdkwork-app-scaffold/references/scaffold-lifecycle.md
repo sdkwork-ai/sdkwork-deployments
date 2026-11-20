@@ -1,30 +1,30 @@
 # Scaffold Lifecycle Contract
 
-The scaffold is the deploy-owned design-time generator input. Its physical API is `app_templates`;
-its concept is Scaffold. A template carries listing metadata, and each immutable version carries the
+The scaffold is the deploy-owned design-time generator input. Its physical API is `scaffolds`;
+its concept is Scaffold. A scaffold carries listing metadata, and each immutable version carries the
 uploaded package.
 
 | Step | Operation | Required fields |
 | --- | --- | --- |
-| Resolve category | `template.templateCategories.list()` | match `categoryKey` or `id` exactly |
-| List / retrieve template | `template.appTemplates.list`, `.retrieve` | exact `templateKey` for reuse |
+| Resolve category | `app.scaffolds.categories.list()` | match `categoryKey` or `id` exactly |
+| List / retrieve scaffold | `app.scaffolds.list`, `.retrieve` | exact `scaffoldKey` for reuse |
 | Upload package | `driveClient.uploader.uploadArchive` | `appResourceType: "deploy.artifact"`, `appResourceId`, `originalFileName`, `contentType`, `checksumSha256Hex` |
 | Register package | `artifact.create` | `siteId`, `packageType: 1`, `fileName`, `contentType`, `contentLength`, `checksumSha256`, `driveUploadSessionId`, `driveUploadItemId`, `driveSpaceId`, `driveNodeId`, `idempotencyKey` |
-| Create template | `template.appTemplates.create` | `appUuid`, `categoryUuid`, `templateKey`, `displayName`, `summary`, optional `initialVersion` |
-| Update listing | `template.appTemplates.update` | listing fields only; never a version |
-| Add version | `template.appTemplateVersions.create` | `version`, `artifactUuid`, `checksumSha256`, `packageSizeBytes`, `platformTargets`, `changelog` |
-| Submit review | `template.appTemplates.submit` | path `templateUuid`; no body |
-| Track status | `template.appTemplates.retrieve`, `template.appTemplateVersions.list` | `status`, `latestVersionUuid` |
-| Withdraw | `template.appTemplates.delete` | path `templateUuid`; requires explicit approval |
-| Marketplace read | `template.marketplaceTemplates.list`, `.retrieve` | public view of a published template |
+| Create scaffold | `app.scaffolds.create` | `appUuid`, `categoryUuid`, `scaffoldKey`, `displayName`, `summary`, optional `initialVersion` |
+| Update listing | `app.scaffolds.update` | listing fields only; never a version |
+| Add version | `app.scaffolds.versions.create` | `version`, `artifactUuid`, `checksumSha256`, `packageSizeBytes`, `platformTargets`, `changelog` |
+| Submit review | `app.scaffolds.submit` | path `scaffoldUuid`; no body |
+| Track status | `app.scaffolds.retrieve`, `app.scaffolds.versions.list` | `status`, `latestVersionUuid` |
+| Withdraw | `app.scaffolds.delete` | path `scaffoldUuid`; requires explicit approval |
+| Marketplace read | `app.marketplace.scaffolds.list`, `.retrieve` | public view of a published scaffold |
 
-`packageSizeBytes` and `priceMinor` are int64 strings. `templateType` is `APP`, `PPT`, or `VIDEO`
+`packageSizeBytes` and `priceMinor` are int64 strings. `scaffoldType` is `APP`, `PPT`, or `VIDEO`
 (default `APP`).
 
 ## Resolve The Category
 
 ```ts
-const categories = await deployClient.template.templateCategories.list();
+const categories = await deployClient.app.scaffolds.categories.list();
 const matches = categories.items.filter(
   (category) => category.id === categoryRef || category.categoryKey === categoryRef,
 );
@@ -50,7 +50,7 @@ const upload = await driveClient.uploader.uploadArchive({
   file: new Blob([bytes], { type: "application/zip" }),
   appResourceType: "deploy.artifact",
   appResourceId: sourceAppId,
-  scene: "app-template",
+  scene: "application-scaffold",
   originalFileName: fileName,
   contentType: "application/zip",
   checksumSha256Hex: digest,
@@ -77,10 +77,10 @@ const artifact = await deployClient.artifact.create(
 ## Create Or Reuse The Listing
 
 ```ts
-const existing = (await deployClient.template.appTemplates.list({
-  keyword: templateKey,
+const existing = (await deployClient.app.scaffolds.list({
+  keyword: scaffoldKey,
   pageSize: 50,
-})).items.filter((item) => item.templateKey === templateKey);
+})).items.filter((item) => item.scaffoldKey === scaffoldKey);
 
 const version = {
   version: semanticVersion,
@@ -93,16 +93,16 @@ const version = {
 };
 
 const template = existing.length === 1
-  ? await deployClient.template.appTemplates.update(
+  ? await deployClient.app.scaffolds.update(
       existing[0].id,
       { displayName, summary, visibility, pricingModel },
       { idempotencyKey: updateIdempotencyKey },
     )
-  : await deployClient.template.appTemplates.create(
+  : await deployClient.app.scaffolds.create(
       {
         appUuid: sourceAppId,
         categoryUuid,
-        templateKey,
+        scaffoldKey,
         displayName,
         summary,
         visibility,
@@ -113,7 +113,7 @@ const template = existing.length === 1
     );
 
 if (existing.length === 1) {
-  await deployClient.template.appTemplateVersions.create(
+  await deployClient.app.scaffolds.versions.create(
     template.id,
     version,
     { idempotencyKey: versionIdempotencyKey },
@@ -121,18 +121,18 @@ if (existing.length === 1) {
 }
 ```
 
-`list({ keyword })` is a search, not an identity lookup. Confirm the exact `templateKey` before
+`list({ keyword })` is a search, not an identity lookup. Confirm the exact `scaffoldKey` before
 updating; stop when zero or several templates match.
 
 ## Submit, Track, Update, Withdraw
 
 ```ts
 if (submitForReview) {
-  await deployClient.template.appTemplates.submit(template.id);
+  await deployClient.app.scaffolds.submit(template.id);
 }
 
-const current = await deployClient.template.appTemplates.retrieve(template.id);
-const versions = await deployClient.template.appTemplateVersions.list(template.id);
+const current = await deployClient.app.scaffolds.retrieve(template.id);
+const versions = await deployClient.app.scaffolds.versions.list(template.id);
 const latest = versions.items.find((item) => item.templateVersion === semanticVersion);
 
 if (!latest || latest.artifactUuid !== artifact.id || latest.checksumSha256 !== digest) {
@@ -141,9 +141,9 @@ if (!latest || latest.artifactUuid !== artifact.id || latest.checksumSha256 !== 
 ```
 
 - `DRAFT` -> `PENDING_REVIEW` -> `PUBLISHED` is the review path; `REJECTED` stays editable.
-- `appTemplates.update(templateUuid, { ... }, { idempotencyKey })` changes listing metadata only.
-- `appTemplates.delete(templateUuid)` withdraws the listing; ask for explicit approval first.
-- `marketplaceTemplates.list({ templateType: "APP" })` and `.retrieve(templateUuid)` read the public
+- `scaffolds.update(scaffoldUuid, { ... }, { idempotencyKey })` changes listing metadata only.
+- `scaffolds.delete(scaffoldUuid)` withdraws the listing; ask for explicit approval first.
+- `marketplace.scaffolds.list({ templateType: "APP" })` and `.retrieve(scaffoldUuid)` read the public
   view.
 
 ## Git Acquisition

@@ -28,7 +28,7 @@ Use this skill for any SDKWork application operation:
 
 Do not use this skill for:
 
-- publishing an app scaffold as a Deploy app template — use `sdkwork-app-scaffold`;
+- publishing an app scaffold as a Deploy application scaffold — use `sdkwork-app-scaffold`;
 - registering the commerce product listing or app-store catalog — that is a commerce boundary;
 - platform-level domain zones, TLS certificates, or gateway administration — that is the Deploy
   control-plane surface, not an app operation.
@@ -100,7 +100,7 @@ node skills/sdkwork-app-deployments/scripts/run.mjs ops --api backend --filter a
 ```
 
 The generated operation map is [references/api-map.md](references/api-map.md). Operation ids that
-exist on both surfaces (for example `appTemplates.list`) require `--api app|backend`.
+exist on both surfaces (for example `scaffolds.list`) require `--api app|backend`.
 
 ### Application operation map
 

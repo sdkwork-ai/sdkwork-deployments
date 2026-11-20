@@ -4,7 +4,7 @@
  * contracts that this repository already owns.
  *
  * Operation ids collide between the app and backend surfaces (for example
- * `appTemplates.list`), so the registry is keyed `<api>:<operationId>` and callers
+ * `scaffolds.list`), so the registry is keyed `<api>:<operationId>` and callers
  * select the surface explicitly when an id exists on both.
  *
  * Usage:

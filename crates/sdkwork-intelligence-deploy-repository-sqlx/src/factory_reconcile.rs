@@ -11,7 +11,7 @@
 //! hosting carrier live in sibling modules, and this module reads them
 //! **defensively**: a schema that does not host the sibling table is reported as
 //! `unavailable` instead of failing the whole report, exactly as
-//! `template_market.rs` probes `to_regclass` before joining commerce tables.
+//! `scaffold_market.rs` probes `to_regclass` before joining commerce tables.
 //!
 //! The report is read-only. It never repairs anything: a dangling link is an
 //! operator decision (retry provisioning, re-create the carrier, or retire the

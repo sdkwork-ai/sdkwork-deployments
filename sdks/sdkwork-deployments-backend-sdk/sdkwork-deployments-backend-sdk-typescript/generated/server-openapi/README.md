@@ -67,7 +67,6 @@ const client = new SdkworkDeployBackendClient({
 - `client.usage` - usage API
 - `client.signingHealth` - signing_health API
 - `client.sourceEvents` - source_events API
-- `client.template` - template API
 - `client.downloads` - downloads API
 
 ## Usage Examples
@@ -217,18 +216,6 @@ const params = {
   page_size: 2,
 };
 const result = await client.sourceEvents.list(params);
-```
-
-### template
-
-```typescript
-// 获取模板分类列表
-const params = {
-  page: 1,
-  page_size: 2,
-  include_disabled: true,
-};
-const result = await client.template.templateCategories.list(params);
 ```
 
 ### downloads

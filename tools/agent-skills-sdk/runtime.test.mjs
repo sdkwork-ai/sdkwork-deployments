@@ -85,20 +85,20 @@ test('redacts token values but keeps presence flags', () => {
 test('resolves a unique operation and requires an api for collisions', () => {
   assert.equal(resolveOperation({ operationId: 'apps.source.update' }).api, 'app');
   assert.equal(
-    resolveOperation({ operationId: 'appTemplates.list', api: 'backend' }).path,
-    '/backend/v3/api/app_templates',
+    resolveOperation({ operationId: 'scaffolds.list', api: 'backend' }).path,
+    '/backend/v3/api/scaffolds',
   );
   assert.throws(
-    () => resolveOperation({ operationId: 'appTemplates.list' }),
+    () => resolveOperation({ operationId: 'scaffolds.list' }),
     /exists on both surfaces/u,
   );
 });
 
 test('lists operations by surface and filter', () => {
-  const backendTemplates = listOperations({ api: 'backend', filter: 'appTemplates' });
+  const backendTemplates = listOperations({ api: 'backend', filter: 'scaffolds' });
   assert.ok(backendTemplates.length > 0);
   assert.ok(backendTemplates.every((entry) => entry.api === 'backend'));
-  assert.ok(backendTemplates.every((entry) => entry.operationId.includes('appTemplates')));
+  assert.ok(backendTemplates.every((entry) => entry.operationId.includes('scaffolds')));
 });
 
 test('extracts tokens from nested login response shapes', () => {

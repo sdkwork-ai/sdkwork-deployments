@@ -49,15 +49,15 @@ pub const APP_FACTORY_RECONCILIATION: &str = "/backend/v3/api/apps/factory_recon
 /// it is an operator (backend) action, not a tenant-console one.
 pub const APP_IDENTITY_PROVISION: &str = "/backend/v3/api/apps/{appId}/identity_provision";
 
-// -- app template marketplace (admin) ------------------------------------------
+// -- application scaffolds (admin) --------------------------------------------
 
-pub const TEMPLATE_CATEGORIES: &str = "/backend/v3/api/template_categories";
-pub const TEMPLATE_CATEGORY: &str = "/backend/v3/api/template_categories/{categoryUuid}";
-pub const APP_TEMPLATES: &str = "/backend/v3/api/app_templates";
-pub const APP_TEMPLATE: &str = "/backend/v3/api/app_templates/{templateUuid}";
-pub const APP_TEMPLATE_VERSIONS: &str = "/backend/v3/api/app_templates/{templateUuid}/versions";
-pub const APP_TEMPLATE_VERSION: &str =
-    "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}";
+pub const SCAFFOLD_CATEGORIES: &str = "/backend/v3/api/scaffold_categories";
+pub const SCAFFOLD_CATEGORY: &str = "/backend/v3/api/scaffold_categories/{categoryUuid}";
+pub const SCAFFOLDS: &str = "/backend/v3/api/scaffolds";
+pub const SCAFFOLD: &str = "/backend/v3/api/scaffolds/{scaffoldUuid}";
+pub const SCAFFOLD_VERSIONS: &str = "/backend/v3/api/scaffolds/{scaffoldUuid}/versions";
+pub const SCAFFOLD_VERSION: &str =
+    "/backend/v3/api/scaffolds/{scaffoldUuid}/versions/{versionUuid}";
 
 // -- download catalog (admin) --------------------------------------------------
 

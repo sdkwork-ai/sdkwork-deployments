@@ -33,6 +33,7 @@ import {
   type DeployAppDomain,
   type DeployAppOperationsService,
 } from "../service/deploy-app-operations.ts";
+import { AppFactoryPanel } from "./AppFactoryPanel.tsx";
 import css from "./create-deploy-app.module.css";
 
 export interface AppDetailDrawerProps {
@@ -260,6 +261,9 @@ export function AppDetailDrawer({
               </FieldGrid>
             </Section>
           )}
+
+          {/* ---------- 应用工厂：就绪度 / 卸载 / 再创作 / 提升历史 ---------- */}
+          <AppFactoryPanel deployClient={deployClient} app={current} locale={locale} />
         </div>
 
         <footer className={css.footer}>

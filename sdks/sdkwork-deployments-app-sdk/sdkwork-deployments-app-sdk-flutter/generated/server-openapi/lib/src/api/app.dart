@@ -45,6 +45,30 @@ class AppApi {
     })();
   }
 
+  /// Derived application factory readiness
+  Future<AppsReadinessRetrieveResponse?> appsReadinessRetrieve(String appId) async {
+    final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/readiness'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsReadinessRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Forward-only application uninstall
+  Future<AppsUninstallResponse?> appsUninstall(String appId, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/uninstall'), headers: requestHeaders);
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsUninstallResponse.fromJson(map);
+    })();
+  }
+
   /// Retrieve a tenant app
   Future<AppsRetrieveResponse?> appsRetrieve(String appId) async {
     final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}'));
@@ -335,6 +359,160 @@ class AppApi {
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : SourceRepositoriesRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// List template categories
+  Future<ScaffoldsCategoriesListResponse?> scaffoldsCategoriesList([bool? includeDisabled]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('include_disabled', includeDisabled, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/scaffold_categories'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsCategoriesListResponse.fromJson(map);
+    })();
+  }
+
+  /// Browse the tenant app template marketplace
+  Future<MarketplaceScaffoldsListResponse?> marketplaceScaffoldsList([int? page, int? pageSize, String? keyword, String? categoryUuid, String? pricingModel, String? templateType, String? sort]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('keyword', keyword, 'form', true, false, null),
+      QueryParameterSpec('category_uuid', categoryUuid, 'form', true, false, null),
+      QueryParameterSpec('pricing_model', pricingModel, 'form', true, false, null),
+      QueryParameterSpec('template_type', templateType, 'form', true, false, null),
+      QueryParameterSpec('sort', sort, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/marketplace/scaffolds'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : MarketplaceScaffoldsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Retrieve a marketplace app template
+  Future<MarketplaceScaffoldsRetrieveResponse?> marketplaceScaffoldsRetrieve(String scaffoldUuid) async {
+    final response = await _client.get(ApiPaths.appPath('/marketplace/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : MarketplaceScaffoldsRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Install a free, Git-backed template as a new application
+  Future<MarketplaceScaffoldsInstallResponse?> marketplaceScaffoldsInstall(String scaffoldUuid, InstallApplicationScaffoldRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/marketplace/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}/install'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : MarketplaceScaffoldsInstallResponse.fromJson(map);
+    })();
+  }
+
+  /// List the caller's app templates
+  Future<ScaffoldsListResponse?> scaffoldsList([int? page, int? pageSize, String? keyword, String? status]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('keyword', keyword, 'form', true, false, null),
+      QueryParameterSpec('status', status, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/scaffolds'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Publish an app as a template listing
+  Future<ScaffoldsCreateResponse201?> scaffoldsCreate(CreateApplicationScaffoldRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/scaffolds'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsCreateResponse201.fromJson(map);
+    })();
+  }
+
+  /// Retrieve the caller's app template
+  Future<ScaffoldsRetrieveResponse?> scaffoldsRetrieve(String scaffoldUuid) async {
+    final response = await _client.get(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Update the caller's app template listing
+  Future<ScaffoldsUpdateResponse?> scaffoldsUpdate(String scaffoldUuid, UpdateApplicationScaffoldRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.patch(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// Withdraw the caller's app template
+  Future<void> scaffoldsDelete(String scaffoldUuid) async {
+    await _client.delete(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'));
+  }
+
+  /// Submit an app template for review
+  Future<ScaffoldsSubmitResponse?> scaffoldsSubmit(String scaffoldUuid) async {
+    final response = await _client.post(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}/submit'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsSubmitResponse.fromJson(map);
+    })();
+  }
+
+  /// List versions of the caller's app template
+  Future<ScaffoldsVersionsListResponse?> scaffoldsVersionsList(String scaffoldUuid, [int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}/versions'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsVersionsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Add a version to the caller's app template
+  Future<ScaffoldsVersionsCreateResponse201?> scaffoldsVersionsCreate(String scaffoldUuid, CreateApplicationScaffoldVersionRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}/versions'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ScaffoldsVersionsCreateResponse201.fromJson(map);
     })();
   }
 }

@@ -7,38 +7,38 @@ use sdkwork_deploy_contract::{
     AcmeAccountPage, AcmeAccountResponse, AppDatabaseMigrationPage, AppDatabaseMigrationResponse,
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppEnvironmentPage, AppEnvironmentResponse, AppPage, AppReleasePage,
-    AppReleaseResponse, AppResponse, AppSourceKind, AppSourceResponse, AppTemplatePage,
-    AppTemplateResponse, AppTemplateSummaryPage, AppTemplateVersionPage,
-    AppTemplateVersionResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage,
+    AppReleaseResponse, AppResponse, AppSourceKind, AppSourceResponse, ApplicationScaffoldPage,
+    ApplicationScaffoldResponse, ApplicationScaffoldSummaryPage, ApplicationScaffoldVersionPage,
+    ApplicationScaffoldVersionResponse, ArtifactPage, ArtifactResponse, AuditLogPage, BuildPage,
     BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse,
     CertificateChallengePage, CertificateOrderPage, CertificateOrderResponse, CertificatePage,
     CertificateRenewalPage, CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage,
     ChannelRolloutResponse, CreateAcmeAccountRequest, CreateAppDatabaseMigrationRequest,
     CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
-    CreateAppReleaseRequest, CreateAppRequest, CreateAppTemplateRequest,
-    CreateAppTemplateVersionRequest, CreateArtifactRequest, CreateBuildRequest,
+    CreateAppReleaseRequest, CreateAppRequest, CreateApplicationScaffoldRequest,
+    CreateApplicationScaffoldVersionRequest, CreateArtifactRequest, CreateBuildRequest,
     CreateBuildTemplateRequest, CreateCertificateRequest, CreateDeployUploadSessionRequest,
     CreateDomainHostnameRequest, CreateDomainZoneRequest, CreateEnvVariableRequest,
     CreateHealthCheckRequest, CreateNginxConfigRequest, CreateNodeClusterRequest,
-    CreatePlatformTargetRequest, CreateServerRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, CreateTemplateCategoryRequest, DeployUploadSessionResponse,
+    CreatePlatformTargetRequest, CreateScaffoldCategoryRequest, CreateServerRequest,
+    CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DeployUploadSessionResponse,
     DeploymentStatus, DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage,
     DomainHostnameResponse, DomainZonePage, DomainZoneResponse, EntitlementProjectionPage,
     EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
-    HealthCheckPage, HealthCheckResponse, ListAppTemplatesAdminQuery, ListAppTemplatesQuery,
-    ListAppsQuery, ListDomainZonesQuery, ListMarketplaceTemplatesQuery, ListNginxConfigsQuery,
-    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
-    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
-    PlatformTargetPage, PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
-    ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
-    RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
+    HealthCheckPage, HealthCheckResponse, ListApplicationScaffoldsAdminQuery,
+    ListApplicationScaffoldsQuery, ListAppsQuery, ListDomainZonesQuery,
+    ListMarketplaceScaffoldsQuery, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
+    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
+    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
+    PromoteChannelRequest, PromoteEnvironmentRequest, ProvisionAppDomainsResult,
+    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, ResolvedDeployServer,
+    RetentionRunResponse, RunnerHealthPage, ScaffoldCategoryPage, ScaffoldCategoryResponse,
     ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
     SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
-    SourceRepositoryResponse, TemplateCategoryPage, TemplateCategoryResponse,
-    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
-    UpdateAppSourceSpecRequest, UpdateAppTemplateAdminRequest, UpdateAppTemplateRequest,
+    SourceRepositoryResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
+    UpdateAppRequest, UpdateApplicationScaffoldAdminRequest, UpdateApplicationScaffoldRequest,
     UpdateBuildStateRequest, UpdateDomainZoneRequest, UpdateNginxConfigRequest,
-    UpdateNodeClusterRequest, UpdateServerRequest, UpdateTemplateCategoryRequest, UsageEventPage,
+    UpdateNodeClusterRequest, UpdateScaffoldCategoryRequest, UpdateServerRequest, UsageEventPage,
     UsageEventResponse, UsageReconciliationResponse,
 };
 use sdkwork_deploy_core::{GitRepositoryValidationStatus, GitValidationErrorCode};
@@ -315,7 +315,7 @@ pub struct DomainDnsRecordUpsert {
 /// receives no listing body, and a draft's existence stays indistinguishable
 /// from a missing row because the service answers both as "not found".
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TemplateReadScope {
+pub struct ScaffoldReadScope {
     pub author_user_id: i64,
     pub visibility: String,
     pub status: String,
@@ -1750,7 +1750,7 @@ pub trait DeployRepositoryPort:
         environment: &str,
     ) -> DeployServiceResult<Option<ResolvedDeployServer>>;
 
-    // -- app template marketplace ---------------------------------------------
+    // -- app scaffold marketplace ---------------------------------------------
     //
     // Tenant scoping follows the module-wide rule: app-side callers pass a hard
     // `tenant_id`, admin callers pass `Option<i64>` where `None` is the
@@ -1759,37 +1759,37 @@ pub trait DeployRepositoryPort:
     // filters (`IAM_SPEC.md` 5.1); `None` means "no ownership gate", which only
     // the marketplace browse surface and the admin surface may use.
 
-    async fn list_template_categories(
+    async fn list_scaffold_categories(
         &self,
         tenant_id: Option<i64>,
         include_disabled: bool,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<TemplateCategoryPage>;
+    ) -> DeployServiceResult<ScaffoldCategoryPage>;
 
-    async fn create_template_category(
+    async fn create_scaffold_category(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         actor_id: Option<i64>,
-        request: &CreateTemplateCategoryRequest,
-    ) -> DeployServiceResult<TemplateCategoryResponse>;
+        request: &CreateScaffoldCategoryRequest,
+    ) -> DeployServiceResult<ScaffoldCategoryResponse>;
 
-    async fn retrieve_template_category(
+    async fn retrieve_scaffold_category(
         &self,
         tenant_id: Option<i64>,
         category_uuid: &str,
-    ) -> DeployServiceResult<TemplateCategoryResponse>;
+    ) -> DeployServiceResult<ScaffoldCategoryResponse>;
 
-    async fn update_template_category(
+    async fn update_scaffold_category(
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
         category_uuid: &str,
-        request: &UpdateTemplateCategoryRequest,
-    ) -> DeployServiceResult<TemplateCategoryResponse>;
+        request: &UpdateScaffoldCategoryRequest,
+    ) -> DeployServiceResult<ScaffoldCategoryResponse>;
 
-    async fn delete_template_category(
+    async fn delete_scaffold_category(
         &self,
         tenant_id: i64,
         category_uuid: &str,
@@ -1798,64 +1798,64 @@ pub trait DeployRepositoryPort:
     /// The tenant marketplace: `PUBLIC` + `PUBLISHED` listings only. This is
     /// the one surface allowed to read without an ownership gate, and it is
     /// still fenced to one tenant.
-    async fn list_marketplace_templates(
+    async fn list_marketplace_scaffolds(
         &self,
         tenant_id: i64,
-        query: &ListMarketplaceTemplatesQuery,
-    ) -> DeployServiceResult<AppTemplateSummaryPage>;
+        query: &ListMarketplaceScaffoldsQuery,
+    ) -> DeployServiceResult<ApplicationScaffoldSummaryPage>;
 
     /// The public read of a marketplace listing; refuses non-`PUBLIC` /
     /// non-`PUBLISHED` rows as not found so a private listing is not
     /// distinguishable from a missing one.
-    async fn retrieve_marketplace_template(
+    async fn retrieve_marketplace_scaffold(
         &self,
         tenant_id: i64,
-        template_uuid: &str,
-    ) -> DeployServiceResult<AppTemplateResponse>;
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<ApplicationScaffoldResponse>;
 
     /// Ownership/marketplace state of one tenant listing, used to choose
     /// between the author read and the marketplace read *before* any body is
     /// read. `None` when the uuid does not resolve inside the tenant or is
     /// soft-deleted.
-    async fn template_read_scope(
+    async fn scaffold_read_scope(
         &self,
         tenant_id: i64,
-        template_uuid: &str,
-    ) -> DeployServiceResult<Option<TemplateReadScope>>;
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<Option<ScaffoldReadScope>>;
 
     /// Published versions of a marketplace-visible listing, for a consumer
-    /// installing someone else's template.
+    /// installing someone else's scaffold.
     ///
     /// The listing must be `PUBLIC` + `PUBLISHED` and not deleted (the same
     /// gate as the marketplace shelf); an invisible listing is refused as not
     /// found rather than answered with an empty page, and draft/withdrawn
     /// versions never appear.
-    async fn list_marketplace_template_versions(
+    async fn list_marketplace_scaffold_versions(
         &self,
         tenant_id: i64,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<AppTemplateVersionPage>;
+    ) -> DeployServiceResult<ApplicationScaffoldVersionPage>;
 
-    /// Verifies a paid `commerce_order` for one app-template listing.
+    /// Verifies a paid `commerce_order` for one app-scaffold listing.
     ///
     /// Read-only cross-module check: the order center owns payment/fulfillment;
     /// Deploy only reads the settled order to decide whether install may run.
     /// `false` covers every non-qualifying shape (missing order, other buyer,
-    /// unpaid, different template).
-    async fn verify_paid_app_template_order(
+    /// unpaid, different scaffold).
+    async fn verify_paid_application_scaffold_order(
         &self,
         tenant_id: i64,
         user_id: i64,
         order_id: &str,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> DeployServiceResult<bool>;
 
-    /// Clones a published template artifact under an installed application.
+    /// Clones a published scaffold artifact under an installed application.
     ///
     /// Returns the new artifact uuid. The source artifact belongs to the
-    /// template's author application; the clone keeps the same Drive node and
+    /// scaffold's author application; the clone keeps the same Drive node and
     /// checksum but attributes the row to the installed app so `apps.source.update`
     /// accepts it.
     async fn clone_marketplace_artifact_for_app(
@@ -1869,12 +1869,12 @@ pub trait DeployRepositoryPort:
     ///
     /// `app_id` makes the counter idempotent per installed application: a
     /// replay of the same install command returns the same app and must not
-    /// count it twice. The audit entry (`app.template.install` on that app) is
+    /// count it twice. The audit entry (`app.scaffold.install` on that app) is
     /// the durable marker; the increment is skipped when it already exists.
-    async fn record_app_template_install(
+    async fn record_app_scaffold_install(
         &self,
         tenant_id: i64,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         app_id: &str,
     ) -> DeployServiceResult<()>;
 
@@ -1887,85 +1887,85 @@ pub trait DeployRepositoryPort:
         artifact_uuid: &str,
     ) -> DeployServiceResult<()>;
 
-    async fn list_app_templates(
+    async fn list_application_scaffolds(
         &self,
         tenant_id: i64,
         author_user_id: Option<i64>,
-        query: &ListAppTemplatesQuery,
-    ) -> DeployServiceResult<AppTemplatePage>;
+        query: &ListApplicationScaffoldsQuery,
+    ) -> DeployServiceResult<ApplicationScaffoldPage>;
 
-    async fn list_app_templates_admin(
+    async fn list_application_scaffolds_admin(
         &self,
         tenant_id: Option<i64>,
-        query: &ListAppTemplatesAdminQuery,
-    ) -> DeployServiceResult<AppTemplatePage>;
+        query: &ListApplicationScaffoldsAdminQuery,
+    ) -> DeployServiceResult<ApplicationScaffoldPage>;
 
     /// `author_user_id = Some` scopes the read to that author's own listing;
     /// `None` is the admin/marketplace shape (tenant-scoped, no owner gate).
-    async fn retrieve_app_template(
+    async fn retrieve_application_scaffold(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
-    ) -> DeployServiceResult<AppTemplateResponse>;
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<ApplicationScaffoldResponse>;
 
-    async fn create_app_template(
+    async fn create_application_scaffold(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         actor_id: Option<i64>,
-        request: &CreateAppTemplateRequest,
-    ) -> DeployServiceResult<AppTemplateResponse>;
+        request: &CreateApplicationScaffoldRequest,
+    ) -> DeployServiceResult<ApplicationScaffoldResponse>;
 
-    async fn update_app_template(
+    async fn update_application_scaffold(
         &self,
         tenant_id: i64,
         author_user_id: i64,
-        template_uuid: &str,
-        request: &UpdateAppTemplateRequest,
-    ) -> DeployServiceResult<AppTemplateResponse>;
+        scaffold_uuid: &str,
+        request: &UpdateApplicationScaffoldRequest,
+    ) -> DeployServiceResult<ApplicationScaffoldResponse>;
 
-    async fn delete_app_template(
+    async fn delete_application_scaffold(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> DeployServiceResult<()>;
 
-    async fn submit_app_template(
+    async fn submit_application_scaffold(
         &self,
         tenant_id: i64,
         author_user_id: i64,
-        template_uuid: &str,
-    ) -> DeployServiceResult<AppTemplateResponse>;
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<ApplicationScaffoldResponse>;
 
-    async fn list_app_template_versions(
+    async fn list_application_scaffold_versions(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<AppTemplateVersionPage>;
+    ) -> DeployServiceResult<ApplicationScaffoldVersionPage>;
 
-    async fn retrieve_app_template_version(
+    async fn retrieve_application_scaffold_version(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         version_uuid: &str,
-    ) -> DeployServiceResult<AppTemplateVersionResponse>;
+    ) -> DeployServiceResult<ApplicationScaffoldVersionResponse>;
 
-    async fn create_app_template_version(
+    async fn create_application_scaffold_version(
         &self,
         tenant_id: i64,
         author_user_id: i64,
-        template_uuid: &str,
-        request: &CreateAppTemplateVersionRequest,
-    ) -> DeployServiceResult<AppTemplateVersionResponse>;
+        scaffold_uuid: &str,
+        request: &CreateApplicationScaffoldVersionRequest,
+    ) -> DeployServiceResult<ApplicationScaffoldVersionResponse>;
 
     /// The version-owned source snapshot captured at publish time.
-    async fn retrieve_app_template_version_source_snapshot(
+    async fn retrieve_application_scaffold_version_source_snapshot(
         &self,
         tenant_id: i64,
         version_uuid: &str,
@@ -1974,13 +1974,13 @@ pub trait DeployRepositoryPort:
     /// Backend moderation: moves `status` / `review_note` / `is_featured`. An
     /// approval publishes the newest draft version; see the service layer for
     /// the transition rules.
-    async fn review_app_template(
+    async fn review_application_scaffold(
         &self,
         tenant_id: Option<i64>,
         operator_id: Option<i64>,
-        template_uuid: &str,
-        request: &UpdateAppTemplateAdminRequest,
-    ) -> DeployServiceResult<AppTemplateResponse>;
+        scaffold_uuid: &str,
+        request: &UpdateApplicationScaffoldAdminRequest,
+    ) -> DeployServiceResult<ApplicationScaffoldResponse>;
 
     // -- download catalog ---------------------------------------------------
     //

@@ -31,7 +31,7 @@
     "@sdkwork/auth-runtime-pc-react": "workspace:*",
     "@sdkwork/deployments-app-sdk": "workspace:*",
     "@sdkwork/deployments-backend-sdk": "workspace:*",
-    "@sdkwork/deployments-pc-admin-app-templates": "workspace:*",
+    "@sdkwork/deployments-pc-admin-scaffolds": "workspace:*",
     "@sdkwork/deployments-pc-admin-audit": "workspace:*",
     "@sdkwork/deployments-pc-admin-downloads": "workspace:*",
     "@sdkwork/deployments-pc-admin-core": "workspace:*",

@@ -8,11 +8,12 @@ pub mod app_resource_link;
 pub mod app_source;
 pub mod app_source_spec;
 pub mod certificate_plan;
+pub mod channel_release;
 pub mod downloads;
 pub mod dto;
 pub mod problem;
 pub mod runtime_env;
-pub mod template_market;
+pub mod scaffold_market;
 pub mod usage;
 
 pub use app_composition::*;
@@ -27,6 +28,7 @@ pub use app_resource_link::*;
 pub use app_source::*;
 pub use app_source_spec::*;
 pub use certificate_plan::*;
+pub use channel_release::*;
 pub use downloads::*;
 pub use dto::*;
 pub use problem::{DeployServiceError, DeployServiceErrorKind, DeployServiceResult};
@@ -34,5 +36,5 @@ pub use runtime_env::{
     deploy_dev_auth_bypass_enabled, deploy_environment_name, deploy_is_production_like_environment,
     deploy_use_dev_inline_auth_resolver,
 };
-pub use template_market::*;
+pub use scaffold_market::*;
 pub use usage::*;

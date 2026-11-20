@@ -7,7 +7,7 @@ pub mod downloads_routes;
 pub mod http_route_manifest;
 pub mod paths;
 pub mod routes;
-pub mod template_market_routes;
+pub mod scaffold_market_routes;
 pub mod web_bootstrap;
 
 pub use domain_certificate_manifest::domain_certificate_route_manifest;
@@ -18,8 +18,8 @@ pub use routes::{
     build_domain_management_router, build_router_with_app_api, build_router_with_shared_app_api,
     AppState,
 };
+pub use scaffold_market_routes::build_scaffold_market_router;
 pub use sdkwork_deploy_contract::{DeployAppApi, DeployAppRequestContext};
-pub use template_market_routes::build_template_market_router;
 pub use web_bootstrap::{
     deploy_app_api_domain_context_injectors, deploy_app_api_prefixes,
     deploy_app_api_public_path_prefixes, wrap_router_with_web_framework_from_env,

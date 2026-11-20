@@ -31,7 +31,7 @@ use sdkwork_deploy_drive_port::{
 };
 
 use crate::app_delivery::assert_app_reachable;
-use crate::template_market_access::{template_read_access, TemplateReadAccess};
+use crate::scaffold_market_access::{scaffold_read_access, ScaffoldReadAccess};
 use crate::DeployService;
 
 impl DeployService {
@@ -2228,28 +2228,28 @@ impl DeployAppApi for DeployService {
             .await
     }
 
-    // -- app template marketplace ---------------------------------------------
+    // -- app scaffold marketplace ---------------------------------------------
 
-    async fn list_template_categories(
+    async fn list_scaffold_categories(
         &self,
         context: &DeployAppRequestContext,
         include_disabled: bool,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryPage> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ScaffoldCategoryPage> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .list_template_categories(Some(tenant_id), include_disabled, 1, 200)
+            .list_scaffold_categories(Some(tenant_id), include_disabled, 1, 200)
             .await
     }
 
-    async fn list_marketplace_templates(
+    async fn list_marketplace_scaffolds(
         &self,
         context: &DeployAppRequestContext,
-        query: &sdkwork_deploy_contract::ListMarketplaceTemplatesQuery,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateSummaryPage> {
+        query: &sdkwork_deploy_contract::ListMarketplaceScaffoldsQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldSummaryPage> {
         let tenant_id = Self::require_tenant(context)?;
         if let Some(pricing) = query.pricing_model.as_deref() {
-            if pricing != sdkwork_deploy_contract::TEMPLATE_PRICING_FREE
-                && pricing != sdkwork_deploy_contract::TEMPLATE_PRICING_PAID
+            if pricing != sdkwork_deploy_contract::SCAFFOLD_PRICING_FREE
+                && pricing != sdkwork_deploy_contract::SCAFFOLD_PRICING_PAID
             {
                 return Err(sdkwork_deploy_contract::DeployServiceError::validation(
                     "pricingModel is invalid",
@@ -2257,9 +2257,9 @@ impl DeployAppApi for DeployService {
             }
         }
         if let Some(template_type) = query.template_type.as_deref() {
-            if template_type != sdkwork_deploy_contract::TEMPLATE_TYPE_APP
-                && template_type != sdkwork_deploy_contract::TEMPLATE_TYPE_PPT
-                && template_type != sdkwork_deploy_contract::TEMPLATE_TYPE_VIDEO
+            if template_type != sdkwork_deploy_contract::SCAFFOLD_TYPE_APP
+                && template_type != sdkwork_deploy_contract::SCAFFOLD_TYPE_PPT
+                && template_type != sdkwork_deploy_contract::SCAFFOLD_TYPE_VIDEO
             {
                 return Err(sdkwork_deploy_contract::DeployServiceError::validation(
                     "templateType is invalid",
@@ -2276,57 +2276,63 @@ impl DeployAppApi for DeployService {
             }
         }
         self.repository
-            .list_marketplace_templates(tenant_id, query)
+            .list_marketplace_scaffolds(tenant_id, query)
             .await
     }
 
-    async fn retrieve_marketplace_template(
+    async fn retrieve_marketplace_scaffold(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .retrieve_marketplace_template(tenant_id, template_uuid)
+            .retrieve_marketplace_scaffold(tenant_id, scaffold_uuid)
             .await
     }
 
-    async fn install_app_template(
+    async fn install_application_scaffold(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         idempotency_key: &str,
-        request: &sdkwork_deploy_contract::InstallAppTemplateRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateInstallResponse> {
-        DeployService::install_app_template(self, context, template_uuid, idempotency_key, request)
-            .await
+        request: &sdkwork_deploy_contract::InstallApplicationScaffoldRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldInstallResponse> {
+        DeployService::install_application_scaffold(
+            self,
+            context,
+            scaffold_uuid,
+            idempotency_key,
+            request,
+        )
+        .await
     }
 
-    async fn list_app_templates(
+    async fn list_application_scaffolds(
         &self,
         context: &DeployAppRequestContext,
-        query: &sdkwork_deploy_contract::ListAppTemplatesQuery,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage> {
+        query: &sdkwork_deploy_contract::ListApplicationScaffoldsQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldPage> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         if let Some(status) = query.status.as_deref() {
-            validate_template_status(status)?;
+            validate_scaffold_status(status)?;
         }
         self.repository
-            .list_app_templates(tenant_id, Some(author_user_id), query)
+            .list_application_scaffolds(tenant_id, Some(author_user_id), query)
             .await
     }
 
-    async fn create_app_template(
+    async fn create_application_scaffold(
         &self,
         context: &DeployAppRequestContext,
         _idempotency_key: &str,
-        request: &sdkwork_deploy_contract::CreateAppTemplateRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        request: &sdkwork_deploy_contract::CreateApplicationScaffoldRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         self.repository
-            .create_app_template(
+            .create_application_scaffold(
                 tenant_id,
                 context.organization_id,
                 Some(author_user_id),
@@ -2335,89 +2341,93 @@ impl DeployAppApi for DeployService {
             .await
     }
 
-    async fn retrieve_app_template(
+    async fn retrieve_application_scaffold(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         match self
-            .resolve_template_read_access(tenant_id, author_user_id, template_uuid)
+            .resolve_scaffold_read_access(tenant_id, author_user_id, scaffold_uuid)
             .await?
         {
-            TemplateReadAccess::Author => {
+            ScaffoldReadAccess::Author => {
                 self.repository
-                    .retrieve_app_template(Some(tenant_id), Some(author_user_id), template_uuid)
+                    .retrieve_application_scaffold(
+                        Some(tenant_id),
+                        Some(author_user_id),
+                        scaffold_uuid,
+                    )
                     .await
             }
-            // A consumer installing someone else's template reads the same
+            // A consumer installing someone else's scaffold reads the same
             // listing the marketplace shelf advertises, never the author view.
-            TemplateReadAccess::Marketplace => {
+            ScaffoldReadAccess::Marketplace => {
                 self.repository
-                    .retrieve_marketplace_template(tenant_id, template_uuid)
+                    .retrieve_marketplace_scaffold(tenant_id, scaffold_uuid)
                     .await
             }
-            TemplateReadAccess::Denied => Err(DeployServiceError::not_found("template not found")),
+            ScaffoldReadAccess::Denied => Err(DeployServiceError::not_found("scaffold not found")),
         }
     }
 
-    async fn update_app_template(
+    async fn update_application_scaffold(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
-        request: &sdkwork_deploy_contract::UpdateAppTemplateRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        scaffold_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateApplicationScaffoldRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         self.repository
-            .update_app_template(tenant_id, author_user_id, template_uuid, request)
+            .update_application_scaffold(tenant_id, author_user_id, scaffold_uuid, request)
             .await
     }
 
-    async fn delete_app_template(
+    async fn delete_application_scaffold(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         self.repository
-            .delete_app_template(Some(tenant_id), Some(author_user_id), template_uuid)
+            .delete_application_scaffold(Some(tenant_id), Some(author_user_id), scaffold_uuid)
             .await
     }
 
-    async fn submit_app_template(
+    async fn submit_application_scaffold(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse> {
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         self.repository
-            .submit_app_template(tenant_id, author_user_id, template_uuid)
+            .submit_application_scaffold(tenant_id, author_user_id, scaffold_uuid)
             .await
     }
 
-    async fn list_app_template_versions(
+    async fn list_application_scaffold_versions(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage> {
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldVersionPage> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         match self
-            .resolve_template_read_access(tenant_id, author_user_id, template_uuid)
+            .resolve_scaffold_read_access(tenant_id, author_user_id, scaffold_uuid)
             .await?
         {
-            TemplateReadAccess::Author => {
+            ScaffoldReadAccess::Author => {
                 self.repository
-                    .list_app_template_versions(
+                    .list_application_scaffold_versions(
                         Some(tenant_id),
                         Some(author_user_id),
-                        template_uuid,
+                        scaffold_uuid,
                         page,
                         page_size,
                     )
@@ -2425,26 +2435,26 @@ impl DeployAppApi for DeployService {
             }
             // The install flow of a marketplace consumer: published versions of
             // a published, public listing. Drafts stay author-only.
-            TemplateReadAccess::Marketplace => {
+            ScaffoldReadAccess::Marketplace => {
                 self.repository
-                    .list_marketplace_template_versions(tenant_id, template_uuid, page, page_size)
+                    .list_marketplace_scaffold_versions(tenant_id, scaffold_uuid, page, page_size)
                     .await
             }
-            TemplateReadAccess::Denied => Err(DeployServiceError::not_found("template not found")),
+            ScaffoldReadAccess::Denied => Err(DeployServiceError::not_found("scaffold not found")),
         }
     }
 
-    async fn create_app_template_version(
+    async fn create_application_scaffold_version(
         &self,
         context: &DeployAppRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         _idempotency_key: &str,
-        request: &sdkwork_deploy_contract::CreateAppTemplateVersionRequest,
-    ) -> DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionResponse> {
+        request: &sdkwork_deploy_contract::CreateApplicationScaffoldVersionRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ApplicationScaffoldVersionResponse> {
         let tenant_id = Self::require_tenant(context)?;
         let author_user_id = Self::require_actor(context)?;
         self.repository
-            .create_app_template_version(tenant_id, author_user_id, template_uuid, request)
+            .create_application_scaffold_version(tenant_id, author_user_id, scaffold_uuid, request)
             .await
     }
 }
@@ -2459,7 +2469,7 @@ impl DeployService {
             .filter(|actor_id| *actor_id > 0)
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::forbidden(
-                    "a user subject is required for template marketplace operations",
+                    "a user subject is required for scaffold marketplace operations",
                 )
             })
     }
@@ -2471,20 +2481,20 @@ impl DeployService {
     /// consumer is routed to the marketplace-visible published read, and
     /// everyone else gets the same "not found" a missing listing produces, so a
     /// draft's existence never leaks.
-    async fn resolve_template_read_access(
+    async fn resolve_scaffold_read_access(
         &self,
         tenant_id: i64,
         actor_id: i64,
-        template_uuid: &str,
-    ) -> DeployServiceResult<TemplateReadAccess> {
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<ScaffoldReadAccess> {
         let Some(scope) = self
             .repository
-            .template_read_scope(tenant_id, template_uuid)
+            .scaffold_read_scope(tenant_id, scaffold_uuid)
             .await?
         else {
-            return Ok(TemplateReadAccess::Denied);
+            return Ok(ScaffoldReadAccess::Denied);
         };
-        Ok(template_read_access(
+        Ok(scaffold_read_access(
             actor_id,
             scope.author_user_id,
             &scope.visibility,
@@ -2493,20 +2503,20 @@ impl DeployService {
     }
 }
 
-fn validate_template_status(status: &str) -> DeployServiceResult<()> {
+fn validate_scaffold_status(status: &str) -> DeployServiceResult<()> {
     let valid = matches!(
         status,
-        sdkwork_deploy_contract::TEMPLATE_STATUS_DRAFT
-            | sdkwork_deploy_contract::TEMPLATE_STATUS_PENDING_REVIEW
-            | sdkwork_deploy_contract::TEMPLATE_STATUS_PUBLISHED
-            | sdkwork_deploy_contract::TEMPLATE_STATUS_REJECTED
-            | sdkwork_deploy_contract::TEMPLATE_STATUS_DISABLED
+        sdkwork_deploy_contract::SCAFFOLD_STATUS_DRAFT
+            | sdkwork_deploy_contract::SCAFFOLD_STATUS_PENDING_REVIEW
+            | sdkwork_deploy_contract::SCAFFOLD_STATUS_PUBLISHED
+            | sdkwork_deploy_contract::SCAFFOLD_STATUS_REJECTED
+            | sdkwork_deploy_contract::SCAFFOLD_STATUS_DISABLED
     );
     if valid {
         Ok(())
     } else {
         Err(sdkwork_deploy_contract::DeployServiceError::validation(
-            "template status is invalid",
+            "scaffold status is invalid",
         ))
     }
 }

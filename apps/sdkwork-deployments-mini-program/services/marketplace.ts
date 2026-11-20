@@ -7,7 +7,7 @@
 /// without WeChat DevTools.
 ///
 /// The port spans two app APIs on the same origin: the deployments catalog
-/// (`template_categories` / `marketplace/templates` / `app_templates`) and the
+/// (`scaffold_categories` / `marketplace/scaffolds` / `scaffolds`) and the
 /// order center's app-template trade (`app_template_orders`). The deployments
 /// module is catalog-only — it owns no purchase, order or entitlement row, so
 /// `acquire`/`myPurchases` speak the order center's payloads and nothing here
@@ -50,14 +50,14 @@ export interface MiniProgramRuntimeOptions {
 
 // -- wire models (mirror of the contract responses; int64 ids stay strings) --
 
-export interface TemplateCategory {
+export interface ScaffoldCategory {
   readonly id: string;
   readonly categoryKey: string;
   readonly displayName: string;
   readonly status: string;
 }
 
-export interface TemplateSummary {
+export interface ScaffoldSummary {
   readonly id: string;
   readonly templateType: string;
   readonly displayName: string;
@@ -70,7 +70,7 @@ export interface TemplateSummary {
   readonly installCount: string;
 }
 
-export interface TemplateDetail {
+export interface ScaffoldDetail {
   readonly id: string;
   readonly displayName: string;
   readonly summary: string;
@@ -130,7 +130,7 @@ export interface TemplateOrderSummary {
   readonly createdAt: string;
 }
 
-export interface MyTemplate {
+export interface MyScaffold {
   readonly id: string;
   readonly displayName: string;
   readonly templateKey: string;
@@ -138,7 +138,7 @@ export interface MyTemplate {
   readonly visibility: string;
 }
 
-export interface TemplateVersion {
+export interface ScaffoldVersion {
   readonly id: string;
   readonly templateVersion: string;
   readonly status: string;
@@ -183,21 +183,21 @@ export interface MarketplaceBrowseParams {
 
 /** One browse page plus the paging facts the list needs to offer "load more". */
 export interface MarketplaceBrowsePage {
-  items: TemplateSummary[];
+  items: ScaffoldSummary[];
   hasMore: boolean;
   total: number;
 }
 
 export interface MarketplacePort {
-  categories(): Promise<TemplateCategory[]>;
+  categories(): Promise<ScaffoldCategory[]>;
   browse(params: MarketplaceBrowseParams): Promise<MarketplaceBrowsePage>;
-  retrieve(templateUuid: string): Promise<TemplateDetail>;
+  retrieve(templateUuid: string): Promise<ScaffoldDetail>;
   /** Order-center trade for a listing; the response carries the payment requirement. */
   acquire(templateUuid: string): Promise<TemplateOrder>;
   /** The buyer's template orders; rows with `status === 'paid'` are entitlements. */
   myPurchases(): Promise<TemplateOrderSummary[]>;
-  myTemplates(): Promise<MyTemplate[]>;
-  versions(templateUuid: string): Promise<TemplateVersion[]>;
+  myScaffolds(): Promise<MyScaffold[]>;
+  versions(templateUuid: string): Promise<ScaffoldVersion[]>;
   submit(templateUuid: string): Promise<void>;
   withdraw(templateUuid: string): Promise<void>;
 }
@@ -274,8 +274,8 @@ export class SdkworkMiniMarketplacePort implements MarketplacePort {
   }
 
   categories() {
-    return this.call<unknown>('GET', '/template_categories?include_disabled=false').then((payload) =>
-      SdkworkMiniMarketplacePort.items<TemplateCategory>(payload),
+    return this.call<unknown>('GET', '/scaffold_categories?include_disabled=false').then((payload) =>
+      SdkworkMiniMarketplacePort.items<ScaffoldCategory>(payload),
     );
   }
 
@@ -289,16 +289,16 @@ export class SdkworkMiniMarketplacePort implements MarketplacePort {
       ...(params.pricingModel ? [['pricing_model', params.pricingModel] as const] : []),
       ...(params.sort ? [['sort', params.sort] as const] : []),
     ]);
-    return this.call<unknown>('GET', `/marketplace/templates${query}`).then((payload) => ({
-      items: SdkworkMiniMarketplacePort.items<TemplateSummary>(payload),
+    return this.call<unknown>('GET', `/marketplace/scaffolds${query}`).then((payload) => ({
+      items: SdkworkMiniMarketplacePort.items<ScaffoldSummary>(payload),
       hasMore: SdkworkMiniMarketplacePort.hasMore(payload),
       total: SdkworkMiniMarketplacePort.total(payload),
     }));
   }
 
   retrieve(templateUuid: string) {
-    return this.call<unknown>('GET', `/marketplace/templates/${encodeURIComponent(templateUuid)}`).then((payload) =>
-      SdkworkMiniMarketplacePort.item<TemplateDetail>(payload),
+    return this.call<unknown>('GET', `/marketplace/scaffolds/${encodeURIComponent(templateUuid)}`).then((payload) =>
+      SdkworkMiniMarketplacePort.item<ScaffoldDetail>(payload),
     );
   }
 
@@ -320,23 +320,23 @@ export class SdkworkMiniMarketplacePort implements MarketplacePort {
     );
   }
 
-  myTemplates() {
-    return this.call<unknown>('GET', '/app_templates?page=1&page_size=50').then((payload) =>
-      SdkworkMiniMarketplacePort.items<MyTemplate>(payload),
+  myScaffolds() {
+    return this.call<unknown>('GET', '/scaffolds?page=1&page_size=50').then((payload) =>
+      SdkworkMiniMarketplacePort.items<MyScaffold>(payload),
     );
   }
 
   versions(templateUuid: string) {
-    return this.call<unknown>('GET', `/app_templates/${encodeURIComponent(templateUuid)}/versions?page=1&page_size=50`).then(
-      (payload) => SdkworkMiniMarketplacePort.items<TemplateVersion>(payload),
+    return this.call<unknown>('GET', `/scaffolds/${encodeURIComponent(templateUuid)}/versions?page=1&page_size=50`).then(
+      (payload) => SdkworkMiniMarketplacePort.items<ScaffoldVersion>(payload),
     );
   }
 
   async submit(templateUuid: string) {
-    await this.call<unknown>('POST', `/app_templates/${encodeURIComponent(templateUuid)}/submit`);
+    await this.call<unknown>('POST', `/scaffolds/${encodeURIComponent(templateUuid)}/submit`);
   }
 
   async withdraw(templateUuid: string) {
-    await this.call<unknown>('DELETE', `/app_templates/${encodeURIComponent(templateUuid)}`);
+    await this.call<unknown>('DELETE', `/scaffolds/${encodeURIComponent(templateUuid)}`);
   }
 }

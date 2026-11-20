@@ -1892,117 +1892,125 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
-    // -- app template marketplace ----------------------------------------------
+    // -- app scaffold marketplace ----------------------------------------------
 
-    async fn list_template_categories(
+    async fn list_scaffold_categories(
         &self,
         tenant_id: Option<i64>,
         include_disabled: bool,
         page: i32,
         page_size: i32,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::TemplateCategoryPage>
+    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::ScaffoldCategoryPage>
     {
-        self.list_template_categories_repo(tenant_id, include_disabled, page, page_size)
+        self.list_scaffold_categories_repo(tenant_id, include_disabled, page, page_size)
             .await
     }
 
-    async fn create_template_category(
+    async fn create_scaffold_category(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         actor_id: Option<i64>,
-        request: &sdkwork_deploy_contract::CreateTemplateCategoryRequest,
+        request: &sdkwork_deploy_contract::CreateScaffoldCategoryRequest,
     ) -> sdkwork_deploy_contract::DeployServiceResult<
-        sdkwork_deploy_contract::TemplateCategoryResponse,
+        sdkwork_deploy_contract::ScaffoldCategoryResponse,
     > {
-        self.create_template_category_repo(tenant_id, organization_id, actor_id, request)
+        self.create_scaffold_category_repo(tenant_id, organization_id, actor_id, request)
             .await
     }
 
-    async fn retrieve_template_category(
+    async fn retrieve_scaffold_category(
         &self,
         tenant_id: Option<i64>,
         category_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<
-        sdkwork_deploy_contract::TemplateCategoryResponse,
+        sdkwork_deploy_contract::ScaffoldCategoryResponse,
     > {
-        self.retrieve_template_category_repo(tenant_id, category_uuid)
+        self.retrieve_scaffold_category_repo(tenant_id, category_uuid)
             .await
     }
 
-    async fn update_template_category(
+    async fn update_scaffold_category(
         &self,
         tenant_id: i64,
         actor_id: Option<i64>,
         category_uuid: &str,
-        request: &sdkwork_deploy_contract::UpdateTemplateCategoryRequest,
+        request: &sdkwork_deploy_contract::UpdateScaffoldCategoryRequest,
     ) -> sdkwork_deploy_contract::DeployServiceResult<
-        sdkwork_deploy_contract::TemplateCategoryResponse,
+        sdkwork_deploy_contract::ScaffoldCategoryResponse,
     > {
-        self.update_template_category_repo(tenant_id, actor_id, category_uuid, request)
+        self.update_scaffold_category_repo(tenant_id, actor_id, category_uuid, request)
             .await
     }
 
-    async fn delete_template_category(
+    async fn delete_scaffold_category(
         &self,
         tenant_id: i64,
         category_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
-        self.delete_template_category_repo(tenant_id, category_uuid)
+        self.delete_scaffold_category_repo(tenant_id, category_uuid)
             .await
     }
 
-    async fn list_marketplace_templates(
+    async fn list_marketplace_scaffolds(
         &self,
         tenant_id: i64,
-        query: &sdkwork_deploy_contract::ListMarketplaceTemplatesQuery,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateSummaryPage>
-    {
-        self.list_marketplace_templates_repo(tenant_id, query).await
-    }
-
-    async fn retrieve_marketplace_template(
-        &self,
-        tenant_id: i64,
-        template_uuid: &str,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
-    {
-        self.retrieve_marketplace_template_repo(tenant_id, template_uuid)
-            .await
-    }
-
-    async fn template_read_scope(
-        &self,
-        tenant_id: i64,
-        template_uuid: &str,
+        query: &sdkwork_deploy_contract::ListMarketplaceScaffoldsQuery,
     ) -> sdkwork_deploy_contract::DeployServiceResult<
-        Option<sdkwork_intelligence_deploy_service::TemplateReadScope>,
+        sdkwork_deploy_contract::ApplicationScaffoldSummaryPage,
     > {
-        self.template_read_scope_repo(tenant_id, template_uuid)
+        self.list_marketplace_scaffolds_repo(tenant_id, query).await
+    }
+
+    async fn retrieve_marketplace_scaffold(
+        &self,
+        tenant_id: i64,
+        scaffold_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldResponse,
+    > {
+        self.retrieve_marketplace_scaffold_repo(tenant_id, scaffold_uuid)
             .await
     }
 
-    async fn list_marketplace_template_versions(
+    async fn scaffold_read_scope(
         &self,
         tenant_id: i64,
-        template_uuid: &str,
+        scaffold_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        Option<sdkwork_intelligence_deploy_service::ScaffoldReadScope>,
+    > {
+        self.scaffold_read_scope_repo(tenant_id, scaffold_uuid)
+            .await
+    }
+
+    async fn list_marketplace_scaffold_versions(
+        &self,
+        tenant_id: i64,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage>
-    {
-        self.list_marketplace_template_versions_repo(tenant_id, template_uuid, page, page_size)
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldVersionPage,
+    > {
+        self.list_marketplace_scaffold_versions_repo(tenant_id, scaffold_uuid, page, page_size)
             .await
     }
 
-    async fn verify_paid_app_template_order(
+    async fn verify_paid_application_scaffold_order(
         &self,
         tenant_id: i64,
         user_id: i64,
         order_id: &str,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<bool> {
-        self.verify_paid_app_template_order_repo(tenant_id, user_id, order_id, template_uuid)
-            .await
+        self.verify_paid_application_scaffold_order_repo(
+            tenant_id,
+            user_id,
+            order_id,
+            scaffold_uuid,
+        )
+        .await
     }
 
     async fn clone_marketplace_artifact_for_app(
@@ -2019,13 +2027,13 @@ impl DeployRepositoryPort for DeployRepository {
         .await
     }
 
-    async fn record_app_template_install(
+    async fn record_app_scaffold_install(
         &self,
         tenant_id: i64,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         app_id: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
-        self.record_app_template_install_repo(tenant_id, template_uuid, app_id)
+        self.record_app_scaffold_install_repo(tenant_id, scaffold_uuid, app_id)
             .await
     }
 
@@ -2038,150 +2046,164 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
-    async fn list_app_templates(
+    async fn list_application_scaffolds(
         &self,
         tenant_id: i64,
         author_user_id: Option<i64>,
-        query: &sdkwork_deploy_contract::ListAppTemplatesQuery,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage>
-    {
-        self.list_app_templates_repo(tenant_id, author_user_id, query)
+        query: &sdkwork_deploy_contract::ListApplicationScaffoldsQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldPage,
+    > {
+        self.list_application_scaffolds_repo(tenant_id, author_user_id, query)
             .await
     }
 
-    async fn list_app_templates_admin(
+    async fn list_application_scaffolds_admin(
         &self,
         tenant_id: Option<i64>,
-        query: &sdkwork_deploy_contract::ListAppTemplatesAdminQuery,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplatePage>
-    {
-        self.list_app_templates_admin_repo(tenant_id, query).await
+        query: &sdkwork_deploy_contract::ListApplicationScaffoldsAdminQuery,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldPage,
+    > {
+        self.list_application_scaffolds_admin_repo(tenant_id, query)
+            .await
     }
 
-    async fn retrieve_app_template(
+    async fn retrieve_application_scaffold(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
-    {
-        self.retrieve_app_template_repo(tenant_id, author_user_id, template_uuid)
+        scaffold_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldResponse,
+    > {
+        self.retrieve_application_scaffold_repo(tenant_id, author_user_id, scaffold_uuid)
             .await
     }
 
-    async fn create_app_template(
+    async fn create_application_scaffold(
         &self,
         tenant_id: i64,
         organization_id: Option<i64>,
         actor_id: Option<i64>,
-        request: &sdkwork_deploy_contract::CreateAppTemplateRequest,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
-    {
-        self.create_app_template_repo(tenant_id, organization_id, actor_id, request)
+        request: &sdkwork_deploy_contract::CreateApplicationScaffoldRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldResponse,
+    > {
+        self.create_application_scaffold_repo(tenant_id, organization_id, actor_id, request)
             .await
     }
 
-    async fn update_app_template(
+    async fn update_application_scaffold(
         &self,
         tenant_id: i64,
         author_user_id: i64,
-        template_uuid: &str,
-        request: &sdkwork_deploy_contract::UpdateAppTemplateRequest,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
-    {
-        self.update_app_template_repo(tenant_id, author_user_id, template_uuid, request)
+        scaffold_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateApplicationScaffoldRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldResponse,
+    > {
+        self.update_application_scaffold_repo(tenant_id, author_user_id, scaffold_uuid, request)
             .await
     }
 
-    async fn delete_app_template(
+    async fn delete_application_scaffold(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<()> {
-        self.delete_app_template_repo(tenant_id, author_user_id, template_uuid)
+        self.delete_application_scaffold_repo(tenant_id, author_user_id, scaffold_uuid)
             .await
     }
 
-    async fn submit_app_template(
+    async fn submit_application_scaffold(
         &self,
         tenant_id: i64,
         author_user_id: i64,
-        template_uuid: &str,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
-    {
-        self.submit_app_template_repo(tenant_id, author_user_id, template_uuid)
+        scaffold_uuid: &str,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldResponse,
+    > {
+        self.submit_application_scaffold_repo(tenant_id, author_user_id, scaffold_uuid)
             .await
     }
 
-    async fn list_app_template_versions(
+    async fn list_application_scaffold_versions(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateVersionPage>
-    {
-        self.list_app_template_versions_repo(
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldVersionPage,
+    > {
+        self.list_application_scaffold_versions_repo(
             tenant_id,
             author_user_id,
-            template_uuid,
+            scaffold_uuid,
             page,
             page_size,
         )
         .await
     }
 
-    async fn retrieve_app_template_version(
+    async fn retrieve_application_scaffold_version(
         &self,
         tenant_id: Option<i64>,
         author_user_id: Option<i64>,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         version_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<
-        sdkwork_deploy_contract::AppTemplateVersionResponse,
+        sdkwork_deploy_contract::ApplicationScaffoldVersionResponse,
     > {
-        self.retrieve_app_template_version_repo(
+        self.retrieve_application_scaffold_version_repo(
             tenant_id,
             author_user_id,
-            template_uuid,
+            scaffold_uuid,
             version_uuid,
         )
         .await
     }
 
-    async fn create_app_template_version(
+    async fn create_application_scaffold_version(
         &self,
         tenant_id: i64,
         author_user_id: i64,
-        template_uuid: &str,
-        request: &sdkwork_deploy_contract::CreateAppTemplateVersionRequest,
+        scaffold_uuid: &str,
+        request: &sdkwork_deploy_contract::CreateApplicationScaffoldVersionRequest,
     ) -> sdkwork_deploy_contract::DeployServiceResult<
-        sdkwork_deploy_contract::AppTemplateVersionResponse,
+        sdkwork_deploy_contract::ApplicationScaffoldVersionResponse,
     > {
-        self.create_app_template_version_repo(tenant_id, author_user_id, template_uuid, request)
-            .await
+        self.create_application_scaffold_version_repo(
+            tenant_id,
+            author_user_id,
+            scaffold_uuid,
+            request,
+        )
+        .await
     }
 
-    async fn retrieve_app_template_version_source_snapshot(
+    async fn retrieve_application_scaffold_version_source_snapshot(
         &self,
         tenant_id: i64,
         version_uuid: &str,
     ) -> sdkwork_deploy_contract::DeployServiceResult<Option<serde_json::Value>> {
-        self.retrieve_app_template_version_source_snapshot_repo(tenant_id, version_uuid)
+        self.retrieve_application_scaffold_version_source_snapshot_repo(tenant_id, version_uuid)
             .await
     }
 
-    async fn review_app_template(
+    async fn review_application_scaffold(
         &self,
         tenant_id: Option<i64>,
         operator_id: Option<i64>,
-        template_uuid: &str,
-        request: &sdkwork_deploy_contract::UpdateAppTemplateAdminRequest,
-    ) -> sdkwork_deploy_contract::DeployServiceResult<sdkwork_deploy_contract::AppTemplateResponse>
-    {
-        self.review_app_template_repo(tenant_id, operator_id, template_uuid, request)
+        scaffold_uuid: &str,
+        request: &sdkwork_deploy_contract::UpdateApplicationScaffoldAdminRequest,
+    ) -> sdkwork_deploy_contract::DeployServiceResult<
+        sdkwork_deploy_contract::ApplicationScaffoldResponse,
+    > {
+        self.review_application_scaffold_repo(tenant_id, operator_id, scaffold_uuid, request)
             .await
     }
     // -- download catalog ---------------------------------------------------

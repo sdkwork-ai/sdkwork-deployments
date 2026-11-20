@@ -128,17 +128,17 @@ pub const APP_ENVIRONMENT: &str = "/app/v3/api/apps/{appId}/environments/{enviro
 pub const APP_ENVIRONMENT_PROMOTIONS: &str =
     "/app/v3/api/apps/{appId}/environments/{environmentId}/promotions";
 
-// -- app template marketplace ------------------------------------------------
+// -- application scaffolds ---------------------------------------------------
 
-pub const TEMPLATE_CATEGORIES: &str = "/app/v3/api/template_categories";
-pub const MARKETPLACE_TEMPLATES: &str = "/app/v3/api/marketplace/templates";
-pub const MARKETPLACE_TEMPLATE: &str = "/app/v3/api/marketplace/templates/{templateUuid}";
-pub const MARKETPLACE_TEMPLATE_INSTALL: &str =
-    "/app/v3/api/marketplace/templates/{templateUuid}/install";
-pub const APP_TEMPLATES: &str = "/app/v3/api/app_templates";
-pub const APP_TEMPLATE: &str = "/app/v3/api/app_templates/{templateUuid}";
-pub const APP_TEMPLATE_SUBMIT: &str = "/app/v3/api/app_templates/{templateUuid}/submit";
-pub const APP_TEMPLATE_VERSIONS: &str = "/app/v3/api/app_templates/{templateUuid}/versions";
+pub const SCAFFOLD_CATEGORIES: &str = "/app/v3/api/scaffold_categories";
+pub const MARKETPLACE_SCAFFOLDS: &str = "/app/v3/api/marketplace/scaffolds";
+pub const MARKETPLACE_SCAFFOLD: &str = "/app/v3/api/marketplace/scaffolds/{scaffoldUuid}";
+pub const MARKETPLACE_SCAFFOLD_INSTALL: &str =
+    "/app/v3/api/marketplace/scaffolds/{scaffoldUuid}/install";
+pub const SCAFFOLDS: &str = "/app/v3/api/scaffolds";
+pub const SCAFFOLD: &str = "/app/v3/api/scaffolds/{scaffoldUuid}";
+pub const SCAFFOLD_SUBMIT: &str = "/app/v3/api/scaffolds/{scaffoldUuid}/submit";
+pub const SCAFFOLD_VERSIONS: &str = "/app/v3/api/scaffolds/{scaffoldUuid}/versions";
 
 // -- download catalog (public) -------------------------------------------------
 

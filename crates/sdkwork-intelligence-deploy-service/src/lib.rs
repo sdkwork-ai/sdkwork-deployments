@@ -14,6 +14,9 @@ pub mod certificate_dns_account;
 pub mod certificate_issuance;
 pub mod certificate_material;
 pub mod certificate_renewal;
+pub mod channel_release;
+pub mod channel_release_direct;
+pub mod channel_release_observer;
 pub mod cloud_accounts;
 pub mod domain_dns_records;
 pub mod domain_verification;
@@ -23,9 +26,10 @@ pub mod factory_ops;
 pub mod git_repository_probe;
 pub mod repository;
 pub mod runtime_publication;
-mod template_install;
-pub mod template_market_access;
+mod scaffold_install;
+pub mod scaffold_market_access;
 pub mod verification_file;
+pub mod wechat_channel_rules;
 
 pub use app_composition::{AppCompositionRepositoryPort, ReplaceAppCompositionCommand};
 pub use app_resource_links::{
@@ -61,6 +65,19 @@ pub use certificate_renewal::{
     MAXIMUM_RENEW_BEFORE_DAYS, MINIMUM_RENEW_BEFORE_DAYS, RENEWAL_OVERDUE_GRACE_DAYS,
     SWEEP_LOOKAHEAD_DAYS,
 };
+pub use channel_release::{
+    plan_command_transitions, ChannelReleaseCommand, ChannelReleaseProvider,
+    MiniProgramAuditObservation, MiniProgramAuditOutcome, MiniProgramAuditSubmission,
+    MiniProgramGrayReleaseRequest, MiniProgramReleaseOutcome, MiniProgramReleaseRequest,
+    MiniProgramRollbackRequest, MiniProgramUploadOutcome, MiniProgramUploadRequest,
+    UnavailableChannelReleaseProvider,
+};
+pub use channel_release_direct::{
+    command_uses_direct_ci, direct_upload_command, plan_direct_upload, plan_miniprogram_ci_upload,
+    MiniProgramCiInvocation, MiniProgramCiUploadRequest, MAX_CI_ROBOT, MAX_PROVIDER_VERSION_CHARS,
+    MAX_UPLOAD_DESCRIPTION_CHARS, MIN_CI_ROBOT,
+};
+pub use channel_release_observer::{ChannelReleaseReviewObserver, ChannelReleaseStore};
 pub use domain_dns_records::hostname_matches_record;
 pub use domain_verification::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, normalize_domain_hostname,
@@ -76,7 +93,7 @@ pub use repository::{
     AppIdentityProvisioningTarget, CertificateOrderClaim, CertificateRenewalClaim,
     DeployRepositoryPort, DnsChallengeZone, DnsRecordSnapshotRow, DomainDnsRecordFilter,
     DomainDnsRecordUpsert, DomainDnsSnapshotWrite, DomainHostnameAsset, ExpiredCertificateSweep,
-    GitRepositoryValidationWrite, TemplateReadScope, UpdateAppSourceCommand,
+    GitRepositoryValidationWrite, ScaffoldReadScope, UpdateAppSourceCommand,
     UpdateAppSourceGitCommand, ZoneDnsSyncTarget,
 };
 pub use runtime_publication::{
@@ -88,6 +105,13 @@ pub use verification_file::{
     UnconfiguredVerificationFileProbe, VerificationFileProbePort, VerificationFileRecord,
     VerificationProbeOutcome, MAX_VERIFICATION_FILES_PER_ZONE, VERIFICATION_FILE_CONTENT_MAX,
     VERIFICATION_FILE_EXTENSIONS, VERIFICATION_FILE_NAME_MAX, VERIFICATION_PLATFORMS,
+};
+pub use wechat_channel_rules::{
+    domain_quota_exhausted, normalize_domain, validate_wechat_audit_submission,
+    validate_wechat_domain_change, validate_wechat_privacy_setting, WechatAuditCategory,
+    WechatAuditSubmission, WechatDomainAction, WechatDomainChange, WechatPrivacySetting,
+    WechatPrivacyVersion, MAX_AUDIT_CATEGORIES, MAX_AUDIT_FEEDBACK_CHARS,
+    MAX_WECHAT_DOMAINS_PER_KIND, WECHAT_DOMAIN_MONTHLY_CHANGE_LIMIT,
 };
 
 use std::sync::Arc;

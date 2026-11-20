@@ -1,4 +1,4 @@
-import type { SdkworkMiniMarketplacePort, MyTemplate } from '../../services/marketplace';
+import type { SdkworkMiniMarketplacePort, MyScaffold } from '../../services/marketplace';
 
 interface MarketplaceGlobals {
   marketplace: SdkworkMiniMarketplacePort;
@@ -6,7 +6,7 @@ interface MarketplaceGlobals {
 
 Page({
   data: {
-    items: [] as MyTemplate[],
+    items: [] as MyScaffold[],
     loading: true,
     error: '',
   },
@@ -19,7 +19,7 @@ Page({
     const globals = getApp<{ globalData: MarketplaceGlobals }>().globalData;
     this.setData({ loading: true, error: '' });
     globals.marketplace
-      .myTemplates()
+      .myScaffolds()
       .then((items) => this.setData({ items, loading: false }))
       .catch(() => this.setData({ loading: false, error: '模板列表加载失败，请重试。' }));
   },
@@ -50,7 +50,7 @@ Page({
   },
 
   /**
-   * Withdrawing deletes the listing (`appTemplates.delete`), so it is behind a
+   * Withdrawing deletes the listing (`scaffolds.delete`), so it is behind a
    * confirmation: the mini-program has no undo and the row disappears on the
    * reload that follows.
    */

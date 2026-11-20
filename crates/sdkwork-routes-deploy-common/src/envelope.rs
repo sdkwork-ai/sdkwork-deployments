@@ -5,25 +5,26 @@ use sdkwork_deploy_contract::{
     AppDatabaseProfilePage, AppDatabaseProfileResponse, AppDeploymentPage, AppDeploymentResponse,
     AppDomainPage, AppDomainResponse, AppEnvironmentPage, AppEnvironmentResponse, AppPage,
     AppReleasePage, AppReleaseResponse, AppResourceLinkPage, AppResourceLinkResponse, AppResponse,
-    AppSourceSpecPage, AppSourceSpecResponse, AppTemplatePage, AppTemplateResponse,
-    AppTemplateSummaryPage, AppTemplateSummaryResponse, AppTemplateVersionPage,
-    AppTemplateVersionResponse, ArtifactPage, ArtifactResponse, AuditLogPage, AuditLogResponse,
-    BuildPage, BuildQueueItemResponse, BuildQueuePage, BuildResponse, BuildTemplatePage,
-    BuildTemplateResponse, CertificateChallengePage, CertificateChallengeResponse,
-    CertificateOrderPage, CertificateOrderResponse, CertificatePage, CertificateRenewalPage,
-    CertificateRenewalResponse, CertificateResponse, ChannelPage, ChannelResponse,
-    ChannelRolloutPage, ChannelRolloutResponse, CloudAccountPage, CloudAccountResponse,
-    DomainDnsRecordPage, DomainDnsRecordResponse, DomainHostnamePage, DomainHostnameResponse,
-    DomainVerificationFilePage, DomainVerificationFileResponse, DomainVerifyResponse,
-    DomainZonePage, DomainZoneResponse, EntitlementProjectionPage, EntitlementProjectionResponse,
-    EnvVariablePage, EnvVariableResponse, EnvironmentPromotionPage, EnvironmentPromotionResponse,
-    HealthCheckPage, HealthCheckResponse, NginxConfigPage, NginxConfigResponse,
-    NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    RunnerHealthPage, RunnerHealthResponse, ServerPage, ServerResponse, SigningIdentityHealthPage,
-    SigningIdentityHealthResponse, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
-    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse, TemplateCategoryPage,
-    TemplateCategoryResponse, UsageEventPage, UsageEventResponse,
+    AppSourceSpecPage, AppSourceSpecResponse, ApplicationScaffoldPage, ApplicationScaffoldResponse,
+    ApplicationScaffoldSummaryPage, ApplicationScaffoldSummaryResponse,
+    ApplicationScaffoldVersionPage, ApplicationScaffoldVersionResponse, ArtifactPage,
+    ArtifactResponse, AuditLogPage, AuditLogResponse, BuildPage, BuildQueueItemResponse,
+    BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse,
+    CertificateChallengePage, CertificateChallengeResponse, CertificateOrderPage,
+    CertificateOrderResponse, CertificatePage, CertificateRenewalPage, CertificateRenewalResponse,
+    CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
+    CloudAccountPage, CloudAccountResponse, DomainDnsRecordPage, DomainDnsRecordResponse,
+    DomainHostnamePage, DomainHostnameResponse, DomainVerificationFilePage,
+    DomainVerificationFileResponse, DomainVerifyResponse, DomainZonePage, DomainZoneResponse,
+    EntitlementProjectionPage, EntitlementProjectionResponse, EnvVariablePage, EnvVariableResponse,
+    EnvironmentPromotionPage, EnvironmentPromotionResponse, HealthCheckPage, HealthCheckResponse,
+    NginxConfigPage, NginxConfigResponse, NginxReloadResponse, NginxStatusResponse,
+    NginxValidateResponse, NodeClusterPage, NodeClusterResponse, PackagePage, PackageResponse,
+    PlatformTargetPage, PlatformTargetResponse, RunnerHealthPage, RunnerHealthResponse,
+    ScaffoldCategoryPage, ScaffoldCategoryResponse, ServerPage, ServerResponse,
+    SigningIdentityHealthPage, SigningIdentityHealthResponse, SigningIdentityPage,
+    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
+    SourceRepositoryResponse, UsageEventPage, UsageEventResponse,
 };
 use sdkwork_deploy_core::normalize_pagination;
 use sdkwork_utils_rust::{PageInfo, PageMode, SdkWorkPageData, SdkWorkResourceData};
@@ -342,26 +343,28 @@ fn offset_page<T>(items: Vec<T>, page: i32, page_size: i32, total: i64) -> SdkWo
     }
 }
 
-// -- app template marketplace --------------------------------------------------
+// -- app scaffold marketplace --------------------------------------------------
 
-pub fn template_category_page(
-    page: TemplateCategoryPage,
-) -> SdkWorkPageData<TemplateCategoryResponse> {
+pub fn scaffold_category_page(
+    page: ScaffoldCategoryPage,
+) -> SdkWorkPageData<ScaffoldCategoryResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }
 
-pub fn app_template_summary_page(
-    page: AppTemplateSummaryPage,
-) -> SdkWorkPageData<AppTemplateSummaryResponse> {
+pub fn application_scaffold_summary_page(
+    page: ApplicationScaffoldSummaryPage,
+) -> SdkWorkPageData<ApplicationScaffoldSummaryResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }
 
-pub fn app_template_page(page: AppTemplatePage) -> SdkWorkPageData<AppTemplateResponse> {
+pub fn application_scaffold_page(
+    page: ApplicationScaffoldPage,
+) -> SdkWorkPageData<ApplicationScaffoldResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }
 
-pub fn app_template_version_page(
-    page: AppTemplateVersionPage,
-) -> SdkWorkPageData<AppTemplateVersionResponse> {
+pub fn application_scaffold_version_page(
+    page: ApplicationScaffoldVersionPage,
+) -> SdkWorkPageData<ApplicationScaffoldVersionResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }

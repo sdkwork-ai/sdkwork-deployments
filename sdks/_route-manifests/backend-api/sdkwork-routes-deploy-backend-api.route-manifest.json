@@ -881,10 +881,10 @@
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/template_categories",
-      "operationId": "templateCategories.list",
+      "path": "/backend/v3/api/scaffold_categories",
+      "operationId": "scaffolds.categories.list",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -900,15 +900,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.templateCategories.read",
+      "permission": "deploy.scaffoldCategories.read",
       "idempotent": false
     },
     {
       "method": "POST",
-      "path": "/backend/v3/api/template_categories",
-      "operationId": "templateCategories.create",
+      "path": "/backend/v3/api/scaffold_categories",
+      "operationId": "scaffolds.categories.create",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -924,15 +924,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.templateCategories.write",
+      "permission": "deploy.scaffoldCategories.write",
       "idempotent": true
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/template_categories/{categoryUuid}",
-      "operationId": "templateCategories.retrieve",
+      "path": "/backend/v3/api/scaffold_categories/{categoryUuid}",
+      "operationId": "scaffolds.categories.retrieve",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -948,15 +948,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.templateCategories.read",
+      "permission": "deploy.scaffoldCategories.read",
       "idempotent": false
     },
     {
       "method": "PATCH",
-      "path": "/backend/v3/api/template_categories/{categoryUuid}",
-      "operationId": "templateCategories.update",
+      "path": "/backend/v3/api/scaffold_categories/{categoryUuid}",
+      "operationId": "scaffolds.categories.update",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -972,15 +972,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.templateCategories.write",
+      "permission": "deploy.scaffoldCategories.write",
       "idempotent": true
     },
     {
       "method": "DELETE",
-      "path": "/backend/v3/api/template_categories/{categoryUuid}",
-      "operationId": "templateCategories.delete",
+      "path": "/backend/v3/api/scaffold_categories/{categoryUuid}",
+      "operationId": "scaffolds.categories.delete",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -996,15 +996,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.templateCategories.write",
+      "permission": "deploy.scaffoldCategories.write",
       "idempotent": false
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/app_templates",
-      "operationId": "appTemplates.list",
+      "path": "/backend/v3/api/scaffolds",
+      "operationId": "scaffolds.list",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1020,15 +1020,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.appTemplates.read",
+      "permission": "deploy.scaffolds.read",
       "idempotent": false
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/app_templates/{templateUuid}",
-      "operationId": "appTemplates.retrieve",
+      "path": "/backend/v3/api/scaffolds/{scaffoldUuid}",
+      "operationId": "scaffolds.retrieve",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1044,15 +1044,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.appTemplates.read",
+      "permission": "deploy.scaffolds.read",
       "idempotent": false
     },
     {
       "method": "PATCH",
-      "path": "/backend/v3/api/app_templates/{templateUuid}",
-      "operationId": "appTemplates.update",
+      "path": "/backend/v3/api/scaffolds/{scaffoldUuid}",
+      "operationId": "scaffolds.update",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1068,15 +1068,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.appTemplates.write",
+      "permission": "deploy.scaffolds.write",
       "idempotent": true
     },
     {
       "method": "DELETE",
-      "path": "/backend/v3/api/app_templates/{templateUuid}",
-      "operationId": "appTemplates.delete",
+      "path": "/backend/v3/api/scaffolds/{scaffoldUuid}",
+      "operationId": "scaffolds.delete",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1092,15 +1092,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.appTemplates.write",
+      "permission": "deploy.scaffolds.write",
       "idempotent": false
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/app_templates/{templateUuid}/versions",
-      "operationId": "appTemplateVersions.list",
+      "path": "/backend/v3/api/scaffolds/{scaffoldUuid}/versions",
+      "operationId": "scaffolds.versions.list",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1116,15 +1116,15 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.appTemplateVersions.read",
+      "permission": "deploy.scaffolds.read",
       "idempotent": false
     },
     {
       "method": "GET",
-      "path": "/backend/v3/api/app_templates/{templateUuid}/versions/{versionUuid}",
-      "operationId": "appTemplateVersions.retrieve",
+      "path": "/backend/v3/api/scaffolds/{scaffoldUuid}/versions/{versionUuid}",
+      "operationId": "scaffolds.versions.retrieve",
       "tags": [
-        "template"
+        "app"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1140,7 +1140,7 @@
       },
       "requestContext": "WebRequestContext",
       "apiSurface": "backend-api",
-      "permission": "deploy.appTemplateVersions.read",
+      "permission": "deploy.scaffolds.read",
       "idempotent": false
     },
     {

@@ -2,7 +2,7 @@
 
 WeChat mini-program client root of `sdkwork-deployments`, shipping the app
 template marketplace mobile surface
-(`docs/domains/APP_TEMPLATE_MARKETPLACE.md`):
+(`docs/domains/APPLICATION_SCAFFOLD_MARKETPLACE.md`):
 
 - **模板市场 tab** — category chips + keyword search over `PUBLIC` + `PUBLISHED`
   listings and a modal detail/confirm dialog. Acquiring a template is an

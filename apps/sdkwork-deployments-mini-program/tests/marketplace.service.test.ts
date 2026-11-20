@@ -51,7 +51,7 @@ function fakePort(routes: Record<string, Responder>): {
 
 test('browse projects blank facets and hits the marketplace path with snake_case query', async () => {
   const { port, calls } = fakePort({
-    'GET http://127.0.0.1:3900/app/v3/api/marketplace/templates': () =>
+    'GET http://127.0.0.1:3900/app/v3/api/marketplace/scaffolds': () =>
       envelope({ items: [cannedSummary], pageInfo: { hasMore: true, totalItems: '7' } }),
   });
   const page = await port.browse({ page: 1, pageSize: 10, keyword: '   ', categoryUuid: '' });
@@ -72,7 +72,7 @@ test('browse projects blank facets and hits the marketplace path with snake_case
 
 test('browse carries the pricing and sort facets and defaults missing paging facts', async () => {
   const { port, calls } = fakePort({
-    'GET http://127.0.0.1:3900/app/v3/api/marketplace/templates': () =>
+    'GET http://127.0.0.1:3900/app/v3/api/marketplace/scaffolds': () =>
       envelope({ items: [cannedSummary], pageInfo: {} }),
   });
   const page = await port.browse({ page: 2, pageSize: 10, pricingModel: 'PAID', sort: 'POPULAR' });
@@ -221,8 +221,8 @@ test('paymentRequirement prefers the provider payload only when the order says s
 });
 
 test('non-2xx and broken envelopes fail closed', async () => {  const { port } = fakePort({
-    'GET http://127.0.0.1:3900/app/v3/api/marketplace/templates': () => ({ statusCode: 500, data: null }),
-    'GET http://127.0.0.1:3900/app/v3/api/template_categories': () => ({
+    'GET http://127.0.0.1:3900/app/v3/api/marketplace/scaffolds': () => ({ statusCode: 500, data: null }),
+    'GET http://127.0.0.1:3900/app/v3/api/scaffold_categories': () => ({
       statusCode: 200,
       data: { code: 7, data: null },
     }),

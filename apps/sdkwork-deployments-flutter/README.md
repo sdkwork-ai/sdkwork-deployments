@@ -1,7 +1,7 @@
 # SDKWork Deployments Flutter
 
 Flutter client root of `sdkwork-deployments`, shipping the app template
-marketplace mobile surface (`docs/domains/APP_TEMPLATE_MARKETPLACE.md`):
+marketplace mobile surface (`docs/domains/APPLICATION_SCAFFOLD_MARKETPLACE.md`):
 
 - **模板市场 tab** — category chips + keyword search over `PUBLIC` + `PUBLISHED`
   listings and a detail bottom sheet. Acquiring is an order-center trade

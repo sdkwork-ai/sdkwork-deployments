@@ -1,7 +1,7 @@
 import type {
-  CreateAppTemplateRequest,
+  CreateApplicationScaffoldRequest,
   SdkworkDeployAppClient,
-  UpdateAppTemplateRequest,
+  UpdateApplicationScaffoldRequest,
 } from "@sdkwork/deployments-app-sdk";
 import type { SdkworkDeployBackendClient } from "@sdkwork/deployments-backend-sdk";
 import { describe, expect, it } from "vitest";
@@ -9,18 +9,18 @@ import { describe, expect, it } from "vitest";
 import { createDeploymentsAdminRegistry } from "../src/index.tsx";
 
 /**
- * The application center's template actions are plane-dependent.
+ * The application center's scaffold actions are plane-dependent.
  *
  * Listing create/edit exist only on the app API, so those two actions appear
  * only when the host injects the app client. Hosts that bridge the catalog with
  * the backend client alone (the Web Server admin surface) must keep the
  * moderation-only action set instead of failing to compose the registry.
  */
-describe("app template actions", () => {
+describe("app scaffold actions", () => {
   const backend = {} as unknown as SdkworkDeployBackendClient;
 
   it("offers moderation only when no app client is injected", () => {
-    const actions = createDeploymentsAdminRegistry(backend).appTemplates?.actions ?? [];
+    const actions = createDeploymentsAdminRegistry(backend).scaffolds?.actions ?? [];
     const ids = actions.map((action) => action.id);
     expect(ids).not.toContain("create");
     expect(ids).not.toContain("update");
@@ -29,7 +29,7 @@ describe("app template actions", () => {
 
   it("adds listing authoring when the app client is injected", () => {
     const app = {} as unknown as SdkworkDeployAppClient;
-    const ids = (createDeploymentsAdminRegistry(backend, app).appTemplates?.actions ?? []).map(
+    const ids = (createDeploymentsAdminRegistry(backend, app).scaffolds?.actions ?? []).map(
       (action) => action.id,
     );
     expect(ids).toEqual(expect.arrayContaining(["create", "update", "publish", "delete"]));
@@ -37,24 +37,24 @@ describe("app template actions", () => {
 
   it("sends the template presentation media and validates the screenshot gallery", async () => {
     const captured: {
-      create?: CreateAppTemplateRequest;
-      update?: UpdateAppTemplateRequest;
+      create?: CreateApplicationScaffoldRequest;
+      update?: UpdateApplicationScaffoldRequest;
     } = {};
     const app = {
-      template: {
-        appTemplates: {
-          create: async (body: CreateAppTemplateRequest) => {
+      app: {
+        scaffolds: {
+          create: async (body: CreateApplicationScaffoldRequest) => {
             captured.create = body;
             return {};
           },
-          update: async (_templateUuid: string, body: UpdateAppTemplateRequest) => {
+          update: async (_scaffoldUuid: string, body: UpdateApplicationScaffoldRequest) => {
             captured.update = body;
             return {};
           },
         },
       },
     } as unknown as SdkworkDeployAppClient;
-    const actions = createDeploymentsAdminRegistry(backend, app).appTemplates?.actions ?? [];
+    const actions = createDeploymentsAdminRegistry(backend, app).scaffolds?.actions ?? [];
     const create = actions.find((action) => action.id === "create");
     const update = actions.find((action) => action.id === "update");
     if (!create || !update) {
@@ -65,7 +65,7 @@ describe("app template actions", () => {
       appUuid: "app-1",
       categoryUuid: "category-1",
       templateKey: "tpl-1",
-      displayName: "Demo template",
+      displayName: "Demo scaffold",
       summary: "One line",
     };
     await create.execute({

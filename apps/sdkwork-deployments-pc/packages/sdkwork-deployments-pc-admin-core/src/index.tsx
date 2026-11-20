@@ -12,20 +12,20 @@ import { createContext, useContext, type ReactNode } from "react";
 
 import type {
   DeploymentsAppPlaneClient,
-  DeploymentsAppTemplateCreateBody,
-  DeploymentsAppTemplateScreenshot,
-  DeploymentsAppTemplateUpdateBody,
+  DeploymentsApplicationScaffoldCreateBody,
+  DeploymentsApplicationScaffoldScreenshot,
+  DeploymentsApplicationScaffoldUpdateBody,
 } from "./app-plane-port.ts";
 
 export type {
   DeploymentsAppIdempotencyParams,
   DeploymentsAppPlaneClient,
-  DeploymentsAppTemplateCreateBody,
-  DeploymentsAppTemplatePricingModel,
-  DeploymentsAppTemplateScreenshot,
-  DeploymentsAppTemplateType,
-  DeploymentsAppTemplateUpdateBody,
-  DeploymentsAppTemplateVisibility,
+  DeploymentsApplicationScaffoldCreateBody,
+  DeploymentsApplicationScaffoldPricingModel,
+  DeploymentsApplicationScaffoldScreenshot,
+  DeploymentsApplicationScaffoldType,
+  DeploymentsApplicationScaffoldUpdateBody,
+  DeploymentsApplicationScaffoldVisibility,
 } from "./app-plane-port.ts";
 
 // Feature packages must not import the generated backend SDK directly
@@ -132,34 +132,34 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
       ["name", "region", "description"],
     ),
     audit: source((query) => client.audit.auditLogs.list({ page: query.page, pageSize: query.pageSize }), [], ["action", "resource"]),
-    templateCategories: source(
-      (query) => client.template.templateCategories.list({ page: query.page, pageSize: query.pageSize, includeDisabled: true }),
+    scaffoldCategories: source(
+      (query) => client.app.scaffolds.categories.list({ page: query.page, pageSize: query.pageSize, includeDisabled: true }),
       [
         action("create", "Create category", { parentId: "", categoryKey: "", displayName: "", description: "", sortOrder: 0 }, (context) =>
-          client.template.templateCategories.create(
-            cleanBody(context.body) as unknown as Parameters<typeof client.template.templateCategories.create>[0],
+          client.app.scaffolds.categories.create(
+            cleanBody(context.body) as unknown as Parameters<typeof client.app.scaffolds.categories.create>[0],
             idempotencyParams(),
           )),
         action("update", "Update category", { displayName: "", description: "", sortOrder: 0, status: "ACTIVE" }, (context) =>
-          client.template.templateCategories.update(
+          client.app.scaffolds.categories.update(
             selected(context, "id"),
-            cleanBody(context.body) as unknown as Parameters<typeof client.template.templateCategories.update>[1],
+            cleanBody(context.body) as unknown as Parameters<typeof client.app.scaffolds.categories.update>[1],
             idempotencyParams(),
           ), { selection: true }),
         // Soft delete: the baseline frees the `category_key` for a same-key
         // rebuild, so the taxonomy can be corrected without losing listings
         // that still reference a disabled parent.
         action("delete", "Delete category", {}, (context) =>
-          client.template.templateCategories.delete(selected(context, "id")), { dangerous: true, selection: true }),
+          client.app.scaffolds.categories.delete(selected(context, "id")), { dangerous: true, selection: true }),
       ],
       ["displayName", "categoryKey"],
     ),
-    appTemplates: source(
-      (query) => client.template.appTemplates.list({ page: query.page, pageSize: query.pageSize }),
+    scaffolds: source(
+      (query) => client.app.scaffolds.list({ page: query.page, pageSize: query.pageSize }),
       [
         // Authoring has no backend-admin counterpart: creating a listing and
         // patching its editable copy are app-plane commands
-        // (`template.appTemplates.*`), so they use the injected app client while
+        // (`template.scaffolds.*`), so they use the injected app client while
         // every moderation transition below stays on the backend-admin client.
         // A host that does not inject the app client keeps the moderation-only
         // action set instead of failing to compose the registry.
@@ -182,7 +182,7 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
             coverMediaRef: "",
             screenshots: "",
           }, async (context) =>
-            app.template.appTemplates.create(appTemplateCreateBody(context.body), idempotencyParams())),
+            app.app.scaffolds.create(appTemplateCreateBody(context.body), idempotencyParams())),
           action("update", "Update listing", {
             displayName: "",
             summary: "",
@@ -196,34 +196,34 @@ export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClien
             coverMediaRef: "",
             screenshots: "",
           }, async (context) =>
-            app.template.appTemplates.update(selected(context, "id"), appTemplateUpdateBody(context.body), idempotencyParams()), { selection: true }),
+            app.app.scaffolds.update(selected(context, "id"), appTemplateUpdateBody(context.body), idempotencyParams()), { selection: true }),
         ]),
         // Moderation moves status only; the author owns the listing copy. An
         // approval publishes the newest draft versions server-side.
         action("publish", "Approve listing", { status: "PUBLISHED" }, (context) =>
-          client.template.appTemplates.update(selected(context, "id"), { status: "PUBLISHED" }, idempotencyParams()), { selection: true }),
+          client.app.scaffolds.update(selected(context, "id"), { status: "PUBLISHED" }, idempotencyParams()), { selection: true }),
         action("reject", "Reject listing", { status: "REJECTED", reviewNote: "" }, (context) =>
-          client.template.appTemplates.update(
+          client.app.scaffolds.update(
             selected(context, "id"),
-            cleanBody(context.body) as unknown as Parameters<typeof client.template.appTemplates.update>[1],
+            cleanBody(context.body) as unknown as Parameters<typeof client.app.scaffolds.update>[1],
             idempotencyParams(),
           ), { selection: true }),
         action("disable", "Disable listing", { status: "DISABLED" }, (context) =>
-          client.template.appTemplates.update(selected(context, "id"), { status: "DISABLED" }, idempotencyParams()), { dangerous: true, selection: true }),
+          client.app.scaffolds.update(selected(context, "id"), { status: "DISABLED" }, idempotencyParams()), { dangerous: true, selection: true }),
         action("feature", "Feature listing", { isFeatured: true }, (context) =>
-          client.template.appTemplates.update(selected(context, "id"), { isFeatured: true }, idempotencyParams()), { selection: true }),
+          client.app.scaffolds.update(selected(context, "id"), { isFeatured: true }, idempotencyParams()), { selection: true }),
         action("unfeature", "Unfeature listing", { isFeatured: false }, (context) =>
-          client.template.appTemplates.update(selected(context, "id"), { isFeatured: false }, idempotencyParams()), { selection: true }),
+          client.app.scaffolds.update(selected(context, "id"), { isFeatured: false }, idempotencyParams()), { selection: true }),
         action("delete", "Delete listing", {}, (context) =>
-          client.template.appTemplates.delete(selected(context, "id")), { dangerous: true, selection: true }),
+          client.app.scaffolds.delete(selected(context, "id")), { dangerous: true, selection: true }),
       ],
       ["displayName", "templateKey", "status"],
     ),
     // Versions are a nested collection (`/app_templates/{uuid}/versions`), so
     // this resource is scoped: the shell's scope field carries the listing's
     // template uuid and the table loads nothing until it is present.
-    appTemplateVersions: source(
-      (query) => client.template.appTemplateVersions.list(query.scopeId ?? "", { page: query.page, pageSize: query.pageSize }),
+    scaffoldVersions: source(
+      (query) => client.app.scaffolds.versions.list(query.scopeId ?? "", { page: query.page, pageSize: query.pageSize }),
       [],
       ["templateVersion", "status"],
       { requiresScope: true },
@@ -297,7 +297,7 @@ function cleanBody(body: Record<string, unknown>): Record<string, unknown> {
  * uuid- or enum-typed member the server would reject; optional members are
  * omitted instead of being sent as `undefined` (`exactOptionalPropertyTypes`).
  */
-function appTemplateCreateBody(body: Record<string, unknown>): DeploymentsAppTemplateCreateBody {
+function appTemplateCreateBody(body: Record<string, unknown>): DeploymentsApplicationScaffoldCreateBody {
   const cleaned = cleanBody(body);
   const description = optionalText(cleaned.description, false);
   const currency = optionalText(cleaned.currency, true);
@@ -327,7 +327,7 @@ function appTemplateCreateBody(body: Record<string, unknown>): DeploymentsAppTem
  * The editable-copy patch: an omitted field keeps its stored value server-side,
  * so only the members the operator filled in are sent.
  */
-function appTemplateUpdateBody(body: Record<string, unknown>): DeploymentsAppTemplateUpdateBody {
+function appTemplateUpdateBody(body: Record<string, unknown>): DeploymentsApplicationScaffoldUpdateBody {
   const cleaned = cleanBody(body);
   const displayName = optionalText(cleaned.displayName, true);
   const summary = optionalText(cleaned.summary, true);
@@ -359,7 +359,7 @@ function appTemplateUpdateBody(body: Record<string, unknown>): DeploymentsAppTem
  */
 function appTemplateMedia(
   body: Record<string, unknown>,
-): Pick<DeploymentsAppTemplateUpdateBody, "iconMediaRef" | "coverMediaRef" | "screenshots"> {
+): Pick<DeploymentsApplicationScaffoldUpdateBody, "iconMediaRef" | "coverMediaRef" | "screenshots"> {
   const iconMediaRef = optionalText(body.iconMediaRef, true);
   const coverMediaRef = optionalText(body.coverMediaRef, true);
   const screenshots = parseScreenshots(body.screenshots);
@@ -370,7 +370,7 @@ function appTemplateMedia(
   };
 }
 
-function parseScreenshots(value: unknown): DeploymentsAppTemplateScreenshot[] | undefined {
+function parseScreenshots(value: unknown): DeploymentsApplicationScaffoldScreenshot[] | undefined {
   const text = optionalText(value, false);
   if (text === undefined) {
     return undefined;
@@ -418,15 +418,15 @@ function optionalText(value: unknown, trim: boolean): string | undefined {
   return trim ? value.trim() : value;
 }
 
-function templateType(value: unknown): DeploymentsAppTemplateCreateBody["templateType"] {
+function templateType(value: unknown): DeploymentsApplicationScaffoldCreateBody["templateType"] {
   return value === "APP" || value === "PPT" || value === "VIDEO" ? value : undefined;
 }
 
-function visibility(value: unknown): DeploymentsAppTemplateUpdateBody["visibility"] {
+function visibility(value: unknown): DeploymentsApplicationScaffoldUpdateBody["visibility"] {
   return value === "PUBLIC" || value === "PRIVATE" ? value : undefined;
 }
 
-function pricingModel(value: unknown): DeploymentsAppTemplateUpdateBody["pricingModel"] {
+function pricingModel(value: unknown): DeploymentsApplicationScaffoldUpdateBody["pricingModel"] {
   return value === "FREE" || value === "PAID" ? value : undefined;
 }
 

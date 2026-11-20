@@ -1,4 +1,4 @@
-import { deploymentsModule as adminAppCenter } from "@sdkwork/deployments-pc-admin-app-templates";
+import { deploymentsModule as adminAppCenter } from "@sdkwork/deployments-pc-admin-scaffolds";
 import { useSdkworkAuthControllerState } from "@sdkwork/auth-pc-react";
 import { sourceSpecsModule, SourceSpecsAdminPage } from "@sdkwork/deployments-pc-admin-core";
 import { deploymentsModule as adminAudit } from "@sdkwork/deployments-pc-admin-audit";
@@ -67,7 +67,7 @@ function AdminAppsBridge({ locale }: DeploymentsResourcePageProps) {
   return <PublishingAppsPage deployClient={deploy} driveClient={drive} locale={locale} surface="admin" />;
 }
 
-const consoleResourcePages = { apps: PublishingAppsBridge, marketplace: MarketplaceBridge, myTemplates: MyTemplatesBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
+const consoleResourcePages = { apps: PublishingAppsBridge, marketplace: MarketplaceBridge, myScaffolds: MyTemplatesBridge, domains: LazyDomainManagementPage, certificates: LazyCertificateManagementPage } as const;
 const adminModules = [localProjects, infrastructure, adminNodes, adminAppCenter, adminAudit, adminDownloads, sourceSpecsModule] satisfies readonly DeploymentsPcModuleDefinition[];
 /**
  * The source-specs ledger mounts straight from the capability that owns the

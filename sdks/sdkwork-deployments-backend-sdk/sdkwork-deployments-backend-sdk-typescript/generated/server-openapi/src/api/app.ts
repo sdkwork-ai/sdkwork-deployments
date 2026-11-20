@@ -1,8 +1,163 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppFactoryReconciliation, AppIdentityProvisionResponse, AppKind, AppOwnerType, AppResponse, PageInfo } from '../types';
+import type { AppFactoryReconciliation, AppIdentityProvisionResponse, AppKind, ApplicationScaffoldResponse, ApplicationScaffoldVersionResponse, AppOwnerType, AppResponse, CreateScaffoldCategoryRequest, PageInfo, ScaffoldCategoryResponse, UpdateApplicationScaffoldAdminRequest, UpdateScaffoldCategoryRequest } from '../types';
 
+
+export interface AppScaffoldsVersionsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export class AppScaffoldsVersionsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 获取应用模板版本列表 */
+  async list(scaffoldUuid: string, params?: AppScaffoldsVersionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldVersionResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: ApplicationScaffoldVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}/versions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** 获取应用模板版本详情 */
+  async retrieve(scaffoldUuid: string, versionUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldVersionResponse> {
+    return this.client.request<ApplicationScaffoldVersionResponse>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}/versions/${serializePathParameter(versionUuid, { name: 'versionUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface AppScaffoldsCategoriesListParams {
+  page?: number;
+  pageSize?: number;
+  includeDisabled?: boolean;
+}
+
+export interface AppScaffoldsCategoriesCreateParams {
+  idempotencyKey: string;
+}
+
+export interface AppScaffoldsCategoriesUpdateParams {
+  idempotencyKey: string;
+}
+
+export class AppScaffoldsCategoriesApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 获取模板分类列表 */
+  async list(params?: AppScaffoldsCategoriesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ScaffoldCategoryResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'include_disabled', value: params?.includeDisabled, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: ScaffoldCategoryResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/scaffold_categories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** 创建模板分类 */
+  async create(body: CreateScaffoldCategoryRequest, params: AppScaffoldsCategoriesCreateParams, requestOptions?: ApiRequestOptions): Promise<ScaffoldCategoryResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<ScaffoldCategoryResponse>(backendApiPath(`/scaffold_categories`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** 获取模板分类详情 */
+  async retrieve(categoryUuid: string, requestOptions?: ApiRequestOptions): Promise<ScaffoldCategoryResponse> {
+    return this.client.request<ScaffoldCategoryResponse>(backendApiPath(`/scaffold_categories/${serializePathParameter(categoryUuid, { name: 'categoryUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** 更新模板分类 */
+  async update(categoryUuid: string, body: UpdateScaffoldCategoryRequest, params: AppScaffoldsCategoriesUpdateParams, requestOptions?: ApiRequestOptions): Promise<ScaffoldCategoryResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<ScaffoldCategoryResponse>(backendApiPath(`/scaffold_categories/${serializePathParameter(categoryUuid, { name: 'categoryUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** 删除模板分类 */
+  async delete(categoryUuid: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(backendApiPath(`/scaffold_categories/${serializePathParameter(categoryUuid, { name: 'categoryUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+}
+
+export interface AppScaffoldsListParams {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  status?: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' | 'REJECTED' | 'DISABLED';
+  categoryUuid?: string;
+  visibility?: 'PUBLIC' | 'PRIVATE';
+  templateType?: 'APP' | 'PPT' | 'VIDEO';
+}
+
+export interface AppScaffoldsUpdateParams {
+  idempotencyKey: string;
+}
+
+export class AppScaffoldsApi {
+  private client: HttpClient;
+  public readonly categories: AppScaffoldsCategoriesApi;
+  public readonly versions: AppScaffoldsVersionsApi;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+    this.categories = new AppScaffoldsCategoriesApi(client);
+    this.versions = new AppScaffoldsVersionsApi(client);
+  }
+
+
+/** 获取应用模板列表（全状态） */
+  async list(params?: AppScaffoldsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
+      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
+      { name: 'category_uuid', value: params?.categoryUuid, style: 'form', explode: true, allowReserved: false },
+      { name: 'visibility', value: params?.visibility, style: 'form', explode: true, allowReserved: false },
+      { name: 'template_type', value: params?.templateType, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: ApplicationScaffoldResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/scaffolds`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** 获取应用模板详情 */
+  async retrieve(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
+    return this.client.request<ApplicationScaffoldResponse>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** 审核或调整应用模板 */
+  async update(scaffoldUuid: string, body: UpdateApplicationScaffoldAdminRequest, params: AppScaffoldsUpdateParams, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<ApplicationScaffoldResponse>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** 删除应用模板 */
+  async delete(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<void> {
+    return this.client.request<void>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
+  }
+}
 
 export class AppFactoryReconciliationApi {
   private client: HttpClient;
@@ -32,10 +187,12 @@ export interface AppListParams {
 export class AppApi {
   private client: HttpClient;
   public readonly factoryReconciliation: AppFactoryReconciliationApi;
+  public readonly scaffolds: AppScaffoldsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.factoryReconciliation = new AppFactoryReconciliationApi(client);
+    this.scaffolds = new AppScaffoldsApi(client);
   }
 
 
@@ -294,4 +451,79 @@ function encodeQueryValue(value: string, allowReserved: boolean): string {
     .replace(/%2C/gi, ',')
     .replace(/%3B/gi, ';')
     .replace(/%3D/gi, '=');
+}
+function buildRequestHeaders(
+  headers: Record<string, HeaderParameterSpec | undefined>,
+  cookies: Record<string, HeaderParameterSpec | undefined> = {},
+): Record<string, string> | undefined {
+  const requestHeaders: Record<string, string> = {};
+
+  for (const [name, parameter] of Object.entries(headers)) {
+    const serialized = serializeParameterValue(parameter);
+    if (serialized !== undefined) {
+      requestHeaders[name] = serialized;
+    }
+  }
+
+  const cookieHeader = buildCookieHeader(cookies);
+  if (cookieHeader) {
+    requestHeaders.Cookie = requestHeaders.Cookie
+      ? `${requestHeaders.Cookie}; ${cookieHeader}`
+      : cookieHeader;
+  }
+
+  return Object.keys(requestHeaders).length > 0 ? requestHeaders : undefined;
+}
+
+interface HeaderParameterSpec {
+  value: unknown;
+  style: string;
+  explode: boolean;
+  contentType?: string;
+}
+
+function buildCookieHeader(cookies: Record<string, HeaderParameterSpec | undefined>): string | undefined {
+  const pairs: string[] = [];
+  for (const [name, parameter] of Object.entries(cookies)) {
+    const serialized = serializeParameterValue(parameter);
+    if (serialized !== undefined) {
+      pairs.push(`${encodeURIComponent(name)}=${encodeURIComponent(serialized)}`);
+    }
+  }
+  return pairs.length > 0 ? pairs.join('; ') : undefined;
+}
+
+function serializeParameterValue(parameter: HeaderParameterSpec | undefined): string | undefined {
+  const value = parameter?.value;
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (parameter?.contentType) {
+    return JSON.stringify(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => serializeHeaderPrimitive(item)).join(',');
+  }
+  if (typeof value === 'object' && value !== null) {
+    return serializeHeaderObject(value as Record<string, unknown>, parameter?.explode === true);
+  }
+  return serializeHeaderPrimitive(value);
+}
+
+function serializeHeaderObject(value: Record<string, unknown>, explode: boolean): string {
+  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined && entryValue !== null);
+  if (explode) {
+    return entries.map(([key, entryValue]) => `${key}=${serializeHeaderPrimitive(entryValue)}`).join(',');
+  }
+  return entries.flatMap(([key, entryValue]) => [key, serializeHeaderPrimitive(entryValue)]).join(',');
+}
+
+function serializeHeaderPrimitive(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return String(value);
 }

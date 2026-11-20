@@ -6,16 +6,16 @@ import { DataTable, type DataTableColumn } from "@sdkwork/ui-pc-react";
 import type {
   AppTemplateOrderCreateResult,
   AppTemplateOrderSummary,
-  AppTemplateResponse,
-  AppTemplateSummaryResponse,
+  ApplicationScaffoldResponse,
+  ApplicationScaffoldSummaryResponse,
   SdkworkDeployAppClient,
   SdkworkOrderAppClient,
-  TemplateCategoryResponse,
+  ScaffoldCategoryResponse,
 } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
 
 import { marketplaceTranslator, type MarketplaceMessageKey } from "./i18n.ts";
-import { createMarketplaceService, isSettledTemplateOrderStatus, type MarketplacePage as MarketplaceLedger, type TemplateType } from "./service/marketplace.ts";
+import { createMarketplaceService, isSettledTemplateOrderStatus, type MarketplacePage as MarketplaceLedger, type ScaffoldType } from "./service/marketplace.ts";
 
 export interface MarketplacePageProps {
   readonly deployClient: SdkworkDeployAppClient;
@@ -53,8 +53,8 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   // every render, re-fire the load effect, and refetch the whole page in a loop.
   const t = useMemo(() => marketplaceTranslator(locale), [locale]);
   const service = useMemo(() => createMarketplaceService(deployClient, orderClient), [deployClient, orderClient]);
-  const [categories, setCategories] = useState<readonly TemplateCategoryResponse[]>([]);
-  const [items, setItems] = useState<readonly AppTemplateSummaryResponse[]>([]);
+  const [categories, setCategories] = useState<readonly ScaffoldCategoryResponse[]>([]);
+  const [items, setItems] = useState<readonly ApplicationScaffoldSummaryResponse[]>([]);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
@@ -66,9 +66,9 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [categoryUuid, setCategoryUuid] = useState("");
   const [pricingModel, setPricingModel] = useState<"" | "FREE" | "PAID">("");
-  const [templateType, setTemplateType] = useState<"" | TemplateType>("");
+  const [templateType, setScaffoldType] = useState<"" | ScaffoldType>("");
   const [sort, setSort] = useState<"NEWEST" | "POPULAR">("NEWEST");
-  const [detail, setDetail] = useState<AppTemplateResponse>();
+  const [detail, setDetail] = useState<ApplicationScaffoldResponse>();
   const [orders, setOrders] = useState<readonly AppTemplateOrderSummary[]>([]);
   const [pendingPayment, setPendingPayment] = useState<PendingPayment>();
   const [busy, setBusy] = useState(false);
@@ -186,18 +186,18 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
     [service, load, t],
   );
 
-  const columns = useMemo<DataTableColumn<AppTemplateSummaryResponse>[]>(
+  const columns = useMemo<DataTableColumn<ApplicationScaffoldSummaryResponse>[]>(
     () => [
       {
         id: "displayName",
-        header: t("myTemplates.create.displayName"),
+        header: t("myScaffolds.create.displayName"),
         cell: (item) => (
           <button className="link-button" type="button" onClick={() => void openDetail(item.id)}>
             {item.displayName}
           </button>
         ),
       },
-      { id: "summary", header: t("myTemplates.create.summary"), cell: (item) => item.summary },
+      { id: "summary", header: t("myScaffolds.create.summary"), cell: (item) => item.summary },
       { id: "pricingModel", header: t("common.pricing"), cell: (item) => formatPricing(item, t) },
       { id: "installCount", header: t("marketplace.sort.POPULAR"), cell: (item) => t("marketplace.installCount", { count: item.installCount }) },
       {
@@ -283,7 +283,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
             aria-label={t("marketplace.type")}
             value={templateType}
             onChange={(event) => {
-              setTemplateType(event.target.value as "" | TemplateType);
+              setScaffoldType(event.target.value as "" | ScaffoldType);
               setPage(1);
             }}
           >
@@ -320,7 +320,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
           {t("marketplace.installSucceeded", { name: installedName })}
         </div>
       )}
-      <DataTable<AppTemplateSummaryResponse>
+      <DataTable<ApplicationScaffoldSummaryResponse>
         columns={columns}
         density="compact"
         emptyState={<span>{t("marketplace.empty")}</span>}
@@ -338,7 +338,7 @@ export function MarketplacePage({ deployClient, orderClient, locale }: Marketpla
           pageSizeOptions: [PAGE_SIZE],
           ...(total === 0 ? {} : { rowCount: total }),
         }}
-        rows={items as AppTemplateSummaryResponse[]}
+        rows={items as ApplicationScaffoldSummaryResponse[]}
         stickyHeader
       />
       {detail && (
@@ -442,7 +442,7 @@ function pricingLabel(pricingModel: "FREE" | "PAID", t: (key: MarketplaceMessage
 
 /** Localized facet label for a listing's artifact kind. */
 function templateTypeLabel(
-  templateType: AppTemplateSummaryResponse["templateType"],
+  templateType: ApplicationScaffoldSummaryResponse["templateType"],
   t: (key: MarketplaceMessageKey, values?: Record<string, string | number>) => string,
 ): string {
   switch (templateType) {
@@ -456,7 +456,7 @@ function templateTypeLabel(
 }
 
 function formatPricing(
-  item: AppTemplateSummaryResponse,
+  item: ApplicationScaffoldSummaryResponse,
   t: (key: MarketplaceMessageKey, values?: Record<string, string | number>) => string,
 ): string {
   const label = pricingLabel(item.pricingModel, t);

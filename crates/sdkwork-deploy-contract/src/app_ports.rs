@@ -109,7 +109,10 @@ mod permission_tests {
         DeployAppRequestContext {
             tenant_id: 7,
             actor_id: Some(11),
-            permissions: permissions.iter().map(|value| (*value).to_owned()).collect(),
+            permissions: permissions
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
             ..Default::default()
         }
     }
@@ -122,7 +125,12 @@ mod permission_tests {
                 "{grant} must authorize the approval gate"
             );
         }
-        for grant in ["deploy.apps.write", "deploy.apps.approvals", "deployx.*", ""] {
+        for grant in [
+            "deploy.apps.write",
+            "deploy.apps.approvals",
+            "deployx.*",
+            "",
+        ] {
             assert!(
                 !context(&[grant]).has_permission(DEPLOY_APPS_APPROVE_PERMISSION),
                 "{grant} must not authorize the approval gate"
@@ -140,11 +148,9 @@ mod permission_tests {
             ),
             "a promote-only credential must not record an approval"
         );
-        assert!(
-            context(&["deploy.apps.approve"])
-                .require_promotion_approval()
-                .is_ok()
-        );
+        assert!(context(&["deploy.apps.approve"])
+            .require_promotion_approval()
+            .is_ok());
     }
 }
 
@@ -1787,133 +1793,133 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
-    // -- app template marketplace ---------------------------------------------
+    // -- app scaffold marketplace ---------------------------------------------
 
-    async fn list_template_categories(
+    async fn list_scaffold_categories(
         &self,
         _context: &DeployAppRequestContext,
         _include_disabled: bool,
-    ) -> DeployServiceResult<crate::template_market::TemplateCategoryPage> {
+    ) -> DeployServiceResult<crate::scaffold_market::ScaffoldCategoryPage> {
         Err(crate::DeployServiceError::Internal(
-            "list_template_categories API is not implemented".to_owned(),
+            "list_scaffold_categories API is not implemented".to_owned(),
         ))
     }
 
-    async fn list_marketplace_templates(
+    async fn list_marketplace_scaffolds(
         &self,
         _context: &DeployAppRequestContext,
-        _query: &crate::template_market::ListMarketplaceTemplatesQuery,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateSummaryPage> {
+        _query: &crate::scaffold_market::ListMarketplaceScaffoldsQuery,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldSummaryPage> {
         Err(crate::DeployServiceError::Internal(
-            "list_marketplace_templates API is not implemented".to_owned(),
+            "list_marketplace_scaffolds API is not implemented".to_owned(),
         ))
     }
 
-    async fn retrieve_marketplace_template(
+    async fn retrieve_marketplace_scaffold(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        _scaffold_uuid: &str,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse> {
         Err(crate::DeployServiceError::Internal(
-            "retrieve_marketplace_template API is not implemented".to_owned(),
+            "retrieve_marketplace_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn install_app_template(
+    async fn install_application_scaffold(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
+        _scaffold_uuid: &str,
         _idempotency_key: &str,
-        _request: &crate::template_market::InstallAppTemplateRequest,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateInstallResponse> {
+        _request: &crate::scaffold_market::InstallApplicationScaffoldRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldInstallResponse> {
         Err(crate::DeployServiceError::Internal(
-            "install_app_template API is not implemented".to_owned(),
+            "install_application_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn list_app_templates(
+    async fn list_application_scaffolds(
         &self,
         _context: &DeployAppRequestContext,
-        _query: &crate::template_market::ListAppTemplatesQuery,
-    ) -> DeployServiceResult<crate::template_market::AppTemplatePage> {
+        _query: &crate::scaffold_market::ListApplicationScaffoldsQuery,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldPage> {
         Err(crate::DeployServiceError::Internal(
-            "list_app_templates API is not implemented".to_owned(),
+            "list_application_scaffolds API is not implemented".to_owned(),
         ))
     }
 
-    async fn create_app_template(
+    async fn create_application_scaffold(
         &self,
         _context: &DeployAppRequestContext,
         _idempotency_key: &str,
-        _request: &crate::template_market::CreateAppTemplateRequest,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        _request: &crate::scaffold_market::CreateApplicationScaffoldRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse> {
         Err(crate::DeployServiceError::Internal(
-            "create_app_template API is not implemented".to_owned(),
+            "create_application_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn retrieve_app_template(
+    async fn retrieve_application_scaffold(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        _scaffold_uuid: &str,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse> {
         Err(crate::DeployServiceError::Internal(
-            "retrieve_app_template API is not implemented".to_owned(),
+            "retrieve_application_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn update_app_template(
+    async fn update_application_scaffold(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
-        _request: &crate::template_market::UpdateAppTemplateRequest,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        _scaffold_uuid: &str,
+        _request: &crate::scaffold_market::UpdateApplicationScaffoldRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse> {
         Err(crate::DeployServiceError::Internal(
-            "update_app_template API is not implemented".to_owned(),
+            "update_application_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn delete_app_template(
+    async fn delete_application_scaffold(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
+        _scaffold_uuid: &str,
     ) -> DeployServiceResult<()> {
         Err(crate::DeployServiceError::Internal(
-            "delete_app_template API is not implemented".to_owned(),
+            "delete_application_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn submit_app_template(
+    async fn submit_application_scaffold(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse> {
+        _scaffold_uuid: &str,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse> {
         Err(crate::DeployServiceError::Internal(
-            "submit_app_template API is not implemented".to_owned(),
+            "submit_application_scaffold API is not implemented".to_owned(),
         ))
     }
 
-    async fn list_app_template_versions(
+    async fn list_application_scaffold_versions(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
+        _scaffold_uuid: &str,
         _page: i32,
         _page_size: i32,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionPage> {
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldVersionPage> {
         Err(crate::DeployServiceError::Internal(
-            "list_app_template_versions API is not implemented".to_owned(),
+            "list_application_scaffold_versions API is not implemented".to_owned(),
         ))
     }
 
-    async fn create_app_template_version(
+    async fn create_application_scaffold_version(
         &self,
         _context: &DeployAppRequestContext,
-        _template_uuid: &str,
+        _scaffold_uuid: &str,
         _idempotency_key: &str,
-        _request: &crate::template_market::CreateAppTemplateVersionRequest,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse> {
+        _request: &crate::scaffold_market::CreateApplicationScaffoldVersionRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldVersionResponse> {
         Err(crate::DeployServiceError::Internal(
-            "create_app_template_version API is not implemented".to_owned(),
+            "create_application_scaffold_version API is not implemented".to_owned(),
         ))
     }
 }
@@ -2162,80 +2168,80 @@ pub trait DeployBackendApi: Send + Sync {
         page_size: i32,
     ) -> DeployServiceResult<SourceEventPage>;
 
-    // -- app template marketplace (admin) --------------------------------------
+    // -- app scaffold marketplace (admin) --------------------------------------
 
-    async fn list_template_categories(
+    async fn list_scaffold_categories(
         &self,
         context: &DeployBackendRequestContext,
         include_disabled: bool,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<crate::template_market::TemplateCategoryPage>;
+    ) -> DeployServiceResult<crate::scaffold_market::ScaffoldCategoryPage>;
 
-    async fn create_template_category(
+    async fn create_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
-        request: &crate::template_market::CreateTemplateCategoryRequest,
-    ) -> DeployServiceResult<crate::template_market::TemplateCategoryResponse>;
+        request: &crate::scaffold_market::CreateScaffoldCategoryRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ScaffoldCategoryResponse>;
 
-    async fn retrieve_template_category(
-        &self,
-        context: &DeployBackendRequestContext,
-        category_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::TemplateCategoryResponse>;
-
-    async fn update_template_category(
+    async fn retrieve_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
         category_uuid: &str,
-        request: &crate::template_market::UpdateTemplateCategoryRequest,
-    ) -> DeployServiceResult<crate::template_market::TemplateCategoryResponse>;
+    ) -> DeployServiceResult<crate::scaffold_market::ScaffoldCategoryResponse>;
 
-    async fn delete_template_category(
+    async fn update_scaffold_category(
+        &self,
+        context: &DeployBackendRequestContext,
+        category_uuid: &str,
+        request: &crate::scaffold_market::UpdateScaffoldCategoryRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ScaffoldCategoryResponse>;
+
+    async fn delete_scaffold_category(
         &self,
         context: &DeployBackendRequestContext,
         category_uuid: &str,
     ) -> DeployServiceResult<()>;
 
-    async fn list_app_templates(
+    async fn list_application_scaffolds(
         &self,
         context: &DeployBackendRequestContext,
-        query: &crate::template_market::ListAppTemplatesAdminQuery,
-    ) -> DeployServiceResult<crate::template_market::AppTemplatePage>;
+        query: &crate::scaffold_market::ListApplicationScaffoldsAdminQuery,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldPage>;
 
-    async fn retrieve_app_template(
+    async fn retrieve_application_scaffold(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse>;
+        scaffold_uuid: &str,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse>;
 
-    async fn update_app_template(
+    async fn update_application_scaffold(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
-        request: &crate::template_market::UpdateAppTemplateAdminRequest,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateResponse>;
+        scaffold_uuid: &str,
+        request: &crate::scaffold_market::UpdateApplicationScaffoldAdminRequest,
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldResponse>;
 
-    async fn delete_app_template(
+    async fn delete_application_scaffold(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
     ) -> DeployServiceResult<()>;
 
-    async fn list_app_template_versions(
+    async fn list_application_scaffold_versions(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         page: i32,
         page_size: i32,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionPage>;
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldVersionPage>;
 
-    async fn retrieve_app_template_version(
+    async fn retrieve_application_scaffold_version(
         &self,
         context: &DeployBackendRequestContext,
-        template_uuid: &str,
+        scaffold_uuid: &str,
         version_uuid: &str,
-    ) -> DeployServiceResult<crate::template_market::AppTemplateVersionResponse>;
+    ) -> DeployServiceResult<crate::scaffold_market::ApplicationScaffoldVersionResponse>;
 
     // -- application identity (operator retry entry) ----------------------------
 
