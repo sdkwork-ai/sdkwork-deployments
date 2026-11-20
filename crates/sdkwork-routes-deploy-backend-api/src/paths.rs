@@ -36,6 +36,10 @@ pub const SOURCE_EVENTS: &str = "/backend/v3/api/source_events";
 /// ownership and endpoint facets as the tenant surface.
 pub const APPS: &str = "/backend/v3/api/apps";
 
+/// The factory reconciliation report (section 9): dangling cross-module
+/// references for the operator's tenant. Read-only; never repairs.
+pub const APP_FACTORY_RECONCILIATION: &str = "/backend/v3/api/apps/factory_reconciliation";
+
 // -- application identity (operator retry entry) ------------------------------
 
 /// Re-runs IAM installation provisioning for one application.

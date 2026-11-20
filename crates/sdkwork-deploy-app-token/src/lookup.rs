@@ -52,12 +52,11 @@ impl PgDeployApplicationLookup {
         tenant_id: &str,
         order_id: &str,
     ) -> Result<bool, AppTokenError> {
-        let present: Option<String> = sqlx::query_scalar(
-            "SELECT to_regclass('commerce_order')::text",
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|error| AppTokenError::Storage(error.to_string()))?;
+        let present: Option<String> =
+            sqlx::query_scalar("SELECT to_regclass('commerce_order')::text")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|error| AppTokenError::Storage(error.to_string()))?;
         if present.is_none() {
             return Ok(false);
         }

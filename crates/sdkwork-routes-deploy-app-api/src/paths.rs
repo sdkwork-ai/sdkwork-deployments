@@ -34,6 +34,11 @@ pub const CLOUD_ACCOUNTS: &str = "/app/v3/api/cloud_accounts";
 pub const APP_COMPOSITION: &str = "/app/v3/api/apps/{appId}/composition";
 pub const APP_ACTIVATE: &str = "/app/v3/api/apps/{appId}/activate";
 pub const APP_PAUSE: &str = "/app/v3/api/apps/{appId}/pause";
+/// Derived per-stage factory readiness (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`
+/// section 11). Read-only; recomputed on every call.
+pub const APP_READINESS: &str = "/app/v3/api/apps/{appId}/readiness";
+/// Forward-only uninstall (section 3 stage 6): disable IAM, then archive.
+pub const APP_UNINSTALL: &str = "/app/v3/api/apps/{appId}/uninstall";
 pub const APP_ENV_VARIABLES: &str = "/app/v3/api/apps/{appId}/env_variables";
 /// The account bindings an application environment publishes through.
 ///

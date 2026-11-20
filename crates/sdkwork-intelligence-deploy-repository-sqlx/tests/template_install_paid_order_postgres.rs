@@ -79,7 +79,12 @@ async fn only_the_settled_buyer_order_for_the_listing_verifies() {
         .await
         .expect("other buyer"));
     assert!(!repository
-        .verify_paid_app_template_order(TENANT_ID, BUYER_ID, ORDER_ID, "ffffffff-6666-4666-8666-ffffffffffff")
+        .verify_paid_app_template_order(
+            TENANT_ID,
+            BUYER_ID,
+            ORDER_ID,
+            "ffffffff-6666-4666-8666-ffffffffffff"
+        )
         .await
         .expect("other template"));
     sqlx::query("UPDATE commerce_order SET payment_status = 'refunded' WHERE id = $1")

@@ -626,7 +626,10 @@ CREATE TABLE IF NOT EXISTS deploy_deployment (
     CONSTRAINT uk_deploy_deployment_uuid UNIQUE (uuid),
     CONSTRAINT uk_deploy_deployment_idempotency UNIQUE (tenant_id, idempotency_key),
     CONSTRAINT fk_deploy_deployment_rollback FOREIGN KEY (rollback_from_deployment_id) REFERENCES deploy_deployment(id),
-    CONSTRAINT chk_deploy_deployment_percentage CHECK (percentage IS NULL OR (percentage >= 1 AND percentage <= 100))
+    CONSTRAINT chk_deploy_deployment_percentage CHECK (percentage IS NULL OR (percentage >= 1 AND percentage <= 100)),
+    CONSTRAINT chk_deploy_deployment_environment CHECK (
+        environment IN ('development', 'test', 'staging', 'demo', 'production')
+    )
 );
 
 COMMENT ON TABLE deploy_deployment IS '部署执行记录表（统一应用交付模型）';
@@ -1796,6 +1799,17 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     name            VARCHAR(200) NOT NULL,
     slug            VARCHAR(120) NOT NULL,
     app_kind        VARCHAR(32)  NOT NULL,
+    -- The endpoint surface of this application (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`
+    -- section 5), which a multi-platform `app_kind` cannot express on its own: a
+    -- `FLUTTER_APP` is one application with several platform targets, and the
+    -- publish dialog needs to know which surface a release targets. NULL on rows
+    -- that predate the column; a fresh create records it.
+    app_surface     VARCHAR(24),
+    -- Forward-only uninstall stage marker (section 3 stage 6). `app_status`
+    -- remains the application state machine; this column records how far the
+    -- cross-module uninstall sequence got, so an interrupted retirement is
+    -- replayed from stored state instead of starting over.
+    uninstall_status VARCHAR(24) NOT NULL DEFAULT 'not_started',
     description     VARCHAR(2000),
     app_status      VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
     type            INTEGER      NOT NULL DEFAULT 1,
@@ -1873,6 +1887,18 @@ CREATE TABLE IF NOT EXISTS deploy_app (
     CONSTRAINT pk_deploy_app PRIMARY KEY (id),
     CONSTRAINT chk_deploy_app_type CHECK (type BETWEEN 1 AND 6),
     CONSTRAINT chk_deploy_app_status CHECK (app_status IN ('DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED')),
+    CONSTRAINT chk_deploy_app_app_surface CHECK (
+        app_surface IS NULL
+        OR app_surface IN (
+            'H5', 'PC', 'MINI_PROGRAM', 'FLUTTER', 'IOS', 'ANDROID',
+            'HARMONYOS', 'API_SERVICE', 'DESKTOP', 'STATIC', 'OTHER'
+        )
+    ),
+    CONSTRAINT chk_deploy_app_uninstall_status CHECK (
+        uninstall_status IN (
+            'not_started', 'pending_identity_disable', 'identity_disabled', 'complete', 'failed'
+        )
+    ),
     -- The endpoint kind (`app_kind`) is a closed vocabulary: one application is
     -- one endpoint, and an unknown value is a registration defect rather than a
     -- future extension. `STATIC_WEB` / `SPA_WEB` are the legacy rendering-model
@@ -2349,7 +2375,13 @@ CREATE TABLE IF NOT EXISTS deploy_app_platform_target (
     CONSTRAINT fk_deploy_app_platform_target_app
         FOREIGN KEY (app_id) REFERENCES deploy_app(id),
     CONSTRAINT fk_deploy_app_platform_target_template
-        FOREIGN KEY (build_template_id) REFERENCES deploy_build_recipe(id)
+        FOREIGN KEY (build_template_id) REFERENCES deploy_build_recipe(id),
+    CONSTRAINT chk_deploy_app_platform_target_platform CHECK (
+        platform IN (
+            'WEB', 'API', 'WECHAT', 'DOUYIN', 'IOS', 'ANDROID',
+            'HARMONYOS', 'WINDOWS', 'MACOS', 'LINUX'
+        )
+    )
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_platform_target_uuid
@@ -2875,6 +2907,9 @@ CREATE TABLE IF NOT EXISTS deploy_app_environment (
         FOREIGN KEY (current_release_id) REFERENCES deploy_release(id),
     CONSTRAINT chk_deploy_app_environment_level CHECK (env_level IN
         ('DEVELOPMENT', 'STAGING', 'PRODUCTION')),
+    CONSTRAINT chk_deploy_app_environment_env_key CHECK (
+        env_key IN ('development', 'test', 'staging', 'demo', 'production')
+    ),
     CONSTRAINT chk_deploy_app_environment_status CHECK (env_status IN
         ('DRAFT', 'ACTIVE', 'ARCHIVED'))
 );
@@ -2901,6 +2936,10 @@ CREATE TABLE IF NOT EXISTS deploy_environment_promotion (
     release_id      BIGINT       NOT NULL,
     from_environment_id BIGINT   NULL,
     promoted_by     BIGINT,
+    -- User subject that approved an approval-gated promotion. MUST differ from
+    -- `promoted_by`; NULL for promotions into environments that do not require
+    -- approval and for rows that predate the column.
+    approver_user_id BIGINT,
     note            VARCHAR(500),
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     CONSTRAINT pk_deploy_environment_promotion PRIMARY KEY (id),

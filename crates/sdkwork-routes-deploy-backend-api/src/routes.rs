@@ -39,6 +39,10 @@ pub fn build_router_with_shared_backend_api(api: Arc<dyn DeployBackendApi>) -> R
     Router::new()
         .route(paths::APPS, get(list_apps))
         .route(
+            paths::APP_FACTORY_RECONCILIATION,
+            get(app_factory_reconciliation),
+        )
+        .route(
             paths::NGINX_CONFIGS,
             get(list_nginx_configs).post(create_nginx_config),
         )
@@ -156,6 +160,22 @@ fn default_page() -> i32 {
 
 fn default_page_size() -> i32 {
     20
+}
+
+async fn app_factory_reconciliation(
+    ctx: WebRequestContext,
+    State(state): State<BackendState>,
+    context: Option<Extension<DeployBackendRequestContext>>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_backend_context(context)?;
+            let report = state.api.factory_reconciliation(&context).await?;
+            ok_json(envelope::resource(report))
+        }
+        .await,
+    )
 }
 
 async fn list_apps(

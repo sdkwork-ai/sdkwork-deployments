@@ -1153,6 +1153,23 @@ impl DeployAppApi for DeployService {
         Ok(app)
     }
 
+    async fn app_factory_readiness(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppFactoryReadiness> {
+        self.factory_readiness(context, app_id).await
+    }
+
+    async fn uninstall_app(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        idempotency_key: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppUninstallResponse> {
+        self.uninstall_app(context, app_id, idempotency_key).await
+    }
+
     async fn list_artifacts(
         &self,
         context: &DeployAppRequestContext,

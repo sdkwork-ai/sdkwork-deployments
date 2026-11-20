@@ -2853,6 +2853,74 @@
         "x-sdkwork-idempotent": true
       }
     },
+    "/backend/v3/api/apps/factory_reconciliation": {
+      "get": {
+        "operationId": "apps.factoryReconciliation",
+        "summary": "工厂跨模块引用对账",
+        "description": "Reconciles the factory's soft cross-module references for the operator's tenant (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 9): whether an application reporting `identity_status = active` has a live IAM installation, whether a completed uninstall left an installation able to issue, whether an installation environment domain is missing from the deploy domain plan, and whether the hosting carrier is 1:1 with the deploy application. Read-only: a dangling reference is reported as `DRIFT`, never silently repaired. Authorities whose tables are not in this database schema are reported under `unavailable` instead of failing the report.",
+        "tags": [
+          "app"
+        ],
+        "x-sdkwork-permission": "deploy.apps.read",
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "对账结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppFactoryReconciliation"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "backend-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token"
+      }
+    },
     "/backend/v3/api/apps/{appId}/identity_provision": {
       "parameters": [
         {
@@ -6777,6 +6845,77 @@
           },
           "duplicate": {
             "type": "boolean"
+          }
+        }
+      },
+      "AppFactoryReconciliation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "appsChecked",
+          "dangling",
+          "unavailable"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "CLEAN",
+              "DRIFT",
+              "PARTIAL"
+            ],
+            "description": "`CLEAN` when no dangling reference was found, `DRIFT` when at least one was, `PARTIAL` when every check found nothing but some authority could not be inspected."
+          },
+          "appsChecked": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "dangling": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactoryDanglingReference"
+            }
+          },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "FactoryDanglingReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authority",
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "authority": {
+            "type": "string",
+            "enum": [
+              "iam",
+              "webserver",
+              "self"
+            ]
+          },
+          "deployApplicationId": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "appId": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "Closed finding code, stable enough for alerts."
+          },
+          "detail": {
+            "type": "string"
           }
         }
       },

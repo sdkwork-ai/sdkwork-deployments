@@ -947,6 +947,45 @@ pub trait DeployRepositoryPort:
         status: &str,
     ) -> DeployServiceResult<()>;
 
+    /// Loads the facts the factory readiness derivation needs for one application
+    /// (`sdkwork_deploy_core::derive_factory_readiness`).
+    ///
+    /// Reads the app row, live platform targets, the optional remix source, the
+    /// environment statuses, and whether the deploy-side default-domain plan
+    /// exists. Nothing is stored: readiness is derived on every read.
+    async fn factory_readiness_facts(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_core::FactoryReadinessFacts>;
+
+    /// Writes one durable uninstall stage marker (`deploy_app.uninstall_status`).
+    async fn mark_uninstall_stage(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        stage: &str,
+    ) -> DeployServiceResult<()>;
+
+    /// Archives the application and disables its environments after the
+    /// installation was disabled. Forward-only; never deletes a row.
+    async fn archive_app(&self, tenant_id: i64, app_id: &str) -> DeployServiceResult<()>;
+
+    /// Reads `(uninstall_status, app_status)` for the uninstall response.
+    async fn retrieve_uninstall_state(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<(String, String)>;
+
+    /// Reconciles the factory's soft cross-module references for one tenant
+    /// (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 9). Read-only: the report
+    /// names dangling references and unavailable authorities, it never repairs.
+    async fn reconcile_factory_references(
+        &self,
+        tenant_id: i64,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppFactoryReconciliation>;
+
     async fn list_app_domains(
         &self,
         tenant_id: i64,

@@ -32,7 +32,10 @@ async fn main() {
         .await
         .expect("connect deploy database for refund revocation failed");
     let period = interval();
-    info!(interval_seconds = period.as_secs(), apply, "refund revocation worker started");
+    info!(
+        interval_seconds = period.as_secs(),
+        apply, "refund revocation worker started"
+    );
 
     loop {
         match revoke_once(&pool, apply).await {

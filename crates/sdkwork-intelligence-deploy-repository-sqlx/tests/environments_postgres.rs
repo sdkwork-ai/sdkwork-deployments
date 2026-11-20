@@ -1,4 +1,4 @@
-﻿//! Environment promotion chain and CI source event integration tests:
+//! Environment promotion chain and CI source event integration tests:
 //! environment CRUD, chain-enforced promotion with immutable history, and
 //! webhook event ingestion deduplicated per commit with default-branch build
 //! triggering.
@@ -194,6 +194,23 @@ async fn environment_promotion_chain_is_enforced_and_immutable() {
         )
         .await
         .expect("activate staging");
+    // Production declares `approval_required = true`, so it is activated as well
+    // before a promotion can target it; the fence refuses a DRAFT target and an
+    // unapproved promotion into an approval-gated one.
+    repository
+        .update_app_environment(
+            7,
+            Some(11),
+            &app_id,
+            &production.id,
+            &UpdateAppEnvironmentRequest {
+                env_name: None,
+                approval_required: None,
+                env_status: Some("ACTIVE".to_owned()),
+            },
+        )
+        .await
+        .expect("activate production");
     let first = repository
         .promote_environment(
             7,
@@ -203,6 +220,8 @@ async fn environment_promotion_chain_is_enforced_and_immutable() {
             &PromoteEnvironmentRequest {
                 release_id: release_uuid.clone(),
                 from_environment_id: None,
+                approve: false,
+                approver_user_id: None,
                 note: Some("first promotion".to_owned()),
             },
         )
@@ -222,13 +241,75 @@ async fn environment_promotion_chain_is_enforced_and_immutable() {
             &PromoteEnvironmentRequest {
                 release_id: release_uuid.clone(),
                 from_environment_id: Some("00000000-0000-4000-8000-0000000000aa".to_owned()),
+                approve: false,
+                approver_user_id: None,
                 note: None,
             },
         )
         .await;
     assert!(skipped.is_err(), "chain skip must be rejected");
 
-    // Chain promotion from staging succeeds.
+    // Chain promotion from staging succeeds — but only with the operator's
+    // approval, because production declares `approval_required = true`.
+    let unapproved = repository
+        .promote_environment(
+            7,
+            Some(11),
+            &app_id,
+            &production.id,
+            &PromoteEnvironmentRequest {
+                release_id: release_uuid.clone(),
+                from_environment_id: Some(staging.id.clone()),
+                approve: false,
+                approver_user_id: None,
+                note: None,
+            },
+        )
+        .await;
+    assert!(
+        unapproved.is_err(),
+        "an approval-gated environment refuses an unapproved promotion"
+    );
+    // `approve` alone is not an approval: a second subject must be named.
+    let unapproved_without_approver = repository
+        .promote_environment(
+            7,
+            Some(11),
+            &app_id,
+            &production.id,
+            &PromoteEnvironmentRequest {
+                release_id: release_uuid.clone(),
+                from_environment_id: Some(staging.id.clone()),
+                approve: true,
+                approver_user_id: None,
+                note: None,
+            },
+        )
+        .await;
+    assert!(
+        unapproved_without_approver.is_err(),
+        "approval without approverUserId must be rejected"
+    );
+    // The approver may not be the promoter.
+    let self_approved = repository
+        .promote_environment(
+            7,
+            Some(11),
+            &app_id,
+            &production.id,
+            &PromoteEnvironmentRequest {
+                release_id: release_uuid.clone(),
+                from_environment_id: Some(staging.id.clone()),
+                approve: true,
+                approver_user_id: Some("11".to_owned()),
+                note: None,
+            },
+        )
+        .await;
+    assert!(
+        self_approved.is_err(),
+        "the approver must be a different subject from the promoter"
+    );
     let chained = repository
         .promote_environment(
             7,
@@ -238,12 +319,19 @@ async fn environment_promotion_chain_is_enforced_and_immutable() {
             &PromoteEnvironmentRequest {
                 release_id: release_uuid.clone(),
                 from_environment_id: Some(staging.id.clone()),
+                approve: true,
+                approver_user_id: Some("12".to_owned()),
                 note: None,
             },
         )
         .await
         .expect("chained promotion to production");
     assert_eq!(chained.from_environment_key.as_deref(), Some("staging"));
+    assert_eq!(
+        chained.approver_user_id,
+        Some(12),
+        "the approval is recorded on the promotion"
+    );
 
     // Promoting the same release again into the same environment is rejected.
     let again = repository
@@ -255,6 +343,8 @@ async fn environment_promotion_chain_is_enforced_and_immutable() {
             &PromoteEnvironmentRequest {
                 release_id: release_uuid.clone(),
                 from_environment_id: None,
+                approve: true,
+                approver_user_id: Some("12".to_owned()),
                 note: None,
             },
         )

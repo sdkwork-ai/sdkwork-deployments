@@ -826,6 +826,43 @@ impl DeployRepositoryPort for DeployRepository {
             .await
     }
 
+    async fn factory_readiness_facts(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_core::FactoryReadinessFacts> {
+        self.factory_readiness_facts_repo(tenant_id, app_id).await
+    }
+
+    async fn mark_uninstall_stage(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        stage: &str,
+    ) -> DeployServiceResult<()> {
+        self.mark_uninstall_stage_repo(tenant_id, app_id, stage)
+            .await
+    }
+
+    async fn archive_app(&self, tenant_id: i64, app_id: &str) -> DeployServiceResult<()> {
+        self.archive_app_repo(tenant_id, app_id).await
+    }
+
+    async fn retrieve_uninstall_state(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+    ) -> DeployServiceResult<(String, String)> {
+        self.retrieve_uninstall_state_repo(tenant_id, app_id).await
+    }
+
+    async fn reconcile_factory_references(
+        &self,
+        tenant_id: i64,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppFactoryReconciliation> {
+        self.reconcile_factory_references_repo(tenant_id).await
+    }
+
     async fn list_app_domains(
         &self,
         tenant_id: i64,

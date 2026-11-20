@@ -738,6 +738,35 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    /// Derived per-stage factory readiness (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`
+    /// section 11). The default answers "not implemented" so an older service host
+    /// keeps compiling while the route exists.
+    async fn app_factory_readiness(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<AppFactoryReadiness> {
+        Err(crate::DeployServiceError::Internal(
+            "app factory readiness API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Forward-only uninstall (section 3 stage 6): disable the IAM installation,
+    /// then archive the deploy environments and the application.
+    async fn uninstall_app(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _idempotency_key: &str,
+    ) -> DeployServiceResult<AppUninstallResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app uninstall API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Reconciles the factory's soft cross-module references (section 9): the
+    /// identity anchor, the hosting carrier, the installation domains, and the
+    /// token anchor. Read-only; never repairs.
     async fn list_artifacts(
         &self,
         _context: &DeployAppRequestContext,
@@ -2005,6 +2034,15 @@ pub trait DeployBackendApi: Send + Sync {
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<SigningIdentityHealthPage>;
+
+    /// Reconciles the factory's soft cross-module references (section 9): the
+    /// identity anchor, the hosting carrier, the installation domains, and the
+    /// token anchor. Read-only; never repairs. A dangling reference is an alert,
+    /// not a valid state, so this answers `DRIFT` rather than silently passing.
+    async fn factory_reconciliation(
+        &self,
+        context: &DeployBackendRequestContext,
+    ) -> DeployServiceResult<AppFactoryReconciliation>;
 
     /// Ingests a Git webhook push event (GitHub-compatible payload with
     /// `X-Hub-Signature-256` HMAC verification) and triggers builds for the

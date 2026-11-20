@@ -544,6 +544,23 @@ impl DeployBackendApi for DeployService {
             .list_signing_identity_health(context.tenant_id, page, page_size)
             .await
     }
+
+    async fn factory_reconciliation(
+        &self,
+        context: &DeployBackendRequestContext,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppFactoryReconciliation> {
+        // A cross-tenant operator has no single tenant to reconcile, and defaulting
+        // the scope to `0` would silently answer an empty report for "the tenant
+        // whose id is zero". Fail closed and name the missing context instead.
+        let tenant_id = context.tenant_id.ok_or_else(|| {
+            DeployServiceError::validation(
+                "factory reconciliation requires a tenant-scoped operator context",
+            )
+        })?;
+        self.repository
+            .reconcile_factory_references(tenant_id)
+            .await
+    }
     async fn ingest_source_event(
         &self,
         _context: &DeployBackendRequestContext,

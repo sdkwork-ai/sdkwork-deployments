@@ -13,6 +13,10 @@ use sdkwork_deploy_content_provider_port::{
 };
 use sdkwork_deploy_database_host::bootstrap_deploy_database_from_env;
 use sdkwork_deploy_drive_port::deploy_drive_port_from_env;
+use sdkwork_deploy_identity_lifecycle_port::{
+    resolve_lifecycle_mode, DeployInstallationLifecyclePort, HttpInstallationLifecycleAdapter,
+    InProcessInstallationLifecycleAdapter, InstallationLifecycleMode,
+};
 use sdkwork_deploy_identity_provisioning_port::{
     resolve_identity_provisioning_mode, DeployIdentityProvisioningPort,
     HttpIdentityProvisioningAdapter, IdentityProvisioningMode,
@@ -170,6 +174,34 @@ fn identity_provisioning_from_env(
     let adapter = InProcessIdentityProvisioningAdapter::from_env(pool.clone())
         .map_err(|error| format!("configure IAM application provisioning failed: {error}"))?;
     tracing::info!("IAM application provisioning uses the in-process IAM adapter");
+    Ok(Arc::new(adapter))
+}
+
+/// The uninstall sequence's identity port, selected by the same switch as
+/// provisioning.
+///
+/// In-process is the default. The split-deployment adapter posts to IAM's
+/// anchor-addressed disable operation
+/// (`tenantApplications.disableByDeployApplication`, `bootstrap_body` auth) with
+/// the deployment's backend token, so a split deployment can complete the
+/// sequence without holding the IAM row id.
+fn identity_lifecycle_from_env(
+    pool: &sqlx::PgPool,
+) -> Result<Arc<dyn DeployInstallationLifecyclePort>, String> {
+    let mode = resolve_lifecycle_mode()
+        .map_err(|error| format!("configure IAM installation lifecycle failed: {error}"))?;
+    if mode == InstallationLifecycleMode::Http {
+        let adapter = HttpInstallationLifecycleAdapter::from_env().map_err(|error| {
+            format!("configure IAM installation lifecycle (split deployment) failed: {error}")
+        })?;
+        tracing::info!(
+            "IAM installation lifecycle uses the split-deployment anchor-addressed disable adapter"
+        );
+        return Ok(Arc::new(adapter));
+    }
+    let adapter = InProcessInstallationLifecycleAdapter::from_env(pool.clone())
+        .map_err(|error| format!("configure IAM installation lifecycle failed: {error}"))?;
+    tracing::info!("IAM installation lifecycle uses the in-process IAM adapter");
     Ok(Arc::new(adapter))
 }
 
@@ -346,6 +378,10 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     // rather than on the first `apps.create`.
     let identity_provisioning = identity_provisioning_from_env(&identity_pool)?;
     service = service.with_identity_provisioning(identity_provisioning);
+    // Uninstall disables the IAM installation before anything is archived. The
+    // adapter is built from the same switch as provisioning so a split deployment
+    // cannot provision in-process and uninstall over HTTP.
+    service = service.with_identity_lifecycle(identity_lifecycle_from_env(&identity_pool)?);
     // The verification-file self-check shares the crawler's bounds: a probe
     // that could read more than the platform's fetcher would endorse nothing.
     if let Ok(probe) = verification_file_probe::BoundedVerificationFileProbe::new() {

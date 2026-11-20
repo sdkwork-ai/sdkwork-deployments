@@ -892,6 +892,13 @@ pub struct AppResponse {
     pub app_kind: String,
     #[serde(rename = "appStatus")]
     pub app_status: String,
+    /// `deploy_app.app_surface`: the endpoint surface recorded at create, or
+    /// absent for a row that predates the column.
+    #[serde(rename = "appSurface", skip_serializing_if = "Option::is_none")]
+    pub app_surface: Option<String>,
+    /// `deploy_app.uninstall_status`: forward-only uninstall stage marker.
+    #[serde(rename = "uninstallStatus")]
+    pub uninstall_status: String,
     #[serde(rename = "type")]
     pub app_type: i32,
     #[serde(rename = "description", skip_serializing_if = "Option::is_none")]
@@ -998,6 +1005,146 @@ pub struct AppPage {
     pub total: i64,
     pub page: i32,
     pub page_size: i32,
+}
+
+// ---------------------------------------------------------------------------
+// Factory readiness
+// ---------------------------------------------------------------------------
+
+/// The stages every deploy application must clear before it is an operable
+/// endpoint, in the order the factory runbook (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`
+/// section 11) walks them.
+///
+/// `HOSTING_CARRIER` is reported as `external` because the carrier lives in
+/// `sdkwork-webserver`; deploy can only say whether it has been asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FactoryReadinessStep {
+    Registration,
+    PlatformTarget,
+    Environment,
+    Identity,
+    Source,
+    HostingCarrier,
+}
+
+impl FactoryReadinessStep {
+    pub const ALL: [Self; 6] = [
+        Self::Registration,
+        Self::PlatformTarget,
+        Self::Environment,
+        Self::Identity,
+        Self::Source,
+        Self::HostingCarrier,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Registration => "REGISTRATION",
+            Self::PlatformTarget => "PLATFORM_TARGET",
+            Self::Environment => "ENVIRONMENT",
+            Self::Identity => "IDENTITY",
+            Self::Source => "SOURCE",
+            Self::HostingCarrier => "HOSTING_CARRIER",
+        }
+    }
+}
+
+/// One row of the derived readiness report.
+///
+/// `status` is one of `READY` | `PENDING` | `BLOCKED` | `NOT_APPLICABLE` |
+/// `EXTERNAL`. `reason` is a closed, machine-readable code; `detail` is the
+/// operator-facing sentence and never the only signal.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FactoryReadinessCheck {
+    pub step: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl FactoryReadinessCheck {
+    #[must_use]
+    pub fn new(
+        step: FactoryReadinessStep,
+        status: &str,
+        reason: Option<&str>,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self {
+            step: step.as_str().to_owned(),
+            status: status.to_owned(),
+            reason: reason.map(str::to_owned),
+            detail: Some(detail.into()),
+        }
+    }
+}
+
+/// Derived per-stage readiness of one deploy application.
+///
+/// This is a **read model**, never a stored status: it is recomputed on every
+/// read from the rows that actually exist, so a retired artifact or a disabled
+/// installation flips it without an extra write
+/// (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 3: `READY` is derived).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppFactoryReadiness {
+    /// `READY` only when every required step is `READY` or `EXTERNAL`.
+    pub status: String,
+    /// The first blocking step in factory order, when one exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocking_step: Option<String>,
+    pub checks: Vec<FactoryReadinessCheck>,
+}
+
+/// One cross-module reference that does not agree with the deploy inventory
+/// (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 9 reconciliation).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct FactoryDanglingReference {
+    /// Which authority participates: `iam`, `webserver`, or `self`.
+    pub authority: String,
+    #[serde(
+        rename = "deployApplicationId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub deploy_application_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
+    /// Closed finding code, stable enough for alerts and dashboards.
+    pub code: String,
+    pub detail: String,
+}
+
+/// The factory reconciliation report (operator read model).
+///
+/// `status` is `CLEAN`, `DRIFT`, or `PARTIAL`; `unavailable` lists the checks that
+/// could not run because the sibling authority is not in this database schema.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct AppFactoryReconciliation {
+    pub status: String,
+    #[serde(rename = "appsChecked")]
+    pub apps_checked: i64,
+    pub dangling: Vec<FactoryDanglingReference>,
+    pub unavailable: Vec<String>,
+}
+
+/// `apps.uninstall` result: the forward-only uninstall stage the application is
+/// in after the call, plus the derived readiness that shows what stopped.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct AppUninstallResponse {
+    #[serde(rename = "appId")]
+    pub app_id: String,
+    /// `not_started` | `pending_identity_disable` | `identity_disabled` |
+    /// `complete` | `failed`.
+    #[serde(rename = "uninstallStatus")]
+    pub uninstall_status: String,
+    /// `DRAFT` | `ACTIVE` | `PAUSED` | `ARCHIVED`.
+    #[serde(rename = "appStatus")]
+    pub app_status: String,
+    /// Whether this call completed the uninstall, or replayed an earlier one.
+    #[serde(rename = "replayed")]
+    pub replayed: bool,
 }
 
 /// `apps.identityProvision` result: the application whose IAM installation was
@@ -2564,8 +2711,30 @@ pub struct AppEnvironmentPage {
 pub struct PromoteEnvironmentRequest {
     #[serde(rename = "releaseId")]
     pub release_id: String,
+    /// The environment the release is promoted *from*. Optional for a
+    /// development/demo environment that has no predecessor; when the target
+    /// environment declares `approval_required`, this is not trusted as the
+    /// source of the chain — the repository derives the predecessor from
+    /// `env_level` and checks `current_release_id` itself.
     #[serde(rename = "fromEnvironmentId", skip_serializing_if = "Option::is_none")]
     pub from_environment_id: Option<String>,
+    /// Explicit approval of the promotion.
+    ///
+    /// A target environment whose `deploy_app_environment.approval_required` is
+    /// true refuses the promotion unless this is `true`; the flag is the
+    /// operator's approval confirmation and is covered by the
+    /// `deploy_environment_promotion` row written in the same transaction. It is
+    /// not sufficient on its own: `approverUserId` must name a second subject
+    /// (`approve` without an approver is a 409).
+    #[serde(default)]
+    pub approve: bool,
+    /// The user subject that approves this promotion.
+    ///
+    /// Required only when the target environment declares `approval_required`;
+    /// it must differ from the caller, so the person who promotes cannot be the
+    /// person who approves. Recorded on the promotion row as audit evidence.
+    #[serde(rename = "approverUserId", default)]
+    pub approver_user_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
@@ -2589,6 +2758,10 @@ pub struct EnvironmentPromotionResponse {
     pub from_environment_key: Option<String>,
     #[serde(rename = "promotedBy", skip_serializing_if = "Option::is_none")]
     pub promoted_by: Option<i64>,
+    /// The second subject that approved this promotion, when the target
+    /// environment required approval.
+    #[serde(rename = "approverUserId", skip_serializing_if = "Option::is_none")]
+    pub approver_user_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     #[serde(rename = "createdAt")]

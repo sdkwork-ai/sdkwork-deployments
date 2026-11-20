@@ -177,6 +177,8 @@ pub fn build_router_with_shared_app_api(api: Arc<dyn DeployAppApi>) -> Router {
         .route(paths::APP_COMPOSITION, put(update_app_composition))
         .route(paths::APP_ACTIVATE, post(activate_app))
         .route(paths::APP_PAUSE, post(pause_app))
+        .route(paths::APP_READINESS, get(app_factory_readiness))
+        .route(paths::APP_UNINSTALL, post(uninstall_app))
         .route(
             paths::APP_ENV_VARIABLES,
             get(list_env_variables).post(create_env_variable),
@@ -814,6 +816,58 @@ async fn pause_app(
                 sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
             })?;
             let item = state.api.pause_app(&context, &app_id).await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// `GET /app/v3/api/apps/{appId}/readiness` — derived per-stage readiness.
+async fn app_factory_readiness(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let app_id = params.get("appId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
+            })?;
+            let item = state.api.app_factory_readiness(&context, &app_id).await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// `POST /app/v3/api/apps/{appId}/uninstall` — forward-only uninstall.
+///
+/// The `Idempotency-Key` header is required for the same reason every other
+/// command requires one (`API_SPEC.md` section 15.4): a retried uninstall must be
+/// recognisable as the same request. The durable stage column makes the replay
+/// land on the same state even when the key is fresh.
+async fn uninstall_app(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let app_id = params.get("appId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
+            })?;
+            let idempotency_key = required_header(&headers, "idempotency-key")?;
+            let item = state
+                .api
+                .uninstall_app(&context, &app_id, &idempotency_key)
+                .await?;
             ok_json(envelope::resource(item))
         }
         .await,

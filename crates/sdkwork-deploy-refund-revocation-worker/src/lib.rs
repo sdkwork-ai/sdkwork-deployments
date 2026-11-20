@@ -57,7 +57,10 @@ pub async fn revoke_once(
         archived: 0,
     };
     if !apply {
-        info!(candidates = report.candidates.len(), "refund revocation dry-run");
+        info!(
+            candidates = report.candidates.len(),
+            "refund revocation dry-run"
+        );
         return Ok(report);
     }
 

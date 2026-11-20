@@ -20,6 +20,9 @@ mod downloads;
 mod entitlement;
 mod env_variables;
 mod environments;
+pub mod factory_reconcile;
+
+mod factory;
 mod health_checks;
 mod nginx_configs;
 mod nginx_orchestrator;

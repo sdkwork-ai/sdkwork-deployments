@@ -22,7 +22,9 @@ use crate::support::{
 use crate::DeployRepository;
 use sdkwork_intelligence_deploy_service::repository::AppIdentityProvisioningTarget;
 
-const APP_SELECT: &str = "a.id, a.uuid, a.name, a.slug, a.app_kind, a.app_status, a.type,
+const APP_SELECT: &str =
+    "a.id, a.uuid, a.name, a.slug, a.app_kind, a.app_surface, a.app_status, a.type,
+    a.uninstall_status,
     a.description, a.runtime_config, a.metadata, a.current_revision_id, a.desired_revision_id,
     a.default_environment,
     (SELECT COUNT(*) FROM deploy_app_platform_target t
@@ -162,6 +164,13 @@ fn map_app_row(row: &PgRow) -> Result<AppResponse, DeployServiceError> {
         slug,
         app_kind: row.try_get("app_kind").unwrap_or_default(),
         app_status: row.try_get("app_status").unwrap_or_default(),
+        app_surface: row
+            .try_get::<Option<String>, _>("app_surface")
+            .ok()
+            .flatten(),
+        uninstall_status: row
+            .try_get("uninstall_status")
+            .unwrap_or_else(|_| "not_started".to_owned()),
         app_type: row.try_get("type").unwrap_or(1),
         description: row.try_get("description").ok(),
         runtime_config: row.try_get("runtime_config").ok(),
@@ -361,13 +370,14 @@ impl DeployRepository {
 
         let result = sqlx::query(
             "INSERT INTO deploy_app
-                (id, uuid, tenant_id, organization_id, name, slug, app_kind, description,
+                (id, uuid, tenant_id, organization_id, name, slug, app_kind,
+                 uninstall_status, description,
                  app_status, type, metadata, default_environment,
                  app_domain_label, app_domain_suffixes,
                  owner_type, user_id,
                  created_by, updated_by,
                  idempotency_key, request_sha256, created_at, updated_at, version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_started', $8, $9, $10, $11, $12, $13, $14,
                      $15, $16, $17, $18, $19, $20, NOW(), NOW(), 1)
              ON CONFLICT (tenant_id, slug) WHERE deleted_at IS NULL DO NOTHING
              RETURNING uuid",
@@ -793,6 +803,27 @@ impl DeployRepository {
         request: &UpdateAppRequest,
     ) -> DeployServiceResult<AppResponse> {
         resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
+        // A caller-supplied `appStatus` goes through the same state machine as
+        // `apps.activate`/`apps.pause`: this PATCH used to write the column
+        // directly, which made `ARCHIVED` reversible and let a client skip the
+        // documented direction.
+        if let Some(requested_status) = request.app_status {
+            let requested = requested_status.as_str();
+            let current_status: String = sqlx::query_scalar(
+                "SELECT app_status FROM deploy_app
+                 WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+            )
+            .bind(tenant_id)
+            .bind(app_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|error| store_error("read deploy_app status", error))?
+            .ok_or_else(|| DeployServiceError::not_found("app not found"))?;
+            sdkwork_deploy_core::validate_app_status_transition(&current_status, requested)
+                .map_err(|reason| {
+                    DeployServiceError::conflict(reason.message(&current_status, requested))
+                })?;
+        }
         let app_status = request
             .app_status
             .map(|status| status.as_str())
@@ -830,6 +861,9 @@ impl DeployRepository {
                 name = COALESCE($3, name),
                 description = COALESCE($4, description),
                 app_status = CASE WHEN $5 = '' THEN app_status ELSE $5 END,
+                activated_at = CASE WHEN $5 = 'ACTIVE' THEN NOW() ELSE activated_at END,
+                paused_at = CASE WHEN $5 = 'PAUSED' THEN NOW() ELSE paused_at END,
+                archived_at = CASE WHEN $5 = 'ARCHIVED' THEN NOW() ELSE archived_at END,
                 default_environment = COALESCE($6, default_environment),
                 metadata = COALESCE($8, metadata),
                 app_domain_label = CASE WHEN $9 THEN $10 ELSE app_domain_label END,
@@ -916,7 +950,7 @@ impl DeployRepository {
     ) -> DeployServiceResult<AppResponse> {
         let app_internal_id = resolve_app_internal_id(&self.pool, tenant_id, app_id).await?;
         let row = sqlx::query(
-            "SELECT user_id, organization_id FROM deploy_app
+            "SELECT user_id, organization_id, owner_type, identity_status FROM deploy_app
              WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
         )
         .bind(app_internal_id)
@@ -929,6 +963,8 @@ impl DeployRepository {
         };
         let current_user_id: Option<i64> = row.try_get("user_id").ok().flatten();
         let current_organization_id: i64 = row.try_get("organization_id").unwrap_or_default();
+        let current_owner_type: String = row.try_get("owner_type").unwrap_or_default();
+        let identity_status: String = row.try_get("identity_status").unwrap_or_default();
         let requested_user_id: Option<i64> = owner_user_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -971,6 +1007,22 @@ impl DeployRepository {
                 }
             },
         };
+        // The release scope is immutable once the IAM installation exists
+        // (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 4, and the
+        // installation stores it under a CHECK). Deploy used to accept a level
+        // change at any time, which silently diverged the application's owner
+        // from the installation's `ownership_scope`: the app became visible to
+        // one user while its token and isolation key stayed tenant-wide (or the
+        // reverse). A level change is only safe before provisioning, when there
+        // is no installation to contradict.
+        let level_changing = !current_owner_type.eq_ignore_ascii_case(level.as_str())
+            || (level == AppOwnerType::User && user_id != current_user_id);
+        if level_changing && !identity_status.eq_ignore_ascii_case("pending_identity") {
+            return Err(DeployServiceError::conflict(format!(
+                "application ownership cannot change after identity provisioning (identityStatus={identity_status}); \
+                 the IAM installation stores its release scope immutably, so publishing at another level needs a new deploy application"
+            )));
+        }
         sqlx::query(
             "UPDATE deploy_app SET
                 owner_type = $3, user_id = $4, organization_id = $5,
@@ -1005,6 +1057,30 @@ impl DeployRepository {
                 ))
             }
         };
+        // The state machine lives in `sdkwork-deploy-core::app_status`; every
+        // writer routes through it so `ARCHIVED` is terminal and a backward move
+        // is refused here rather than only in the console.
+        let current_status: Option<String> = sqlx::query_scalar(
+            "SELECT app_status FROM deploy_app
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(app_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read deploy_app status", error))?;
+        let Some(current_status) = current_status else {
+            return Err(DeployServiceError::not_found("app not found"));
+        };
+        sdkwork_deploy_core::validate_app_status_transition(&current_status, app_status).map_err(
+            |reason| DeployServiceError::conflict(reason.message(&current_status, app_status)),
+        )?;
+        // A replay of the same status is a no-op, so the timestamp column keeps
+        // the moment the status was first reached instead of being bumped by a
+        // retry.
+        if current_status.eq_ignore_ascii_case(app_status) {
+            return self.retrieve_app_repo(tenant_id, app_id).await;
+        }
         let now_expr = if status == 1 {
             ", activated_at = NOW()"
         } else if status == 2 {

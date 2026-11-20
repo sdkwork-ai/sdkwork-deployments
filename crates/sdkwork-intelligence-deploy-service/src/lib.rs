@@ -19,6 +19,7 @@ pub mod domain_dns_records;
 pub mod domain_verification;
 pub mod downloads;
 pub mod entitlement;
+pub mod factory_ops;
 pub mod git_repository_probe;
 pub mod repository;
 pub mod runtime_publication;
@@ -96,6 +97,9 @@ use sdkwork_deploy_cloud_account_port::{DeployCloudAccountPort, DeployCloudAccou
 use sdkwork_deploy_content_provider_port::{ContentProviderPort, MemoryContentProviderPort};
 use sdkwork_deploy_contract::DeployServiceResult;
 use sdkwork_deploy_drive_port::DeployDrivePort;
+use sdkwork_deploy_identity_lifecycle_port::{
+    DeployInstallationLifecyclePort, UnconfiguredInstallationLifecyclePort,
+};
 use sdkwork_deploy_identity_provisioning_port::{
     DeployIdentityProvisioningPort, UnconfiguredIdentityProvisioningPort,
 };
@@ -145,6 +149,12 @@ pub struct DeployService {
     /// that hosts no IAM must still be able to create applications, and marking
     /// every one of them `failed` for a step it never attempted would be a lie.
     pub(crate) identity_provisioning: Arc<dyn DeployIdentityProvisioningPort>,
+    /// The IAM installation disabler for uninstall (factory section 3 stage 6).
+    ///
+    /// The default fails closed: archiving an application whose installation
+    /// might still issue credentials is the ordering violation the standard
+    /// forbids, so "not configured" keeps the application operable.
+    pub(crate) identity_lifecycle: Arc<dyn DeployInstallationLifecyclePort>,
     /// Production probe for the verification-file self-check: bounded to what
     /// the platform crawlers themselves can do (timeouts, body caps), because a
     /// self-check with powers the crawler lacks endorses nothing.
@@ -173,6 +183,7 @@ impl DeployService {
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
             identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
+            identity_lifecycle: Arc::new(UnconfiguredInstallationLifecyclePort),
             verification_probe: Arc::new(
                 crate::verification_file::UnconfiguredVerificationFileProbe,
             ),
@@ -200,6 +211,7 @@ impl DeployService {
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
             identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
+            identity_lifecycle: Arc::new(UnconfiguredInstallationLifecyclePort),
             verification_probe: Arc::new(
                 crate::verification_file::UnconfiguredVerificationFileProbe,
             ),
@@ -321,6 +333,20 @@ impl DeployService {
         port: Arc<dyn DeployIdentityProvisioningPort>,
     ) -> Self {
         self.identity_provisioning = port;
+        self
+    }
+
+    /// Installs the IAM installation disabler the uninstall command calls.
+    ///
+    /// Until it is supplied, `apps.uninstall` refuses to archive: it records the
+    /// stage as `failed` and leaves the application operable, because a
+    /// deployment that cannot stop issuance has not completed the first step of
+    /// the uninstall sequence.
+    pub fn with_identity_lifecycle(
+        mut self,
+        port: Arc<dyn DeployInstallationLifecyclePort>,
+    ) -> Self {
+        self.identity_lifecycle = port;
         self
     }
 

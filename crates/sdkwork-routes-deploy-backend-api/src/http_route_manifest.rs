@@ -231,6 +231,13 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_idempotent(true),
     HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/backend/v3/api/apps/factory_reconciliation",
+        "app",
+        "apps.factoryReconciliation",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/apps/{appId}/identity_provision",
         "app",

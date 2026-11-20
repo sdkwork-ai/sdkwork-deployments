@@ -130,6 +130,80 @@ async fn an_application_created_without_a_mode_is_a_tenant_application() {
     assert_eq!(stored, ("TENANT".to_owned(), 0, None));
 }
 
+/// The release scope is immutable once the IAM installation exists
+/// (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 4): a level change after
+/// provisioning would diverge the application's owner from the installation's
+/// `ownership_scope`, silently re-interpreting every stored row under another
+/// isolation key.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn a_provisioned_application_refuses_an_ownership_level_change() {
+    let (repository, pool) =
+        common::migrated_repository_with_pool("sdkwork-deploy-ownership-immutable-test").await;
+
+    let app = repository
+        .create_app(
+            TENANT_A,
+            Some(ORG_A),
+            Some(ALICE),
+            None,
+            &app_request("Provisioned App", "provisioned-app", AppKind::PcWeb, None),
+        )
+        .await
+        .expect("create a tenant application");
+
+    // Before provisioning the level is still selectable: nothing stores it yet.
+    let movable = repository
+        .update_app(
+            TENANT_A,
+            Some(ALICE),
+            Some(ORG_A),
+            &app.id,
+            &serde_json::from_value::<sdkwork_deploy_contract::UpdateAppRequest>(
+                serde_json::json!({ "ownerType": "ORGANIZATION" }),
+            )
+            .expect("UpdateAppRequest"),
+        )
+        .await
+        .expect("an unprovisioned application may still change level");
+    assert_eq!(movable.ownership_scope, AppOwnerType::Organization);
+
+    // Simulate the IAM installation: once `identity_status = active`, the level is
+    // frozen and a change is a conflict naming the reason.
+    sqlx::query("UPDATE deploy_app SET identity_status = 'active' WHERE uuid = $1")
+        .bind(&app.id)
+        .execute(&pool)
+        .await
+        .expect("mark the application as provisioned");
+
+    let attempted = repository
+        .update_app(
+            TENANT_A,
+            Some(ALICE),
+            Some(ORG_A),
+            &app.id,
+            &serde_json::from_value::<sdkwork_deploy_contract::UpdateAppRequest>(
+                serde_json::json!({ "ownerType": "USER", "ownerUserId": "11002" }),
+            )
+            .expect("UpdateAppRequest"),
+        )
+        .await;
+    assert_eq!(
+        failure_kind(attempted),
+        DeployServiceErrorKind::Conflict,
+        "a provisioned application must refuse an ownership level change"
+    );
+
+    let stored: (String, i64, Option<i64>) = sqlx::query_as(
+        "SELECT owner_type, organization_id, user_id FROM deploy_app WHERE uuid = $1",
+    )
+    .bind(&app.id)
+    .fetch_one(&pool)
+    .await
+    .expect("read the stored owner after the refused change");
+    assert_eq!(stored, ("ORGANIZATION".to_owned(), ORG_A, None));
+}
+
 #[tokio::test]
 #[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
 async fn explicit_modes_store_the_pointers_their_mode_requires() {

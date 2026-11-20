@@ -17507,6 +17507,16 @@
             "type": "string",
             "format": "uuid"
           },
+          "approve": {
+            "type": "boolean",
+            "description": "Confirms the promotion of an approval-gated environment. Not sufficient on its own: `approverUserId` must name a second subject."
+          },
+          "approverUserId": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true,
+            "description": "The user subject that approves this promotion. Required when the target environment declares `approvalRequired`, and it must differ from the promoter."
+          },
           "note": {
             "type": "string",
             "maxLength": 500
@@ -17559,6 +17569,12 @@
             "type": "string",
             "format": "int64",
             "x-sdkwork-int64-string": true
+          },
+          "approverUserId": {
+            "type": "string",
+            "format": "int64",
+            "x-sdkwork-int64-string": true,
+            "description": "The second subject that approved an approval-gated promotion. Absent when the environment did not require approval."
           },
           "note": {
             "type": "string"

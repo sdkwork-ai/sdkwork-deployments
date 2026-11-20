@@ -198,6 +198,119 @@ impl DeployRepository {
             .await
             .map_err(|error| store_error("begin environment promotion", error))?;
 
+        // Serialise promotions for this application before reading any pointer:
+        // two concurrent promotions must leave one current release and two
+        // history rows, and the loser must fail with a named conflict rather than
+        // silently overwrite the winner's pointer. Locking every environment row
+        // of the app in id order (one statement, so no deadlock between two
+        // callers) is the cheapest fence the schema supports; a version-only
+        // compare-and-set would not stop a *different* release from being written
+        // while the first promotion's history row is still uncommitted.
+        let environment_rows = sqlx::query(
+            "SELECT id, uuid, env_key, env_level, approval_required, env_status, current_release_id
+             FROM deploy_app_environment
+             WHERE tenant_id = $1 AND app_id = $2 AND deleted_at IS NULL
+             ORDER BY id
+             FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(app_internal_id)
+        .fetch_all(&mut *transaction)
+        .await
+        .map_err(|error| store_error("lock deploy_app_environment for promotion", error))?;
+        let target = environment_rows
+            .iter()
+            .find(|row| row.try_get::<i64, _>("id").ok() == Some(environment_internal_id));
+        let Some(target) = target else {
+            return Err(DeployServiceError::not_found("environment not found"));
+        };
+        let target_status: String = target.try_get("env_status").unwrap_or_default();
+        if !target_status.eq_ignore_ascii_case("ACTIVE") {
+            return Err(DeployServiceError::conflict(format!(
+                "environment {environment_id} is {target_status} and cannot receive a promotion; \
+                 activate it before promoting a release"
+            )));
+        }
+        let approval_required: bool = target.try_get("approval_required").unwrap_or(false);
+        // Separation of duties for an approval-gated environment: the flag alone
+        // is a caller-supplied boolean, so an approval must also name a second
+        // subject, and that subject may not be the promoter. The pair is recorded
+        // on the promotion row.
+        let approver_user_id: Option<i64> = if approval_required {
+            if !request.approve {
+                return Err(DeployServiceError::conflict(format!(
+                    "environment {environment_id} requires approval; resend the promotion with approve=true \
+                     and approverUserId naming the approver"
+                )));
+            }
+            let raw = request
+                .approver_user_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    DeployServiceError::validation(
+                        "an approval-gated promotion requires approverUserId",
+                    )
+                })?;
+            let approver: i64 = raw.parse().map_err(|_| {
+                DeployServiceError::validation(format!(
+                    "approverUserId {raw:?} is not an int64 user subject"
+                ))
+            })?;
+            if approver <= 0 {
+                return Err(DeployServiceError::validation(
+                    "approverUserId must be a positive user subject",
+                ));
+            }
+            if actor_id == Some(approver) {
+                return Err(DeployServiceError::conflict(
+                    "the approver must be a different subject from the promoter",
+                ));
+            }
+            Some(approver)
+        } else {
+            None
+        };
+
+        // The predecessor is derived from `env_level`, never taken from the
+        // request: a caller that omits `fromEnvironmentId` must not be able to
+        // skip the chain check, and a caller that names a different environment
+        // must not be able to fabricate a predecessor. The request's value is
+        // only used to *confirm* the derived one when both are present.
+        let target_level: String = target.try_get("env_level").unwrap_or_default();
+        let derived_source = environment_rows
+            .iter()
+            .filter(|row| row.try_get::<i64, _>("id").ok() != Some(environment_internal_id))
+            .filter(|row| {
+                let level: String = row.try_get("env_level").unwrap_or_default();
+                env_level_rank(&level) < env_level_rank(&target_level)
+            })
+            .max_by_key(|row| {
+                env_level_rank(&row.try_get::<String, _>("env_level").unwrap_or_default())
+            })
+            .map(|row| {
+                (
+                    row.try_get::<i64, _>("id").unwrap_or_default(),
+                    row.try_get::<String, _>("uuid").unwrap_or_default(),
+                    row.try_get::<String, _>("env_key").unwrap_or_default(),
+                    row.try_get::<Option<i64>, _>("current_release_id")
+                        .ok()
+                        .flatten(),
+                )
+            });
+        if let Some(named_source) = request.from_environment_id.as_deref() {
+            let matches_derived = derived_source
+                .as_ref()
+                .is_some_and(|(_, uuid, _, _)| uuid == named_source);
+            if !matches_derived {
+                return Err(DeployServiceError::validation(format!(
+                    "fromEnvironmentId {named_source} is not the environment immediately below this one \
+                     in the promotion chain; the predecessor is derived from env_level"
+                )));
+            }
+        }
+
         // The release must belong to the app.
         let release_internal_id = sqlx::query(
             "SELECT id, uuid FROM deploy_release
@@ -213,46 +326,26 @@ impl DeployRepository {
         .and_then(|row| row.try_get::<i64, _>("id").ok())
         .ok_or_else(|| DeployServiceError::not_found("release not found"))?;
 
-        // Chain enforcement: the source environment must currently point at
-        // the release being promoted.
+        // Chain enforcement: the derived source environment must currently point
+        // at the release being promoted. There is no "unchecked promotion" path
+        // for a environment that has a predecessor — an environment with no lower
+        // level (development/demo) has nothing to chain from and promotes its
+        // first release directly.
         let mut from_environment_internal_id: Option<i64> = None;
-        if let Some(from_environment_id) = request.from_environment_id.as_deref() {
-            let from_row = sqlx::query(
-                "SELECT id, current_release_id FROM deploy_app_environment
-                 WHERE tenant_id = $1 AND app_id = $2 AND uuid = $3 AND deleted_at IS NULL",
-            )
-            .bind(tenant_id)
-            .bind(app_internal_id)
-            .bind(from_environment_id)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(|error| store_error("resolve source environment", error))?;
-            let Some(from_row) = from_row else {
-                return Err(DeployServiceError::not_found(
-                    "source environment not found",
-                ));
-            };
-            let from_id: i64 = from_row.try_get("id").unwrap_or(0);
-            let from_current: Option<i64> = from_row.try_get("current_release_id").ok();
-            if from_current != Some(release_internal_id) {
+        if let Some((from_id, from_uuid, from_key, from_current)) = derived_source.as_ref() {
+            if *from_current != Some(release_internal_id) {
                 return Err(DeployServiceError::conflict(format!(
-                    "release {} is not the current release of the source environment",
+                    "release {} is not the current release of the source environment {from_key} ({from_uuid})",
                     request.release_id
                 )));
             }
-            from_environment_internal_id = Some(from_id);
+            from_environment_internal_id = Some(*from_id);
         }
 
-        // Reject promoting a release the environment already points at.
-        let current_row =
-            sqlx::query("SELECT current_release_id FROM deploy_app_environment WHERE id = $1")
-                .bind(environment_internal_id)
-                .fetch_optional(&mut *transaction)
-                .await
-                .map_err(|error| store_error("read environment current release", error))?;
-        let current_release: Option<i64> = current_row
-            .and_then(|row| row.try_get("current_release_id").ok())
-            .flatten();
+        // Reject promoting a release the environment already points at. The
+        // value was read under the lock above, so a concurrent promotion cannot
+        // have changed it between the read and this decision.
+        let current_release: Option<i64> = target.try_get("current_release_id").ok().flatten();
         if current_release == Some(release_internal_id) {
             return Err(DeployServiceError::conflict(
                 "release is already current in this environment",
@@ -263,11 +356,13 @@ impl DeployRepository {
             "UPDATE deploy_app_environment
                 SET current_release_id = $1, updated_by = $2, updated_at = NOW(),
                     version = version + 1
-             WHERE id = $3 AND deleted_at IS NULL",
+             WHERE id = $3 AND deleted_at IS NULL
+               AND current_release_id IS NOT DISTINCT FROM $4",
         )
         .bind(release_internal_id)
         .bind(actor_id.unwrap_or(0))
         .bind(environment_internal_id)
+        .bind(current_release)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("update environment current release", error))?;
@@ -277,8 +372,8 @@ impl DeployRepository {
         sqlx::query(
             "INSERT INTO deploy_environment_promotion
                 (id, uuid, tenant_id, organization_id, app_id, environment_id, release_id,
-                 from_environment_id, promoted_by, note, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())",
+                 from_environment_id, promoted_by, approver_user_id, note, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())",
         )
         .bind(promotion_id)
         .bind(&promotion_uuid)
@@ -289,6 +384,7 @@ impl DeployRepository {
         .bind(release_internal_id)
         .bind(from_environment_internal_id)
         .bind(actor_id)
+        .bind(approver_user_id)
         .bind(request.note.as_deref())
         .execute(&mut *transaction)
         .await
@@ -330,7 +426,7 @@ impl DeployRepository {
             "SELECT p.uuid, p.tenant_id, a.uuid AS app_uuid, e.uuid AS environment_uuid,
                     e.env_key, r.uuid AS release_uuid, r.semantic_version,
                     fe.uuid AS from_environment_uuid, fe.env_key AS from_environment_key,
-                    p.promoted_by, p.note, p.created_at
+                    p.promoted_by, p.approver_user_id, p.note, p.created_at
              FROM deploy_environment_promotion p
              JOIN deploy_app a ON a.id = p.app_id
              JOIN deploy_app_environment e ON e.id = p.environment_id
@@ -368,7 +464,7 @@ impl DeployRepository {
             "SELECT p.uuid, p.tenant_id, a.uuid AS app_uuid, e.uuid AS environment_uuid,
                     e.env_key, r.uuid AS release_uuid, r.semantic_version,
                     fe.uuid AS from_environment_uuid, fe.env_key AS from_environment_key,
-                    p.promoted_by, p.note, p.created_at
+                    p.promoted_by, p.approver_user_id, p.note, p.created_at
              FROM deploy_environment_promotion p
              JOIN deploy_app a ON a.id = p.app_id
              JOIN deploy_app_environment e ON e.id = p.environment_id
@@ -430,6 +526,22 @@ fn map_app_environment_row(
     })
 }
 
+/// Position of an `env_level` in the promotion chain.
+///
+/// The coarser vocabulary (`DEVELOPMENT` < `STAGING` < `PRODUCTION`) is what the
+/// database CHECK and the promotion fence share: a target may only be promoted
+/// from an environment at a strictly lower rank, and the predecessor is the
+/// highest-ranked environment below the target. An unknown level sorts lowest so
+/// it can never be mistaken for a later stage.
+fn env_level_rank(level: &str) -> u8 {
+    match level.trim().to_ascii_uppercase().as_str() {
+        "DEVELOPMENT" => 0,
+        "STAGING" => 1,
+        "PRODUCTION" => 2,
+        _ => 0,
+    }
+}
+
 fn map_environment_promotion_row(
     row: &sqlx::postgres::PgRow,
 ) -> Result<EnvironmentPromotionResponse, DeployServiceError> {
@@ -444,6 +556,7 @@ fn map_environment_promotion_row(
         from_environment_id: row.try_get("from_environment_uuid").ok(),
         from_environment_key: row.try_get("from_environment_key").ok(),
         promoted_by: row.try_get("promoted_by").ok(),
+        approver_user_id: row.try_get("approver_user_id").ok().flatten(),
         note: row.try_get("note").ok(),
         created_at,
     })

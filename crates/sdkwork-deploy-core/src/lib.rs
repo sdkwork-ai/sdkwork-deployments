@@ -3,9 +3,11 @@
 pub mod app_domains;
 pub mod app_kind_rules;
 pub mod app_source;
+pub mod app_status;
 pub mod certificate_key_algorithm;
 pub mod certificate_validity;
 pub mod database_profile;
+pub mod factory_readiness;
 pub mod package_manifest;
 pub mod runtime_env;
 pub mod util;
@@ -40,6 +42,10 @@ pub use app_source::{
     SOURCE_REPOSITORY_STATUS_INVALID, SOURCE_REPOSITORY_STATUS_PENDING,
     SOURCE_REPOSITORY_STATUS_VALIDATED,
 };
+pub use app_status::{
+    validate_app_status_transition, AppStatusTransitionError, APP_STATUS_ACTIVE,
+    APP_STATUS_ARCHIVED, APP_STATUS_DRAFT, APP_STATUS_PAUSED, STORED_APP_STATUSES,
+};
 pub use certificate_key_algorithm::{
     validate_certificate_key_algorithm, CERTIFICATE_DEFAULT_KEY_ALGORITHM,
     CERTIFICATE_KEY_ALGORITHMS, CERTIFICATE_KEY_ALGORITHM_ECDSA, CERTIFICATE_KEY_ALGORITHM_RSA,
@@ -53,6 +59,11 @@ pub use database_profile::{
     validate_migration_strategy, validate_migration_version, validate_profile_key,
     validate_profile_status, DATABASE_ENGINES, MIGRATION_STATUSES, MIGRATION_STRATEGIES,
     PROFILE_STATUSES,
+};
+pub use factory_readiness::{
+    derive_factory_readiness, FactoryReadinessFacts, FactoryReadinessVerdict, FactoryStage,
+    FactoryStageVerdict, READINESS_STATUS_BLOCKED, READINESS_STATUS_EXTERNAL,
+    READINESS_STATUS_NOT_APPLICABLE, READINESS_STATUS_PENDING, READINESS_STATUS_READY,
 };
 pub use package_manifest::{
     canonical_manifest_sha256, validate_package_manifest, validate_sha256_hex,
