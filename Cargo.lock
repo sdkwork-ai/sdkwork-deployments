@@ -4202,6 +4202,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-deploy-factory-reconciliation-worker"
+version = "0.1.0"
+dependencies = [
+ "sdkwork-deploy-contract",
+ "sdkwork-intelligence-deploy-repository-sqlx",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "sdkwork-deploy-feed"
 version = "0.1.0"
 dependencies = [

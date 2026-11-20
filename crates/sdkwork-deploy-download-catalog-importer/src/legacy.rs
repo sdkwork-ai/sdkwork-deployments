@@ -210,7 +210,7 @@ pub fn plan_import(document: &str, options: &ImportOptions) -> Result<ImportPlan
                         Some(href) => serde_json::json!({ "href": href }),
                         None => serde_json::json!({}),
                     }),
-                    size_bytes: action.size_bytes,
+                    size_bytes: action.size_bytes.map(|value| value.to_string()),
                     checksum_sha256: text(&action.sha256),
                     primary_action: Some(action.primary),
                     disabled: Some(action.disabled || href_is_missing(&action.href)),

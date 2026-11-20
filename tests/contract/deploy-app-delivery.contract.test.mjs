@@ -39,7 +39,7 @@ for (const operation of [
   'apps.sourceSpecs.retrieve',
   'apps.sourceSpecs.update',
   'apps.sourceSpecs.delete',
-  'apps.sourceSpecs.bindSource',
+  'apps.sourceSpecs.source.update',
   'platformTargets.create',
   'sourceRepositories.create',
   'buildTemplates.create',

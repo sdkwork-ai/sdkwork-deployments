@@ -834,7 +834,7 @@
     {
       "method": "GET",
       "path": "/backend/v3/api/apps/factory_reconciliation",
-      "operationId": "apps.factoryReconciliation",
+      "operationId": "apps.factoryReconciliation.list",
       "tags": [
         "app"
       ],
@@ -1148,7 +1148,7 @@
       "path": "/backend/v3/api/downloads/catalogs",
       "operationId": "downloadCatalog.list",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1172,7 +1172,7 @@
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}",
       "operationId": "downloadCatalog.retrieve",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1194,9 +1194,9 @@
     {
       "method": "PUT",
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}",
-      "operationId": "downloadCatalog.upsert",
+      "operationId": "downloadCatalog.update",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1220,7 +1220,7 @@
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/publish",
       "operationId": "downloadCatalog.publish",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1242,9 +1242,9 @@
     {
       "method": "PUT",
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
-      "operationId": "downloadCard.upsert",
+      "operationId": "downloadCard.update",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1268,7 +1268,7 @@
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
       "operationId": "downloadCard.delete",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1290,9 +1290,9 @@
     {
       "method": "PUT",
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
-      "operationId": "downloadItem.upsert",
+      "operationId": "downloadItem.update",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1316,7 +1316,7 @@
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
       "operationId": "downloadItem.delete",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",
@@ -1338,9 +1338,9 @@
     {
       "method": "PUT",
       "path": "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update",
-      "operationId": "downloadUpdate.upsert",
+      "operationId": "downloadUpdate.update",
       "tags": [
-        "downloadCatalog"
+        "downloads"
       ],
       "auth": {
         "mode": "dual-token",

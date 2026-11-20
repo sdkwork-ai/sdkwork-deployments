@@ -216,9 +216,9 @@
     "path": "/app/v3/api/apps/{appId}/source/validate",
     "summary": "Validate the application's Git source repository"
   },
-  "app:apps.sourceSpecs.bindSource": {
+  "app:apps.sourceSpecs.source.update": {
     "api": "app",
-    "operationId": "apps.sourceSpecs.bindSource",
+    "operationId": "apps.sourceSpecs.source.update",
     "method": "PUT",
     "path": "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
     "summary": "Register the uploaded source behind a spec"

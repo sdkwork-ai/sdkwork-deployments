@@ -62,6 +62,8 @@ export type { UsageReconciliationResponse } from './usage-reconciliation-respons
 export type { SigningIdentityHealthResponse } from './signing-identity-health-response';
 export type { SourceEventResponse } from './source-event-response';
 export type { SourceEventIngestResponse } from './source-event-ingest-response';
+export type { AppFactoryReconciliation } from './app-factory-reconciliation';
+export type { FactoryDanglingReference } from './factory-dangling-reference';
 export type { AppIdentityProvisionResponse } from './app-identity-provision-response';
 export type { DownloadUpdateResponse } from './download-update-response';
 export type { DownloadUpdateUpsertRequest } from './download-update-upsert-request';
@@ -107,6 +109,7 @@ export type { SigningIdentityHealthListResponse } from './signing-identity-healt
 export type { ListGetResponse2 } from './list-get-response2';
 export type { CreateRequest } from './create-request';
 export type { CreatePostResponse2012 } from './create-post-response2012';
+export type { AppsFactoryReconciliationListResponse } from './apps-factory-reconciliation-list-response';
 export type { AppsIdentityProvisionResponse } from './apps-identity-provision-response';
 export type { TemplateCategoriesListResponse } from './template-categories-list-response';
 export type { TemplateCategoriesCreateResponse201 } from './template-categories-create-response201';
@@ -119,8 +122,8 @@ export type { AppTemplateVersionsListResponse } from './app-template-versions-li
 export type { AppTemplateVersionsRetrieveResponse } from './app-template-versions-retrieve-response';
 export type { DownloadCatalogListResponse } from './download-catalog-list-response';
 export type { DownloadCatalogRetrieveResponse } from './download-catalog-retrieve-response';
-export type { DownloadCatalogUpsertResponse } from './download-catalog-upsert-response';
+export type { DownloadCatalogUpdateResponse } from './download-catalog-update-response';
 export type { DownloadCatalogPublishResponse } from './download-catalog-publish-response';
-export type { DownloadCardUpsertResponse } from './download-card-upsert-response';
-export type { DownloadItemUpsertResponse } from './download-item-upsert-response';
-export type { DownloadUpdateUpsertResponse } from './download-update-upsert-response';
+export type { DownloadCardUpdateResponse } from './download-card-update-response';
+export type { DownloadItemUpdateResponse } from './download-item-update-response';
+export type { DownloadUpdatePutResponse } from './download-update-put-response';

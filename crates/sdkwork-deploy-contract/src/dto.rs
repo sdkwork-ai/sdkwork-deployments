@@ -572,14 +572,23 @@ pub struct ListCloudAccountsQuery {
     /// The DNS family being configured. Present whenever the picker is opened from a
     /// zone or certificate form, and the reason an account list is short rather than
     /// confusing: an object-storage account is not a DNS answer.
+    ///
+    /// Query parameters are `lower_snake_case` (`API_SPEC.md` section 13); the
+    /// camelCase alias keeps a console that predates the rename working.
     #[serde(
-        rename = "dnsProvider",
+        rename = "dns_provider",
+        alias = "dnsProvider",
         default,
         skip_serializing_if = "Option::is_none"
     )]
     pub dns_provider: Option<String>,
     /// `platform`, `tenant`, or `user`. Absent walks every level the caller can see.
-    #[serde(rename = "scopeType", default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "scope_type",
+        alias = "scopeType",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
     pub scope_type: Option<String>,
     /// Only the caller's own accounts.
     #[serde(default)]

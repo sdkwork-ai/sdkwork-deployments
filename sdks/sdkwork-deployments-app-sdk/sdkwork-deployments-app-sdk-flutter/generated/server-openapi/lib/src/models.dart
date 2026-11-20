@@ -9188,11 +9188,15 @@ class AppEnvironmentResponse {
 class PromoteEnvironmentRequest {
   final String releaseId;
   final String? fromEnvironmentId;
+  final bool? approve;
+  final String? approverUserId;
   final String? note;
 
   PromoteEnvironmentRequest({
     required this.releaseId,
     this.fromEnvironmentId,
+    this.approve,
+    this.approverUserId,
     this.note
   });
 
@@ -9206,6 +9210,8 @@ class PromoteEnvironmentRequest {
         return value;
       })(),
       fromEnvironmentId: json['fromEnvironmentId']?.toString(),
+      approve: json['approve'] is bool ? json['approve'] : null,
+      approverUserId: json['approverUserId']?.toString(),
       note: json['note']?.toString()
     );
   }
@@ -9214,6 +9220,8 @@ class PromoteEnvironmentRequest {
     return <String, dynamic>{
       'releaseId': releaseId,
       'fromEnvironmentId': fromEnvironmentId,
+      'approve': approve,
+      'approverUserId': approverUserId,
       'note': note,
     };
   }
@@ -9229,6 +9237,7 @@ class EnvironmentPromotionResponse {
   final String? fromEnvironmentId;
   final String? fromEnvironmentKey;
   final String? promotedBy;
+  final String? approverUserId;
   final String? note;
   final String createdAt;
 
@@ -9242,6 +9251,7 @@ class EnvironmentPromotionResponse {
     this.fromEnvironmentId,
     this.fromEnvironmentKey,
     this.promotedBy,
+    this.approverUserId,
     this.note,
     required this.createdAt
   });
@@ -9293,6 +9303,7 @@ class EnvironmentPromotionResponse {
       fromEnvironmentId: json['fromEnvironmentId']?.toString(),
       fromEnvironmentKey: json['fromEnvironmentKey']?.toString(),
       promotedBy: json['promotedBy']?.toString(),
+      approverUserId: json['approverUserId']?.toString(),
       note: json['note']?.toString(),
       createdAt: (() {
         final value = json['createdAt']?.toString();
@@ -9315,6 +9326,7 @@ class EnvironmentPromotionResponse {
       'fromEnvironmentId': fromEnvironmentId,
       'fromEnvironmentKey': fromEnvironmentKey,
       'promotedBy': promotedBy,
+      'approverUserId': approverUserId,
       'note': note,
       'createdAt': createdAt,
     };
@@ -9530,7 +9542,7 @@ class DownloadActionDocument {
   final String? fileName;
   final String? version;
   final String? releaseTag;
-  final int? sizeBytes;
+  final String? sizeBytes;
   final String? sha256;
   final bool primary;
   final bool disabled;
@@ -9592,7 +9604,7 @@ class DownloadActionDocument {
       fileName: json['fileName']?.toString(),
       version: json['version']?.toString(),
       releaseTag: json['releaseTag']?.toString(),
-      sizeBytes: json['sizeBytes'] is int ? json['sizeBytes'] : null,
+      sizeBytes: json['sizeBytes']?.toString(),
       sha256: json['sha256']?.toString(),
       primary: (() {
         final value = json['primary'];
@@ -12062,37 +12074,37 @@ class AppsSourceSpecsUpdateResponse {
   }
 }
 
-class AppsSourceSpecsBindResponse {
+class AppsSourceSpecsUpdatePutResponse {
   final int code;
   final dynamic data;
   final String traceId;
 
-  AppsSourceSpecsBindResponse({
+  AppsSourceSpecsUpdatePutResponse({
     required this.code,
     required this.data,
     required this.traceId
   });
 
-  factory AppsSourceSpecsBindResponse.fromJson(Map<String, dynamic> json) {
-    return AppsSourceSpecsBindResponse(
+  factory AppsSourceSpecsUpdatePutResponse.fromJson(Map<String, dynamic> json) {
+    return AppsSourceSpecsUpdatePutResponse(
       code: (() {
         final value = json['code'];
         if (value is! int) {
-          throw FormatException('AppsSourceSpecsBindResponse.code is required');
+          throw FormatException('AppsSourceSpecsUpdatePutResponse.code is required');
         }
         return value;
       })(),
       data: (() {
         final map = _sdkworkAsMap(json['data']);
         if (map == null) {
-          throw FormatException('AppsSourceSpecsBindResponse.data is required');
+          throw FormatException('AppsSourceSpecsUpdatePutResponse.data is required');
         }
         return map;
       })(),
       traceId: (() {
         final value = json['traceId']?.toString();
         if (value == null) {
-          throw FormatException('AppsSourceSpecsBindResponse.traceId is required');
+          throw FormatException('AppsSourceSpecsUpdatePutResponse.traceId is required');
         }
         return value;
       })()

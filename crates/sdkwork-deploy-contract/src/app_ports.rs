@@ -27,6 +27,15 @@ pub struct DeployAppRequestContext {
     /// rows must be narrowed by this value while it is present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_id: Option<String>,
+    /// Permission codes the caller's credential actually carries.
+    ///
+    /// The route manifest's required permission gates the surface; the approval
+    /// step needs a second, narrower grant (`deploy.apps.approve`) that the
+    /// framework cannot express as a route permission because it depends on the
+    /// request body (`approve: true`). Projected from the verified principal, so
+    /// a client cannot invent it.
+    #[serde(default, skip_serializing)]
+    pub permissions: Vec<String>,
     #[serde(default, skip_serializing)]
     pub auth_token: Option<String>,
     #[serde(default, skip_serializing)]
@@ -44,6 +53,98 @@ impl DeployAppRequestContext {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
+    }
+
+    /// Whether the credential carries `required`, honoring the `*` wildcard
+    /// families (`deploy.*`, `deploy.apps.*`) the IAM scope vocabulary uses.
+    pub fn has_permission(&self, required: &str) -> bool {
+        self.permissions
+            .iter()
+            .any(|granted| permission_matches(granted, required))
+    }
+
+    /// Gate for an environment promotion that records an approval.
+    ///
+    /// `deploy.apps.write` lets an operator promote; recording an approval is a
+    /// second, narrower right because it asserts another party's sign-off. The
+    /// check is fail-closed: a credential with no `deploy.apps.approve` grant
+    /// cannot promote with `approve: true`, even if it can promote otherwise.
+    pub fn require_promotion_approval(&self) -> DeployServiceResult<()> {
+        if self.has_permission(DEPLOY_APPS_APPROVE_PERMISSION) {
+            Ok(())
+        } else {
+            Err(DeployServiceError::forbidden(
+                "deploy.apps.approve permission is required to approve an environment promotion",
+            ))
+        }
+    }
+}
+
+/// Permission code that authorizes recording an approval on a promotion.
+pub const DEPLOY_APPS_APPROVE_PERMISSION: &str = "deploy.apps.approve";
+
+fn permission_matches(granted: &str, required: &str) -> bool {
+    let granted = granted.trim();
+    if granted.is_empty() {
+        return false;
+    }
+    if granted == "*" || granted == required {
+        return true;
+    }
+    if let Some(prefix) = granted.strip_suffix(".*") {
+        return required == prefix || required.starts_with(&format!("{prefix}."));
+    }
+    // A bare trailing `*` is a prefix grant (`deploy.apps*`).
+    if let Some(prefix) = granted.strip_suffix('*') {
+        return required.starts_with(prefix);
+    }
+    false
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    fn context(permissions: &[&str]) -> DeployAppRequestContext {
+        DeployAppRequestContext {
+            tenant_id: 7,
+            actor_id: Some(11),
+            permissions: permissions.iter().map(|value| (*value).to_owned()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn exact_and_wildcard_grants_match() {
+        for grant in ["deploy.apps.approve", "deploy.*", "deploy.apps.*", "*"] {
+            assert!(
+                context(&[grant]).has_permission(DEPLOY_APPS_APPROVE_PERMISSION),
+                "{grant} must authorize the approval gate"
+            );
+        }
+        for grant in ["deploy.apps.write", "deploy.apps.approvals", "deployx.*", ""] {
+            assert!(
+                !context(&[grant]).has_permission(DEPLOY_APPS_APPROVE_PERMISSION),
+                "{grant} must not authorize the approval gate"
+            );
+        }
+    }
+
+    #[test]
+    fn promotion_approval_is_fail_closed() {
+        assert!(context(&[]).require_promotion_approval().is_err());
+        assert!(
+            matches!(
+                context(&["deploy.apps.write"]).require_promotion_approval(),
+                Err(DeployServiceError::Forbidden(_))
+            ),
+            "a promote-only credential must not record an approval"
+        );
+        assert!(
+            context(&["deploy.apps.approve"])
+                .require_promotion_approval()
+                .is_ok()
+        );
     }
 }
 

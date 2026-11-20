@@ -1,10 +1,3 @@
-import {
-  createClient as createDeployClient,
-  type AppTemplateScreenshot,
-  type CreateAppTemplateRequest,
-  type SdkworkDeployAppClient,
-  type UpdateAppTemplateRequest,
-} from "@sdkwork/deployments-app-sdk";
 import { createClient, type SdkworkDeployBackendClient } from "@sdkwork/deployments-backend-sdk";
 import {
   normalizeDeploymentsPage,
@@ -17,28 +10,49 @@ import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { uuid } from "@sdkwork/utils/id";
 import { createContext, useContext, type ReactNode } from "react";
 
+import type {
+  DeploymentsAppPlaneClient,
+  DeploymentsAppTemplateCreateBody,
+  DeploymentsAppTemplateScreenshot,
+  DeploymentsAppTemplateUpdateBody,
+} from "./app-plane-port.ts";
+
+export type {
+  DeploymentsAppIdempotencyParams,
+  DeploymentsAppPlaneClient,
+  DeploymentsAppTemplateCreateBody,
+  DeploymentsAppTemplatePricingModel,
+  DeploymentsAppTemplateScreenshot,
+  DeploymentsAppTemplateType,
+  DeploymentsAppTemplateUpdateBody,
+  DeploymentsAppTemplateVisibility,
+} from "./app-plane-port.ts";
+
+// Feature packages must not import the generated backend SDK directly
+// (`check-application-layering.mjs`): core owns the SDK boundary and re-exports
+// the wire types a feature package needs, so a contract change still breaks the
+// feature build without leaking the generated module into the package graph.
+export type {
+  DownloadCardResponse,
+  DownloadCardUpsertRequest,
+  DownloadCatalogResponse,
+  DownloadCatalogSummaryResponse,
+  DownloadCatalogUpsertRequest,
+  DownloadItemResponse,
+  DownloadItemUpsertRequest,
+  DownloadUpdateResponse,
+  DownloadUpdateUpsertRequest,
+  SdkworkDeployBackendClient,
+} from "@sdkwork/deployments-backend-sdk";
+
 const Context = createContext<SdkworkDeployBackendClient | null>(null);
-const AppClientContext = createContext<SdkworkDeployAppClient | null>(null);
+const AppClientContext = createContext<DeploymentsAppPlaneClient | null>(null);
 
 export function createDeploymentsAdminClient(baseUrl: string, tokenManager: AuthTokenManager) {
   return createClient({ baseUrl, authMode: "dual-token", platform: "pc", tokenManager });
 }
 
-/**
- * App-plane client hosted by the admin surface.
- *
- * `deploy_app` application authoring and app-template listing create/edit exist
- * on the app API only: the backend-admin contract moderates a listing but has
- * no create command and no editable-copy patch. The admin surface therefore
- * keeps the app-plane client behind its `backend-admin` boundary — the same
- * split `sourceSpecsPort` already uses — and routes only those commands through
- * it (see `createDeploymentsAdminRegistry`).
- */
-export function createDeploymentsAppClient(appApiBaseUrl: string, tokenManager: AuthTokenManager) {
-  return createDeployClient({ baseUrl: appApiBaseUrl, authMode: "dual-token", platform: "pc", tokenManager });
-}
-
-export function DeploymentsAdminProvider({ appClient, children, client }: { appClient: SdkworkDeployAppClient; children: ReactNode; client: SdkworkDeployBackendClient }) {
+export function DeploymentsAdminProvider({ appClient, children, client }: { appClient: DeploymentsAppPlaneClient; children: ReactNode; client: SdkworkDeployBackendClient }) {
   return (
     <Context.Provider value={client}>
       <AppClientContext.Provider value={appClient}>{children}</AppClientContext.Provider>
@@ -66,7 +80,7 @@ export function useDeploymentsAdminAppClient() {
  * compiling and get the moderation-only action set, while this application's
  * admin surface injects the app-plane client to expose listing create/edit.
  */
-export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClient, appClient?: SdkworkDeployAppClient): DeploymentsRegistry {
+export function createDeploymentsAdminRegistry(client: SdkworkDeployBackendClient, appClient?: DeploymentsAppPlaneClient): DeploymentsRegistry {
   const app = appClient;
   return {
     nginx: source(
@@ -283,7 +297,7 @@ function cleanBody(body: Record<string, unknown>): Record<string, unknown> {
  * uuid- or enum-typed member the server would reject; optional members are
  * omitted instead of being sent as `undefined` (`exactOptionalPropertyTypes`).
  */
-function appTemplateCreateBody(body: Record<string, unknown>): CreateAppTemplateRequest {
+function appTemplateCreateBody(body: Record<string, unknown>): DeploymentsAppTemplateCreateBody {
   const cleaned = cleanBody(body);
   const description = optionalText(cleaned.description, false);
   const currency = optionalText(cleaned.currency, true);
@@ -313,7 +327,7 @@ function appTemplateCreateBody(body: Record<string, unknown>): CreateAppTemplate
  * The editable-copy patch: an omitted field keeps its stored value server-side,
  * so only the members the operator filled in are sent.
  */
-function appTemplateUpdateBody(body: Record<string, unknown>): UpdateAppTemplateRequest {
+function appTemplateUpdateBody(body: Record<string, unknown>): DeploymentsAppTemplateUpdateBody {
   const cleaned = cleanBody(body);
   const displayName = optionalText(cleaned.displayName, true);
   const summary = optionalText(cleaned.summary, true);
@@ -345,7 +359,7 @@ function appTemplateUpdateBody(body: Record<string, unknown>): UpdateAppTemplate
  */
 function appTemplateMedia(
   body: Record<string, unknown>,
-): Pick<UpdateAppTemplateRequest, "iconMediaRef" | "coverMediaRef" | "screenshots"> {
+): Pick<DeploymentsAppTemplateUpdateBody, "iconMediaRef" | "coverMediaRef" | "screenshots"> {
   const iconMediaRef = optionalText(body.iconMediaRef, true);
   const coverMediaRef = optionalText(body.coverMediaRef, true);
   const screenshots = parseScreenshots(body.screenshots);
@@ -356,7 +370,7 @@ function appTemplateMedia(
   };
 }
 
-function parseScreenshots(value: unknown): AppTemplateScreenshot[] | undefined {
+function parseScreenshots(value: unknown): DeploymentsAppTemplateScreenshot[] | undefined {
   const text = optionalText(value, false);
   if (text === undefined) {
     return undefined;
@@ -404,15 +418,15 @@ function optionalText(value: unknown, trim: boolean): string | undefined {
   return trim ? value.trim() : value;
 }
 
-function templateType(value: unknown): CreateAppTemplateRequest["templateType"] {
+function templateType(value: unknown): DeploymentsAppTemplateCreateBody["templateType"] {
   return value === "APP" || value === "PPT" || value === "VIDEO" ? value : undefined;
 }
 
-function visibility(value: unknown): UpdateAppTemplateRequest["visibility"] {
+function visibility(value: unknown): DeploymentsAppTemplateUpdateBody["visibility"] {
   return value === "PUBLIC" || value === "PRIVATE" ? value : undefined;
 }
 
-function pricingModel(value: unknown): UpdateAppTemplateRequest["pricingModel"] {
+function pricingModel(value: unknown): DeploymentsAppTemplateUpdateBody["pricingModel"] {
   return value === "FREE" || value === "PAID" ? value : undefined;
 }
 

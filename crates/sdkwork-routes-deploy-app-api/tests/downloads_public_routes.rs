@@ -60,7 +60,7 @@ impl DeployDownloadsReadApi for StubDownloads {
                     file_name: "Demo.exe".to_owned(),
                     version: "1.0.0".to_owned(),
                     release_tag: String::new(),
-                    size_bytes: Some(10),
+                    size_bytes: Some("10".to_owned()),
                     sha256: None,
                     primary: true,
                     disabled: false,

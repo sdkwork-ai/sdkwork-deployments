@@ -1382,6 +1382,12 @@ impl DeployService {
                 ));
             }
         }
+        // Recording an approval asserts another party's sign-off; it needs the
+        // narrower `deploy.apps.approve` grant on top of the route's
+        // `deploy.apps.write`. Fail closed before any row is written.
+        if request.approve {
+            context.require_promotion_approval()?;
+        }
         let promotion = self
             .repository
             .promote_environment(tenant_id, context.actor_id, app_id, environment_id, request)

@@ -28,6 +28,18 @@ use crate::support::store_error;
 use crate::DeployRepository;
 
 impl DeployRepository {
+    /// Public read-only reconciliation entry point.
+    ///
+    /// The HTTP surface calls the service (which requires a tenant context); the
+    /// factory reconciliation worker owns the long-running loop and calls this
+    /// directly, so the report has exactly one implementation.
+    pub async fn reconcile_factory_references(
+        &self,
+        tenant_id: i64,
+    ) -> DeployServiceResult<AppFactoryReconciliation> {
+        self.reconcile_factory_references_repo(tenant_id).await
+    }
+
     /// Reconciles the factory's soft cross-module references for one tenant.
     pub(super) async fn reconcile_factory_references_repo(
         &self,
@@ -58,7 +70,7 @@ impl DeployRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(|error| store_error("list deploy_app for reconciliation", error))?;
-        let apps_checked = apps.len() as i64;
+        let apps_checked = apps.len().to_string();
 
         for app in &apps {
             let app_uuid: String = app.try_get("uuid").unwrap_or_default();
@@ -289,7 +301,7 @@ mod tests {
     fn a_report_with_findings_is_drift_and_names_the_authority() {
         let report = AppFactoryReconciliation {
             status: "DRIFT".to_owned(),
-            apps_checked: 1,
+            apps_checked: "1".to_owned(),
             dangling: vec![FactoryDanglingReference {
                 authority: "iam".to_owned(),
                 app_id: Some("app-uuid".to_owned()),
@@ -303,14 +315,14 @@ mod tests {
         assert_eq!(json["status"], "DRIFT");
         assert_eq!(json["dangling"][0]["authority"], "iam");
         assert_eq!(json["dangling"][0]["deployApplicationId"], "42");
-        assert_eq!(json["appsChecked"], 1);
+        assert_eq!(json["appsChecked"], "1");
     }
 
     #[test]
     fn an_unavailable_authority_is_visible_instead_of_being_hidden() {
         let report = AppFactoryReconciliation {
             status: "PARTIAL".to_owned(),
-            apps_checked: 0,
+            apps_checked: "0".to_owned(),
             dangling: Vec::new(),
             unavailable: vec!["webserver".to_owned()],
         };

@@ -1123,8 +1123,10 @@ pub struct FactoryDanglingReference {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct AppFactoryReconciliation {
     pub status: String,
+    /// Count of inspected applications, serialized as an int64 string per
+    /// `API_SPEC.md` section 13.6.
     #[serde(rename = "appsChecked")]
-    pub apps_checked: i64,
+    pub apps_checked: String,
     pub dangling: Vec<FactoryDanglingReference>,
     pub unavailable: Vec<String>,
 }

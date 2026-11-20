@@ -30,8 +30,8 @@ export class DomainCloudAccountsApi {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
       { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
-      { name: 'dnsProvider', value: params?.dnsProvider, style: 'form', explode: true, allowReserved: false },
-      { name: 'scopeType', value: params?.scopeType, style: 'form', explode: true, allowReserved: false },
+      { name: 'dns_provider', value: params?.dnsProvider, style: 'form', explode: true, allowReserved: false },
+      { name: 'scope_type', value: params?.scopeType, style: 'form', explode: true, allowReserved: false },
       { name: 'mine', value: params?.mine, style: 'form', explode: true, allowReserved: false },
       { name: 'keyword', value: params?.keyword, style: 'form', explode: true, allowReserved: false },
     ]);
@@ -185,7 +185,7 @@ export class DomainDomainZonesHostnameClaimsApi {
       },
       {}
     );
-    return this.client.request<{ items: DomainHostnameClaimResponse[]; }>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/hostname_claims`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'data' });
+    return this.client.request<{ items: DomainHostnameClaimResponse[]; }>(appApiPath(`/domain_zones/${serializePathParameter(zoneId, { name: 'zoneId', style: 'simple', explode: false })}/hostname_claims/ensure`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'data' });
   }
 }
 

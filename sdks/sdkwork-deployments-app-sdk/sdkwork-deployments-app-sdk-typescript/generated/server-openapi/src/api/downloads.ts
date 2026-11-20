@@ -31,7 +31,7 @@ export class DownloadsDownloadConfigApi {
   }
 }
 
-export class DownloadsDownloadCatalogApi {
+export class DownloadsDownloadCatalogPublicApi {
   private client: HttpClient;
 
   constructor(client: HttpClient) {
@@ -40,9 +40,18 @@ export class DownloadsDownloadCatalogApi {
 
 
 /** Published download catalog rendered by the download page */
-  async publicRetrieve(catalogKey: string, requestOptions?: ApiRequestOptions): Promise<DownloadCatalogDocument> {
+  async retrieve(catalogKey: string, requestOptions?: ApiRequestOptions): Promise<DownloadCatalogDocument> {
     return this.client.request<DownloadCatalogDocument>(appApiPath(`/downloads/catalog/${serializePathParameter(catalogKey, { name: 'catalogKey', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, skipAuth: true, sdkworkUnwrapKind: 'data' });
   }
+}
+
+export class DownloadsDownloadCatalogApi {
+  public readonly public: DownloadsDownloadCatalogPublicApi;
+
+  constructor(client: HttpClient) {
+    this.public = new DownloadsDownloadCatalogPublicApi(client);
+  }
+
 }
 
 export class DownloadsApi {

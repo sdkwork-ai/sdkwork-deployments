@@ -158,7 +158,7 @@ pub struct DownloadItemDto {
     #[serde(rename = "downloadSource", default)]
     pub download_source: Value,
     #[serde(rename = "sizeBytes", default, skip_serializing_if = "Option::is_none")]
-    pub size_bytes: Option<i64>,
+    pub size_bytes: Option<String>,
     #[serde(
         rename = "checksumSha256",
         default,
@@ -224,7 +224,7 @@ pub struct DownloadCatalogDto {
     #[serde(rename = "defaultChannelKey")]
     pub default_channel_key: String,
     pub status: String,
-    pub revision: i64,
+    pub revision: String,
     #[serde(
         rename = "publishedAt",
         default,
@@ -253,7 +253,7 @@ pub struct DownloadCatalogSummaryDto {
     #[serde(rename = "productVersion")]
     pub product_version: String,
     pub status: String,
-    pub revision: i64,
+    pub revision: String,
     #[serde(
         rename = "publishedAt",
         default,
@@ -325,7 +325,7 @@ pub struct UpsertDownloadItemRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub download_source: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub size_bytes: Option<i64>,
+    pub size_bytes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checksum_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -483,7 +483,7 @@ pub struct PublicDownloadAction {
     )]
     pub release_tag: String,
     #[serde(rename = "sizeBytes", default, skip_serializing_if = "Option::is_none")]
-    pub size_bytes: Option<i64>,
+    pub size_bytes: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
     pub primary: bool,

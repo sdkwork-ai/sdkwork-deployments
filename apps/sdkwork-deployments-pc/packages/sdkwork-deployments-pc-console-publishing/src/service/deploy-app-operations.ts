@@ -719,7 +719,7 @@ export function createDeployAppOperationsService(
     },
 
     bindSourceSpecSource(appId, specId, source) {
-      return deployClient.app.sourceSpecs.bindSource(appId, specId, { source })
+      return deployClient.app.sourceSpecs.source.update(appId, specId, { source })
     },
 
     async setClientClassDefault(appId, clientClass, targetSpecId, specs) {

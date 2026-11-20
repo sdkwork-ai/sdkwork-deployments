@@ -73,7 +73,7 @@ async fn download_catalog_round_trip_and_publication() {
                 download_source: Some(serde_json::json!({
                     "href": "https://download.example.com/demo.exe"
                 })),
-                size_bytes: Some(1024),
+                size_bytes: Some("1024".to_owned()),
                 checksum_sha256: Some("abc".to_owned()),
                 primary_action: Some(true),
                 ..Default::default()
@@ -132,7 +132,7 @@ async fn download_catalog_round_trip_and_publication() {
         .await
         .expect("publish");
     assert_eq!(published.status, DOWNLOAD_CATALOG_STATUS_PUBLISHED);
-    assert_eq!(published.revision, 2);
+    assert_eq!(published.revision, "2");
     assert!(published.published_at.is_some());
 
     let public = repository

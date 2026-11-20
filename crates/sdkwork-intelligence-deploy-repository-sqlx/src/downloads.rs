@@ -64,7 +64,9 @@ fn map_catalog_summary(row: &PgRow) -> Result<DownloadCatalogSummaryDto, sqlx::E
         product_name: row.try_get("product_name")?,
         product_version: row.try_get("product_version")?,
         status: row.try_get("status")?,
-        revision: row.try_get("revision")?,
+        revision: row
+            .try_get::<i64, _>("revision")
+            .map(|value| value.to_string())?,
         published_at: optional_datetime_from_row(row, "published_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,
         version: row.try_get::<i64, _>("version")?.to_string(),
@@ -81,7 +83,9 @@ fn map_catalog(row: &PgRow) -> Result<DownloadCatalogDto, sqlx::Error> {
         product_version: row.try_get("product_version")?,
         default_channel_key: row.try_get("default_channel_key")?,
         status: row.try_get("status")?,
-        revision: row.try_get("revision")?,
+        revision: row
+            .try_get::<i64, _>("revision")
+            .map(|value| value.to_string())?,
         published_at: optional_datetime_from_row(row, "published_at")?,
         created_at: datetime_from_row(row, "created_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,
@@ -120,7 +124,9 @@ fn map_item(row: &PgRow) -> Result<DownloadItemDto, sqlx::Error> {
         package_id: row.try_get::<Option<String>, _>("package_uuid")?,
         artifact_id: row.try_get::<Option<String>, _>("artifact_uuid")?,
         download_source: row.try_get("download_source")?,
-        size_bytes: row.try_get("size_bytes")?,
+        size_bytes: row
+            .try_get::<Option<i64>, _>("size_bytes")
+            .map(|value| value.map(|size| size.to_string()))?,
         checksum_sha256: row.try_get("checksum_sha256")?,
         primary_action: row.try_get("primary_action")?,
         disabled: row.try_get("disabled")?,
@@ -745,6 +751,15 @@ impl DeployRepository {
             .download_source
             .clone()
             .unwrap_or_else(|| serde_json::json!({}));
+        // `sizeBytes` is an int64-as-string on the wire (`API_SPEC.md` section
+        // 13.6); the column is BIGINT. Parse at the write boundary so a
+        // non-numeric value is a validation error, never a rounded number.
+        let size_bytes: Option<i64> = match request.size_bytes.as_deref() {
+            Some(raw) => Some(raw.trim().parse().map_err(|_| {
+                DeployServiceError::validation("sizeBytes must be an int64 decimal string")
+            })?),
+            None => None,
+        };
 
         let existing = sqlx::query(
             "SELECT id FROM deploy_download_item
@@ -791,7 +806,7 @@ impl DeployRepository {
             .bind(package_id)
             .bind(artifact_id)
             .bind(download_source.clone())
-            .bind(request.size_bytes)
+            .bind(size_bytes)
             .bind(request.checksum_sha256.as_deref())
             .bind(request.primary_action)
             .bind(request.disabled)
@@ -832,7 +847,7 @@ impl DeployRepository {
             .bind(package_id)
             .bind(artifact_id)
             .bind(download_source.clone())
-            .bind(request.size_bytes)
+            .bind(size_bytes)
             .bind(request.checksum_sha256.as_deref())
             .bind(request.primary_action.unwrap_or(false))
             .bind(request.disabled.unwrap_or(false))

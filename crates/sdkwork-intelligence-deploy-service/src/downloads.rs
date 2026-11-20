@@ -346,7 +346,7 @@ impl DeployService {
                                 file_name: item.file_name.clone(),
                                 version: item.version.clone(),
                                 release_tag: item.release_tag.clone(),
-                                size_bytes: item.size_bytes,
+                                size_bytes: item.size_bytes.clone(),
                                 sha256: item.checksum_sha256.clone(),
                                 primary: item.primary_action,
                                 disabled: item.disabled,
@@ -517,7 +517,10 @@ impl DeployDownloadsApi for DeployService {
         if let Some(version) = request.version.as_deref() {
             validate_version_shape(version, "version")?;
         }
-        if let Some(size) = request.size_bytes {
+        if let Some(raw_size) = request.size_bytes.as_deref() {
+            let size: i64 = raw_size.trim().parse().map_err(|_| {
+                DeployServiceError::validation("sizeBytes must be an int64 decimal string")
+            })?;
             if size < 0 {
                 return Err(DeployServiceError::validation(
                     "sizeBytes must not be negative",
@@ -777,11 +780,12 @@ impl DeployDownloadsReadApi for DeployService {
         } else {
             record.item.version.clone()
         };
-        let size = record
-            .item
-            .size_bytes
-            .or_else(|| package.map(|package| package.size_bytes))
-            .unwrap_or(0);
+        let size = match record.item.size_bytes.as_deref() {
+            Some(raw) => raw.trim().parse::<i64>().map_err(|_| {
+                DeployServiceError::validation("sizeBytes must be an int64 decimal string")
+            })?,
+            None => package.map(|package| package.size_bytes).unwrap_or(0),
+        };
         build_feed(&FeedInput {
             version,
             file_url,

@@ -2594,6 +2594,7 @@ mod app_scope_tests {
             app_id: app_id.map(str::to_owned),
             auth_token: None,
             access_token: None,
+            permissions: Vec::new(),
         }
     }
 

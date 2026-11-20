@@ -88,6 +88,7 @@ fn probe_context() -> DeployAppRequestContext {
         app_id: None,
         auth_token: None,
         access_token: None,
+        permissions: Vec::new(),
     }
 }
 

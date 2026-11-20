@@ -22,7 +22,7 @@ import type {
   DownloadItemResponse,
   DownloadUpdateResponse,
   DownloadUpdateUpsertRequest,
-} from "@sdkwork/deployments-backend-sdk";
+} from "@sdkwork/deployments-pc-admin-core";
 
 import { createDownloadsAdminService } from "./service.ts";
 

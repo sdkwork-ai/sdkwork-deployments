@@ -27,17 +27,7 @@ client.setAuthToken('your-auth-token');
 client.setAccessToken('your-access-token');
 
 // Use the SDK
-const params = {
-  page: 1,
-  page_size: 2,
-  keyword: 'keyword',
-  tenant_id: 'tenant_id',
-  ownership_scope: 'PLATFORM',
-  scope: 'PLATFORM',
-  owner_organization_id: 'owner_organization_id',
-  app_kind: 'app_kind',
-};
-const result = await client.app.list(params);
+const result = await client.app.factoryReconciliation.list();
 ```
 
 ## Authentication
@@ -78,25 +68,15 @@ const client = new SdkworkDeployBackendClient({
 - `client.signingHealth` - signing_health API
 - `client.sourceEvents` - source_events API
 - `client.template` - template API
-- `client.downloadCatalog` - download_catalog API
+- `client.downloads` - downloads API
 
 ## Usage Examples
 
 ### app
 
 ```typescript
-// 获取应用台账列表
-const params = {
-  page: 1,
-  page_size: 2,
-  keyword: 'keyword',
-  tenant_id: 'tenant_id',
-  ownership_scope: 'PLATFORM',
-  scope: 'PLATFORM',
-  owner_organization_id: 'owner_organization_id',
-  app_kind: 'app_kind',
-};
-const result = await client.app.list(params);
+// 工厂跨模块引用对账
+const result = await client.app.factoryReconciliation.list();
 ```
 
 ### nginx
@@ -210,7 +190,11 @@ const body = {
     {},
   ],
 };
-const result = await client.usage.ingest.create(body);
+const idempotencyKey = 'Idempotency-Key';
+const params = {
+  idempotencyKey,
+};
+const result = await client.usage.ingest.create(body, params);
 ```
 
 ### signing_health
@@ -247,11 +231,11 @@ const params = {
 const result = await client.template.templateCategories.list(params);
 ```
 
-### download_catalog
+### downloads
 
 ```typescript
 // List download catalogs
-const result = await client.downloadCatalog.list();
+const result = await client.downloads.downloadCatalog.list();
 ```
 
 ## Error Handling
@@ -260,17 +244,7 @@ const result = await client.downloadCatalog.list();
 import { SdkworkDeployBackendClient, NetworkError, TimeoutError, AuthenticationError } from '@sdkwork/deployments-backend-sdk';
 
 try {
-  const params = {
-    page: 1,
-    page_size: 2,
-    keyword: 'keyword',
-    tenant_id: 'tenant_id',
-    ownership_scope: 'PLATFORM',
-    scope: 'PLATFORM',
-    owner_organization_id: 'owner_organization_id',
-    app_kind: 'app_kind',
-  };
-  const result = await client.app.list(params);
+  const result = await client.app.factoryReconciliation.list();
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('Authentication failed:', error.message);

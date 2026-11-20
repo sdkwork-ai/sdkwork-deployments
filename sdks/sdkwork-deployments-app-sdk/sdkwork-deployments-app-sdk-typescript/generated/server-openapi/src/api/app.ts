@@ -157,6 +157,20 @@ export class AppSourceApi {
   }
 }
 
+export class AppSourceSpecsSourceApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Register the uploaded source behind a spec */
+  async update(appId: string, specId: string, body: BindAppSourceSpecSourceRequest, requestOptions?: ApiRequestOptions): Promise<AppSourceSpecResponse> {
+    return this.client.request<AppSourceSpecResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}/source`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+}
+
 export interface AppSourceSpecsListParams {
   environment?: AppPublishEnvironment;
 }
@@ -171,9 +185,11 @@ export interface AppSourceSpecsUpdateParams {
 
 export class AppSourceSpecsApi {
   private client: HttpClient;
+  public readonly source: AppSourceSpecsSourceApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.source = new AppSourceSpecsSourceApi(client);
   }
 
 
@@ -215,11 +231,6 @@ export class AppSourceSpecsApi {
 /** Delete a source spec */
   async delete(appId: string, specId: string, requestOptions?: ApiRequestOptions): Promise<void> {
     return this.client.request<void>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
-  }
-
-/** Register the uploaded source behind a spec */
-  async bindSource(appId: string, specId: string, body: BindAppSourceSpecSourceRequest, requestOptions?: ApiRequestOptions): Promise<AppSourceSpecResponse> {
-    return this.client.request<AppSourceSpecResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/source_specs/${serializePathParameter(specId, { name: 'specId', style: 'simple', explode: false })}/source`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
   }
 }
 

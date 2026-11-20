@@ -66,6 +66,7 @@ fn deploy_app_context_from_web_request(
         organization_id,
         session_id,
         app_id: (!app_id.is_empty()).then(|| app_id.to_owned()),
+        permissions: principal.scopes.permission_scope.clone(),
         auth_token: None,
         access_token: None,
     })

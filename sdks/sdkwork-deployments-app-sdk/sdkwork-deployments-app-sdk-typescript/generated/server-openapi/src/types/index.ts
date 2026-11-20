@@ -200,7 +200,7 @@ export type { AppsSourceSpecsListResponse } from './apps-source-specs-list-respo
 export type { AppsSourceSpecsCreateResponse201 } from './apps-source-specs-create-response201';
 export type { AppsSourceSpecsRetrieveResponse } from './apps-source-specs-retrieve-response';
 export type { AppsSourceSpecsUpdateResponse } from './apps-source-specs-update-response';
-export type { AppsSourceSpecsBindResponse } from './apps-source-specs-bind-response';
+export type { AppsSourceSpecsUpdatePutResponse } from './apps-source-specs-update-put-response';
 export type { AppsSourceRetrieveResponse } from './apps-source-retrieve-response';
 export type { AppsSourceUpdateResponse } from './apps-source-update-response';
 export type { AppsSourceValidateResponse } from './apps-source-validate-response';

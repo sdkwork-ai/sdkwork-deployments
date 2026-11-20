@@ -184,7 +184,7 @@ class DomainApi {
       <String, HeaderParameterSpec>{},
     );
     final payload = body.toJson();
-    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/hostname_claims'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    final response = await _client.post(ApiPaths.appPath('/domain_zones/${serializePathParameter(zoneId, const PathParameterSpec('zoneId', 'simple', false))}/hostname_claims/ensure'), body: payload, headers: requestHeaders, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
       return map == null ? null : DomainZonesHostnameClaimsEnsureResponse.fromJson(map);
@@ -286,8 +286,8 @@ class DomainApi {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
       QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
-      QueryParameterSpec('dnsProvider', dnsProvider, 'form', true, false, null),
-      QueryParameterSpec('scopeType', scopeType, 'form', true, false, null),
+      QueryParameterSpec('dns_provider', dnsProvider, 'form', true, false, null),
+      QueryParameterSpec('scope_type', scopeType, 'form', true, false, null),
       QueryParameterSpec('mine', mine, 'form', true, false, null),
       QueryParameterSpec('keyword', keyword, 'form', true, false, null)
     ]);

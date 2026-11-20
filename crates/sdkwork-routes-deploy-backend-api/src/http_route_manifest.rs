@@ -234,7 +234,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         HttpMethod::Get,
         "/backend/v3/api/apps/factory_reconciliation",
         "app",
-        "apps.factoryReconciliation",
+        "apps.factoryReconciliation.list",
     )
     .with_required_permission("deploy.apps.read"),
     HttpRoute::dual_token(
@@ -327,59 +327,59 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/downloads/catalogs",
-        "downloadCatalog",
+        "downloads",
         "downloadCatalog.list",
     ),
     HttpRoute::dual_token(
         HttpMethod::Get,
         "/backend/v3/api/downloads/catalogs/{catalogKey}",
-        "downloadCatalog",
+        "downloads",
         "downloadCatalog.retrieve",
     ),
     HttpRoute::dual_token(
         HttpMethod::Put,
         "/backend/v3/api/downloads/catalogs/{catalogKey}",
-        "downloadCatalog",
-        "downloadCatalog.upsert",
+        "downloads",
+        "downloadCatalog.update",
     )
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Post,
         "/backend/v3/api/downloads/catalogs/{catalogKey}/publish",
-        "downloadCatalog",
+        "downloads",
         "downloadCatalog.publish",
     ),
     HttpRoute::dual_token(
         HttpMethod::Put,
         "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
-        "downloadCatalog",
-        "downloadCard.upsert",
+        "downloads",
+        "downloadCard.update",
     )
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}",
-        "downloadCatalog",
+        "downloads",
         "downloadCard.delete",
     ),
     HttpRoute::dual_token(
         HttpMethod::Put,
         "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
-        "downloadCatalog",
-        "downloadItem.upsert",
+        "downloads",
+        "downloadItem.update",
     )
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Delete,
         "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}",
-        "downloadCatalog",
+        "downloads",
         "downloadItem.delete",
     ),
     HttpRoute::dual_token(
         HttpMethod::Put,
         "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update",
-        "downloadCatalog",
-        "downloadUpdate.upsert",
+        "downloads",
+        "downloadUpdate.update",
     )
     .with_idempotent(true),
 ];

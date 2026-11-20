@@ -158,7 +158,7 @@ class AppApi {
   }
 
   /// Update a source spec
-  Future<AppsSourceSpecsUpdateResponse?> appsSourceSpecsUpdate(String appId, String specId, UpdateAppSourceSpecRequest body, String ifMatch) async {
+  Future<AppsSourceSpecsUpdateResponse?> patchAppsSourceSpecsUpdate(String appId, String specId, UpdateAppSourceSpecRequest body, String ifMatch) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
         'If-Match': HeaderParameterSpec(ifMatch, 'simple', false, null),
@@ -179,12 +179,12 @@ class AppApi {
   }
 
   /// Register the uploaded source behind a spec
-  Future<AppsSourceSpecsBindResponse?> appsSourceSpecsBind(String appId, String specId, BindAppSourceSpecSourceRequest body) async {
+  Future<AppsSourceSpecsUpdatePutResponse?> updateAppsSourceSpecsUpdate(String appId, String specId, BindAppSourceSpecSourceRequest body) async {
     final payload = body.toJson();
     final response = await _client.put(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/source_specs/${serializePathParameter(specId, const PathParameterSpec('specId', 'simple', false))}/source'), body: payload, contentType: 'application/json');
     return (() {
       final map = sdkworkResponseAsMap(response);
-      return map == null ? null : AppsSourceSpecsBindResponse.fromJson(map);
+      return map == null ? null : AppsSourceSpecsUpdatePutResponse.fromJson(map);
     })();
   }
 

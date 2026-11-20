@@ -109,7 +109,7 @@ async fn a_clean_factory_reconciles_without_findings() {
         .expect("reconcile");
     assert_eq!(report.status, "CLEAN", "{report:?}");
     assert!(report.dangling.is_empty(), "{report:?}");
-    assert_eq!(report.apps_checked, 1);
+    assert_eq!(report.apps_checked, "1");
 }
 
 #[tokio::test]
@@ -254,7 +254,7 @@ async fn dangling_identity_carrier_and_domain_references_are_named() {
         .reconcile_factory_references(OTHER_TENANT)
         .await
         .expect("reconcile another tenant");
-    assert_eq!(other.apps_checked, 0);
+    assert_eq!(other.apps_checked, "0");
     assert!(other.dangling.is_empty(), "{other:?}");
 }
 

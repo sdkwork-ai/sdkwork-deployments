@@ -114,7 +114,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_idempotent(true),
     HttpRoute::dual_token(
         HttpMethod::Post,
-        "/app/v3/api/domain_zones/{zoneId}/hostname_claims",
+        "/app/v3/api/domain_zones/{zoneId}/hostname_claims/ensure",
         "domain",
         "domainZones.hostnameClaims.ensure",
     )
@@ -406,7 +406,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         HttpMethod::Put,
         "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
         "app",
-        "apps.sourceSpecs.bindSource",
+        "apps.sourceSpecs.source.update",
     )
     .with_required_permission("deploy.apps.write"),
     HttpRoute::dual_token(
@@ -880,7 +880,7 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         HttpMethod::Get,
         "/app/v3/api/downloads/catalog/{catalogKey}",
         "downloads",
-        "downloadCatalog.publicRetrieve",
+        "downloadCatalog.public.retrieve",
     ),
     HttpRoute::public(
         HttpMethod::Get,

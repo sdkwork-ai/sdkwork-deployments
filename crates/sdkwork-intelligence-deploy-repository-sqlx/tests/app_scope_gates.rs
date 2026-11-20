@@ -64,6 +64,7 @@ fn caller(app_id: Option<&str>) -> DeployAppRequestContext {
         app_id: app_id.map(str::to_owned),
         auth_token: None,
         access_token: None,
+        permissions: Vec::new(),
     }
 }
 

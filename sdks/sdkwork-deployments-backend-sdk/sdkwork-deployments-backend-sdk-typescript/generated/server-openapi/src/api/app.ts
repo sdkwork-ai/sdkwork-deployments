@@ -1,8 +1,22 @@
 import { backendApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppIdentityProvisionResponse, AppKind, AppOwnerType, AppResponse, PageInfo } from '../types';
+import type { AppFactoryReconciliation, AppIdentityProvisionResponse, AppKind, AppOwnerType, AppResponse, PageInfo } from '../types';
 
+
+export class AppFactoryReconciliationApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 工厂跨模块引用对账 */
+  async list(requestOptions?: ApiRequestOptions): Promise<AppFactoryReconciliation> {
+    return this.client.request<AppFactoryReconciliation>(backendApiPath(`/apps/factory_reconciliation`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
 
 export interface AppListParams {
   page?: number;
@@ -17,9 +31,11 @@ export interface AppListParams {
 
 export class AppApi {
   private client: HttpClient;
+  public readonly factoryReconciliation: AppFactoryReconciliationApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.factoryReconciliation = new AppFactoryReconciliationApi(client);
   }
 
 

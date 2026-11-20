@@ -267,7 +267,7 @@ const result = await client.template.templateCategories.list(params);
 ```typescript
 // Published download catalog rendered by the download page
 const catalogKey = 'catalogKey';
-const result = await client.downloads.downloadCatalog.publicRetrieve(catalogKey);
+const result = await client.downloads.downloadCatalog.public.retrieve(catalogKey);
 ```
 
 ## Error Handling

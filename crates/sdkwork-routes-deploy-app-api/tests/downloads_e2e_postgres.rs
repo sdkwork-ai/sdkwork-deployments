@@ -149,7 +149,7 @@ async fn published_catalog_is_served_end_to_end() {
                 download_source: Some(serde_json::json!({
                     "href": "https://download.example.com/E2E.exe"
                 })),
-                size_bytes: Some(2048),
+                size_bytes: Some("2048".to_owned()),
                 primary_action: Some(true),
                 ..Default::default()
             },

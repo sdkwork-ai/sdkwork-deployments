@@ -2121,6 +2121,7 @@
             "AccessToken": []
           }
         ],
+        "x-sdkwork-idempotent": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2176,13 +2177,16 @@
             }
           }
         },
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-idempotent": true
+        "x-sdkwork-auth-mode": "dual-token"
       }
     },
     "/backend/v3/api/tls/orders/{orderId}/challenges": {
@@ -2460,6 +2464,7 @@
             "AccessToken": []
           }
         ],
+        "x-sdkwork-idempotent": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2515,13 +2520,16 @@
             }
           }
         },
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-idempotent": true
+        "x-sdkwork-auth-mode": "dual-token"
       }
     },
     "/backend/v3/api/usage/reconcile": {
@@ -2538,6 +2546,7 @@
             "AccessToken": []
           }
         ],
+        "x-sdkwork-idempotent": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2593,13 +2602,16 @@
             }
           }
         },
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-idempotent": true
+        "x-sdkwork-auth-mode": "dual-token"
       }
     },
     "/backend/v3/api/signing_identity_health": {
@@ -2778,6 +2790,7 @@
             "AccessToken": []
           }
         ],
+        "x-sdkwork-idempotent": true,
         "requestBody": {
           "required": true,
           "content": {
@@ -2844,18 +2857,21 @@
             }
           }
         },
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
+          }
+        ],
         "x-sdkwork-api-surface": "backend-api",
         "x-sdkwork-owner": "sdkwork-deploy",
         "x-sdkwork-api-authority": "sdkwork-deploy-backend-api",
         "x-sdkwork-request-context": "WebRequestContext",
-        "x-sdkwork-auth-mode": "dual-token",
-        "x-sdkwork-idempotent": true
+        "x-sdkwork-auth-mode": "dual-token"
       }
     },
     "/backend/v3/api/apps/factory_reconciliation": {
       "get": {
-        "operationId": "apps.factoryReconciliation",
+        "operationId": "apps.factoryReconciliation.list",
         "summary": "工厂跨模块引用对账",
         "description": "Reconciles the factory's soft cross-module references for the operator's tenant (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md` section 9): whether an application reporting `identity_status = active` has a live IAM installation, whether a completed uninstall left an installation able to issue, whether an installation environment domain is missing from the deploy domain plan, and whether the hosting carrier is 1:1 with the deploy application. Read-only: a dangling reference is reported as `DRIFT`, never silently repaired. Authorities whose tables are not in this database schema are reported under `unavailable` instead of failing the report.",
         "tags": [
@@ -3921,7 +3937,7 @@
         "summary": "List download catalogs",
         "description": "Operator surface for the download page. Every catalog belongs to the caller's tenant.",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -3981,7 +3997,7 @@
         "operationId": "downloadCatalog.retrieve",
         "summary": "Read one download catalog with cards, installers and update configurations",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4038,10 +4054,10 @@
         "x-sdkwork-auth-mode": "dual-token"
       },
       "put": {
-        "operationId": "downloadCatalog.upsert",
+        "operationId": "downloadCatalog.update",
         "summary": "Create or patch a download catalog",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4053,6 +4069,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/DownloadCatalogKeyParam"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
           }
         ],
         "requestBody": {
@@ -4114,7 +4133,7 @@
         "operationId": "downloadCatalog.publish",
         "summary": "Publish a download catalog and bump its revision",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4173,10 +4192,10 @@
     },
     "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}": {
       "put": {
-        "operationId": "downloadCard.upsert",
+        "operationId": "downloadCard.update",
         "summary": "Create or patch one card of a download catalog",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4191,6 +4210,9 @@
           },
           {
             "$ref": "#/components/parameters/DownloadCardKeyParam"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
           }
         ],
         "requestBody": {
@@ -4250,7 +4272,7 @@
         "operationId": "downloadCard.delete",
         "summary": "Delete one card and its installers",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4290,10 +4312,10 @@
     },
     "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}": {
       "put": {
-        "operationId": "downloadItem.upsert",
+        "operationId": "downloadItem.update",
         "summary": "Create or patch one installer of a card",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4311,6 +4333,9 @@
           },
           {
             "$ref": "#/components/parameters/DownloadItemKeyParam"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
           }
         ],
         "requestBody": {
@@ -4370,7 +4395,7 @@
         "operationId": "downloadItem.delete",
         "summary": "Delete one installer and its update configuration",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4413,10 +4438,10 @@
     },
     "/backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update": {
       "put": {
-        "operationId": "downloadUpdate.upsert",
+        "operationId": "downloadUpdate.update",
         "summary": "Create or replace one installer's update configuration",
         "tags": [
-          "downloadCatalog"
+          "downloads"
         ],
         "security": [
           {
@@ -4434,6 +4459,9 @@
           },
           {
             "$ref": "#/components/parameters/DownloadItemKeyParam"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyParam"
           }
         ],
         "requestBody": {
@@ -6868,8 +6896,10 @@
             "description": "`CLEAN` when no dangling reference was found, `DRIFT` when at least one was, `PARTIAL` when every check found nothing but some authority could not be inspected."
           },
           "appsChecked": {
-            "type": "integer",
-            "format": "int64"
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "dangling": {
             "type": "array",
@@ -7143,8 +7173,10 @@
             "additionalProperties": true
           },
           "sizeBytes": {
-            "type": "integer",
-            "format": "int64"
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "checksumSha256": {
             "type": "string"
@@ -7367,8 +7399,10 @@
             ]
           },
           "revision": {
-            "type": "integer",
-            "format": "int64"
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "publishedAt": {
             "type": "string"
@@ -7432,8 +7466,10 @@
             ]
           },
           "revision": {
-            "type": "integer",
-            "format": "int64"
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "publishedAt": {
             "type": "string"

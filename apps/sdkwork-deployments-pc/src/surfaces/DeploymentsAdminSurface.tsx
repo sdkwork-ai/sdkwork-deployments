@@ -1,4 +1,5 @@
-import { createDeploymentsAdminClient, createDeploymentsAdminRegistry, createDeploymentsAppClient, DeploymentsAdminProvider, SourceSpecsAdminPortProvider, type SourceSpecsAdminPort } from "@sdkwork/deployments-pc-admin-core";
+import { createDeploymentsAdminClient, createDeploymentsAdminRegistry, DeploymentsAdminProvider, SourceSpecsAdminPortProvider, type SourceSpecsAdminPort } from "@sdkwork/deployments-pc-admin-core";
+import { createClient as createDeployAppClient } from "@sdkwork/deployments-app-sdk";
 import { LocalProjectsExplorerPortProvider } from "@sdkwork/deployments-pc-admin-local-projects";
 import { DeploymentsAdminShell } from "@sdkwork/deployments-pc-admin-shell";
 import type {
@@ -9,6 +10,20 @@ import type {
 import type { SandboxExplorerPort } from "@sdkwork/drive-pc-sandbox-contracts";
 import type { AuthTokenManager } from "@sdkwork/sdk-common";
 import { useMemo } from "react";
+
+/**
+ * App-plane client hosted by the admin surface.
+ *
+ * `deploy_app` application authoring and app-template listing create/edit exist
+ * on the app API only, so the admin boundary injects the app client next to the
+ * backend one. Construction lives here (the composition root), not in
+ * `@sdkwork/deployments-pc-admin-core`: the backend-admin core must not depend on
+ * the app-api SDK, and it accepts the client through the structural
+ * `DeploymentsAppPlaneClient` port.
+ */
+function createDeploymentsAppClient(appApiBaseUrl: string, tokenManager: AuthTokenManager) {
+  return createDeployAppClient({ baseUrl: appApiBaseUrl, authMode: "dual-token", platform: "pc", tokenManager });
+}
 
 export interface DeploymentsAdminSurfaceProps {
   /**

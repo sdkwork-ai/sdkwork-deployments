@@ -377,7 +377,7 @@
     },
     {
       "method": "POST",
-      "path": "/app/v3/api/domain_zones/{zoneId}/hostname_claims",
+      "path": "/app/v3/api/domain_zones/{zoneId}/hostname_claims/ensure",
       "operationId": "domainZones.hostnameClaims.ensure",
       "tags": [
         "domain"
@@ -1338,7 +1338,7 @@
     {
       "method": "PUT",
       "path": "/app/v3/api/apps/{appId}/source_specs/{specId}/source",
-      "operationId": "apps.sourceSpecs.bindSource",
+      "operationId": "apps.sourceSpecs.source.update",
       "tags": [
         "app"
       ],
@@ -2898,7 +2898,7 @@
     {
       "method": "GET",
       "path": "/app/v3/api/downloads/catalog/{catalogKey}",
-      "operationId": "downloadCatalog.publicRetrieve",
+      "operationId": "downloadCatalog.public.retrieve",
       "tags": [
         "downloads"
       ],

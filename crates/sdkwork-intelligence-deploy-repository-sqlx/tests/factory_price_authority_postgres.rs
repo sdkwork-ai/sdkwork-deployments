@@ -108,7 +108,15 @@ async fn only_a_settled_order_owned_by_the_buyer_for_this_template_certifies() {
     create_commerce_stubs(&pool).await;
 
     insert_order(&pool, "order-paid", BUYER, "paid", "app_template", TEMPLATE).await;
-    insert_order(&pool, "order-pending", BUYER, "pending", "app_template", TEMPLATE).await;
+    insert_order(
+        &pool,
+        "order-pending",
+        BUYER,
+        "pending",
+        "app_template",
+        TEMPLATE,
+    )
+    .await;
     insert_order(
         &pool,
         "order-other-buyer",
@@ -158,6 +166,9 @@ async fn only_a_settled_order_owned_by_the_buyer_for_this_template_certifies() {
     assert!(!results[1], "an unsettled order does not certify");
     assert!(!results[2], "another buyer's order does not certify");
     assert!(!results[3], "a non-app-template order does not certify");
-    assert!(!results[4], "an order for another template does not certify");
+    assert!(
+        !results[4],
+        "an order for another template does not certify"
+    );
     assert!(!results[5], "an unknown order does not certify");
 }

@@ -40,7 +40,7 @@ credential-entry only and accepts the public application access token.
 | app | `apps.source.retrieve` | GET | `/app/v3/api/apps/{appId}/source` | Retrieve the application's remix source |
 | app | `apps.source.update` | PUT | `/app/v3/api/apps/{appId}/source` | Replace the application's remix source |
 | app | `apps.source.validate` | POST | `/app/v3/api/apps/{appId}/source/validate` | Validate the application's Git source repository |
-| app | `apps.sourceSpecs.bindSource` | PUT | `/app/v3/api/apps/{appId}/source_specs/{specId}/source` | Register the uploaded source behind a spec |
+| app | `apps.sourceSpecs.source.update` | PUT | `/app/v3/api/apps/{appId}/source_specs/{specId}/source` | Register the uploaded source behind a spec |
 | app | `apps.sourceSpecs.create` | POST | `/app/v3/api/apps/{appId}/source_specs` | Declare a source spec for an app |
 | app | `apps.sourceSpecs.delete` | DELETE | `/app/v3/api/apps/{appId}/source_specs/{specId}` | Delete a source spec |
 | app | `apps.sourceSpecs.list` | GET | `/app/v3/api/apps/{appId}/source_specs` | List an app's source specs |

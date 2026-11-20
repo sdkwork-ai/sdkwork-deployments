@@ -1244,7 +1244,7 @@
         "x-sdkwork-permission": "deploy.domainZones.write"
       }
     },
-    "/app/v3/api/domain_zones/{zoneId}/hostname_claims": {
+    "/app/v3/api/domain_zones/{zoneId}/hostname_claims/ensure": {
       "parameters": [
         {
           "$ref": "#/components/parameters/DomainZoneIdParam"
@@ -1935,7 +1935,7 @@
             "$ref": "#/components/parameters/PageSizeParam"
           },
           {
-            "name": "dnsProvider",
+            "name": "dns_provider",
             "in": "query",
             "schema": {
               "type": "string",
@@ -1948,7 +1948,7 @@
             "description": "Restrict to accounts that drive this DNS family. This is what the zone and certificate forms send, and what makes the response short enough to be a picker rather than an inventory."
           },
           {
-            "name": "scopeType",
+            "name": "scope_type",
             "in": "query",
             "schema": {
               "type": "string",
@@ -4426,7 +4426,7 @@
       "post": {
         "operationId": "apps.sourceSpecs.create",
         "summary": "Declare a source spec for an app",
-        "description": "Declares a spec without a source. The source is registered afterwards by `apps.sourceSpecs.bindSource`, so the routing shape can be reviewed before anything is uploaded. The spec takes effect when the environment is next composed or published (`apps.composition.update`), which is the moment every other composition change takes effect; declaring it here does not publish on its own.",
+        "description": "Declares a spec without a source. The source is registered afterwards by `apps.sourceSpecs.source.update`, so the routing shape can be reviewed before anything is uploaded. The spec takes effect when the environment is next composed or published (`apps.composition.update`), which is the moment every other composition change takes effect; declaring it here does not publish on its own.",
         "tags": [
           "app"
         ],
@@ -4776,7 +4776,7 @@
         }
       ],
       "put": {
-        "operationId": "apps.sourceSpecs.bindSource",
+        "operationId": "apps.sourceSpecs.source.update",
         "summary": "Register the uploaded source behind a spec",
         "description": "Resolves a Drive directory or knowledgebase wiki through the content provider and stores the resolved reference on the spec, replacing any previous binding. Idempotent by construction: repeating the same call converges on the same provider reference. The binding takes effect at the next compose or publish.",
         "tags": [
@@ -10551,7 +10551,7 @@
     },
     "/app/v3/api/downloads/catalog/{catalogKey}": {
       "get": {
-        "operationId": "downloadCatalog.publicRetrieve",
+        "operationId": "downloadCatalog.public.retrieve",
         "summary": "Published download catalog rendered by the download page",
         "description": "Anonymous surface: only PUBLISHED catalogs are reachable, hidden cards and disabled installers are omitted, and no tenant identifier is returned.",
         "tags": [
@@ -17716,8 +17716,10 @@
             "type": "string"
           },
           "sizeBytes": {
-            "type": "integer",
-            "format": "int64"
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true
           },
           "sha256": {
             "type": "string"

@@ -687,7 +687,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-  /app/v3/api/domain_zones/{zoneId}/hostname_claims:
+  "/app/v3/api/domain_zones/{zoneId}/hostname_claims/ensure":
     parameters:
     - $ref: '#/components/parameters/DomainZoneIdParam'
     post:
@@ -1107,7 +1107,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/PageParam'
       - $ref: '#/components/parameters/PageSizeParam'
-      - name: dnsProvider
+      - name: dns_provider
         in: query
         schema:
           type: string
@@ -1119,7 +1119,7 @@ paths:
           Restrict to accounts that drive this DNS family. This is what the zone and
           certificate forms send, and what makes the response short enough to be a
           picker rather than an inventory.
-      - name: scopeType
+      - name: scope_type
         in: query
         schema:
           type: string
@@ -2502,7 +2502,7 @@ paths:
       summary: Declare a source spec for an app
       description: >-
         Declares a spec without a source. The source is registered afterwards by
-        `apps.sourceSpecs.bindSource`, so the routing shape can be reviewed
+        `apps.sourceSpecs.source.update`, so the routing shape can be reviewed
         before anything is uploaded. The spec takes effect when the environment
         is next composed or published (`apps.composition.update`), which is the
         moment every other composition change takes effect; declaring it here
@@ -2709,7 +2709,7 @@ paths:
         type: string
         format: uuid
     put:
-      operationId: apps.sourceSpecs.bindSource
+      operationId: apps.sourceSpecs.source.update
       summary: Register the uploaded source behind a spec
       description: >-
         Resolves a Drive directory or knowledgebase wiki through the content
@@ -5983,7 +5983,7 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/downloads/catalog/{catalogKey}:
     get:
-      operationId: downloadCatalog.publicRetrieve
+      operationId: downloadCatalog.public.retrieve
       summary: Published download catalog rendered by the download page
       description: 'Anonymous surface: only PUBLISHED catalogs are reachable, hidden cards and disabled installers are omitted, and no tenant identifier is returned.'
       tags:
@@ -11671,8 +11671,10 @@ components:
         releaseTag:
           type: string
         sizeBytes:
-          type: integer
+          type: string
           format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
         sha256:
           type: string
         primary:

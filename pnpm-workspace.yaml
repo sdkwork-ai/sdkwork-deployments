@@ -21,9 +21,13 @@ packages:
   - "../sdkwork-iam/apps/sdkwork-iam-common/packages/sdkwork-iam-credential-entry"
   - "../sdkwork-iam/apps/sdkwork-iam-pc/packages/sdkwork-user-center-core-pc-react"
   - "../sdkwork-appbase/packages/common/foundation/sdkwork-runtime-bootstrap"
+  - "../sdkwork-appbase/packages/common/foundation/sdkwork-appbase-component-core"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-appbase-pc-react"
   - "../sdkwork-appbase/packages/pc-react/foundation/sdkwork-i18n-pc-react"
+  - "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-appbase-mobile-react"
+  - "../sdkwork-appbase/packages/mobile-react/foundation/sdkwork-shell-mobile-react"
   - "../sdkwork-appbase/sdks/sdkwork-base-data-backend-sdk/sdkwork-base-data-backend-sdk-typescript"
+  - "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
   - "../sdkwork-core/sdkwork-core-pc-react"
   - "../sdkwork-ui/sdkwork-ui-pc-react"
   - "../sdkwork-sdk-commons/sdkwork-sdk-common-typescript"
@@ -35,7 +39,6 @@ packages:
   - "../sdkwork-drive/sdks/sdkwork-drive-app-sdk/sdkwork-drive-app-sdk-typescript"
   - "../sdkwork-drive/apps/sdkwork-drive-common/packages/sdkwork-drive-upload-image-core"
   - "../sdkwork-drive/apps/sdkwork-drive-pc/packages/sdkwork-drive-pc-upload-image"
-  - "../sdkwork-order/sdks/sdkwork-order-app-sdk/sdkwork-order-app-sdk-typescript"
 
 catalog:
   "@tailwindcss/vite": ^4.3.3

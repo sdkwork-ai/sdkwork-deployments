@@ -1203,6 +1203,7 @@ paths:
       - AuthToken: []
         AccessToken: []
       x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
       requestBody:
         required: true
         content:
@@ -1234,7 +1235,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-      parameters: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
   /backend/v3/api/tls/orders/{orderId}/challenges:
     parameters:
     - name: orderId
@@ -1402,6 +1404,7 @@ paths:
       - AuthToken: []
         AccessToken: []
       x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
       requestBody:
         required: true
         content:
@@ -1433,7 +1436,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-      parameters: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
   /backend/v3/api/usage/reconcile:
     post:
       operationId: create
@@ -1448,6 +1452,7 @@ paths:
       - AuthToken: []
         AccessToken: []
       x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
       requestBody:
         required: true
         content:
@@ -1479,7 +1484,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-      parameters: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
   /backend/v3/api/signing_identity_health:
     get:
       operationId: signingIdentityHealth.list
@@ -1593,6 +1599,7 @@ paths:
       - AuthToken: []
         AccessToken: []
       x-sdkwork-permission: false
+      x-sdkwork-idempotent: true
       requestBody:
         required: true
         content:
@@ -1632,10 +1639,11 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
-      parameters: []
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
   /backend/v3/api/apps/factory_reconciliation:
     get:
-      operationId: apps.factoryReconciliation
+      operationId: apps.factoryReconciliation.list
       summary: 工厂跨模块引用对账
       description: >-
         Reconciles the factory's soft cross-module references for the operator's
@@ -2238,7 +2246,7 @@ paths:
       summary: List download catalogs
       description: 'Operator surface for the download page. Every catalog belongs to the caller''s tenant.'
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2270,7 +2278,7 @@ paths:
       operationId: downloadCatalog.retrieve
       summary: Read one download catalog with cards, installers and update configurations
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2298,10 +2306,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
     put:
-      operationId: downloadCatalog.upsert
+      operationId: downloadCatalog.update
       summary: Create or patch a download catalog
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2309,6 +2317,7 @@ paths:
       x-sdkwork-idempotent: true
       parameters:
       - $ref: '#/components/parameters/DownloadCatalogKeyParam'
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
       requestBody:
         required: true
         content:
@@ -2340,7 +2349,7 @@ paths:
       operationId: downloadCatalog.publish
       summary: Publish a download catalog and bump its revision
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2369,10 +2378,10 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
   /backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}:
     put:
-      operationId: downloadCard.upsert
+      operationId: downloadCard.update
       summary: Create or patch one card of a download catalog
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2381,6 +2390,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/DownloadCatalogKeyParam'
       - $ref: '#/components/parameters/DownloadCardKeyParam'
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
       requestBody:
         required: true
         content:
@@ -2411,7 +2421,7 @@ paths:
       operationId: downloadCard.delete
       summary: Delete one card and its installers
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2430,10 +2440,10 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
   /backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}:
     put:
-      operationId: downloadItem.upsert
+      operationId: downloadItem.update
       summary: Create or patch one installer of a card
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2443,6 +2453,7 @@ paths:
       - $ref: '#/components/parameters/DownloadCatalogKeyParam'
       - $ref: '#/components/parameters/DownloadCardKeyParam'
       - $ref: '#/components/parameters/DownloadItemKeyParam'
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
       requestBody:
         required: true
         content:
@@ -2473,7 +2484,7 @@ paths:
       operationId: downloadItem.delete
       summary: Delete one installer and its update configuration
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2493,10 +2504,10 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
   /backend/v3/api/downloads/catalogs/{catalogKey}/cards/{cardKey}/items/{itemKey}/update:
     put:
-      operationId: downloadUpdate.upsert
+      operationId: downloadUpdate.update
       summary: Create or replace one installer's update configuration
       tags:
-      - downloadCatalog
+      - downloads
       security:
       - AuthToken: []
         AccessToken: []
@@ -2506,6 +2517,7 @@ paths:
       - $ref: '#/components/parameters/DownloadCatalogKeyParam'
       - $ref: '#/components/parameters/DownloadCardKeyParam'
       - $ref: '#/components/parameters/DownloadItemKeyParam'
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
       requestBody:
         required: true
         content:
@@ -4316,8 +4328,10 @@ components:
             one was, `PARTIAL` when every check found nothing but some authority
             could not be inspected.
         appsChecked:
-          type: integer
+          type: string
           format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
         dangling:
           type: array
           items:
@@ -4518,8 +4532,10 @@ components:
           type: object
           additionalProperties: true
         sizeBytes:
-          type: integer
+          type: string
           format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
         checksumSha256:
           type: string
         primaryAction:
@@ -4677,8 +4693,10 @@ components:
           - PUBLISHED
           - ARCHIVED
         revision:
-          type: integer
+          type: string
           format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
         publishedAt:
           type: string
         updatedAt:
@@ -4725,8 +4743,10 @@ components:
           - PUBLISHED
           - ARCHIVED
         revision:
-          type: integer
+          type: string
           format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
         publishedAt:
           type: string
         createdAt:
