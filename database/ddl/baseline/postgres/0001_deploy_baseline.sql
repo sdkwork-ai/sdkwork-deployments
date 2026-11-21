@@ -3503,3 +3503,83 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_application_resource_link_default
 
 CREATE INDEX IF NOT EXISTS idx_deploy_application_resource_link_app
     ON deploy_application_resource_link (tenant_id, app_id, env_key, resource_kind, deleted_at, id);
+
+-- folded migration: migrations/postgres/0011_deploy_app_remix_source.up.sql
+
+BEGIN;
+ALTER TABLE deploy_app
+    ADD COLUMN IF NOT EXISTS remix_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_deploy_app_remix_enabled
+    ON deploy_app (tenant_id)
+    WHERE remix_enabled AND deleted_at IS NULL;
+CREATE TABLE IF NOT EXISTS deploy_app_source (
+    id                  BIGINT       NOT NULL,
+    uuid                VARCHAR(36)  NOT NULL,
+    tenant_id           BIGINT       NOT NULL,
+    organization_id     BIGINT       NOT NULL DEFAULT 0,
+    app_id              BIGINT       NOT NULL,
+    source_kind         VARCHAR(16)  NOT NULL,
+    git_repository_id   BIGINT,
+    archive_artifact_id BIGINT,
+    source_ref          VARCHAR(255),
+    sub_path            VARCHAR(1000),
+    created_by          BIGINT,
+    updated_by          BIGINT,
+    created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    deleted_at          TIMESTAMPTZ,
+    version             BIGINT       NOT NULL DEFAULT 1,
+    CONSTRAINT pk_deploy_app_source PRIMARY KEY (id),
+    CONSTRAINT fk_deploy_app_source_app
+        FOREIGN KEY (app_id) REFERENCES deploy_app(id),
+    CONSTRAINT fk_deploy_app_source_git_repository
+        FOREIGN KEY (git_repository_id) REFERENCES deploy_source_repository(id),
+    CONSTRAINT fk_deploy_app_source_archive_artifact
+        FOREIGN KEY (archive_artifact_id) REFERENCES deploy_artifact(id),
+    CONSTRAINT chk_deploy_app_source_kind
+        CHECK (source_kind IN ('GIT', 'ARCHIVE')),
+    CONSTRAINT chk_deploy_app_source_pointer CHECK (
+        (source_kind = 'GIT' AND git_repository_id IS NOT NULL AND archive_artifact_id IS NULL)
+        OR (source_kind = 'ARCHIVE' AND archive_artifact_id IS NOT NULL AND git_repository_id IS NULL)
+    ),
+    CONSTRAINT chk_deploy_app_source_git_scope CHECK (
+        source_kind = 'GIT'
+        OR (source_ref IS NULL AND sub_path IS NULL)
+    ),
+    CONSTRAINT chk_deploy_app_source_source_ref CHECK (
+        source_ref IS NULL OR char_length(source_ref) BETWEEN 1 AND 255
+    ),
+    CONSTRAINT chk_deploy_app_source_sub_path CHECK (
+        sub_path IS NULL
+        OR (
+            char_length(sub_path) BETWEEN 1 AND 1000
+            AND sub_path !~ '^/'
+            AND sub_path !~ '//'
+            AND sub_path !~ '(^|/)\.\.?(/|$)'
+            AND sub_path ~ '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
+        )
+    )
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_source_uuid
+    ON deploy_app_source (uuid);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_app_source_app
+    ON deploy_app_source (app_id)
+    WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_deploy_app_source_git_repository
+    ON deploy_app_source (git_repository_id)
+    WHERE git_repository_id IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_deploy_app_source_archive_artifact
+    ON deploy_app_source (archive_artifact_id)
+    WHERE archive_artifact_id IS NOT NULL AND deleted_at IS NULL;
+COMMENT ON COLUMN deploy_app.remix_enabled IS
+    '应用是否支持 remix；开启要求源码就绪（deploy_app_source 的 READY 判定）';
+COMMENT ON TABLE deploy_app_source IS
+    '应用 remix 源码（每个应用至多一行）：GIT 仓库（可指定仓库内子目录）或已上传压缩包制品';
+COMMENT ON COLUMN deploy_app_source.sub_path IS
+    '仓库内源码目录（相对路径，NULL 为仓库根）；规范化存储，禁止绝对路径与 .. 穿越';
+COMMENT ON COLUMN deploy_app_source.source_ref IS
+    '下载用的分支/标签/提交；NULL 表示使用仓库默认分支';
+COMMENT ON COLUMN deploy_app_source.source_kind IS
+    'GIT：git_repository_id 必填；ARCHIVE：archive_artifact_id 必填';
+COMMIT;
+
