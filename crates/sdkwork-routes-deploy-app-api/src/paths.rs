@@ -107,6 +107,17 @@ pub const APP_BUILD_STATE: &str = "/app/v3/api/apps/{appId}/builds/{buildId}/sta
 pub const APP_PACKAGES: &str = "/app/v3/api/apps/{appId}/packages";
 pub const APP_PACKAGE: &str = "/app/v3/api/apps/{appId}/packages/{packageId}";
 pub const APP_RELEASES: &str = "/app/v3/api/apps/{appId}/releases";
+/// Channel (WeChat mini program / official account) release records.
+pub const APP_CHANNEL_RELEASES: &str = "/app/v3/api/apps/{appId}/channel_releases";
+/// One channel release record.
+pub const APP_CHANNEL_RELEASE: &str =
+    "/app/v3/api/apps/{appId}/channel_releases/{channelReleaseId}";
+/// Publish command (upload / submit / release / rollback / gray).
+pub const APP_CHANNEL_RELEASE_PUBLISH_COMMANDS: &str =
+    "/app/v3/api/apps/{appId}/channel_releases/{channelReleaseId}/publish_commands";
+/// Direct-mode upload planning (self-managed `miniprogram-ci`).
+pub const APP_CHANNEL_DIRECT_UPLOAD_PLANS: &str =
+    "/app/v3/api/apps/{appId}/channel_direct_upload_plans";
 pub const APP_RELEASE: &str = "/app/v3/api/apps/{appId}/releases/{releaseId}";
 pub const APP_CHANNELS: &str = "/app/v3/api/apps/{appId}/channels";
 pub const APP_CHANNEL: &str = "/app/v3/api/apps/{appId}/channels/{channelId}";

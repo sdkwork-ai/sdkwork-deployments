@@ -49,6 +49,87 @@ class ReleaseApi {
     })();
   }
 
+  /// List WeChat channel release records
+  Future<ChannelReleasesListResponse?> channelReleasesList(String appId, [int? page, int? pageSize, String? environment]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null),
+      QueryParameterSpec('environment', environment, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channel_releases'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ChannelReleasesListResponse.fromJson(map);
+    })();
+  }
+
+  /// Create a draft WeChat channel release record
+  Future<ChannelReleasesCreateResponse201?> channelReleasesCreate(String appId, CreateChannelReleaseRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channel_releases'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ChannelReleasesCreateResponse201.fromJson(map);
+    })();
+  }
+
+  /// Retrieve one WeChat channel release record
+  Future<ChannelReleasesRetrieveResponse?> channelReleasesRetrieve(String appId, String channelReleaseId) async {
+    final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channel_releases/${serializePathParameter(channelReleaseId, const PathParameterSpec('channelReleaseId', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ChannelReleasesRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Advance one WeChat channel release to a new observed state
+  Future<ChannelReleasesUpdateResponse?> channelReleasesUpdate(String appId, String channelReleaseId, TransitionChannelReleaseRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.patch(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channel_releases/${serializePathParameter(channelReleaseId, const PathParameterSpec('channelReleaseId', 'simple', false))}'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ChannelReleasesUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// Run one WeChat channel publish step
+  Future<ChannelReleasesPublishCommandsCreateResponse201?> channelReleasesPublishCommandsCreate(String appId, String channelReleaseId, ChannelReleasePublishCommandRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channel_releases/${serializePathParameter(channelReleaseId, const PathParameterSpec('channelReleaseId', 'simple', false))}/publish_commands'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ChannelReleasesPublishCommandsCreateResponse201.fromJson(map);
+    })();
+  }
+
+  /// Plan a direct-mode miniprogram-ci upload
+  Future<ChannelDirectUploadPlansCreateResponse201?> channelDirectUploadPlansCreate(String appId, CreateChannelDirectUploadPlanRequest body, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channel_direct_upload_plans'), body: payload, headers: requestHeaders, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : ChannelDirectUploadPlansCreateResponse201.fromJson(map);
+    })();
+  }
+
   /// List release channels of an app
   Future<ChannelsListResponse?> channelsList(String appId) async {
     final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/channels'));

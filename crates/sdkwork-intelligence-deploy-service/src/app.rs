@@ -1901,6 +1901,126 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn list_channel_releases(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        environment: Option<&str>,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleasePage> {
+        let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
+        if let Some(environment) = environment {
+            if !matches!(
+                environment,
+                "development" | "test" | "staging" | "demo" | "production"
+            ) {
+                return Err(DeployServiceError::validation(
+                    "environment must be development, test, staging, demo, or production",
+                ));
+            }
+        }
+        self.repository
+            .list_channel_releases(tenant_id, app_id, environment, page, page_size)
+            .await
+    }
+
+    async fn retrieve_channel_release(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        release_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
+        self.repository
+            .retrieve_channel_release(tenant_id, app_id, release_id)
+            .await
+    }
+
+    async fn create_channel_release(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::CreateChannelReleaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
+        if !matches!(
+            request.environment.as_str(),
+            "development" | "test" | "staging" | "demo" | "production"
+        ) {
+            return Err(DeployServiceError::validation(
+                "environment must be development, test, staging, demo, or production",
+            ));
+        }
+        self.enforce_entitlement(
+            tenant_id,
+            sdkwork_deploy_contract::ENTITLEMENT_DIMENSION_CHANNEL_RELEASE_COUNT,
+        )
+        .await?;
+        let release = self
+            .repository
+            .create_channel_release(tenant_id, context.actor_id, app_id, request)
+            .await?;
+        self.audit_app_action(context, "channel_release.create", &release.id)
+            .await?;
+        // The release id is the dedup key, so an idempotent replay never
+        // over-counts the publish operation.
+        self.record_usage(crate::repository::InsertUsageEventCommand {
+            tenant_id: context.tenant_id,
+            organization_id: context.organization_id.unwrap_or(0),
+            app_id: None,
+            binding_id: None,
+            attribution: None,
+            period_start: Self::billing_period_start(None),
+            dimension: sdkwork_deploy_contract::USAGE_DIMENSION_CHANNEL_RELEASE_COUNT.to_owned(),
+            quantity: 1,
+            unit: "COUNT".to_owned(),
+            source_target_uuid: Some(release.app_id.clone()),
+            source_window_id: Some(format!("channel_release:{}", release.id)),
+            deduplication_key: format!("channel_release:{}", release.id),
+        })
+        .await;
+        Ok(release)
+    }
+
+    async fn transition_channel_release(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        release_id: &str,
+        request: &sdkwork_deploy_contract::TransitionChannelReleaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        let tenant_id = Self::tenant_id(context)?;
+        self.assert_app_access(context, tenant_id, app_id).await?;
+        self.repository
+            .transition_channel_release(tenant_id, app_id, release_id, request)
+            .await
+    }
+
+    async fn publish_channel_release(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        release_id: &str,
+        request: &sdkwork_deploy_contract::ChannelReleasePublishCommandRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        self.publish_channel_release(context, app_id, release_id, request)
+            .await
+    }
+
+    async fn plan_channel_direct_upload(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::CreateChannelDirectUploadPlanRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelDirectUploadPlan> {
+        self.plan_channel_direct_upload(context, app_id, request)
+            .await
+    }
+
     async fn retrieve_app_release(
         &self,
         context: &DeployAppRequestContext,

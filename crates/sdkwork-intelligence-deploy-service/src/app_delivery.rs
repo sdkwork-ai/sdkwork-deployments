@@ -135,6 +135,48 @@ fn identity_application_type(app_kind: &str) -> String {
     application_type.to_owned()
 }
 
+/// Guards one `apps.update` kind correction.
+///
+/// The endpoint kind owns its token audience, package formats, and store
+/// identity, so a released application must never change it; the correction is
+/// limited to a draft the operator has not published yet. The legacy `SPA_WEB`
+/// value is refused because a new assignment must name the endpoint
+/// (`H5_WEB`/`PC_WEB`), while `STATIC_WEB` stays valid for a static content site.
+fn validate_app_kind_correction(
+    current_kind: &str,
+    current_status: &str,
+    platform_targets: i64,
+    releases: i64,
+    requested: AppKind,
+) -> DeployServiceResult<()> {
+    if current_kind.trim().eq_ignore_ascii_case(requested.as_str()) {
+        return Ok(());
+    }
+    if matches!(requested, AppKind::SpaWeb) {
+        return Err(DeployServiceError::validation(
+            "SPA_WEB is a legacy kind and cannot be assigned; choose H5_WEB or PC_WEB",
+        ));
+    }
+    if !current_status.trim().eq_ignore_ascii_case("DRAFT") {
+        return Err(DeployServiceError::conflict(format!(
+            "the endpoint kind can only be corrected while the application is DRAFT; it is {}",
+            current_status.trim()
+        )));
+    }
+    if platform_targets > 0 {
+        return Err(DeployServiceError::conflict(format!(
+            "the application records {platform_targets} platform target(s); a different endpoint \
+             kind is a new application once a platform target exists"
+        )));
+    }
+    if releases > 0 {
+        return Err(DeployServiceError::conflict(format!(
+            "the application has {releases} release(s); a released endpoint kind is immutable"
+        )));
+    }
+    Ok(())
+}
+
 impl DeployService {
     pub(crate) fn tenant_id(context: &DeployAppRequestContext) -> DeployServiceResult<i64> {
         if context.tenant_id <= 0 {
@@ -167,7 +209,7 @@ impl DeployService {
     /// Emits a usage fact without blocking the primary operation: metering
     /// failures are logged and swallowed (TECH §4.6 fire-and-warn semantics).
     /// The deduplication key makes retried flows idempotent per fact.
-    async fn record_usage(&self, command: InsertUsageEventCommand) {
+    pub(crate) async fn record_usage(&self, command: InsertUsageEventCommand) {
         if let Err(error) = self.repository.insert_usage_event(&command).await {
             tracing::warn!(
                 "usage metering skipped tenant={} dimension={}: {error}",
@@ -179,7 +221,7 @@ impl DeployService {
 
     /// UTC month-start used as the metering period boundary; falls back to
     /// the current month when the source timestamp is missing or malformed.
-    fn billing_period_start(at: Option<&str>) -> String {
+    pub(crate) fn billing_period_start(at: Option<&str>) -> String {
         use chrono::Datelike;
         let instant = at
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
@@ -301,11 +343,32 @@ impl DeployService {
         tenant_id: i64,
         app_id: &str,
     ) -> DeployServiceResult<String> {
+        self.provision_app_identity_status(tenant_id, app_id, false)
+            .await
+    }
+
+    /// The same provisioning call, optionally re-running for an already `active`
+    /// row.
+    ///
+    /// A corrected `app_kind` must reach IAM, because the installation's
+    /// `application_type` is the endpoint IAM resolves and the same provisioning
+    /// key updates that row in place. The normal `apps.identityProvision` command
+    /// short-circuits `active` rows (a second installation is the failure it
+    /// prevents), so the correction passes `force = true`; the row is otherwise
+    /// reconciled by exactly the same code path.
+    async fn provision_app_identity_status(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        force: bool,
+    ) -> DeployServiceResult<String> {
         let status_before = self
             .repository
             .retrieve_app_identity_status(tenant_id, app_id)
             .await?;
-        if identity_provisioning_action(&status_before) == IdentityProvisioningAction::AlreadyActive
+        if !force
+            && identity_provisioning_action(&status_before)
+                == IdentityProvisioningAction::AlreadyActive
         {
             return Ok(IDENTITY_STATUS_ACTIVE.to_owned());
         }
@@ -424,6 +487,31 @@ impl DeployService {
         // this is a rename rather than an addition.
         let domain_config_changed =
             request.app_domain_label.is_some() || request.app_domain_suffixes.is_some();
+        // A kind correction is a guarded maintenance path, not a rename: the
+        // endpoint identity belongs to the kind, so only a never-published draft
+        // may take a different one.
+        let requested_kind = request.app_kind;
+        let kind_changes = requested_kind
+            .is_some_and(|kind| !current.app_kind.trim().eq_ignore_ascii_case(kind.as_str()));
+        if let Some(kind) = requested_kind {
+            if kind_changes {
+                let targets = self
+                    .repository
+                    .list_platform_targets(tenant_id, app_id)
+                    .await?;
+                let releases = self
+                    .repository
+                    .list_app_releases(tenant_id, app_id, 1, 1)
+                    .await?;
+                validate_app_kind_correction(
+                    &current.app_kind,
+                    &current.app_status,
+                    targets.total,
+                    releases.total,
+                    kind,
+                )?;
+            }
+        }
         let app = self
             .repository
             .update_app(
@@ -438,8 +526,18 @@ impl DeployService {
             self.provision_app_default_domains_all_environments(context, &app.id)
                 .await?;
         }
-        self.audit_app_action(context, "app.update", &app.id)
-            .await?;
+        if kind_changes {
+            // IAM stores the endpoint as `application_type`; re-provisioning the
+            // same anchor updates that row in place, so the corrected kind cannot
+            // leave login/cashier resolving the old endpoint.
+            self.provision_app_identity_status(tenant_id, &app.id, true)
+                .await?;
+            self.audit_app_action(context, "app.kind_correct", &app.id)
+                .await?;
+        } else {
+            self.audit_app_action(context, "app.update", &app.id)
+                .await?;
+        }
         Ok(app)
     }
 
@@ -1579,6 +1677,56 @@ mod usage_metering_tests {
         // Malformed input behaves like missing input.
         let fallback = period_start(Some("not-a-date"));
         assert_eq!(fallback, period);
+    }
+}
+
+#[cfg(test)]
+mod kind_correction_tests {
+    use sdkwork_deploy_contract::AppKind;
+
+    use super::validate_app_kind_correction;
+
+    #[test]
+    fn a_draft_without_releases_or_targets_may_be_corrected() {
+        assert!(
+            validate_app_kind_correction("API_SERVICE", "DRAFT", 0, 0, AppKind::FlutterApp).is_ok()
+        );
+        assert!(validate_app_kind_correction(
+            "WECHAT_MINIPROGRAM",
+            "DRAFT",
+            0,
+            0,
+            AppKind::HarmonyosApp
+        )
+        .is_ok());
+        // Idempotent: naming the stored kind is not a correction.
+        assert!(
+            validate_app_kind_correction("FLUTTER_APP", "ACTIVE", 3, 2, AppKind::FlutterApp)
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn a_released_or_legacy_kind_is_refused() {
+        assert!(
+            validate_app_kind_correction("API_SERVICE", "ACTIVE", 0, 0, AppKind::FlutterApp)
+                .is_err()
+        );
+        assert!(
+            validate_app_kind_correction("API_SERVICE", "DRAFT", 1, 0, AppKind::FlutterApp)
+                .is_err()
+        );
+        assert!(
+            validate_app_kind_correction("API_SERVICE", "DRAFT", 0, 2, AppKind::FlutterApp)
+                .is_err()
+        );
+        assert!(
+            validate_app_kind_correction("API_SERVICE", "DRAFT", 0, 0, AppKind::SpaWeb).is_err()
+        );
+        // STATIC_WEB is a valid static-content kind, not a legacy refusal.
+        assert!(
+            validate_app_kind_correction("API_SERVICE", "DRAFT", 0, 0, AppKind::StaticWeb).is_ok()
+        );
     }
 }
 

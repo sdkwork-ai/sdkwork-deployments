@@ -269,6 +269,8 @@ impl ChannelReleaseStore for DeployRepository {
         release_id: &str,
         expected_version: i64,
         next: ChannelReleaseStatus,
+        commit_id: Option<&str>,
+        audit_id: Option<&str>,
         detail: Option<&str>,
     ) -> DeployServiceResult<()> {
         self.transition_channel_release_repo(
@@ -276,11 +278,39 @@ impl ChannelReleaseStore for DeployRepository {
             release_id,
             expected_version,
             next,
-            None,
-            None,
+            commit_id,
+            audit_id,
             detail,
         )
         .await?;
+        Ok(())
+    }
+
+    async fn set_channel_release_gray_percentage(
+        &self,
+        tenant_id: i64,
+        release_id: &str,
+        gray_percentage: u16,
+    ) -> DeployServiceResult<()> {
+        let percentage = i16::try_from(gray_percentage).unwrap_or(100).clamp(0, 100);
+        let result = sqlx::query(
+            "UPDATE deploy_channel_release SET \
+                gray_percentage = $3, \
+                updated_at = NOW(), \
+                version = version + 1 \
+             WHERE tenant_id = $1 AND id = $2 AND release_status = 'RELEASED'",
+        )
+        .bind(tenant_id)
+        .bind(release_id)
+        .bind(percentage)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("set channel release gray percentage", error))?;
+        if result.rows_affected() == 0 {
+            return Err(DeployServiceError::conflict(
+                "channel release is not released; a gray rollout requires RELEASED",
+            ));
+        }
         Ok(())
     }
 }

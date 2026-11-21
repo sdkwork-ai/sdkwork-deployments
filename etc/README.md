@@ -49,6 +49,29 @@ material comes from the deployment platform or a protected operating-system secr
 `SDKWORK_NODE_INSTANCE_ID` is runtime instance identity and is never hardcoded in a source profile;
 the process supervisor or orchestrator must inject a unique value for each production process.
 
+## WeChat Channel Publishing
+
+Deploy executes WeChat channel steps through two independent, optional adapters. Each fails
+closed when its configuration is absent, so a publish command reports "not configured" instead
+of a fake release.
+
+| Variable | Purpose |
+| --- | --- |
+| `SDKWORK_DEPLOY_IAM_CAPABILITY_BASE_URL` | IAM backend base URL used for `capability_invocations`. |
+| `SDKWORK_DEPLOY_IAM_CAPABILITY_BEARER` | Service bearer accepted by the IAM backend API. Supply it from a protected secret file or the orchestrator secret store; it is never logged. |
+| `SDKWORK_DEPLOY_CI_PROJECT_ROOT` | Only project directories under this root may be uploaded in direct (`self_managed`) mode. |
+| `SDKWORK_DEPLOY_CI_KEY_ROOT` | Only upload private keys under this root may be used; Deploy records the path, never the key content. |
+
+Rules:
+
+- Component/authorized publishing (`upload`, `submit_audit`, `release`, `rollback`, `gray`,
+  `modify_domains`, `set_privacy`) needs both IAM variables.
+- Direct (`self_managed`) publishing needs both CI roots. Only `upload` is executed; review,
+  release, and account configuration stay in the WeChat admin console and are recorded through
+  release transitions.
+- Missing configuration makes the corresponding publish commands return `409` and logs one
+  `info` line per unconfigured adapter at startup.
+
 ## Verification
 
 ```powershell

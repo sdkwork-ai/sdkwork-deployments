@@ -27,9 +27,12 @@ use sdkwork_deploy_web_port::{
 };
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{
-    AccountBackedDns01PresenterResolver, BoundedGitRepositoryProbe,
-    CertificateAuthorityAuthorizationPort, CertificateDns01PresenterPort, DeployRepositoryPort,
-    DeployRuntimeAssignmentRepositoryPort, DeployService, RuntimePublicationService,
+    AccountBackedDns01PresenterResolver, BoundedChannelCiRunner, BoundedGitRepositoryProbe,
+    CertificateAuthorityAuthorizationPort, CertificateDns01PresenterPort, ChannelCiRunner,
+    ChannelReleaseProvider, DeployRepositoryPort, DeployRuntimeAssignmentRepositoryPort,
+    DeployService, DirectUploadPolicy, IamChannelCapabilityChannelReleaseProvider,
+    IamChannelCapabilityClient, ReqwestChannelCapabilityTransport, RuntimePublicationService,
+    StaticChannelCapabilityBearerAuth, TokioChannelCiProcess,
     UnconfiguredCertificateAuthorityAuthorization, UnconfiguredCertificateDns01Presenter,
 };
 
@@ -301,6 +304,54 @@ fn certificate_material_key_from_env() -> Result<Option<Arc<dyn MaterialKeyProvi
     }
 }
 
+/// Builds the WeChat channel provider from the IAM capability client when both
+/// the endpoint and the service bearer are configured.
+fn channel_release_provider_from_env() -> Result<Option<Arc<dyn ChannelReleaseProvider>>, String> {
+    let base = std::env::var("SDKWORK_DEPLOY_IAM_CAPABILITY_BASE_URL").unwrap_or_default();
+    let bearer = std::env::var("SDKWORK_DEPLOY_IAM_CAPABILITY_BEARER").unwrap_or_default();
+    if base.trim().is_empty() || bearer.trim().is_empty() {
+        tracing::info!(
+            "WeChat channel provider is not configured; publish commands will fail closed"
+        );
+        return Ok(None);
+    }
+    let transport = ReqwestChannelCapabilityTransport::new()
+        .map_err(|error| format!("build channel capability transport failed: {error}"))?;
+    let client = IamChannelCapabilityClient::new(
+        base.trim(),
+        Arc::new(StaticChannelCapabilityBearerAuth::new(bearer.trim())),
+        Arc::new(transport),
+    );
+    tracing::info!("WeChat channel provider configured through IAM capability invocations");
+    Ok(Some(Arc::new(
+        IamChannelCapabilityChannelReleaseProvider::new(client),
+    )))
+}
+
+/// Builds the direct-mode CI runner when both sandbox roots are configured.
+fn channel_ci_runner_from_env() -> Result<Option<Arc<dyn ChannelCiRunner>>, String> {
+    let project_root = std::env::var("SDKWORK_DEPLOY_CI_PROJECT_ROOT").unwrap_or_default();
+    let key_root = std::env::var("SDKWORK_DEPLOY_CI_KEY_ROOT").unwrap_or_default();
+    if project_root.trim().is_empty() || key_root.trim().is_empty() {
+        tracing::info!(
+            "direct-mode channel upload is not configured; self-managed publish commands fail closed"
+        );
+        return Ok(None);
+    }
+    for (label, path) in [("project root", &project_root), ("key root", &key_root)] {
+        let canonical = std::fs::canonicalize(path.trim())
+            .map_err(|error| format!("{label} {path} is not readable: {error}"))?;
+        if !canonical.is_dir() {
+            return Err(format!("{label} {path} is not a directory"));
+        }
+    }
+    tracing::info!("direct-mode channel upload configured");
+    Ok(Some(Arc::new(BoundedChannelCiRunner::new(
+        TokioChannelCiProcess::new(),
+        DirectUploadPolicy::new(project_root.trim(), key_root.trim()),
+    ))))
+}
+
 fn warn_certificate_material_unavailable(reason: &str) {
     tracing::warn!(
         reason,
@@ -372,6 +423,16 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     )
     .with_certificate_caa_authorization(certificate_caa_from_env()?)
     .with_cloud_accounts(cloud_accounts.clone());
+    // WeChat channel publishing runs through IAM capability invocations. Both
+    // values are optional: an installation without them keeps the fail-closed
+    // provider, so a publish command reports "not configured" instead of
+    // pretending a release happened.
+    if let Some(provider) = channel_release_provider_from_env()? {
+        service = service.with_channel_release_provider(provider);
+    }
+    if let Some(runner) = channel_ci_runner_from_env()? {
+        service = service.with_channel_ci_runner(runner);
+    }
     // Creating an application also mints its IAM installation (migration 0008).
     // The port is built from the environment once, at startup: a split
     // deployment that names an unusable endpoint or credential must fail here

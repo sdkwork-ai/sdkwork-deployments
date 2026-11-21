@@ -52,7 +52,8 @@ use sdkwork_intelligence_deploy_service::runtime_publication::{
 use sdkwork_intelligence_deploy_service::VerificationFileRecord;
 use sdkwork_intelligence_deploy_service::{
     CertificateOrderCaaSubject, CertificateOrderClaim, CertificateRenewalClaim,
-    DeployRepositoryPort, DomainVerificationChallenge, ExpiredCertificateSweep,
+    ChannelReleaseStore, DeployRepositoryPort, DomainVerificationChallenge,
+    ExpiredCertificateSweep,
 };
 
 use crate::DeployRepository;
@@ -1117,6 +1118,116 @@ impl DeployRepositoryPort for DeployRepository {
     ) -> DeployServiceResult<AppReleasePage> {
         self.list_app_releases_repo(tenant_id, app_id, page, page_size)
             .await
+    }
+
+    async fn list_channel_releases(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        environment: Option<&str>,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleasePage> {
+        let releases = self
+            .list_channel_releases_repo(tenant_id, app_id, environment)
+            .await?;
+        let total = releases.len() as i64;
+        let page = page.max(1);
+        let page_size = page_size.clamp(1, 200);
+        let skip = ((page - 1) as usize).saturating_mul(page_size as usize);
+        let items = releases
+            .into_iter()
+            .skip(skip)
+            .take(page_size as usize)
+            .collect();
+        Ok(sdkwork_deploy_contract::ChannelReleasePage {
+            items,
+            total,
+            page,
+            page_size,
+        })
+    }
+
+    async fn retrieve_channel_release(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        release_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        let release = self
+            .find_channel_release_repo(tenant_id, release_id)
+            .await?;
+        if release.app_id != app_id {
+            return Err(sdkwork_deploy_contract::DeployServiceError::not_found(
+                "channel release not found",
+            ));
+        }
+        Ok(release)
+    }
+
+    async fn create_channel_release(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::CreateChannelReleaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        self.create_channel_release_repo(tenant_id, actor_id, app_id, request)
+            .await
+    }
+
+    async fn transition_channel_release(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        release_id: &str,
+        request: &sdkwork_deploy_contract::TransitionChannelReleaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse> {
+        let current = self
+            .find_channel_release_repo(tenant_id, release_id)
+            .await?;
+        if current.app_id != app_id {
+            return Err(sdkwork_deploy_contract::DeployServiceError::not_found(
+                "channel release not found",
+            ));
+        }
+        let expected_version = request
+            .validate()
+            .map_err(|detail| sdkwork_deploy_contract::DeployServiceError::validation(detail))?;
+        self.transition_channel_release_repo(
+            tenant_id,
+            release_id,
+            expected_version,
+            request.release_status,
+            request.commit_id.as_deref(),
+            request.audit_id.as_deref(),
+            request.error_code.as_deref(),
+        )
+        .await
+    }
+
+    async fn set_channel_release_gray(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        release_id: &str,
+        gray_percentage: u16,
+    ) -> DeployServiceResult<()> {
+        let current = self
+            .find_channel_release_repo(tenant_id, release_id)
+            .await?;
+        if current.app_id != app_id {
+            return Err(sdkwork_deploy_contract::DeployServiceError::not_found(
+                "channel release not found",
+            ));
+        }
+        ChannelReleaseStore::set_channel_release_gray_percentage(
+            self,
+            tenant_id,
+            release_id,
+            gray_percentage,
+        )
+        .await
     }
 
     async fn retrieve_app_release(

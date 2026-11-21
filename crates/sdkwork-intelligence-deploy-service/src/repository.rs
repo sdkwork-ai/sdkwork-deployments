@@ -1136,6 +1136,45 @@ pub trait DeployRepositoryPort:
         page_size: i32,
     ) -> DeployServiceResult<AppReleasePage>;
 
+    async fn list_channel_releases(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        environment: Option<&str>,
+        page: i32,
+        page_size: i32,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleasePage>;
+
+    async fn retrieve_channel_release(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        release_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse>;
+
+    async fn create_channel_release(
+        &self,
+        tenant_id: i64,
+        actor_id: Option<i64>,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::CreateChannelReleaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse>;
+
+    async fn transition_channel_release(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        release_id: &str,
+        request: &sdkwork_deploy_contract::TransitionChannelReleaseRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::ChannelReleaseResponse>;
+
+    async fn set_channel_release_gray(
+        &self,
+        tenant_id: i64,
+        app_id: &str,
+        release_id: &str,
+        gray_percentage: u16,
+    ) -> DeployServiceResult<()>;
     async fn retrieve_app_release(
         &self,
         tenant_id: i64,

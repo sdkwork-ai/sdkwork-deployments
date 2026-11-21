@@ -25,6 +25,10 @@ entries:
     path: docs/architecture/decisions/ADR-20260804-unified-app-delivery-platform.md
     kind: adr
     status: accepted
+  - id: ADR-20261124-deploy-iam-channel-capability-auth
+    path: docs/architecture/decisions/ADR-20261124-deploy-iam-channel-capability-auth.md
+    kind: adr
+    status: proposed
   - id: ADR-20260917-dns-credentials-from-iam-cloud-account-center
     path: docs/architecture/decisions/ADR-20260917-dns-credentials-from-iam-cloud-account-center.md
     kind: adr

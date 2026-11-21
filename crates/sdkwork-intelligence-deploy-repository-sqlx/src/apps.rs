@@ -871,6 +871,7 @@ impl DeployRepository {
                 archived_at = CASE WHEN $5 = 'ARCHIVED' THEN NOW() ELSE archived_at END,
                 default_environment = COALESCE($6, default_environment),
                 metadata = COALESCE($8, metadata),
+                app_kind = COALESCE($13, app_kind),
                 app_domain_label = CASE WHEN $9 THEN $10 ELSE app_domain_label END,
                 app_domain_suffixes = CASE WHEN $11 THEN $12 ELSE app_domain_suffixes END,
                 updated_by = $7, updated_at = NOW(),
@@ -890,6 +891,7 @@ impl DeployRepository {
         .bind(domain_label.as_deref())
         .bind(has_domain_suffixes)
         .bind(&domain_suffixes_json)
+        .bind(request.app_kind.map(|kind| kind.as_str()))
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| store_error("update deploy_app", error))?;
