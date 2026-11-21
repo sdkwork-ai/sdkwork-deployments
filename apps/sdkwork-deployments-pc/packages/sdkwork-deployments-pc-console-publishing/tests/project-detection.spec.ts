@@ -24,6 +24,7 @@ import {
   findDetectedSurface,
   joinPath,
   projectProfile,
+  projectSurfaceConflict,
   resolveSourceDirectory,
   surfacesOfDirectoryName,
   type DeployProjectInspection,
@@ -469,5 +470,49 @@ describe("browserDistOutputPath (v3.4 environment-aware dist layout)", () => {
   it("builds demo from the staging subtree (spec alias table lacks demo)", () => {
     expect(browserDistOutputPath("standalone", "demo")).toBe("dist/standalone/staging");
     expect(browserDistOutputPath("cloud", "demo")).toBe("dist/cloud/staging");
+  });
+});
+
+describe("projectSurfaceConflict (v5 locked-type vs source surface)", () => {
+  const detection = detectSdkworkProject(conformantInspection);
+
+  it("blocks a locked type that the project does not provide", () => {
+    // The fixture provides pc / h5 / mini-program / android / ios surfaces.
+    expect(projectSurfaceConflict({ detection, expectedSurfaces: ["h5"] })).toBeUndefined();
+    expect(projectSurfaceConflict({ detection, expectedSurfaces: ["mini-program"] })).toBeUndefined();
+    expect(projectSurfaceConflict({ detection, expectedSurfaces: ["android", "ios"] })).toBeUndefined();
+    expect(projectSurfaceConflict({ detection, expectedSurfaces: ["desktop"] })).toEqual({
+      detected: ["pc", "h5", "mini-program", "android", "ios"],
+      expected: ["desktop"],
+    });
+  });
+
+  it("uses the selected apps/<surface> root when the source is one", () => {
+    expect(projectSurfaceConflict({
+      detection,
+      sourceDirectory: "/workspace/store/apps/sdkwork-store-h5",
+      expectedSurfaces: ["h5"],
+    })).toBeUndefined();
+    expect(projectSurfaceConflict({
+      detection,
+      sourceDirectory: "/workspace/store/apps/sdkwork-store-h5",
+      expectedSurfaces: ["pc"],
+    })).toEqual({ detected: ["h5"], expected: ["pc"] });
+    // A Flutter root publishes android and ios, so a FLUTTER_APP card fits.
+    expect(projectSurfaceConflict({
+      detection,
+      sourceDirectory: "D:\\workspace\\store\\apps\\sdkwork-store-flutter-mobile",
+      expectedSurfaces: ["android", "ios", "harmony"],
+    })).toBeUndefined();
+  });
+
+  it("never blocks a root-publishing or unlistable project", () => {
+    expect(projectSurfaceConflict({ detection, expectedSurfaces: [] })).toBeUndefined();
+    expect(projectSurfaceConflict({ detection: undefined, expectedSurfaces: ["h5"] })).toBeUndefined();
+    expect(projectSurfaceConflict({
+      detection: undefined,
+      sourceDirectory: "/workspace/unknown",
+      expectedSurfaces: ["h5"],
+    })).toBeUndefined();
   });
 });

@@ -26,7 +26,7 @@ export class AppMarketplaceScaffoldsApi {
   }
 
 
-/** Browse the tenant app template marketplace */
+/** Browse the tenant application scaffold marketplace */
   async list(params?: AppMarketplaceScaffoldsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldSummaryResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
@@ -40,7 +40,7 @@ export class AppMarketplaceScaffoldsApi {
     return this.client.request<{ items: ApplicationScaffoldSummaryResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/marketplace/scaffolds`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** Retrieve a marketplace app template */
+/** Retrieve a marketplace application scaffold */
   async retrieve(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     return this.client.request<ApplicationScaffoldResponse>(appApiPath(`/marketplace/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
@@ -83,7 +83,7 @@ export class AppScaffoldsVersionsApi {
   }
 
 
-/** List versions of the caller's app template */
+/** List versions of the caller's application scaffold */
   async list(scaffoldUuid: string, params?: AppScaffoldsVersionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldVersionResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
@@ -92,7 +92,7 @@ export class AppScaffoldsVersionsApi {
     return this.client.request<{ items: ApplicationScaffoldVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}/versions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** Add a version to the caller's app template */
+/** Add a version to the caller's application scaffold */
   async create(scaffoldUuid: string, body: CreateApplicationScaffoldVersionRequest, params: AppScaffoldsVersionsCreateParams, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldVersionResponse> {
     const requestHeaders = buildRequestHeaders(
       {
@@ -152,7 +152,7 @@ export class AppScaffoldsApi {
   }
 
 
-/** List the caller's app templates */
+/** List the caller's application scaffolds */
   async list(params?: AppScaffoldsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
@@ -163,7 +163,7 @@ export class AppScaffoldsApi {
     return this.client.request<{ items: ApplicationScaffoldResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/scaffolds`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** Publish an app as a template listing */
+/** Publish an application as a scaffold listing */
   async create(body: CreateApplicationScaffoldRequest, params: AppScaffoldsCreateParams, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     const requestHeaders = buildRequestHeaders(
       {
@@ -174,12 +174,12 @@ export class AppScaffoldsApi {
     return this.client.request<ApplicationScaffoldResponse>(appApiPath(`/scaffolds`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** Retrieve the caller's app template */
+/** Retrieve the caller's application scaffold */
   async retrieve(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     return this.client.request<ApplicationScaffoldResponse>(appApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-/** Update the caller's app template listing */
+/** Update the caller's application scaffold listing */
   async update(scaffoldUuid: string, body: UpdateApplicationScaffoldRequest, params: AppScaffoldsUpdateParams, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     const requestHeaders = buildRequestHeaders(
       {
@@ -190,12 +190,12 @@ export class AppScaffoldsApi {
     return this.client.request<ApplicationScaffoldResponse>(appApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** Withdraw the caller's app template */
+/** Withdraw the caller's application scaffold */
   async delete(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<void> {
     return this.client.request<void>(appApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
 
-/** Submit an app template for review */
+/** Submit an application scaffold for review */
   async submit(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     return this.client.request<ApplicationScaffoldResponse>(appApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}/submit`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }

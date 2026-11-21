@@ -136,6 +136,31 @@ async fn list_retrieve_and_update_report_the_rows_decimal_id_beside_the_uuid() {
         "the wire value is the decimal id as text, not a number and not the uuid",
     );
 
+    // -- keyword search by the printed id -----------------------------------
+    // The console prints this decimal id in the list, so pasting it into the
+    // server-side keyword facet must find the row. The fixture's name and slug
+    // do not contain "5001", so this can only match through `deploy_app.id`.
+    let by_id = repository
+        .list_apps(
+            TENANT_ID,
+            Some(ACTOR_ID),
+            Some(ORGANIZATION_ID),
+            &ListAppsQuery {
+                page: 1,
+                page_size: 20,
+                keyword: Some(SEEDED_APP_ID.to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("list apps by application id");
+    assert_eq!(
+        by_id.items.len(),
+        1,
+        "the decimal application id is a keyword facet",
+    );
+    assert_eq!(by_id.items[0].id, SEEDED_APP_UUID);
+
     // -- update -------------------------------------------------------------
     // All `UpdateAppRequest` members are optional on the wire, so the patch is
     // built the way a client builds it.

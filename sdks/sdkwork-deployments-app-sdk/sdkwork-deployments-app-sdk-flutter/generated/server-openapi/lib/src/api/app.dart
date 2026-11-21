@@ -374,7 +374,7 @@ class AppApi {
     })();
   }
 
-  /// Browse the tenant app template marketplace
+  /// Browse the tenant application scaffold marketplace
   Future<MarketplaceScaffoldsListResponse?> marketplaceScaffoldsList([int? page, int? pageSize, String? keyword, String? categoryUuid, String? pricingModel, String? templateType, String? sort]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
@@ -392,7 +392,7 @@ class AppApi {
     })();
   }
 
-  /// Retrieve a marketplace app template
+  /// Retrieve a marketplace application scaffold
   Future<MarketplaceScaffoldsRetrieveResponse?> marketplaceScaffoldsRetrieve(String scaffoldUuid) async {
     final response = await _client.get(ApiPaths.appPath('/marketplace/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'));
     return (() {
@@ -417,7 +417,7 @@ class AppApi {
     })();
   }
 
-  /// List the caller's app templates
+  /// List the caller's application scaffolds
   Future<ScaffoldsListResponse?> scaffoldsList([int? page, int? pageSize, String? keyword, String? status]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
@@ -432,7 +432,7 @@ class AppApi {
     })();
   }
 
-  /// Publish an app as a template listing
+  /// Publish an application as a scaffold listing
   Future<ScaffoldsCreateResponse201?> scaffoldsCreate(CreateApplicationScaffoldRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
@@ -448,7 +448,7 @@ class AppApi {
     })();
   }
 
-  /// Retrieve the caller's app template
+  /// Retrieve the caller's application scaffold
   Future<ScaffoldsRetrieveResponse?> scaffoldsRetrieve(String scaffoldUuid) async {
     final response = await _client.get(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'));
     return (() {
@@ -457,7 +457,7 @@ class AppApi {
     })();
   }
 
-  /// Update the caller's app template listing
+  /// Update the caller's application scaffold listing
   Future<ScaffoldsUpdateResponse?> scaffoldsUpdate(String scaffoldUuid, UpdateApplicationScaffoldRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{
@@ -473,12 +473,12 @@ class AppApi {
     })();
   }
 
-  /// Withdraw the caller's app template
+  /// Withdraw the caller's application scaffold
   Future<void> scaffoldsDelete(String scaffoldUuid) async {
     await _client.delete(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}'));
   }
 
-  /// Submit an app template for review
+  /// Submit an application scaffold for review
   Future<ScaffoldsSubmitResponse?> scaffoldsSubmit(String scaffoldUuid) async {
     final response = await _client.post(ApiPaths.appPath('/scaffolds/${serializePathParameter(scaffoldUuid, const PathParameterSpec('scaffoldUuid', 'simple', false))}/submit'));
     return (() {
@@ -487,7 +487,7 @@ class AppApi {
     })();
   }
 
-  /// List versions of the caller's app template
+  /// List versions of the caller's application scaffold
   Future<ScaffoldsVersionsListResponse?> scaffoldsVersionsList(String scaffoldUuid, [int? page, int? pageSize]) async {
     final query = buildQueryString([
       QueryParameterSpec('page', page, 'form', true, false, null),
@@ -500,7 +500,7 @@ class AppApi {
     })();
   }
 
-  /// Add a version to the caller's app template
+  /// Add a version to the caller's application scaffold
   Future<ScaffoldsVersionsCreateResponse201?> scaffoldsVersionsCreate(String scaffoldUuid, CreateApplicationScaffoldVersionRequest body, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(
       <String, HeaderParameterSpec>{

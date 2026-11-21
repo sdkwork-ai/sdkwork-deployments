@@ -501,6 +501,27 @@ export function cardsOfAppKind(appKind: DeployAppKind | undefined): readonly Dep
   return DEPLOY_APP_TYPE_CARDS.filter((card) => ids.has(card.id));
 }
 
+/**
+ * Surfaces one dialog type card can publish (union of its framework options).
+ *
+ * The publish dialog locks the card to the existing app's `app_kind`, so this
+ * set is what the chosen source directory must provide at least one of. The
+ * root-publishing cards (`api-service`, `static-web`) carry no surface and
+ * return an empty set, which the conflict check treats as "never conflicts".
+ */
+export function cardSurfaceIds(cardId: string | undefined): readonly AppSurfaceId[] {
+  if (cardId === undefined) return [];
+  const card = DEPLOY_APP_TYPE_CARDS.find((candidate) => candidate.id === cardId);
+  if (card === undefined) return [];
+  const surfaces = new Set<AppSurfaceId>();
+  if (card.surface !== undefined) surfaces.add(card.surface);
+  for (const framework of card.frameworks) {
+    const option = DEPLOY_APP_TYPE_OPTIONS.find((candidate) => candidate.id === framework.optionId);
+    if (option?.surface !== undefined) surfaces.add(option.surface);
+  }
+  return [...surfaces];
+}
+
 /* ------------------------------------------------------------------ *
  * v4：项目规范驱动的可选性（发布对话框「支持 / 不支持」判定）
  * ------------------------------------------------------------------ */
