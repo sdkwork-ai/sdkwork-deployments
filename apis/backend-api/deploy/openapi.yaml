@@ -32,7 +32,8 @@ paths:
       - $ref: '#/components/parameters/PageSizeParam'
       - name: keyword
         in: query
-        description: Case-insensitive match on the app name or slug.
+        description: Case-insensitive match on the app name or slug, or the decimal
+          application id (`deployApplicationId`).
         schema:
           type: string
           maxLength: 200
@@ -4375,11 +4376,25 @@ components:
       additionalProperties: false
       required:
       - appId
+      - deployApplicationId
       - identityStatus
       properties:
         appId:
           type: string
           format: uuid
+          description: Opaque, stable public address of the application (`deploy_app.uuid`),
+            not the decimal id IAM anchors on.
+        deployApplicationId:
+          type: string
+          format: int64
+          pattern: ^-?[0-9]+$
+          x-sdkwork-int64-string: true
+          description: The application's **decimal** primary key (`deploy_app.id`),
+            and the **IAM installation anchor**. The same value `apps.create`,
+            `apps.retrieve`, and `apps.update` publish as `deployApplicationId`;
+            a re-registered installation therefore answers with the anchor it
+            was just provisioned under instead of making the caller derive it
+            from the uuid.
         identityStatus:
           type: string
           enum:

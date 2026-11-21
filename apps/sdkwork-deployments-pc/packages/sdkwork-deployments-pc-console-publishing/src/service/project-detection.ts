@@ -325,6 +325,51 @@ export function detectedSurfaceIds(
   return DIALOG_SURFACE_ORDER.filter((id) => found.has(id));
 }
 
+/** The application-type surface set a source directory can publish. */
+export interface DeployProjectSurfaceConflict {
+  /** Surfaces the source directory (or its project listing) actually provides. */
+  readonly detected: readonly AppSurfaceId[]
+  /** Surfaces the selected application type expects. */
+  readonly expected: readonly AppSurfaceId[]
+}
+
+function lastPathSegment(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const segments = value.trim().replace(/[\\/]+$/u, "").split(/[\\/]/u);
+  return segments.at(-1) || undefined;
+}
+
+/**
+ * v5: prove that the selected application type can publish the chosen source.
+ *
+ * The publish dialog locks the type to the existing app's `app_kind`, but the
+ * source directory is chosen freely — publishing a mini-program or Flutter
+ * source into an `API_SERVICE` app was possible and produced exactly the
+ * mis-typed registrations this check now prevents. Two sources of truth are
+ * used, strongest first:
+ *
+ * 1. the selected source directory itself, when its name is a canonical
+ *    `apps/sdkwork-<code>-<architecture>` surface root;
+ * 2. otherwise the host's listing of the project's `apps/` roots.
+ *
+ * Only a *provable* conflict is reported: an unlistable project (no `apps/`
+ * roots observed) never blocks, and root-publishing types (`api` / `static`)
+ * have no expected surface and never conflict.
+ */
+export function projectSurfaceConflict(input: {
+  readonly detection?: DeployProjectDetection | undefined
+  readonly sourceDirectory?: string | undefined
+  readonly expectedSurfaces: readonly AppSurfaceId[]
+}): DeployProjectSurfaceConflict | undefined {
+  const expected = [...new Set(input.expectedSurfaces)];
+  if (expected.length === 0) return undefined;
+  const namedSurface = surfacesOfDirectoryName(lastPathSegment(input.sourceDirectory) ?? "");
+  const detected = namedSurface?.surfaces ?? detectedSurfaceIds(input.detection);
+  if (detected.length === 0) return undefined;
+  if (expected.some((surface) => detected.includes(surface))) return undefined;
+  return { detected, expected };
+}
+
 /**
  * v4: 目录位于 `apps/<surface>/` 内部时，其所属仓库根路径。
  *

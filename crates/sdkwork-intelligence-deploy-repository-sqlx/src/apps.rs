@@ -621,11 +621,16 @@ impl DeployRepository {
         organization_parameter: usize,
         app_kind_parameter: usize,
     ) -> String {
+        // The keyword matches the decimal `deploy_app.id` too: it is the
+        // application id the console prints, so an operator who pastes it must
+        // find the row exactly as they can by name or slug. `::text` keeps the
+        // comparison on the same string form the wire exposes.
         format!(
             "(${ownership_parameter} = '' OR a.owner_type = ${ownership_parameter})
              AND (${keyword_parameter} = ''
                   OR LOWER(a.name) LIKE ${keyword_parameter}
-                  OR LOWER(a.slug) LIKE ${keyword_parameter})
+                  OR LOWER(a.slug) LIKE ${keyword_parameter}
+                  OR a.id::text LIKE ${keyword_parameter})
              AND (${organization_parameter}::bigint IS NULL
                   OR (${organization_parameter} = 0 AND a.owner_type = 'TENANT')
                   OR (${organization_parameter} > 0

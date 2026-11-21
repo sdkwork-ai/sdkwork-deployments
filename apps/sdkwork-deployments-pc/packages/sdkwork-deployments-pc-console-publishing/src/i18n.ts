@@ -258,6 +258,7 @@ typeFlutterHint: "One codebase; publish native Android, iOS, or HarmonyOS target
   fieldErrorTargetApp: "Select the application to publish into.",
   publishCheckingDirectories: "Checking directories…",
   sourceDirectoryMissing: "The source directory does not exist or cannot be accessed. Check the path and retry.",
+  sourceSurfaceMismatch: "The selected source is a {detected} surface, but the target application type is {expected}. Create or choose an application of the matching type before publishing.",
   buildOutputMissing: "Build output directory does not exist under the application root: {path}. Build the app first or fix the path.",
 
   // One-click build (host sdkwork-app-build port; v3.5)
@@ -1259,6 +1260,7 @@ typeFlutterHint: "一套代码，可发布 Android、iOS 或 HarmonyOS 原生目
   fieldErrorTargetApp: "请选择要发布到的应用。",
   publishCheckingDirectories: "正在检测目录…",
   sourceDirectoryMissing: "源目录不存在或无法访问，请检查路径后重试。",
+  sourceSurfaceMismatch: "所选源码属于 {detected} 表面，但目标应用类型是 {expected}。请先创建或选择类型匹配的应用再发布。",
   buildOutputMissing: "应用根路径下不存在构建产物目录：{path}。请先构建应用或修正路径。",
 
   // 一键打包（宿主 sdkwork-app-build 端口；v3.5）

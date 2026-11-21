@@ -882,6 +882,7 @@ impl DeployBackendApi for DeployService {
             .await?;
         Ok(AppIdentityProvisionResponse {
             app_id: app.id,
+            deploy_application_id: app.deploy_application_id,
             identity_status,
         })
     }

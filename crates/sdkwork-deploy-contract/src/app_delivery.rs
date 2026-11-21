@@ -28,13 +28,13 @@ use crate::app_source_spec::AppSourceSpecDefinition;
 /// | --- | --- | --- | --- |
 /// | H5 | `H5_WEB` (added) | `WEB` | `h5` |
 /// | PC web | `PC_WEB` (added) | `WEB` | `pc` |
-/// | Mini program | `WECHAT_MINIPROGRAM` / `DOUYIN_MINIPROGRAM` | `WECHAT` / `DOUYIN` | `other` |
+/// | Mini program | `WECHAT_MINIPROGRAM` / `DOUYIN_MINIPROGRAM` | `WECHAT` / `DOUYIN` | `miniprogram` |
 /// | Flutter | `FLUTTER_APP` (added) | iOS/Android/HarmonyOS/desktop/web targets | `flutter` |
-/// | iOS | `IOS_APP` | `IOS` | `other` |
-/// | Android | `ANDROID_APP` | `ANDROID` | `other` |
-/// | HarmonyOS | `HARMONYOS_APP` | `HARMONYOS` | `other` |
+/// | iOS | `IOS_APP` | `IOS` | `ios` |
+/// | Android | `ANDROID_APP` | `ANDROID` | `android` |
+/// | HarmonyOS | `HARMONYOS_APP` | `HARMONYOS` | `harmonyos` |
 /// | API / service | `API_SERVICE` | `API` | `api` |
-/// | Desktop | `DESKTOP_APP` | `WINDOWS` / `MACOS` / `LINUX` | `pc` |
+/// | Desktop | `DESKTOP_APP` | `WINDOWS` / `MACOS` / `LINUX` | `desktop` |
 ///
 /// `STATIC_WEB` and `SPA_WEB` are the **legacy** rendering-model kinds: they
 /// say how a web surface is built, not which endpoint it is, and they cannot
@@ -1161,6 +1161,20 @@ pub struct AppUninstallResponse {
 pub struct AppIdentityProvisionResponse {
     #[serde(rename = "appId")]
     pub app_id: String,
+    /// The application's **decimal** primary key (`deploy_app.id`), serialized
+    /// as a string under the int64 wire contract (`API_SPEC.md` §13.6).
+    ///
+    /// `appId` above is the opaque `deploy_app.uuid`; this is the value IAM
+    /// stores as the installation anchor and that `apps.create` /
+    /// `apps.retrieve` / `apps.update` already publish as
+    /// `deployApplicationId`. A caller that just re-registered an installation
+    /// reads the same anchor here, so no app command makes it derive the
+    /// decimal id from the uuid or guess the mapping.
+    #[serde(
+        rename = "deployApplicationId",
+        with = "sdkwork_utils_rust::serde_int64"
+    )]
+    pub deploy_application_id: i64,
     /// `pending_identity` | `active` | `failed`.
     #[serde(rename = "identityStatus")]
     pub identity_status: String,

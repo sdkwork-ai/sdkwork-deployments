@@ -1820,7 +1820,8 @@ paths:
       - $ref: '#/components/parameters/PageSizeParam'
       - name: keyword
         in: query
-        description: Case-insensitive match on the app name or slug.
+        description: Case-insensitive match on the app name or slug, or the decimal
+          application id (`deployApplicationId`).
         schema:
           type: string
           maxLength: 200

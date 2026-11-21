@@ -17,7 +17,7 @@ export class AppScaffoldsVersionsApi {
   }
 
 
-/** 获取应用模板版本列表 */
+/** 获取应用脚手架版本列表 */
   async list(scaffoldUuid: string, params?: AppScaffoldsVersionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldVersionResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
@@ -26,7 +26,7 @@ export class AppScaffoldsVersionsApi {
     return this.client.request<{ items: ApplicationScaffoldVersionResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}/versions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** 获取应用模板版本详情 */
+/** 获取应用脚手架版本详情 */
   async retrieve(scaffoldUuid: string, versionUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldVersionResponse> {
     return this.client.request<ApplicationScaffoldVersionResponse>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}/versions/${serializePathParameter(versionUuid, { name: 'versionUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
@@ -54,7 +54,7 @@ export class AppScaffoldsCategoriesApi {
   }
 
 
-/** 获取模板分类列表 */
+/** 获取脚手架分类列表 */
   async list(params?: AppScaffoldsCategoriesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ScaffoldCategoryResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
@@ -64,7 +64,7 @@ export class AppScaffoldsCategoriesApi {
     return this.client.request<{ items: ScaffoldCategoryResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/scaffold_categories`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** 创建模板分类 */
+/** 创建脚手架分类 */
   async create(body: CreateScaffoldCategoryRequest, params: AppScaffoldsCategoriesCreateParams, requestOptions?: ApiRequestOptions): Promise<ScaffoldCategoryResponse> {
     const requestHeaders = buildRequestHeaders(
       {
@@ -75,12 +75,12 @@ export class AppScaffoldsCategoriesApi {
     return this.client.request<ScaffoldCategoryResponse>(backendApiPath(`/scaffold_categories`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** 获取模板分类详情 */
+/** 获取脚手架分类详情 */
   async retrieve(categoryUuid: string, requestOptions?: ApiRequestOptions): Promise<ScaffoldCategoryResponse> {
     return this.client.request<ScaffoldCategoryResponse>(backendApiPath(`/scaffold_categories/${serializePathParameter(categoryUuid, { name: 'categoryUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-/** 更新模板分类 */
+/** 更新脚手架分类 */
   async update(categoryUuid: string, body: UpdateScaffoldCategoryRequest, params: AppScaffoldsCategoriesUpdateParams, requestOptions?: ApiRequestOptions): Promise<ScaffoldCategoryResponse> {
     const requestHeaders = buildRequestHeaders(
       {
@@ -91,7 +91,7 @@ export class AppScaffoldsCategoriesApi {
     return this.client.request<ScaffoldCategoryResponse>(backendApiPath(`/scaffold_categories/${serializePathParameter(categoryUuid, { name: 'categoryUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** 删除模板分类 */
+/** 删除脚手架分类 */
   async delete(categoryUuid: string, requestOptions?: ApiRequestOptions): Promise<void> {
     return this.client.request<void>(backendApiPath(`/scaffold_categories/${serializePathParameter(categoryUuid, { name: 'categoryUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }
@@ -123,7 +123,7 @@ export class AppScaffoldsApi {
   }
 
 
-/** 获取应用模板列表（全状态） */
+/** 获取应用脚手架列表（全状态） */
   async list(params?: AppScaffoldsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ApplicationScaffoldResponse[]; pageInfo: PageInfo; }> {
     const query = buildQueryString([
       { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
@@ -137,12 +137,12 @@ export class AppScaffoldsApi {
     return this.client.request<{ items: ApplicationScaffoldResponse[]; pageInfo: PageInfo; }>(appendQueryString(backendApiPath(`/scaffolds`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
   }
 
-/** 获取应用模板详情 */
+/** 获取应用脚手架详情 */
   async retrieve(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     return this.client.request<ApplicationScaffoldResponse>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
   }
 
-/** 审核或调整应用模板 */
+/** 审核或调整应用脚手架 */
   async update(scaffoldUuid: string, body: UpdateApplicationScaffoldAdminRequest, params: AppScaffoldsUpdateParams, requestOptions?: ApiRequestOptions): Promise<ApplicationScaffoldResponse> {
     const requestHeaders = buildRequestHeaders(
       {
@@ -153,7 +153,7 @@ export class AppScaffoldsApi {
     return this.client.request<ApplicationScaffoldResponse>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
   }
 
-/** 删除应用模板 */
+/** 删除应用脚手架 */
   async delete(scaffoldUuid: string, requestOptions?: ApiRequestOptions): Promise<void> {
     return this.client.request<void>(backendApiPath(`/scaffolds/${serializePathParameter(scaffoldUuid, { name: 'scaffoldUuid', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'DELETE' as any });
   }

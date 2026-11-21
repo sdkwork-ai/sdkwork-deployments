@@ -11,6 +11,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   appKindOfCard,
+  cardSurfaceIds,
   cardsOfAppKind,
   classifyAppTypeCards,
   classifyFrameworks,
@@ -756,5 +757,21 @@ describe("application type card mapping", () => {
     // A Flutter target must resolve to the cross-platform kind, not one store.
     expect(resolveDeployAppType("flutter", "flutter-ios")?.appKind).toBe("FLUTTER_APP");
     expect(resolveDeployAppType("flutter", "flutter-android")?.platform).toBe("ANDROID");
+  });
+});
+
+describe("cardSurfaceIds (v5 type card surfaces)", () => {
+  it("maps every card onto the surfaces it can publish", () => {
+    expect(cardSurfaceIds("h5")).toEqual(["h5"]);
+    expect(cardSurfaceIds("pc-web")).toEqual(["pc"]);
+    expect(cardSurfaceIds("mini-program")).toEqual(["mini-program"]);
+    expect(cardSurfaceIds("douyin-mini-program")).toEqual(["mini-program"]);
+    expect(cardSurfaceIds("flutter")).toEqual(expect.arrayContaining(["android", "ios", "harmony"]));
+    expect(cardSurfaceIds("desktop")).toEqual(["desktop"]);
+    // Root-publishing types carry no surface: never a conflict.
+    expect(cardSurfaceIds("api-service")).toEqual([]);
+    expect(cardSurfaceIds("static-web")).toEqual([]);
+    expect(cardSurfaceIds(undefined)).toEqual([]);
+    expect(cardSurfaceIds("not-a-card")).toEqual([]);
   });
 });

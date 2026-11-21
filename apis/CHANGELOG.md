@@ -6,6 +6,20 @@ not_published` in both SDK manifests), so a breaking change is landed directly
 without a compatibility alias; the approval is recorded here rather than
 carried as a retired alias.
 
+## 2026-11-21 — App identity provision echoes the decimal application id (additive)
+
+`POST /backend/v3/api/apps/{appId}/identity_provision` now also answers
+`deployApplicationId`: the application's decimal `deploy_app.id`, serialized as
+an int64 string. Registering an installation therefore returns the same IAM
+anchor that `apps.create`, `apps.retrieve`, and `apps.update` already publish,
+instead of forcing the caller to derive it from the uuid. The generated
+TypeScript backend SDK was regenerated from the authority.
+
+The app list's `keyword` facet now also matches that decimal id (alongside the
+app name and slug), so the id the console prints can be pasted into the list
+search. The generated app and backend SDKs were regenerated from the updated
+authority descriptions.
+
 ## 2026-11-21 — Application-scaffold surface rename (breaking)
 
 The physical catalog has been `deploy_application_scaffold*` since the

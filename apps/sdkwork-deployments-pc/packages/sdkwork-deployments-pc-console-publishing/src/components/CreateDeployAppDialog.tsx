@@ -37,9 +37,10 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { AppKind, AppResponse, SdkworkDeployAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { SdkworkDriveAppClient } from "@sdkwork/deployments-pc-console-core/sdk";
 import type { DeploymentsLocale } from "@sdkwork/deployments-pc-commons";
-import { publishingTranslator, APP_KIND_LABEL_KEYS, type PublishingMessageKey, type PublishingTranslator } from "../i18n.ts";
+import { publishingTranslator, APP_KIND_LABEL_KEYS, APP_SURFACE_LABEL_KEYS, type PublishingMessageKey, type PublishingTranslator } from "../i18n.ts";
 import {
   createDeployAppPublishingService,
+  cardSurfaceIds,
   classifyFrameworks,
   detectFrameworkId,
   frameworksOfCard,
@@ -61,6 +62,7 @@ import {
   detectSdkworkProject,
   findDetectedSurface,
   projectProfile,
+  projectSurfaceConflict,
   repositoryRootOf,
   resolveSourceDirectory,
   shouldSyncEnvironmentBuildOutput,
@@ -254,6 +256,21 @@ export function CreateDeployAppDialog({
       ? undefined
       : deriveSurfaceDirectory(directory, type.surface)),
     [directory, type],
+  )
+
+  // v5: the target app's type is locked (chosen at creation), but the source
+  // directory is free — publishing a Flutter or mini-program source into an
+  // API_SERVICE app was possible and is exactly how a wrong type reaches a
+  // release. Require the locked type to serve at least one surface the source
+  // actually provides; only a provable conflict blocks (an unlistable project
+  // never does, and the root-publishing API/static types have no surface).
+  const surfaceConflict = useMemo(
+    () => projectSurfaceConflict({
+      detection,
+      sourceDirectory: matchedSurfacePath ?? directory,
+      expectedSurfaces: cardSurfaceIds(cardId),
+    }),
+    [cardId, detection, directory, matchedSurfacePath],
   )
 
   const pickBuildOutputDirectory = async (): Promise<void> => {
@@ -501,6 +518,17 @@ export function CreateDeployAppDialog({
     return isValidSemver(version)
   }
 
+  // v5: corrective copy for a locked type that cannot publish the chosen source.
+  const surfaceMismatchMessage = (): string | undefined => {
+    if (surfaceConflict === undefined) return undefined
+    return t("sourceSurfaceMismatch", {
+      expected: type === undefined ? (cardId ?? "") : t(type.labelKey),
+      detected: surfaceConflict.detected
+        .map((surface) => t(APP_SURFACE_LABEL_KEYS[surface]))
+        .join(" / "),
+    })
+  }
+
   // v3.4: 目录步骤「下一步」前的存在性检查（宿主桥可用时）—— 源目录必须
   // 能被宿主列举成功（detection 非 undefined），构建产物目录按表面子目录
   // 列举判定存在性；无法判定（无列举能力）时放行，由发布时兜底。
@@ -509,6 +537,8 @@ export function CreateDeployAppDialog({
       if (inspecting) return t("publishCheckingDirectories")
       if (detection === undefined) return t("sourceDirectoryMissing")
     }
+    const mismatch = surfaceMismatchMessage()
+    if (mismatch !== undefined) return mismatch
     if (buildOutputDetected === false) {
       return t("buildOutputMissing", { path: buildOutputPath.trim() })
     }
@@ -594,6 +624,12 @@ export function CreateDeployAppDialog({
     const directoryProblem = stepTwoDirectoryProblem()
     if (directoryProblem !== undefined) {
       setError(directoryProblem)
+      return
+    }
+    // v5: 类型与源码表面的复检 —— 第 2 步之后目录仍可能被改，错误类型不能发布。
+    const mismatch = surfaceMismatchMessage()
+    if (mismatch !== undefined) {
+      setError(mismatch)
       return
     }
     setBusy(true)
