@@ -1424,6 +1424,76 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    async fn list_channel_releases(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _environment: Option<&str>,
+        _page: i32,
+        _page_size: i32,
+    ) -> DeployServiceResult<crate::ChannelReleasePage> {
+        Err(crate::DeployServiceError::Internal(
+            "list_channel_releases API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn retrieve_channel_release(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _release_id: &str,
+    ) -> DeployServiceResult<crate::ChannelReleaseResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "retrieve_channel_release API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn create_channel_release(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &crate::CreateChannelReleaseRequest,
+    ) -> DeployServiceResult<crate::ChannelReleaseResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "create_channel_release API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn transition_channel_release(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _release_id: &str,
+        _request: &crate::TransitionChannelReleaseRequest,
+    ) -> DeployServiceResult<crate::ChannelReleaseResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "transition_channel_release API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn publish_channel_release(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _release_id: &str,
+        _request: &crate::ChannelReleasePublishCommandRequest,
+    ) -> DeployServiceResult<crate::ChannelReleaseResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "publish_channel_release API is not implemented".to_owned(),
+        ))
+    }
+
+    async fn plan_channel_direct_upload(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &crate::CreateChannelDirectUploadPlanRequest,
+    ) -> DeployServiceResult<crate::ChannelDirectUploadPlan> {
+        Err(crate::DeployServiceError::Internal(
+            "plan_channel_direct_upload API is not implemented".to_owned(),
+        ))
+    }
+
     async fn retrieve_app_release(
         &self,
         _context: &DeployAppRequestContext,

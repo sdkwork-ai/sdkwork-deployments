@@ -28,13 +28,26 @@ pub trait ChannelReleaseStore: Send + Sync {
         release_id: &str,
     ) -> DeployServiceResult<(ChannelReleaseStatus, i64)>;
     /// Applies one observed transition.
+    ///
+    /// `commit_id` and `audit_id` are provider identifiers the publisher records;
+    /// the review observer passes `None` for both.
     async fn transition_channel_release(
         &self,
         tenant_id: i64,
         release_id: &str,
         expected_version: i64,
         next: ChannelReleaseStatus,
+        commit_id: Option<&str>,
+        audit_id: Option<&str>,
         detail: Option<&str>,
+    ) -> DeployServiceResult<()>;
+
+    /// Records the provider's active gray percentage for a released version.
+    async fn set_channel_release_gray_percentage(
+        &self,
+        tenant_id: i64,
+        release_id: &str,
+        gray_percentage: u16,
     ) -> DeployServiceResult<()>;
 }
 
@@ -57,6 +70,7 @@ impl<P: ChannelReleaseProvider, S: ChannelReleaseStore> ChannelReleaseReviewObse
         &self,
         tenant_id: i64,
         release_id: &str,
+        authorization_id: &str,
         audit_id: &str,
     ) -> DeployServiceResult<ChannelReleaseStatus> {
         let (current, version) = self
@@ -66,7 +80,10 @@ impl<P: ChannelReleaseProvider, S: ChannelReleaseStore> ChannelReleaseReviewObse
         if current.is_terminal() {
             return Ok(current);
         }
-        let observation = self.provider.query_mini_program_audit(audit_id).await?;
+        let observation = self
+            .provider
+            .query_mini_program_audit(authorization_id, audit_id)
+            .await?;
         if observation.status == current {
             return Ok(current);
         }
@@ -78,6 +95,8 @@ impl<P: ChannelReleaseProvider, S: ChannelReleaseStore> ChannelReleaseReviewObse
                 release_id,
                 version,
                 observation.status,
+                None,
+                None,
                 observation.detail.as_deref(),
             )
             .await?;
@@ -120,6 +139,7 @@ mod tests {
 
         async fn query_mini_program_audit(
             &self,
+            _authorization_id: &str,
             _audit_id: &str,
         ) -> DeployServiceResult<MiniProgramAuditObservation> {
             self.queries.fetch_add(1, Ordering::SeqCst);
@@ -145,6 +165,23 @@ mod tests {
         async fn gray_release_mini_program(
             &self,
             _request: &MiniProgramGrayReleaseRequest,
+        ) -> DeployServiceResult<()> {
+            Err(DeployServiceError::Internal("unused".to_string()))
+        }
+
+        async fn modify_mini_program_domains(
+            &self,
+            _authorization_id: &str,
+            _action: &str,
+            _domains: &[String],
+        ) -> DeployServiceResult<()> {
+            Err(DeployServiceError::Internal("unused".to_string()))
+        }
+
+        async fn set_mini_program_privacy(
+            &self,
+            _authorization_id: &str,
+            _privacy: serde_json::Value,
         ) -> DeployServiceResult<()> {
             Err(DeployServiceError::Internal("unused".to_string()))
         }
@@ -184,6 +221,8 @@ mod tests {
             _release_id: &str,
             expected_version: i64,
             next: ChannelReleaseStatus,
+            _commit_id: Option<&str>,
+            _audit_id: Option<&str>,
             detail: Option<&str>,
         ) -> DeployServiceResult<()> {
             let mut state = self.state.lock().expect("state");
@@ -196,6 +235,15 @@ mod tests {
                 next,
                 detail.map(str::to_string),
             ));
+            Ok(())
+        }
+
+        async fn set_channel_release_gray_percentage(
+            &self,
+            _tenant_id: i64,
+            _release_id: &str,
+            _gray_percentage: u16,
+        ) -> DeployServiceResult<()> {
             Ok(())
         }
     }
@@ -223,7 +271,7 @@ mod tests {
         let store = FakeStore::with(ChannelReleaseStatus::InReview, 3);
         let observer = ChannelReleaseReviewObserver::new(provider, store);
         let status = observer
-            .observe(7, "release-1", "audit-1")
+            .observe(7, "release-1", "auth-1", "audit-1")
             .await
             .expect("observe");
         assert_eq!(status, ChannelReleaseStatus::Approved);
@@ -239,7 +287,7 @@ mod tests {
         let store = FakeStore::with(ChannelReleaseStatus::Rejected, 1);
         let observer = ChannelReleaseReviewObserver::new(provider, store);
         let status = observer
-            .observe(7, "release-1", "audit-1")
+            .observe(7, "release-1", "auth-1", "audit-1")
             .await
             .expect("observe");
         assert_eq!(status, ChannelReleaseStatus::Rejected);
@@ -253,7 +301,7 @@ mod tests {
         let store = FakeStore::with(ChannelReleaseStatus::InReview, 2);
         let observer = ChannelReleaseReviewObserver::new(provider, store);
         let status = observer
-            .observe(7, "release-1", "audit-1")
+            .observe(7, "release-1", "auth-1", "audit-1")
             .await
             .expect("observe");
         assert_eq!(status, ChannelReleaseStatus::InReview);
@@ -266,7 +314,7 @@ mod tests {
         let store = FakeStore::with(ChannelReleaseStatus::Uploaded, 1);
         let observer = ChannelReleaseReviewObserver::new(provider, store);
         let error = observer
-            .observe(7, "release-1", "audit-1")
+            .observe(7, "release-1", "auth-1", "audit-1")
             .await
             .expect_err("must reject");
         assert!(format!("{error}").contains("invalid channel release transition"));
@@ -283,7 +331,7 @@ mod tests {
         let store = FakeStore::with(ChannelReleaseStatus::InReview, 1);
         let observer = ChannelReleaseReviewObserver::new(provider, store);
         let error = observer
-            .observe(7, "release-1", "audit-1")
+            .observe(7, "release-1", "auth-1", "audit-1")
             .await
             .expect_err("must fail");
         assert!(format!("{error}").contains("provider down"));

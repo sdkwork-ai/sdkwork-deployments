@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppReleaseResponse, ChannelResponse, ChannelRolloutResponse, CreateAppReleaseRequest, PageInfo, PromoteChannelRequest } from '../types';
+import type { AppReleaseResponse, ChannelDirectUploadPlan, ChannelReleasePublishCommandRequest, ChannelReleaseResponse, ChannelResponse, ChannelRolloutResponse, CreateAppReleaseRequest, CreateChannelDirectUploadPlanRequest, CreateChannelReleaseRequest, PageInfo, PromoteChannelRequest, TransitionChannelReleaseRequest } from '../types';
 
 
 export interface ReleaseChannelsRolloutsListParams {
@@ -63,6 +63,106 @@ export class ReleaseChannelsApi {
   }
 }
 
+export interface ReleaseChannelDirectUploadPlansCreateParams {
+  idempotencyKey: string;
+}
+
+export class ReleaseChannelDirectUploadPlansApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Plan a direct-mode miniprogram-ci upload */
+  async create(appId: string, body: CreateChannelDirectUploadPlanRequest, params: ReleaseChannelDirectUploadPlansCreateParams, requestOptions?: ApiRequestOptions): Promise<ChannelDirectUploadPlan> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<ChannelDirectUploadPlan>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/channel_direct_upload_plans`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface ReleaseChannelReleasesPublishCommandsCreateParams {
+  idempotencyKey: string;
+}
+
+export class ReleaseChannelReleasesPublishCommandsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Run one WeChat channel publish step */
+  async create(appId: string, channelReleaseId: string, body: ChannelReleasePublishCommandRequest, params: ReleaseChannelReleasesPublishCommandsCreateParams, requestOptions?: ApiRequestOptions): Promise<ChannelReleaseResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<ChannelReleaseResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/channel_releases/${serializePathParameter(channelReleaseId, { name: 'channelReleaseId', style: 'simple', explode: false })}/publish_commands`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface ReleaseChannelReleasesListParams {
+  page?: number;
+  pageSize?: number;
+  environment?: 'development' | 'test' | 'staging' | 'demo' | 'production';
+}
+
+export interface ReleaseChannelReleasesCreateParams {
+  idempotencyKey: string;
+}
+
+export class ReleaseChannelReleasesApi {
+  private client: HttpClient;
+  public readonly publishCommands: ReleaseChannelReleasesPublishCommandsApi;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+    this.publishCommands = new ReleaseChannelReleasesPublishCommandsApi(client);
+  }
+
+
+/** List WeChat channel release records */
+  async list(appId: string, params?: ReleaseChannelReleasesListParams, requestOptions?: ApiRequestOptions): Promise<{ items: ChannelReleaseResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+      { name: 'environment', value: params?.environment, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: ChannelReleaseResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/channel_releases`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Create a draft WeChat channel release record */
+  async create(appId: string, body: CreateChannelReleaseRequest, params: ReleaseChannelReleasesCreateParams, requestOptions?: ApiRequestOptions): Promise<ChannelReleaseResponse> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<ChannelReleaseResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/channel_releases`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** Retrieve one WeChat channel release record */
+  async retrieve(appId: string, channelReleaseId: string, requestOptions?: ApiRequestOptions): Promise<ChannelReleaseResponse> {
+    return this.client.request<ChannelReleaseResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/channel_releases/${serializePathParameter(channelReleaseId, { name: 'channelReleaseId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Advance one WeChat channel release to a new observed state */
+  async update(appId: string, channelReleaseId: string, body: TransitionChannelReleaseRequest, requestOptions?: ApiRequestOptions): Promise<ChannelReleaseResponse> {
+    return this.client.request<ChannelReleaseResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/channel_releases/${serializePathParameter(channelReleaseId, { name: 'channelReleaseId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PATCH' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+}
+
 export interface ReleaseListParams {
   page?: number;
   pageSize?: number;
@@ -74,10 +174,14 @@ export interface ReleaseCreateParams {
 
 export class ReleaseApi {
   private client: HttpClient;
+  public readonly channelReleases: ReleaseChannelReleasesApi;
+  public readonly channelDirectUploadPlans: ReleaseChannelDirectUploadPlansApi;
   public readonly channels: ReleaseChannelsApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.channelReleases = new ReleaseChannelReleasesApi(client);
+    this.channelDirectUploadPlans = new ReleaseChannelDirectUploadPlansApi(client);
     this.channels = new ReleaseChannelsApi(client);
   }
 

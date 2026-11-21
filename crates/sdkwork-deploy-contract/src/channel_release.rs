@@ -411,6 +411,209 @@ pub struct ChannelReleaseResponse {
     pub version: String,
 }
 
+/// Advances one channel release to a new observed state.
+///
+/// `expected_version` is the optimistic-concurrency version read from the
+/// previous response; a stale value is rejected instead of overwriting a newer
+/// provider observation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TransitionChannelReleaseRequest {
+    /// Optimistic version the caller read, decimal string on the wire.
+    #[serde(rename = "expectedVersion")]
+    pub expected_version: String,
+    /// Target state.
+    #[serde(rename = "releaseStatus")]
+    pub release_status: ChannelReleaseStatus,
+    /// Provider commit id, when the transition records an upload.
+    #[serde(rename = "commitId", skip_serializing_if = "Option::is_none")]
+    pub commit_id: Option<String>,
+    /// Provider audit id, when the transition records a submission.
+    #[serde(rename = "auditId", skip_serializing_if = "Option::is_none")]
+    pub audit_id: Option<String>,
+    /// Stable provider error code, when the transition records a failure.
+    #[serde(rename = "errorCode", skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+}
+
+/// Upload action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_UPLOAD: &str = "upload";
+/// Submit-review action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_SUBMIT_AUDIT: &str = "submit_audit";
+/// Publish action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_RELEASE: &str = "release";
+/// Rollback action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_ROLLBACK: &str = "rollback";
+/// Gray-rollout action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_GRAY: &str = "gray";
+/// Server-domain edit action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_MODIFY_DOMAINS: &str = "modify_domains";
+/// Privacy-declaration action for a publish command.
+pub const CHANNEL_RELEASE_ACTION_SET_PRIVACY: &str = "set_privacy";
+
+/// One publish step for a channel release.
+///
+/// A single command surface keeps the five provider steps on the same
+/// authorization, version, and audit path instead of five near-identical
+/// endpoints that would each need their own state guards.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChannelReleasePublishCommandRequest {
+    /// `upload` | `submit_audit` | `release` | `rollback` | `gray`.
+    pub action: String,
+    /// IAM resource authorization that owns the authorizer token.
+    #[serde(rename = "authorizationId")]
+    pub authorization_id: String,
+    /// WeChat template id, required by `upload` when the release has none.
+    #[serde(rename = "templateId", skip_serializing_if = "Option::is_none")]
+    pub template_id: Option<String>,
+    /// User-facing version, required by `upload` when the release has none.
+    #[serde(rename = "providerVersion", skip_serializing_if = "Option::is_none")]
+    pub provider_version: Option<String>,
+    /// `ext_json` overrides for the component path.
+    #[serde(rename = "extJson", skip_serializing_if = "Option::is_none")]
+    pub ext_json: Option<serde_json::Value>,
+    /// Version to restore on `rollback`.
+    #[serde(rename = "targetVersion", skip_serializing_if = "Option::is_none")]
+    pub target_version: Option<String>,
+    /// Percentage `0..=100` on `gray`.
+    #[serde(rename = "grayPercentage", skip_serializing_if = "Option::is_none")]
+    pub gray_percentage: Option<u16>,
+    /// WeChat review item list, required by `submit_audit`.
+    #[serde(rename = "items", skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<serde_json::Value>>,
+    /// Domain action (`add` / `set` / `delete`), required by `modify_domains`.
+    #[serde(rename = "domainAction", skip_serializing_if = "Option::is_none")]
+    pub domain_action: Option<String>,
+    /// Request domains, required by `modify_domains`.
+    #[serde(rename = "domains", skip_serializing_if = "Option::is_none")]
+    pub domains: Option<Vec<String>>,
+    /// Privacy declaration, required by `set_privacy`.
+    #[serde(rename = "privacy", skip_serializing_if = "Option::is_none")]
+    pub privacy: Option<serde_json::Value>,
+    /// WeChat AppID, required by a direct-mode (`self_managed`) upload.
+    #[serde(rename = "providerAppId", skip_serializing_if = "Option::is_none")]
+    pub provider_app_id: Option<String>,
+    /// Project directory, required by a direct-mode upload.
+    #[serde(rename = "projectDir", skip_serializing_if = "Option::is_none")]
+    pub project_dir: Option<String>,
+    /// Upload private key path, required by a direct-mode upload.
+    #[serde(rename = "privateKeyPath", skip_serializing_if = "Option::is_none")]
+    pub private_key_path: Option<String>,
+    /// Optional CI robot number, `1..=30`.
+    #[serde(rename = "robot", skip_serializing_if = "Option::is_none")]
+    pub robot: Option<u8>,
+}
+
+impl ChannelReleasePublishCommandRequest {
+    /// Rejects an action or field set the publisher cannot apply.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.authorization_id.trim().is_empty() {
+            return Err("authorizationId is required".to_string());
+        }
+        match self.action.trim() {
+            CHANNEL_RELEASE_ACTION_UPLOAD
+            | CHANNEL_RELEASE_ACTION_SUBMIT_AUDIT
+            | CHANNEL_RELEASE_ACTION_RELEASE => Ok(()),
+            CHANNEL_RELEASE_ACTION_ROLLBACK => {
+                if self
+                    .target_version
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none()
+                {
+                    return Err("targetVersion is required for a rollback".to_string());
+                }
+                Ok(())
+            }
+            CHANNEL_RELEASE_ACTION_GRAY => match self.gray_percentage {
+                Some(value) if value <= 100 => Ok(()),
+                Some(_) => Err("grayPercentage must be between 0 and 100".to_string()),
+                None => Err("grayPercentage is required for a gray rollout".to_string()),
+            },
+            CHANNEL_RELEASE_ACTION_MODIFY_DOMAINS => {
+                let action = self
+                    .domain_action
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| matches!(*value, "add" | "set" | "delete"))
+                    .ok_or_else(|| "domainAction must be add, set, or delete".to_string())?;
+                let _ = action;
+                match self.domains.as_ref() {
+                    Some(domains) if !domains.is_empty() => Ok(()),
+                    _ => Err("domains is required for a domain edit".to_string()),
+                }
+            }
+            CHANNEL_RELEASE_ACTION_SET_PRIVACY => match self.privacy.as_ref() {
+                Some(privacy) if privacy.is_object() => Ok(()),
+                Some(_) => Err("privacy must be a JSON object".to_string()),
+                None => Err("privacy is required for a privacy update".to_string()),
+            },
+            other => Err(format!("unknown channel release action {other}")),
+        }
+    }
+}
+
+impl TransitionChannelReleaseRequest {
+    /// Rejects a body the repository cannot apply.
+    pub fn validate(&self) -> Result<i64, String> {
+        let expected_version = self
+            .expected_version
+            .trim()
+            .parse::<i64>()
+            .map_err(|_| "expectedVersion must be a decimal integer".to_string())?;
+        if expected_version < 1 {
+            return Err("expectedVersion must be positive".to_string());
+        }
+        Ok(expected_version)
+    }
+}
+
+/// Plans a direct-mode (`self_managed`) mini-program upload.
+///
+/// The customer keeps their own WeChat account and upload key; Deploy returns
+/// the exact `miniprogram-ci` invocation and never reads the key itself.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateChannelDirectUploadPlanRequest {
+    /// WeChat AppID of the customer's mini program.
+    #[serde(rename = "providerAppId")]
+    pub provider_app_id: String,
+    /// Path to the projected mini-program project.
+    #[serde(rename = "projectDir")]
+    pub project_dir: String,
+    /// Path to the customer's upload private key.
+    #[serde(rename = "privateKeyPath")]
+    pub private_key_path: String,
+    /// Version shown to users.
+    pub version: String,
+    /// Upload description (build identity).
+    pub description: String,
+    /// Optional CI robot number, `1..=30`.
+    pub robot: Option<u8>,
+}
+
+/// The deterministic direct-mode upload invocation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChannelDirectUploadPlan {
+    /// Executable name.
+    pub program: String,
+    /// Ordered argument vector.
+    pub args: Vec<String>,
+}
+
+/// One page of channel releases.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChannelReleasePage {
+    /// Page items, newest first.
+    pub items: Vec<ChannelReleaseResponse>,
+    /// Total rows for the filtered scope.
+    pub total: i64,
+    /// 1-based page number.
+    pub page: i32,
+    /// Requested page size.
+    #[serde(rename = "pageSize")]
+    pub page_size: i32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,6 +750,156 @@ mod tests {
         ] {
             assert_eq!(ChannelKind::from_wire(kind.as_str()), Some(kind));
         }
+    }
+
+    #[test]
+    fn transition_request_requires_a_positive_decimal_version() {
+        let valid = TransitionChannelReleaseRequest {
+            expected_version: "7".to_string(),
+            release_status: ChannelReleaseStatus::Uploaded,
+            commit_id: None,
+            audit_id: None,
+            error_code: None,
+        };
+        assert_eq!(valid.validate(), Ok(7));
+        for invalid in ["", "abc", "0", "-1", "1.5"] {
+            let request = TransitionChannelReleaseRequest {
+                expected_version: invalid.to_string(),
+                release_status: ChannelReleaseStatus::Uploaded,
+                commit_id: None,
+                audit_id: None,
+                error_code: None,
+            };
+            assert!(request.validate().is_err(), "{invalid} must be rejected");
+        }
+    }
+
+    #[test]
+    fn publish_command_requires_action_specific_fields() {
+        let base = ChannelReleasePublishCommandRequest {
+            action: CHANNEL_RELEASE_ACTION_UPLOAD.to_string(),
+            authorization_id: "auth-1".to_string(),
+            template_id: None,
+            provider_version: None,
+            ext_json: None,
+            target_version: None,
+            gray_percentage: None,
+            items: None,
+            domain_action: None,
+            domains: None,
+            privacy: None,
+            provider_app_id: None,
+            project_dir: None,
+            private_key_path: None,
+            robot: None,
+        };
+        assert!(base.validate().is_ok());
+        let missing_authorization = ChannelReleasePublishCommandRequest {
+            authorization_id: String::new(),
+            ..base.clone()
+        };
+        assert!(missing_authorization.validate().is_err());
+
+        let rollback = ChannelReleasePublishCommandRequest {
+            action: CHANNEL_RELEASE_ACTION_ROLLBACK.to_string(),
+            ..base.clone()
+        };
+        assert!(rollback.validate().is_err());
+        let rollback_with_target = ChannelReleasePublishCommandRequest {
+            target_version: Some("0.9.0".to_string()),
+            ..rollback.clone()
+        };
+        assert!(rollback_with_target.validate().is_ok());
+
+        let gray_without_percentage = ChannelReleasePublishCommandRequest {
+            action: CHANNEL_RELEASE_ACTION_GRAY.to_string(),
+            ..base.clone()
+        };
+        assert!(gray_without_percentage.validate().is_err());
+        let gray_out_of_range = ChannelReleasePublishCommandRequest {
+            gray_percentage: Some(101),
+            ..gray_without_percentage.clone()
+        };
+        assert!(gray_out_of_range.validate().is_err());
+        let gray_ok = ChannelReleasePublishCommandRequest {
+            gray_percentage: Some(30),
+            ..gray_without_percentage
+        };
+        assert!(gray_ok.validate().is_ok());
+
+        let unknown = ChannelReleasePublishCommandRequest {
+            action: "delete_everything".to_string(),
+            ..base
+        };
+        assert!(unknown.validate().is_err());
+    }
+
+    #[test]
+    fn domain_and_privacy_actions_validate_their_fields() {
+        let base = ChannelReleasePublishCommandRequest {
+            action: CHANNEL_RELEASE_ACTION_MODIFY_DOMAINS.to_string(),
+            authorization_id: "auth-1".to_string(),
+            template_id: None,
+            provider_version: None,
+            ext_json: None,
+            target_version: None,
+            gray_percentage: None,
+            items: None,
+            domain_action: None,
+            domains: None,
+            privacy: None,
+            provider_app_id: None,
+            project_dir: None,
+            private_key_path: None,
+            robot: None,
+        };
+        assert!(base.validate().is_err());
+        let with_domains = ChannelReleasePublishCommandRequest {
+            domain_action: Some("add".to_string()),
+            domains: Some(vec!["https://api.example.com".to_string()]),
+            ..base.clone()
+        };
+        assert!(with_domains.validate().is_ok());
+        let bad_action = ChannelReleasePublishCommandRequest {
+            domain_action: Some("replace".to_string()),
+            ..with_domains.clone()
+        };
+        assert!(bad_action.validate().is_err());
+
+        let privacy = ChannelReleasePublishCommandRequest {
+            action: CHANNEL_RELEASE_ACTION_SET_PRIVACY.to_string(),
+            ..base
+        };
+        assert!(privacy.validate().is_err());
+        let privacy_object = ChannelReleasePublishCommandRequest {
+            privacy: Some(serde_json::json!({"privacy_ver": 1})),
+            ..privacy.clone()
+        };
+        assert!(privacy_object.validate().is_ok());
+        let privacy_scalar = ChannelReleasePublishCommandRequest {
+            privacy: Some(serde_json::json!("text")),
+            ..privacy
+        };
+        assert!(privacy_scalar.validate().is_err());
+    }
+
+    #[test]
+    fn direct_upload_plan_request_round_trips() {
+        let request = CreateChannelDirectUploadPlanRequest {
+            provider_app_id: "wx123".to_string(),
+            project_dir: "/srv/apps/demo".to_string(),
+            private_key_path: "/run/secrets/ci.key".to_string(),
+            version: "1.0.0".to_string(),
+            description: "build 42".to_string(),
+            robot: Some(7),
+        };
+        let encoded = serde_json::to_string(&request).expect("serialize");
+        assert!(encoded.contains("\"providerAppId\":\"wx123\""));
+        assert!(encoded.contains("\"robot\":7"));
+        let decoded: CreateChannelDirectUploadPlanRequest =
+            serde_json::from_str(&encoded).expect("deserialize");
+        assert_eq!(decoded.provider_app_id, "wx123");
+        assert_eq!(decoded.robot, Some(7));
     }
 
     #[test]

@@ -8,8 +8,11 @@
 //! upload commands are constructed only when the corresponding secret files
 //! are present.
 
+pub mod channel_ci;
 pub mod ota_manifest;
 pub mod review_observer;
+
+pub use channel_ci::TokioChannelCiProcess;
 
 pub use ota_manifest::{
     generate_android_ota_json, generate_ios_ota_plist, OtaManifestError, OtaManifestInput,

@@ -14,9 +14,15 @@ pub mod certificate_dns_account;
 pub mod certificate_issuance;
 pub mod certificate_material;
 pub mod certificate_renewal;
+pub mod channel_capability_client;
+pub mod channel_capability_provider;
+pub mod channel_ci_process;
+pub mod channel_ci_runner;
 pub mod channel_release;
+pub mod channel_release_commands;
 pub mod channel_release_direct;
 pub mod channel_release_observer;
+pub mod channel_release_publisher;
 pub mod cloud_accounts;
 pub mod domain_dns_records;
 pub mod domain_verification;
@@ -65,6 +71,17 @@ pub use certificate_renewal::{
     MAXIMUM_RENEW_BEFORE_DAYS, MINIMUM_RENEW_BEFORE_DAYS, RENEWAL_OVERDUE_GRACE_DAYS,
     SWEEP_LOOKAHEAD_DAYS,
 };
+pub use channel_capability_client::{
+    ChannelCapabilityBearerAuth, ChannelCapabilityTransport, IamChannelCapabilityClient,
+    ReqwestChannelCapabilityTransport, StaticChannelCapabilityBearerAuth,
+    UnconfiguredChannelCapabilityBearerAuth,
+};
+pub use channel_capability_provider::IamChannelCapabilityChannelReleaseProvider;
+pub use channel_ci_process::TokioChannelCiProcess;
+pub use channel_ci_runner::{
+    BoundedChannelCiRunner, ChannelCiOutcome, ChannelCiProcess, ChannelCiRunner,
+    DirectUploadPolicy, UnconfiguredChannelCiRunner,
+};
 pub use channel_release::{
     plan_command_transitions, ChannelReleaseCommand, ChannelReleaseProvider,
     MiniProgramAuditObservation, MiniProgramAuditOutcome, MiniProgramAuditSubmission,
@@ -72,12 +89,14 @@ pub use channel_release::{
     MiniProgramRollbackRequest, MiniProgramUploadOutcome, MiniProgramUploadRequest,
     UnavailableChannelReleaseProvider,
 };
+pub use channel_release_commands::PortChannelReleaseStore;
 pub use channel_release_direct::{
     command_uses_direct_ci, direct_upload_command, plan_direct_upload, plan_miniprogram_ci_upload,
     MiniProgramCiInvocation, MiniProgramCiUploadRequest, MAX_CI_ROBOT, MAX_PROVIDER_VERSION_CHARS,
     MAX_UPLOAD_DESCRIPTION_CHARS, MIN_CI_ROBOT,
 };
 pub use channel_release_observer::{ChannelReleaseReviewObserver, ChannelReleaseStore};
+pub use channel_release_publisher::ChannelReleasePublisher;
 pub use domain_dns_records::hostname_matches_record;
 pub use domain_verification::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, normalize_domain_hostname,
@@ -191,6 +210,12 @@ pub struct DeployService {
     /// repository `PENDING` with `GIT_VALIDATION_PROBE_UNAVAILABLE`.
     pub(crate) git_repository_probe: Option<Arc<dyn GitRepositoryProbePort>>,
     runtime_publication: Option<Arc<RuntimePublicationService>>,
+    /// Provider-side channel execution. Fail-closed until a gateway client is
+    /// installed; a deployment can never claim a publish the provider rejected.
+    pub(crate) channel_release_provider: Arc<dyn crate::channel_release::ChannelReleaseProvider>,
+    /// Direct-mode (`self_managed`) upload execution. Fail-closed until the
+    /// worker sandbox roots are configured.
+    pub(crate) channel_ci_runner: Arc<dyn crate::channel_ci_runner::ChannelCiRunner>,
 }
 
 impl DeployService {
@@ -213,6 +238,10 @@ impl DeployService {
             ),
             git_repository_probe: None,
             runtime_publication: None,
+            channel_release_provider: Arc::new(
+                crate::channel_release::UnavailableChannelReleaseProvider,
+            ),
+            channel_ci_runner: Arc::new(crate::channel_ci_runner::UnconfiguredChannelCiRunner),
         }
     }
 
@@ -241,7 +270,32 @@ impl DeployService {
             ),
             git_repository_probe: None,
             runtime_publication: Some(runtime_publication),
+            channel_release_provider: Arc::new(
+                crate::channel_release::UnavailableChannelReleaseProvider,
+            ),
+            channel_ci_runner: Arc::new(crate::channel_ci_runner::UnconfiguredChannelCiRunner),
         }
+    }
+
+    /// Installs the direct-mode (`self_managed`) CI runner.
+    pub fn with_channel_ci_runner(
+        mut self,
+        runner: Arc<dyn crate::channel_ci_runner::ChannelCiRunner>,
+    ) -> Self {
+        self.channel_ci_runner = runner;
+        self
+    }
+
+    /// Installs the provider-side channel execution client.
+    ///
+    /// Without it every publish command fails closed with a conflict, which is
+    /// what keeps a "released" status honest.
+    pub fn with_channel_release_provider(
+        mut self,
+        provider: Arc<dyn crate::channel_release::ChannelReleaseProvider>,
+    ) -> Self {
+        self.channel_release_provider = provider;
+        self
     }
 
     /// Installs the verification-file self-check probe.

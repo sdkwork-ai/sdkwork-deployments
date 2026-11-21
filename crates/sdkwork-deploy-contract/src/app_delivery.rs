@@ -810,6 +810,17 @@ pub struct UpdateAppRequest {
     /// to write back `metadata.media` after the Drive upload completes.
     #[serde(default)]
     pub metadata: Option<Value>,
+    /// Correct the endpoint kind of a draft application.
+    ///
+    /// A kind is immutable for a released endpoint (`APPLICATION_FACTORY_DEPLOYMENT_SPEC.md`
+    /// §5): the token audience, package formats, and store identity belong to it.
+    /// This field is therefore **not** a rename — the service accepts it only for
+    /// a `DRAFT` application with no platform targets and no releases, rejects the
+    /// legacy `SPA_WEB`/`STATIC_WEB` kinds, records the correction in the audit
+    /// log, and re-provisions the IAM installation so its `application_type`
+    /// follows the new kind.
+    #[serde(rename = "appKind", default)]
+    pub app_kind: Option<AppKind>,
     /// Moves the app to another ownership level. Absent leaves it alone.
     ///
     /// A plain `Option` rather than the double-`Option` used by `appDomainLabel`:
@@ -1849,6 +1860,8 @@ pub struct SigningIdentityPage {
 pub const USAGE_DIMENSION_BUILD_MINUTES: &str = "build_minutes";
 pub const USAGE_DIMENSION_PACKAGE_STORAGE_BYTES: &str = "package_storage_bytes";
 pub const USAGE_DIMENSION_DEPLOYMENT_COUNT: &str = "deployment_count";
+/// Metered WeChat channel publish operations.
+pub const USAGE_DIMENSION_CHANNEL_RELEASE_COUNT: &str = "channel_release_count";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct UsageEventResponse {
@@ -2079,6 +2092,8 @@ pub const ENTITLEMENT_DIMENSION_PACKAGE_STORAGE_BYTES: &str = "package_storage_b
 pub const ENTITLEMENT_DIMENSION_RELEASE_COUNT: &str = "release_count";
 pub const ENTITLEMENT_DIMENSION_DEPLOYMENT_COUNT: &str = "deployment_count";
 pub const ENTITLEMENT_DIMENSION_CHANNEL_COUNT: &str = "channel_count";
+/// Live WeChat channel release records (one per publish attempt).
+pub const ENTITLEMENT_DIMENSION_CHANNEL_RELEASE_COUNT: &str = "channel_release_count";
 pub const ENTITLEMENT_DIMENSION_TRAFFIC_REQUESTS: &str = "traffic.requests";
 pub const ENTITLEMENT_DIMENSION_TRAFFIC_INGRESS_BYTES: &str = "traffic.ingress_bytes";
 pub const ENTITLEMENT_DIMENSION_TRAFFIC_EGRESS_BYTES: &str = "traffic.egress_bytes";

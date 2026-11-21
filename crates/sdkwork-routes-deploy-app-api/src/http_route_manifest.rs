@@ -628,6 +628,51 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.releases.read"),
     HttpRoute::dual_token(
         HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/channel_releases",
+        "release",
+        "channelReleases.list",
+    )
+    .with_required_permission("deploy.channelReleases.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/channel_releases",
+        "release",
+        "channelReleases.create",
+    )
+    .with_required_permission("deploy.channelReleases.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/channel_releases/{channelReleaseId}",
+        "release",
+        "channelReleases.retrieve",
+    )
+    .with_required_permission("deploy.channelReleases.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Patch,
+        "/app/v3/api/apps/{appId}/channel_releases/{channelReleaseId}",
+        "release",
+        "channelReleases.update",
+    )
+    .with_required_permission("deploy.channelReleases.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/channel_releases/{channelReleaseId}/publish_commands",
+        "release",
+        "channelReleases.publishCommands.create",
+    )
+    .with_required_permission("deploy.channelReleases.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/channel_direct_upload_plans",
+        "release",
+        "channelDirectUploadPlans.create",
+    )
+    .with_required_permission("deploy.channelDirectUploadPlans.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
         "/app/v3/api/apps/{appId}/channels",
         "release",
         "channels.list",

@@ -5917,6 +5917,7 @@ class UpdateAppRequest {
   final String? appStatus;
   final String? defaultEnvironment;
   final Map<String, dynamic>? metadata;
+  final String? appKind;
   final String? appDomainLabel;
   final List<String>? appDomainSuffixes;
 
@@ -5928,6 +5929,7 @@ class UpdateAppRequest {
     this.appStatus,
     this.defaultEnvironment,
     this.metadata,
+    this.appKind,
     this.appDomainLabel,
     this.appDomainSuffixes
   });
@@ -5941,6 +5943,7 @@ class UpdateAppRequest {
       appStatus: json['appStatus']?.toString(),
       defaultEnvironment: json['defaultEnvironment']?.toString(),
       metadata: _sdkworkAsMap(json['metadata']),
+      appKind: json['appKind']?.toString(),
       appDomainLabel: json['appDomainLabel']?.toString(),
       appDomainSuffixes: (() {
         final list = _sdkworkAsList(json['appDomainSuffixes']);
@@ -5964,6 +5967,7 @@ class UpdateAppRequest {
       'appStatus': appStatus,
       'defaultEnvironment': defaultEnvironment,
       'metadata': metadata,
+      'appKind': appKind,
       'appDomainLabel': appDomainLabel,
       'appDomainSuffixes': appDomainSuffixes?.map((item) => item).toList(),
     };
@@ -7757,6 +7761,485 @@ class CreateAppReleaseRequest {
       'releaseNotes': releaseNotes,
       'releaseStatus': releaseStatus,
       'idempotencyKey': idempotencyKey,
+    };
+  }
+}
+
+class CreateChannelReleaseRequest {
+  final String environment;
+  final String resourceLinkId;
+  final String channel;
+  final String accessMode;
+  final String? templateId;
+  final String? providerVersion;
+  final Map<String, dynamic>? extJson;
+
+  CreateChannelReleaseRequest({
+    required this.environment,
+    required this.resourceLinkId,
+    required this.channel,
+    required this.accessMode,
+    this.templateId,
+    this.providerVersion,
+    this.extJson
+  });
+
+  factory CreateChannelReleaseRequest.fromJson(Map<String, dynamic> json) {
+    return CreateChannelReleaseRequest(
+      environment: (() {
+        final value = json['environment']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelReleaseRequest.environment is required');
+        }
+        return value;
+      })(),
+      resourceLinkId: (() {
+        final value = json['resourceLinkId']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelReleaseRequest.resourceLinkId is required');
+        }
+        return value;
+      })(),
+      channel: (() {
+        final value = json['channel']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelReleaseRequest.channel is required');
+        }
+        return value;
+      })(),
+      accessMode: (() {
+        final value = json['accessMode']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelReleaseRequest.accessMode is required');
+        }
+        return value;
+      })(),
+      templateId: json['templateId']?.toString(),
+      providerVersion: json['providerVersion']?.toString(),
+      extJson: _sdkworkAsMap(json['extJson'])
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'environment': environment,
+      'resourceLinkId': resourceLinkId,
+      'channel': channel,
+      'accessMode': accessMode,
+      'templateId': templateId,
+      'providerVersion': providerVersion,
+      'extJson': extJson,
+    };
+  }
+}
+
+class TransitionChannelReleaseRequest {
+  final String expectedVersion;
+  final String releaseStatus;
+  final String? commitId;
+  final String? auditId;
+  final String? errorCode;
+
+  TransitionChannelReleaseRequest({
+    required this.expectedVersion,
+    required this.releaseStatus,
+    this.commitId,
+    this.auditId,
+    this.errorCode
+  });
+
+  factory TransitionChannelReleaseRequest.fromJson(Map<String, dynamic> json) {
+    return TransitionChannelReleaseRequest(
+      expectedVersion: (() {
+        final value = json['expectedVersion']?.toString();
+        if (value == null) {
+          throw FormatException('TransitionChannelReleaseRequest.expectedVersion is required');
+        }
+        return value;
+      })(),
+      releaseStatus: (() {
+        final value = json['releaseStatus']?.toString();
+        if (value == null) {
+          throw FormatException('TransitionChannelReleaseRequest.releaseStatus is required');
+        }
+        return value;
+      })(),
+      commitId: json['commitId']?.toString(),
+      auditId: json['auditId']?.toString(),
+      errorCode: json['errorCode']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'expectedVersion': expectedVersion,
+      'releaseStatus': releaseStatus,
+      'commitId': commitId,
+      'auditId': auditId,
+      'errorCode': errorCode,
+    };
+  }
+}
+
+class ChannelReleasePublishCommandRequest {
+  final String action;
+  final String authorizationId;
+  final String? templateId;
+  final String? providerVersion;
+  final Map<String, dynamic>? extJson;
+  final String? targetVersion;
+  final int? grayPercentage;
+  final List<Map<String, dynamic>>? items;
+  final String? domainAction;
+  final List<String>? domains;
+  final Map<String, dynamic>? privacy;
+  final String? providerAppId;
+  final String? projectDir;
+  final String? privateKeyPath;
+  final int? robot;
+
+  ChannelReleasePublishCommandRequest({
+    required this.action,
+    required this.authorizationId,
+    this.templateId,
+    this.providerVersion,
+    this.extJson,
+    this.targetVersion,
+    this.grayPercentage,
+    this.items,
+    this.domainAction,
+    this.domains,
+    this.privacy,
+    this.providerAppId,
+    this.projectDir,
+    this.privateKeyPath,
+    this.robot
+  });
+
+  factory ChannelReleasePublishCommandRequest.fromJson(Map<String, dynamic> json) {
+    return ChannelReleasePublishCommandRequest(
+      action: (() {
+        final value = json['action']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasePublishCommandRequest.action is required');
+        }
+        return value;
+      })(),
+      authorizationId: (() {
+        final value = json['authorizationId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasePublishCommandRequest.authorizationId is required');
+        }
+        return value;
+      })(),
+      templateId: json['templateId']?.toString(),
+      providerVersion: json['providerVersion']?.toString(),
+      extJson: _sdkworkAsMap(json['extJson']),
+      targetVersion: json['targetVersion']?.toString(),
+      grayPercentage: json['grayPercentage'] is int ? json['grayPercentage'] : null,
+      items: (() {
+        final list = _sdkworkAsList(json['items']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => _sdkworkAsMap(item))
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      })(),
+      domainAction: json['domainAction']?.toString(),
+      domains: (() {
+        final list = _sdkworkAsList(json['domains']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      privacy: _sdkworkAsMap(json['privacy']),
+      providerAppId: json['providerAppId']?.toString(),
+      projectDir: json['projectDir']?.toString(),
+      privateKeyPath: json['privateKeyPath']?.toString(),
+      robot: json['robot'] is int ? json['robot'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'action': action,
+      'authorizationId': authorizationId,
+      'templateId': templateId,
+      'providerVersion': providerVersion,
+      'extJson': extJson,
+      'targetVersion': targetVersion,
+      'grayPercentage': grayPercentage,
+      'items': items?.map((item) => item).toList(),
+      'domainAction': domainAction,
+      'domains': domains?.map((item) => item).toList(),
+      'privacy': privacy,
+      'providerAppId': providerAppId,
+      'projectDir': projectDir,
+      'privateKeyPath': privateKeyPath,
+      'robot': robot,
+    };
+  }
+}
+
+class CreateChannelDirectUploadPlanRequest {
+  final String providerAppId;
+  final String projectDir;
+  final String privateKeyPath;
+  final String version;
+  final String description;
+  final int? robot;
+
+  CreateChannelDirectUploadPlanRequest({
+    required this.providerAppId,
+    required this.projectDir,
+    required this.privateKeyPath,
+    required this.version,
+    required this.description,
+    this.robot
+  });
+
+  factory CreateChannelDirectUploadPlanRequest.fromJson(Map<String, dynamic> json) {
+    return CreateChannelDirectUploadPlanRequest(
+      providerAppId: (() {
+        final value = json['providerAppId']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelDirectUploadPlanRequest.providerAppId is required');
+        }
+        return value;
+      })(),
+      projectDir: (() {
+        final value = json['projectDir']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelDirectUploadPlanRequest.projectDir is required');
+        }
+        return value;
+      })(),
+      privateKeyPath: (() {
+        final value = json['privateKeyPath']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelDirectUploadPlanRequest.privateKeyPath is required');
+        }
+        return value;
+      })(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelDirectUploadPlanRequest.version is required');
+        }
+        return value;
+      })(),
+      description: (() {
+        final value = json['description']?.toString();
+        if (value == null) {
+          throw FormatException('CreateChannelDirectUploadPlanRequest.description is required');
+        }
+        return value;
+      })(),
+      robot: json['robot'] is int ? json['robot'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'providerAppId': providerAppId,
+      'projectDir': projectDir,
+      'privateKeyPath': privateKeyPath,
+      'version': version,
+      'description': description,
+      'robot': robot,
+    };
+  }
+}
+
+class ChannelDirectUploadPlan {
+  final String program;
+  final List<String> args;
+
+  ChannelDirectUploadPlan({
+    required this.program,
+    required this.args
+  });
+
+  factory ChannelDirectUploadPlan.fromJson(Map<String, dynamic> json) {
+    return ChannelDirectUploadPlan(
+      program: (() {
+        final value = json['program']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelDirectUploadPlan.program is required');
+        }
+        return value;
+      })(),
+      args: (() {
+        final list = _sdkworkAsList(json['args']);
+        if (list == null) {
+          throw FormatException('ChannelDirectUploadPlan.args is required');
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'program': program,
+      'args': args.map((item) => item).toList(),
+    };
+  }
+}
+
+class ChannelReleaseResponse {
+  final String id;
+  final String appId;
+  final String environment;
+  final String channel;
+  final String accessMode;
+  final String? providerVersion;
+  final String? templateId;
+  final String? commitId;
+  final String? auditId;
+  final String releaseStatus;
+  final int grayPercentage;
+  final String? rollbackOfReleaseId;
+  final String? errorCode;
+  final String? submittedAt;
+  final String? releasedAt;
+  final String createdAt;
+  final String updatedAt;
+  final String version;
+
+  ChannelReleaseResponse({
+    required this.id,
+    required this.appId,
+    required this.environment,
+    required this.channel,
+    required this.accessMode,
+    this.providerVersion,
+    this.templateId,
+    this.commitId,
+    this.auditId,
+    required this.releaseStatus,
+    required this.grayPercentage,
+    this.rollbackOfReleaseId,
+    this.errorCode,
+    this.submittedAt,
+    this.releasedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version
+  });
+
+  factory ChannelReleaseResponse.fromJson(Map<String, dynamic> json) {
+    return ChannelReleaseResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.id is required');
+        }
+        return value;
+      })(),
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.appId is required');
+        }
+        return value;
+      })(),
+      environment: (() {
+        final value = json['environment']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.environment is required');
+        }
+        return value;
+      })(),
+      channel: (() {
+        final value = json['channel']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.channel is required');
+        }
+        return value;
+      })(),
+      accessMode: (() {
+        final value = json['accessMode']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.accessMode is required');
+        }
+        return value;
+      })(),
+      providerVersion: json['providerVersion']?.toString(),
+      templateId: json['templateId']?.toString(),
+      commitId: json['commitId']?.toString(),
+      auditId: json['auditId']?.toString(),
+      releaseStatus: (() {
+        final value = json['releaseStatus']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.releaseStatus is required');
+        }
+        return value;
+      })(),
+      grayPercentage: (() {
+        final value = json['grayPercentage'];
+        if (value is! int) {
+          throw FormatException('ChannelReleaseResponse.grayPercentage is required');
+        }
+        return value;
+      })(),
+      rollbackOfReleaseId: json['rollbackOfReleaseId']?.toString(),
+      errorCode: json['errorCode']?.toString(),
+      submittedAt: json['submittedAt']?.toString(),
+      releasedAt: json['releasedAt']?.toString(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      updatedAt: (() {
+        final value = json['updatedAt']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.updatedAt is required');
+        }
+        return value;
+      })(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleaseResponse.version is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'environment': environment,
+      'channel': channel,
+      'accessMode': accessMode,
+      'providerVersion': providerVersion,
+      'templateId': templateId,
+      'commitId': commitId,
+      'auditId': auditId,
+      'releaseStatus': releaseStatus,
+      'grayPercentage': grayPercentage,
+      'rollbackOfReleaseId': rollbackOfReleaseId,
+      'errorCode': errorCode,
+      'submittedAt': submittedAt,
+      'releasedAt': releasedAt,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'version': version,
     };
   }
 }
@@ -13539,6 +14022,282 @@ class ReleasesRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('ReleasesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ChannelReleasesListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ChannelReleasesListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ChannelReleasesListResponse.fromJson(Map<String, dynamic> json) {
+    return ChannelReleasesListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ChannelReleasesListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ChannelReleasesListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasesListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ChannelReleasesCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ChannelReleasesCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ChannelReleasesCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ChannelReleasesCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ChannelReleasesCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ChannelReleasesCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasesCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ChannelReleasesRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ChannelReleasesRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ChannelReleasesRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return ChannelReleasesRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ChannelReleasesRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ChannelReleasesRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ChannelReleasesUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ChannelReleasesUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ChannelReleasesUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return ChannelReleasesUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ChannelReleasesUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ChannelReleasesUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasesUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ChannelReleasesPublishCommandsCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ChannelReleasesPublishCommandsCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ChannelReleasesPublishCommandsCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ChannelReleasesPublishCommandsCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ChannelReleasesPublishCommandsCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ChannelReleasesPublishCommandsCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelReleasesPublishCommandsCreateResponse201.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class ChannelDirectUploadPlansCreateResponse201 {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  ChannelDirectUploadPlansCreateResponse201({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory ChannelDirectUploadPlansCreateResponse201.fromJson(Map<String, dynamic> json) {
+    return ChannelDirectUploadPlansCreateResponse201(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('ChannelDirectUploadPlansCreateResponse201.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('ChannelDirectUploadPlansCreateResponse201.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('ChannelDirectUploadPlansCreateResponse201.traceId is required');
         }
         return value;
       })()

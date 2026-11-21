@@ -1,3 +1,4 @@
+import type { AppKind } from './app-kind';
 import type { AppOwnerType } from './app-owner-type';
 import type { AppStatus } from './app-status';
 
@@ -12,6 +13,8 @@ export interface UpdateAppRequest {
   defaultEnvironment?: string;
   /** Free-form JSONB merged into deploy_app.metadata. */
   metadata?: Record<string, unknown>;
+  /** Correct the endpoint kind of a draft application. The kind owns the token audience, package formats, and store identity, so the command is accepted only while the application is DRAFT with no platform targets and no releases; the legacy `SPA_WEB` value is refused. The correction is audited (`app.kind_correct`) and re-provisions the IAM installation so its `applicationType` follows the new endpoint. */
+  appKind?: AppKind;
   /** The `<appId>` prefix of the app's default publishing hostnames. Must be one lowercase DNS label (alphanumeric plus interior hyphens). `null` clears the override so the slug is used again. */
   appDomainLabel?: string | null;
   /** Per-app override of the platform app-domain suffix catalog. Each entry is a lowercase dotted domain without a leading dot. `null` clears the override so the platform catalog applies. */

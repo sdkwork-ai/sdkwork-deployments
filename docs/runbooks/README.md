@@ -20,3 +20,9 @@ See `DOCUMENTATION_SPEC.md` section 2.
 | Runbook | 内容 |
 | --- | --- |
 | [identity-provisioning-reconciliation.md](identity-provisioning-reconciliation.md) | `deploy_app.identity_status` 只读报表、失败/挂起应用的重试路径与 active + NULL key 异常排查（迁移 0008） |
+
+## WeChat channel publishing
+
+| Runbook | 内容 |
+| --- | --- |
+| [wechat-channel-publishing.md](wechat-channel-publishing.md) | 第三方平台开通与授权、发布命令、直连模式边界、配置变量与故障处置 |

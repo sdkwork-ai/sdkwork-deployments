@@ -75,6 +75,12 @@ pub fn package_page(page: PackagePage) -> SdkWorkPageData<PackageResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }
 
+pub fn channel_release_page(
+    page: sdkwork_deploy_contract::ChannelReleasePage,
+) -> SdkWorkPageData<sdkwork_deploy_contract::ChannelReleaseResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
 pub fn app_release_page(page: AppReleasePage) -> SdkWorkPageData<AppReleaseResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }

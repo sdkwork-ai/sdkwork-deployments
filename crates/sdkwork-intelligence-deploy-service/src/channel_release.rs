@@ -19,6 +19,8 @@ use serde_json::Value;
 /// Inputs for uploading mini-program code.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MiniProgramUploadRequest {
+    /// IAM resource authorization that owns the authorizer token.
+    pub authorization_id: String,
     /// Deploy environment key.
     pub environment: String,
     /// Template id for the component path.
@@ -39,10 +41,14 @@ pub struct MiniProgramUploadOutcome {
 /// Inputs for submitting a review.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MiniProgramAuditSubmission {
+    /// IAM resource authorization that owns the authorizer token.
+    pub authorization_id: String,
     /// Uploaded commit id.
     pub commit_id: String,
     /// Version under review.
     pub provider_version: String,
+    /// WeChat review item list (categories and page paths).
+    pub items: Vec<Value>,
 }
 
 /// Submission outcome.
@@ -64,6 +70,8 @@ pub struct MiniProgramAuditObservation {
 /// Release inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MiniProgramReleaseRequest {
+    /// IAM resource authorization that owns the authorizer token.
+    pub authorization_id: String,
     /// Version to publish.
     pub provider_version: Option<String>,
 }
@@ -78,6 +86,8 @@ pub struct MiniProgramReleaseOutcome {
 /// Rollback inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MiniProgramRollbackRequest {
+    /// IAM resource authorization that owns the authorizer token.
+    pub authorization_id: String,
     /// Version to restore.
     pub target_version: String,
 }
@@ -85,6 +95,8 @@ pub struct MiniProgramRollbackRequest {
 /// Gray release inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MiniProgramGrayReleaseRequest {
+    /// IAM resource authorization that owns the authorizer token.
+    pub authorization_id: String,
     /// Percentage `0..=100`.
     pub gray_percentage: u16,
 }
@@ -108,6 +120,7 @@ pub trait ChannelReleaseProvider: Send + Sync {
     /// Queries the review state.
     async fn query_mini_program_audit(
         &self,
+        authorization_id: &str,
         audit_id: &str,
     ) -> DeployServiceResult<MiniProgramAuditObservation>;
     /// Publishes the approved version.
@@ -125,11 +138,23 @@ pub trait ChannelReleaseProvider: Send + Sync {
         &self,
         request: &MiniProgramGrayReleaseRequest,
     ) -> DeployServiceResult<()>;
+    /// Adds, sets, or deletes the mini-program server domains.
+    async fn modify_mini_program_domains(
+        &self,
+        authorization_id: &str,
+        action: &str,
+        domains: &[String],
+    ) -> DeployServiceResult<()>;
+    /// Sets the mini-program privacy declaration.
+    async fn set_mini_program_privacy(
+        &self,
+        authorization_id: &str,
+        privacy: serde_json::Value,
+    ) -> DeployServiceResult<()>;
 }
 
 /// Fail-closed provider used until a real channel gateway is configured.
 pub struct UnavailableChannelReleaseProvider;
-
 const PROVIDER_UNAVAILABLE: &str = "channel release provider is not configured";
 
 #[async_trait]
@@ -154,6 +179,7 @@ impl ChannelReleaseProvider for UnavailableChannelReleaseProvider {
 
     async fn query_mini_program_audit(
         &self,
+        _authorization_id: &str,
         _audit_id: &str,
     ) -> DeployServiceResult<MiniProgramAuditObservation> {
         Err(DeployServiceError::Conflict(
@@ -182,6 +208,27 @@ impl ChannelReleaseProvider for UnavailableChannelReleaseProvider {
     async fn gray_release_mini_program(
         &self,
         _request: &MiniProgramGrayReleaseRequest,
+    ) -> DeployServiceResult<()> {
+        Err(DeployServiceError::Conflict(
+            PROVIDER_UNAVAILABLE.to_string(),
+        ))
+    }
+
+    async fn modify_mini_program_domains(
+        &self,
+        _authorization_id: &str,
+        _action: &str,
+        _domains: &[String],
+    ) -> DeployServiceResult<()> {
+        Err(DeployServiceError::Conflict(
+            PROVIDER_UNAVAILABLE.to_string(),
+        ))
+    }
+
+    async fn set_mini_program_privacy(
+        &self,
+        _authorization_id: &str,
+        _privacy: serde_json::Value,
     ) -> DeployServiceResult<()> {
         Err(DeployServiceError::Conflict(
             PROVIDER_UNAVAILABLE.to_string(),
@@ -354,6 +401,7 @@ mod tests {
         let provider = UnavailableChannelReleaseProvider;
         let error = provider
             .upload_mini_program(&MiniProgramUploadRequest {
+                authorization_id: "auth-1".to_string(),
                 environment: "production".to_string(),
                 template_id: None,
                 provider_version: None,
@@ -362,5 +410,74 @@ mod tests {
             .await
             .expect_err("must fail closed");
         assert!(format!("{error}").contains("not configured"));
+    }
+}
+
+#[async_trait]
+impl<T: ChannelReleaseProvider + ?Sized> ChannelReleaseProvider for std::sync::Arc<T> {
+    async fn upload_mini_program(
+        &self,
+        request: &MiniProgramUploadRequest,
+    ) -> DeployServiceResult<MiniProgramUploadOutcome> {
+        (**self).upload_mini_program(request).await
+    }
+
+    async fn submit_mini_program_audit(
+        &self,
+        request: &MiniProgramAuditSubmission,
+    ) -> DeployServiceResult<MiniProgramAuditOutcome> {
+        (**self).submit_mini_program_audit(request).await
+    }
+
+    async fn query_mini_program_audit(
+        &self,
+        authorization_id: &str,
+        audit_id: &str,
+    ) -> DeployServiceResult<MiniProgramAuditObservation> {
+        (**self)
+            .query_mini_program_audit(authorization_id, audit_id)
+            .await
+    }
+
+    async fn release_mini_program(
+        &self,
+        request: &MiniProgramReleaseRequest,
+    ) -> DeployServiceResult<MiniProgramReleaseOutcome> {
+        (**self).release_mini_program(request).await
+    }
+
+    async fn rollback_mini_program(
+        &self,
+        request: &MiniProgramRollbackRequest,
+    ) -> DeployServiceResult<()> {
+        (**self).rollback_mini_program(request).await
+    }
+
+    async fn gray_release_mini_program(
+        &self,
+        request: &MiniProgramGrayReleaseRequest,
+    ) -> DeployServiceResult<()> {
+        (**self).gray_release_mini_program(request).await
+    }
+
+    async fn modify_mini_program_domains(
+        &self,
+        authorization_id: &str,
+        action: &str,
+        domains: &[String],
+    ) -> DeployServiceResult<()> {
+        (**self)
+            .modify_mini_program_domains(authorization_id, action, domains)
+            .await
+    }
+
+    async fn set_mini_program_privacy(
+        &self,
+        authorization_id: &str,
+        privacy: serde_json::Value,
+    ) -> DeployServiceResult<()> {
+        (**self)
+            .set_mini_program_privacy(authorization_id, privacy)
+            .await
     }
 }

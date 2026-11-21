@@ -70,6 +70,11 @@ impl DeployRepository {
                 "deploy_release_channel",
                 "AND channel_status <> 'ARCHIVED'",
             ),
+            "channel_release_count" => (
+                "COUNT(*)",
+                "deploy_channel_release",
+                "AND release_status NOT IN ('SUPERSEDED','ROLLED_BACK')",
+            ),
             _ => {
                 return Err(DeployServiceError::validation(format!(
                     "unknown entitlement dimension {dimension}"

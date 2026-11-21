@@ -12,15 +12,17 @@ use axum::{
     Extension, Json, Router,
 };
 use sdkwork_deploy_contract::{
-    BindAppSourceSpecSourceRequest, CreateAppDatabaseMigrationRequest,
-    CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest, CreateAppEnvironmentRequest,
-    CreateAppReleaseRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreateBuildRequest,
-    CreateBuildTemplateRequest, CreatePlatformTargetRequest, CreateSigningIdentityRequest,
-    CreateSourceRepositoryRequest, DeployAppRequestContext, ListAppResourceLinksQuery,
-    ListAppsQuery, PromoteChannelRequest, PromoteEnvironmentRequest, RegisterPackageRequest,
-    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest,
-    UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest,
-    UpdateBuildStateRequest, UpsertAppResourceLinkRequest, UsageEventQuery,
+    BindAppSourceSpecSourceRequest, ChannelReleasePublishCommandRequest,
+    CreateAppDatabaseMigrationRequest, CreateAppDatabaseProfileRequest, CreateAppDeploymentRequest,
+    CreateAppEnvironmentRequest, CreateAppReleaseRequest, CreateAppRequest,
+    CreateAppSourceSpecRequest, CreateBuildRequest, CreateBuildTemplateRequest,
+    CreateChannelDirectUploadPlanRequest, CreateChannelReleaseRequest, CreatePlatformTargetRequest,
+    CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DeployAppRequestContext,
+    ListAppResourceLinksQuery, ListAppsQuery, PromoteChannelRequest, PromoteEnvironmentRequest,
+    RegisterPackageRequest, TransitionChannelReleaseRequest, UpdateAppDatabaseProfileRequest,
+    UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRemixRequest,
+    UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
+    UpsertAppResourceLinkRequest, UsageEventQuery,
 };
 use sdkwork_routes_deploy_common::{
     app_kind_filter, envelope, finish_api_json, finish_created_api_json, finish_no_content,
@@ -39,6 +41,13 @@ use crate::{
 struct PageQuery {
     page: Option<i32>,
     page_size: Option<i32>,
+}
+
+#[derive(Deserialize)]
+struct ChannelReleaseListQuery {
+    page: Option<i32>,
+    page_size: Option<i32>,
+    environment: Option<String>,
 }
 
 fn page_values(query: &PageQuery) -> (i32, i32) {
@@ -84,6 +93,22 @@ pub fn build_app_delivery_router() -> Router<AppState> {
         .route(
             paths::APP_RELEASE,
             get(retrieve_app_release).patch(update_app_release_status),
+        )
+        .route(
+            paths::APP_CHANNEL_RELEASES,
+            get(list_channel_releases).post(create_channel_release),
+        )
+        .route(
+            paths::APP_CHANNEL_RELEASE,
+            get(retrieve_channel_release).patch(transition_channel_release),
+        )
+        .route(
+            paths::APP_CHANNEL_RELEASE_PUBLISH_COMMANDS,
+            post(publish_channel_release),
+        )
+        .route(
+            paths::APP_CHANNEL_DIRECT_UPLOAD_PLANS,
+            post(plan_channel_direct_upload),
         )
         .route(paths::APP_CHANNELS, get(list_channels))
         .route(paths::APP_CHANNEL, get(retrieve_channel))
@@ -998,6 +1023,139 @@ async fn list_app_releases(
                 .list_app_releases(&context, &app_id, page, page_size)
                 .await?;
             ok_json(envelope::app_release_page(result))
+        }
+        .await,
+    )
+}
+
+async fn list_channel_releases(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Query(query): Query<ChannelReleaseListQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = query.page.unwrap_or(1);
+            let page_size = query.page_size.unwrap_or(20);
+            let result = state
+                .api
+                .list_channel_releases(
+                    &context,
+                    &app_id,
+                    query.environment.as_deref(),
+                    page,
+                    page_size,
+                )
+                .await?;
+            ok_json(envelope::channel_release_page(result))
+        }
+        .await,
+    )
+}
+
+async fn retrieve_channel_release(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path((app_id, channel_release_id)): Path<(String, String)>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .retrieve_channel_release(&context, &app_id, &channel_release_id)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn create_channel_release(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<CreateChannelReleaseRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .create_channel_release(&context, &app_id, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn transition_channel_release(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path((app_id, channel_release_id)): Path<(String, String)>,
+    Json(request): Json<TransitionChannelReleaseRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .transition_channel_release(&context, &app_id, &channel_release_id, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn publish_channel_release(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path((app_id, channel_release_id)): Path<(String, String)>,
+    Json(request): Json<ChannelReleasePublishCommandRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .publish_channel_release(&context, &app_id, &channel_release_id, &request)
+                .await?;
+            ok_json(envelope::resource(result))
+        }
+        .await,
+    )
+}
+
+async fn plan_channel_direct_upload(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<CreateChannelDirectUploadPlanRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let result = state
+                .api
+                .plan_channel_direct_upload(&context, &app_id, &request)
+                .await?;
+            ok_json(envelope::resource(result))
         }
         .await,
     )
