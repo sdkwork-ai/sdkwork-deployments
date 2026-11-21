@@ -212,7 +212,7 @@ mod tests {
                     "authToken": "b",
                     "expiresAt": "2026-11-19T12:00:00Z",
                     "appId": "381764687714324480",
-                    "tenantApplicationId": "tapp_100001_0_381764687714324480",
+                    "installationId": "tapp_100001_0_381764687714324480",
                     "organizationId": "0",
                     "ownershipScope": "TENANT",
                     "sessionId": "session-1"

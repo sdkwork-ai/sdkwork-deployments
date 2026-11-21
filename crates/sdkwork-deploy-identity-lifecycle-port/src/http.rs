@@ -9,12 +9,13 @@
 //!
 //! Route authority (read from sdkwork-iam, not guessed):
 //!
-//! - `POST /backend/v3/api/iam/tenant_applications/by_deploy_application/{deployApplicationId}/disable`
+//! - `POST /backend/v3/api/iam/installations/by_deploy_application/{deployApplicationId}/disable`
 //!   is declared in `crates/sdkwork-routes-iam-backend-api/src/manifest.rs` as a
-//!   `bootstrap_body` route with permission `iam.tenant_applications.disable`,
+//!   `bootstrap_body` route with permission `iam.installations.disable`
+//!   (the permission code keeps its historical spelling until the IAM migration),
 //!   handled by `disable_tenant_application_by_deploy_application_handler`, and
 //!   published in `apis/backend-api/iam/sdkwork-iam-backend-api.openapi.yaml` as
-//!   `tenantApplications.disableByDeployApplication`.
+//!   `installations.management.byDeployApplication.disable`.
 //! - Authentication is the deployment's dedicated backend bootstrap token, carried
 //!   in the request body (`authToken`) exactly like the provisioning route; there
 //!   is no end-user request whose dual tokens could be borrowed.
@@ -27,7 +28,7 @@ use crate::{DeployInstallationLifecyclePort, DisabledInstallation, InstallationL
 
 /// IAM backend route that disables the installation bound to a deploy anchor.
 pub const IAM_DISABLE_BY_DEPLOY_APPLICATION_PATH: &str =
-    "/backend/v3/api/iam/tenant_applications/by_deploy_application/{deployApplicationId}/disable";
+    "/backend/v3/api/iam/installations/by_deploy_application/{deployApplicationId}/disable";
 
 /// Split-deployment adapter that disables through IAM's backend HTTP surface.
 #[derive(Clone, Debug)]
@@ -190,7 +191,11 @@ fn installation_id_from_body(text: &str) -> Option<String> {
     value
         .get("data")
         .and_then(|data| data.get("item"))
-        .and_then(|item| item.get("tenantApplicationId").or_else(|| item.get("id")))
+        .and_then(|item| {
+            item.get("installationId")
+                .or_else(|| item.get("tenantApplicationId"))
+                .or_else(|| item.get("id"))
+        })
         .and_then(Value::as_str)
         .map(str::to_owned)
 }
@@ -214,7 +219,7 @@ mod tests {
     fn the_endpoint_is_the_anchor_addressed_disable_route() {
         let endpoint = adapter().endpoint("1845123456789012345");
         assert!(endpoint.ends_with(
-            "/backend/v3/api/iam/tenant_applications/by_deploy_application/1845123456789012345/disable"
+            "/backend/v3/api/iam/installations/by_deploy_application/1845123456789012345/disable"
         ));
         assert!(endpoint.starts_with("http"));
     }
@@ -230,7 +235,7 @@ mod tests {
     #[test]
     fn the_success_envelope_yields_the_installation_id() {
         let id = installation_id_from_body(
-            r#"{"code":0,"data":{"item":{"tenantApplicationId":"tapp_7"}},"traceId":"t"}"#,
+            r#"{"code":0,"data":{"item":{"installationId":"tapp_7"}},"traceId":"t"}"#,
         );
         assert_eq!(id.as_deref(), Some("tapp_7"));
     }

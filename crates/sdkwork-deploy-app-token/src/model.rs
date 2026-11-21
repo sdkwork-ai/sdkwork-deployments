@@ -209,7 +209,7 @@ pub struct AppAccessToken {
     #[serde(rename = "appId")]
     pub app_id: String,
     /// Installation the credential was issued for.
-    #[serde(rename = "tenantApplicationId")]
+    #[serde(rename = "installationId", alias = "tenantApplicationId")]
     pub tenant_application_id: String,
     /// Organization claim of the installation.
     #[serde(rename = "organizationId", default)]
@@ -233,7 +233,7 @@ impl fmt::Debug for AppAccessToken {
             .field("auth_token", &"<redacted>")
             .field("expires_at", &self.expires_at)
             .field("app_id", &self.app_id)
-            .field("tenant_application_id", &self.tenant_application_id)
+            .field("installation_id", &self.tenant_application_id)
             .field("organization_id", &self.organization_id)
             .field("ownership_scope", &self.ownership_scope)
             .field("environment", &self.environment)

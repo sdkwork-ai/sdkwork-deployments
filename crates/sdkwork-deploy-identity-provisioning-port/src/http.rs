@@ -8,17 +8,15 @@
 //!
 //! Route authority (read from sdkwork-iam, not guessed):
 //!
-//! - `crates/sdkwork-routes-iam-backend-api/src/handlers.rs:186-189` mounts
-//!   `POST /backend/v3/api/iam/tenant_applications` on
-//!   `provision_tenant_application_handler` (handler at `handlers.rs:476`).
-//! - `crates/sdkwork-routes-iam-backend-api/src/manifest.rs:607-612` declares the
-//!   route as `HttpMethod::Post` with permission token `tenantApplications.create`;
-//!   `sdks/sdkwork-iam-backend-sdk/openapi/sdkwork-iam-backend-api.openapi.yaml`
-//!   publishes it as operation `tenantApplications.create` with permission
-//!   `iam.tenant_applications.provision` and `x-sdkwork-auth-mode:
-//!   bootstrap-body`.
+//! - `crates/sdkwork-routes-iam-backend-api/src/handlers.rs` mounts
+//!   `POST /backend/v3/api/iam/installations` on the installation provisioning
+//!   handler.
+//! - `crates/sdkwork-routes-iam-backend-api/src/manifest.rs` declares the route
+//!   as `HttpMethod::Post` with operation `installations.create`; the permission
+//!   code remains `iam.installations.provision` until the IAM permission
+//!   migration renames it, and the auth mode is `bootstrap-body`.
 //! - The request body parser
-//!   (`crates/sdkwork-iam-web-adapter/src/application_registry.rs:310-369`)
+//!   (`crates/sdkwork-iam-web-adapter/src/application_registry.rs`)
 //!   accepts `deployApplicationId` / `deploy_application_id` and
 //!   `provisioningIdempotencyKey` / `provisioning_idempotency_key`.
 //!
@@ -41,8 +39,8 @@ use crate::{
     TenantApplicationReceipt,
 };
 
-/// IAM backend route that provisions one tenant application.
-pub const IAM_TENANT_APPLICATIONS_PATH: &str = "/backend/v3/api/iam/tenant_applications";
+/// IAM backend route that provisions one installation.
+pub const IAM_TENANT_APPLICATIONS_PATH: &str = "/backend/v3/api/iam/installations";
 
 /// Provisions tenant applications over IAM's backend HTTP surface.
 #[derive(Clone, Debug)]
@@ -244,7 +242,7 @@ fn problem_code(text: &str) -> String {
 }
 
 /// Reads the installation identity back out of IAM's success envelope
-/// (`{ "code": 0, "data": { "item": { "tenantApplicationId", "appId" } } }`).
+/// (`{ "code": 0, "data": { "item": { "installationId", "appId" } } }`).
 ///
 /// A missing or unexpected envelope is not a failure: the call itself succeeded,
 /// and losing the echo must not mark an installed application `failed`.
@@ -259,7 +257,9 @@ fn receipt_from_body(text: &str) -> TenantApplicationReceipt {
             .map(str::to_owned)
     };
     TenantApplicationReceipt {
-        tenant_application_id: read("tenantApplicationId").or_else(|| read("id")),
+        tenant_application_id: read("installationId")
+            .or_else(|| read("tenantApplicationId"))
+            .or_else(|| read("id")),
         runtime_app_id: read("appId"),
     }
 }
@@ -295,9 +295,9 @@ mod tests {
     }
 
     #[test]
-    fn endpoint_targets_the_iam_backend_tenant_applications_route() {
+    fn endpoint_targets_the_iam_backend_installations_route() {
         let endpoint = adapter().endpoint();
-        assert!(endpoint.ends_with("/backend/v3/api/iam/tenant_applications"));
+        assert!(endpoint.ends_with("/backend/v3/api/iam/installations"));
         assert!(endpoint.starts_with("http"));
     }
 
@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn success_envelope_yields_the_installation_identity() {
         let receipt = receipt_from_body(
-            r#"{"code":0,"data":{"item":{"tenantApplicationId":"tapp_7_0_platform","appId":"app_7"}},"traceId":"t"}"#,
+            r#"{"code":0,"data":{"item":{"installationId":"tapp_7_0_platform","appId":"app_7"}},"traceId":"t"}"#,
         );
         assert_eq!(
             receipt.tenant_application_id.as_deref(),

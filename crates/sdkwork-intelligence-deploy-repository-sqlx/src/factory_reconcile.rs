@@ -258,6 +258,58 @@ impl DeployRepository {
             }
         }
 
+        // (e) Every live installation must carry exactly one deploy anchor owned
+        // by a live deploy_app in the same tenant. A NULL anchor or an anchor
+        // that no live deploy_app owns is DRIFT: issuance would name an
+        // application identity the deploy plane cannot resolve.
+        if has_iam {
+            let unanchored = sqlx::query(
+                "SELECT i.id, i.app_id, i.deploy_application_id
+                 FROM iam_application_installation i
+                 WHERE i.tenant_id = $1::text AND i.deleted_at IS NULL
+                   AND (
+                     i.deploy_application_id IS NULL
+                     OR NOT EXISTS (
+                       SELECT 1
+                       FROM deploy_app a
+                       WHERE a.tenant_id = $1
+                         AND a.deleted_at IS NULL
+                         AND a.id::text = i.deploy_application_id
+                     )
+                   )
+                 ORDER BY i.id",
+            )
+            .bind(tenant_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| store_error("find installations without a deploy anchor", error))?;
+            for row in &unanchored {
+                let installation_id: String = row.try_get("id").unwrap_or_default();
+                let runtime_app_id: Option<String> = row.try_get("app_id").ok();
+                let anchor: Option<String> = row.try_get("deploy_application_id").ok();
+                let code = if anchor.is_none() {
+                    "INSTALLATION_WITHOUT_DEPLOY_ANCHOR"
+                } else {
+                    "INSTALLATION_ANCHOR_NOT_OWNED_BY_DEPLOY_APPLICATION"
+                };
+                let detail = match anchor.as_deref() {
+                    Some(anchor) => format!(
+                        "IAM installation {installation_id} is bound to deploy application {anchor}, which no live deploy_app in this tenant owns"
+                    ),
+                    None => format!(
+                        "IAM installation {installation_id} has no deploy application anchor; issuance cannot resolve an application identity"
+                    ),
+                };
+                dangling.push(FactoryDanglingReference {
+                    authority: "iam".to_owned(),
+                    app_id: runtime_app_id,
+                    deploy_application_id: anchor,
+                    code: code.to_owned(),
+                    detail,
+                });
+            }
+        }
+
         // (f) The token anchor lives in client profile files, not in this
         // database; the file-side check is `check-release-access-token-env.mjs`,
         // which the packaging gate already runs. It is not listed under
