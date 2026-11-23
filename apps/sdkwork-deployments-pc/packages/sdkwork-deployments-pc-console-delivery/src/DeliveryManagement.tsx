@@ -58,6 +58,16 @@ import { DataTable, type DataTableColumn, type DataTablePaginationProps } from "
 
 import { deliveryText, type DeliveryMessageKey } from "./i18n.ts";
 import { relativeRecordName } from "./dns-record-name.ts";
+import {
+  isServableVerificationFileName,
+  platformAcceptsExtension,
+  suggestVerificationFileName,
+  verificationFileExtension,
+  verificationFilePublicUrl,
+  VERIFICATION_PLATFORMS,
+  verificationPlatform,
+  type VerificationPlatform,
+} from "./verificationPlatforms.ts";
 import { type RootDomainIssue, isRootDomainApex, validateRootDomain } from "./root-domain.ts";
 import { SideDrawer } from "./SideDrawer.tsx";
 
@@ -1795,34 +1805,12 @@ function ZoneDnsRecordLedger({ backLabel, backTo, hostnameId, locale, title, zon
  * 登记多份;边缘数据面对该 Zone 的每个主机名按请求路径原样提供;自检按平台
  * 爬虫的视角取回比对,失败也只陈述事实。
  */
-type VerificationPlatform =
-  | "WECHAT_OFFICIAL_ACCOUNT"
-  | "WECHAT_MINI_PROGRAM"
-  | "ALIPAY"
-  | "BYTEDANCE"
-  | "APPLE"
-  | "GOOGLE"
-  | "CUSTOM";
-
-const VERIFICATION_PLATFORM_LABELS: Record<VerificationPlatform, DeliveryMessageKey> = {
-  WECHAT_OFFICIAL_ACCOUNT: "verificationFilePlatformWECHAT_OFFICIAL_ACCOUNT",
-  WECHAT_MINI_PROGRAM: "verificationFilePlatformWECHAT_MINI_PROGRAM",
-  ALIPAY: "verificationFilePlatformALIPAY",
-  BYTEDANCE: "verificationFilePlatformBYTEDANCE",
-  APPLE: "verificationFilePlatformAPPLE",
-  GOOGLE: "verificationFilePlatformGOOGLE",
-  CUSTOM: "verificationFilePlatformCUSTOM",
-};
-
-const VERIFICATION_PLATFORMS = Object.keys(VERIFICATION_PLATFORM_LABELS) as VerificationPlatform[];
-
 /** 服务端的内容上限(字节);超过它的文件在读入前就被拒绝。 */
 const VERIFICATION_CONTENT_LIMIT = 4096;
 
 /** 未登记过的平台码按"其他"呈现:契约新增平台时控制台先于文案更新也不会崩。 */
 function verificationPlatformLabel(t: Translator, platform: string): string {
-  const key = VERIFICATION_PLATFORM_LABELS[platform as VerificationPlatform];
-  return t(key ?? "verificationFilePlatformCUSTOM");
+  return t(verificationPlatform(platform)?.labelKey ?? "verificationFilePlatformCUSTOM");
 }
 
 function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { apex: string; close(): void; locale: DeploymentsLocale; service: DeploymentsDeliveryService; t: Translator; zoneId: string }) {
@@ -1835,6 +1823,8 @@ function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { a
   const [uploaded, setUploaded] = useState(false);
   const [checks, setChecks] = useState<Record<string, DomainVerificationFileCheckResponse>>({});
   const [deleteTarget, setDeleteTarget] = useState<DomainVerificationFileResponse>();
+  const [copiedId, setCopiedId] = useState<string>();
+  const spec = verificationPlatform(platform);
 
   const load = useCallback(async () => {
     const result = await service.listZoneVerificationFiles(zoneId);
@@ -1869,12 +1859,50 @@ function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { a
       setError(t("verificationFileTooLarge"));
       return;
     }
+    // 平台只会来取它自己签发的形态;选错平台/选错文件在这里就说清楚,而不是
+    // 存下来之后让平台那边的校验永远不过。
+    if (!isServableVerificationFileName(file.name)) {
+      setError(t("verificationFilePlatformExtension", { extension: spec?.extension ?? "txt" }));
+      return;
+    }
+    if (!platformAcceptsExtension(platform, verificationFileExtension(file.name))) {
+      setError(t("verificationFilePlatformExtension", { extension: spec?.extension ?? "txt" }));
+      return;
+    }
     setFileName(file.name);
     setContent(await file.text());
   }
 
+  /**
+   * 由粘贴的 token 带出平台真正会来取的文件名(微信 `MP_verify_<token>.txt`、
+   * Google `<token>.html`、Apple 固定名)。文件名的内容与文件名同源,所以内容
+   * 优先。
+   */
+  function deriveName() {
+    const suggested = suggestVerificationFileName(platform, content || fileName);
+    if (suggested) {
+      setFileName(suggested);
+      setError(undefined);
+    }
+  }
+
+  async function copyUrl(file: DomainVerificationFileResponse) {
+    try {
+      await navigator.clipboard.writeText(verificationFilePublicUrl(apex, file.fileName));
+      setCopiedId(file.id);
+      window.setTimeout(() => setCopiedId((current) => (current === file.id ? undefined : current)), 2000);
+    } catch {
+      // 剪贴板被拒绝不值得一条错误横幅:地址本身就显示在行里。
+    }
+  }
+
   async function save() {
     if (!fileName.trim() || !content) { setError(t("dnsValueRequired")); return; }
+    if (!isServableVerificationFileName(fileName)
+      || !platformAcceptsExtension(platform, verificationFileExtension(fileName))) {
+      setError(t("verificationFilePlatformExtension", { extension: spec?.extension ?? "txt" }));
+      return;
+    }
     setBusy(true); setError(undefined); setUploaded(false);
     try {
       // 同名文件是替换而不是新增:平台换发文件后重新保存一次即可。替换后旧的
@@ -1942,6 +1970,15 @@ function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { a
                   {verificationPlatformLabel(t, file.platform)}
                   {file.updatedAt ? ` · ${formatDate(file.updatedAt, locale)}` : ""}
                 </p>
+                {apex ? (
+                  <p className="form-hint">
+                    {t("verificationFilePublicUrl")}: {verificationFilePublicUrl(apex, file.fileName)}
+                    {" "}
+                    <button className="table-action table-action-text" disabled={busy} type="button" onClick={() => void copyUrl(file)}>
+                      {copiedId === file.id ? t("verificationFileCopied") : t("verificationFileCopyUrl")}
+                    </button>
+                  </p>
+                ) : null}
                 {verdict ? (
                   <div className={check?.matched ? "verification-success" : "verification-pending"}>
                     <BadgeCheck size={19} />
@@ -1963,9 +2000,10 @@ function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { a
             <span>{t("verificationFilePlatform")}</span>
             <select value={platform} onChange={(event) => setPlatform(event.target.value as VerificationPlatform)}>
               {VERIFICATION_PLATFORMS.map((value) => (
-                <option key={value} value={value}>{t(VERIFICATION_PLATFORM_LABELS[value])}</option>
+                <option key={value.platform} value={value.platform}>{t(value.labelKey)}</option>
               ))}
             </select>
+            {spec ? <span className="form-hint">{spec.fileNameHint} · {t(spec.issuedByKey)}</span> : null}
           </label>
           <label>
             <span>{t("verificationFilePick")}</span>
@@ -1978,7 +2016,10 @@ function VerificationFileDialog({ apex, close, locale, service, t, zoneId }: { a
           </label>
           <label>
             <span>{t("verificationFileName")}</span>
-            <input required value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="MP_verify_xxxxxxxxxx.txt / google123.html" autoComplete="off" />
+            <input required value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder={spec?.fixedFileName ?? "MP_verify_xxxxxxxxxx.txt / google123.html"} autoComplete="off" />
+            <button className="table-action table-action-text" type="button" disabled={busy} onClick={deriveName}>
+              {t("verificationFileDeriveName")}
+            </button>
           </label>
           <label>
             <span>{t("verificationFileContent")}</span>
