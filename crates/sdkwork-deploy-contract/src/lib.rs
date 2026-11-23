@@ -16,6 +16,7 @@ pub mod problem;
 pub mod runtime_env;
 pub mod scaffold_market;
 pub mod usage;
+pub mod verification_file_catalog;
 
 pub use app_composition::*;
 pub use app_delivery::*;
@@ -40,3 +41,8 @@ pub use runtime_env::{
 };
 pub use scaffold_market::*;
 pub use usage::*;
+pub use verification_file_catalog::{
+    content_type_for_extension, is_servable_verification_file_name, platform_accepts_extension,
+    suggested_verification_file_name, verification_platform, verification_platform_codes,
+    VerificationFilePlatformSpec, VERIFICATION_FILE_EXTENSIONS, VERIFICATION_FILE_PLATFORMS,
+};

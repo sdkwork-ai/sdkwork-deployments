@@ -13,7 +13,10 @@
 
 use std::collections::BTreeSet;
 
-use sdkwork_intelligence_deploy_service::{VERIFICATION_FILE_EXTENSIONS, VERIFICATION_PLATFORMS};
+use sdkwork_deploy_contract::{
+    content_type_for_extension, platform_accepts_extension, verification_platform,
+    verification_platform_codes, VERIFICATION_FILE_EXTENSIONS,
+};
 
 const POSTGRES_BASELINE: &str =
     include_str!("../../../database/ddl/baseline/postgres/0001_deploy_baseline.sql");
@@ -67,15 +70,62 @@ fn contract_platforms(schema: &str) -> BTreeSet<String> {
 #[test]
 fn the_ddl_and_the_service_agree_on_the_platform_set() {
     let ddl: BTreeSet<String> = admitted_values(POSTGRES_BASELINE, PLATFORM_CONSTRAINT);
-    let service: BTreeSet<String> = VERIFICATION_PLATFORMS
-        .iter()
-        .map(|platform| (*platform).to_owned())
-        .collect();
+    let service: BTreeSet<String> = verification_platform_codes().map(str::to_owned).collect();
     assert_eq!(
         ddl, service,
-        "the baseline's platform CHECK and VERIFICATION_PLATFORMS disagree; a stored value must be \
-         one the service validates, and a validated value must be one the schema admits"
+        "the baseline's platform CHECK and the verification-file catalog disagree; a stored value \
+         must be one the service validates, and a validated value must be one the schema admits"
     );
+}
+
+/// The catalog's per-platform rules are the reason it exists: each platform's
+/// issued file has a fixed shape, and every extension it names is one the edge
+/// answers.
+#[test]
+fn every_platform_declares_a_shape_the_edge_can_serve() {
+    for code in verification_platform_codes() {
+        let spec = verification_platform(code).expect("the code comes from the catalog");
+        assert!(
+            VERIFICATION_FILE_EXTENSIONS.contains(&spec.extension),
+            "{code} declares extension {} outside the servable set",
+            spec.extension
+        );
+        assert!(
+            spec.file_name_hint
+                .to_ascii_lowercase()
+                .contains(&format!(".{}", spec.extension)),
+            "{code}'s hint {} does not name its own extension",
+            spec.file_name_hint
+        );
+        assert!(
+            spec.label_key.starts_with("domain.verification.platform."),
+            "{code}'s label key must stay in the shared namespace"
+        );
+        assert!(
+            platform_accepts_extension(code, spec.extension),
+            "{code} must accept its own extension"
+        );
+        assert_eq!(
+            content_type_for_extension(spec.extension),
+            if spec.extension == "txt" {
+                "text/plain; charset=utf-8"
+            } else if spec.extension == "html" {
+                "text/html; charset=utf-8"
+            } else {
+                "application/xml; charset=utf-8"
+            },
+            "{code}'s content type drifted from the extension"
+        );
+    }
+    // A fixed-name platform pins the name regardless of the token.
+    assert_eq!(
+        sdkwork_deploy_contract::suggested_verification_file_name("APPLE", "ignored").as_deref(),
+        Some("apple-developer-domain-association.txt")
+    );
+    // The escape hatch keeps every servable extension.
+    for extension in VERIFICATION_FILE_EXTENSIONS {
+        assert!(platform_accepts_extension("CUSTOM", extension));
+    }
 }
 
 #[test]

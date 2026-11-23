@@ -528,6 +528,11 @@ impl DeployRepository {
         .bind(platform)
         .bind(file_name)
         .bind(content)
+        // $9 is the row's owner and $10 the audit pair; both are the acting
+        // caller here, which is why the actor is bound twice. Binding it once
+        // left the statement one parameter short and every create/upsert of a
+        // verification file failed with a bind-count error.
+        .bind(owner.actor_id())
         .bind(owner.actor_id())
         .fetch_one(&self.pool)
         .await

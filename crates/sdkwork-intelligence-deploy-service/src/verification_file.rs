@@ -36,20 +36,15 @@ use sdkwork_deploy_contract::{
     DomainVerificationFileResponse,
 };
 
-/// 平台封闭集合。
+/// 平台封闭集合的唯一来源见 [`sdkwork_deploy_contract::verification_file_catalog`]。
 ///
-/// 与 DDL 的 `chk_deploy_dns_zone_verification_file_platform`、契约的
-/// `DomainVerificationFilePlatform` 枚举、控制台的选择项同源；三处一起改，
-/// 不允许单边新增。
-pub const VERIFICATION_PLATFORMS: &[&str] = &[
-    "WECHAT_OFFICIAL_ACCOUNT",
-    "WECHAT_MINI_PROGRAM",
-    "ALIPAY",
-    "BYTEDANCE",
-    "APPLE",
-    "GOOGLE",
-    "CUSTOM",
-];
+/// 本模块不再自带一份列表：DDL 的 `chk_deploy_dns_zone_verification_file_platform`、
+/// 契约里 `DomainVerificationFileResponse.platform` 的枚举、边缘的 `Content-Type`
+/// 表、以及三个控制台的选择项都由那份 catalog 推导，`verification_file_platform_parity`
+/// 把它们钉在一起。
+pub fn verification_platforms() -> Vec<&'static str> {
+    sdkwork_deploy_contract::verification_platform_codes().collect()
+}
 
 /// 文件名上限（含扩展名）。平台签发的名字远短于此；上限只为封住滥用。
 pub const VERIFICATION_FILE_NAME_MAX: usize = 128;
@@ -59,9 +54,10 @@ pub const VERIFICATION_FILE_NAME_MAX: usize = 128;
 /// 边缘服务端的响应体上限一致。
 pub const VERIFICATION_FILE_CONTENT_MAX: usize = 4096;
 
-/// 校验文件实际使用的扩展名。边缘按扩展名推断 `Content-Type`，所以这份
-/// 列表同时是"哪些文件能被应答"的定义。
-pub const VERIFICATION_FILE_EXTENSIONS: [&str; 3] = ["txt", "html", "xml"];
+/// 校验文件实际使用的扩展名（单一来源在 contract 的 catalog 里）。
+///
+/// 边缘按扩展名推断 `Content-Type`，所以这份列表同时是"哪些文件能被应答"的定义。
+pub use sdkwork_deploy_contract::VERIFICATION_FILE_EXTENSIONS;
 
 /// 一个 Zone 最多登记多少份校验文件。
 ///
@@ -116,13 +112,31 @@ pub struct VerificationFileRecord {
 
 fn normalize_platform(value: &str) -> DeployServiceResult<String> {
     let value = value.trim().to_ascii_uppercase();
-    if !VERIFICATION_PLATFORMS.contains(&value.as_str()) {
+    if sdkwork_deploy_contract::verification_platform(&value).is_none() {
         return Err(DeployServiceError::validation(format!(
             "platform must be one of {}",
-            VERIFICATION_PLATFORMS.join(", ")
+            verification_platforms().join(", ")
         )));
     }
     Ok(value)
+}
+
+/// 平台签发的文件形态是固定的：微信只会来取 `*.txt`，Google 只会来取
+/// `*.html`。接受别的扩展名等于登记一份平台永远不会请求的文件，操作员看到
+/// "已上传"却在平台侧永远验证不过——所以按 catalog 的规则直接拒绝。
+fn require_platform_extension(platform: &str, file_name: &str) -> DeployServiceResult<()> {
+    let extension = file_name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .unwrap_or("");
+    if sdkwork_deploy_contract::platform_accepts_extension(platform, extension) {
+        return Ok(());
+    }
+    let spec = sdkwork_deploy_contract::verification_platform(platform);
+    Err(DeployServiceError::validation(format!(
+        "{platform} verification files are {}; {file_name} would never be fetched",
+        spec.map(|spec| spec.file_name_hint).unwrap_or("<unknown>")
+    )))
 }
 
 /// 接受 `<名称>.<txt|html|xml>` 的单段 ASCII 文件名。
@@ -248,6 +262,7 @@ impl crate::DeployService {
     ) -> DeployServiceResult<DomainVerificationFileResponse> {
         let platform = normalize_platform(&request.platform)?;
         let file_name = normalize_file_name(&request.file_name)?;
+        require_platform_extension(&platform, &file_name)?;
         let content = normalize_content(&request.content)?;
         let existing: Vec<String> = self
             .repository

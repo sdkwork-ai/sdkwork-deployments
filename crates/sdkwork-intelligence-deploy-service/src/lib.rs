@@ -121,9 +121,9 @@ pub use runtime_publication::{
     RuntimePublicationBatchResult, RuntimePublicationService,
 };
 pub use verification_file::{
-    UnconfiguredVerificationFileProbe, VerificationFileProbePort, VerificationFileRecord,
-    VerificationProbeOutcome, MAX_VERIFICATION_FILES_PER_ZONE, VERIFICATION_FILE_CONTENT_MAX,
-    VERIFICATION_FILE_EXTENSIONS, VERIFICATION_FILE_NAME_MAX, VERIFICATION_PLATFORMS,
+    verification_platforms, UnconfiguredVerificationFileProbe, VerificationFileProbePort,
+    VerificationFileRecord, VerificationProbeOutcome, MAX_VERIFICATION_FILES_PER_ZONE,
+    VERIFICATION_FILE_CONTENT_MAX, VERIFICATION_FILE_EXTENSIONS, VERIFICATION_FILE_NAME_MAX,
 };
 pub use wechat_channel_rules::{
     domain_quota_exhausted, normalize_domain, validate_wechat_audit_submission,

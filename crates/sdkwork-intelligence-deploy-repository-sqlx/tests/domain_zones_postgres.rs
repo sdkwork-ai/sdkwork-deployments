@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
-    CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployAppApi, DeployAppRequestContext,
-    ListDomainZonesQuery, OwnershipReach, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
-    ZoneScope,
+    CreateDomainHostnameRequest, CreateDomainVerificationFileRequest, CreateDomainZoneRequest,
+    DeployAppApi, DeployAppRequestContext, DeployServiceErrorKind, ListDomainZonesQuery,
+    OwnershipReach, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -1275,5 +1275,106 @@ async fn postgres_tenant_wide_reach_lists_every_owner_and_stops_at_the_tenant() 
             .await
             .is_err(),
         "the user-private reach must not reach another user's zone"
+    );
+}
+
+/// The issuing platform decides the file shape, and the control plane enforces
+/// it before writing a row.
+///
+/// WeChat only ever fetches `MP_verify_<token>.txt`; a `.html` registered under
+/// the WeChat platform would be stored, shown as uploaded, and then never
+/// requested by the platform — the operator would be stuck with a verification
+/// that can never pass. `CUSTOM` stays the escape hatch for every servable
+/// extension, because some platforms have no catalog entry.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_verification_files_follow_the_platform_shape() {
+    let pool = common::postgres_pool().await;
+    let repository = Arc::new(DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    ));
+    let service = DeployService::new(repository, Arc::new(MemoryDeployDrivePort));
+    let context = DeployAppRequestContext {
+        tenant_id: 7,
+        actor_id: Some(11),
+        organization_id: Some(9),
+        ..DeployAppRequestContext::default()
+    };
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let zone = service
+        .create_domain_zone(
+            &context,
+            &CreateDomainZoneRequest {
+                apex_hostname: format!("verify{suffix}.dev"),
+                display_name: None,
+                dns_provider: Some("manual".to_owned()),
+                provider_zone_ref: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("create the zone the files are published under");
+    let file = |platform: &str, file_name: &str| CreateDomainVerificationFileRequest {
+        platform: platform.to_owned(),
+        file_name: file_name.to_owned(),
+        content: "verification-token".to_owned(),
+    };
+
+    service
+        .create_domain_zone_verification_file(
+            &context,
+            &zone.id,
+            &file("WECHAT_OFFICIAL_ACCOUNT", "MP_verify_abc.txt"),
+        )
+        .await
+        .expect("the platform's own shape must be accepted");
+    let error = service
+        .create_domain_zone_verification_file(
+            &context,
+            &zone.id,
+            &file("WECHAT_OFFICIAL_ACCOUNT", "MP_verify_abc.html"),
+        )
+        .await
+        .expect_err("a shape WeChat never fetches must be refused");
+    assert_eq!(
+        error.kind(),
+        DeployServiceErrorKind::Validation,
+        "the refusal is a validation error, not a storage failure: {error:?}"
+    );
+    service
+        .create_domain_zone_verification_file(&context, &zone.id, &file("GOOGLE", "google123.html"))
+        .await
+        .expect("Google's html file is accepted");
+    service
+        .create_domain_zone_verification_file(&context, &zone.id, &file("CUSTOM", "SiteAuth.xml"))
+        .await
+        .expect("CUSTOM keeps every servable extension");
+
+    let page = service
+        .list_domain_zone_verification_files(&context, &zone.id)
+        .await
+        .expect("list the zone's files");
+    let mut names: Vec<String> = page
+        .items
+        .iter()
+        .map(|item| item.file_name.clone())
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        vec![
+            "MP_verify_abc.txt".to_owned(),
+            "SiteAuth.xml".to_owned(),
+            "google123.html".to_owned(),
+        ],
+        "the accepted set is exactly the valid ones"
+    );
+    assert!(
+        page.items
+            .iter()
+            .all(|item| item.content == "verification-token"),
+        "the stored content is the byte-for-byte value the caller sent"
     );
 }
