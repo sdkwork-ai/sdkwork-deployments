@@ -1458,3 +1458,115 @@ async fn postgres_verification_file_records_its_drive_object() {
     assert_eq!(content_type.as_deref(), Some("text/plain; charset=utf-8"));
     assert_eq!(inline, "verification-token", "the inline copy stays intact");
 }
+
+/// End-to-end over the control plane and the edge's own resolution path.
+///
+/// The flow a platform relies on: register a root domain, add the subdomain it
+/// will verify, upload the platform's file, and the edge resolves that exact
+/// hostname to the exact bytes — then deletion stops the answer. The digest
+/// assertion is what ties the two copies together: the row's inline content (the
+/// edge's serving copy) is byte-identical to the object written to sdkwork-drive.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_verification_file_is_served_by_hostname_and_removed_on_delete() {
+    let pool = common::postgres_pool().await;
+    let repository = Arc::new(DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    ));
+    let repository_port: Arc<dyn DeployRepositoryPort> = repository.clone();
+    let service = DeployService::new(repository_port, Arc::new(MemoryDeployDrivePort))
+        .with_verification_store(Arc::new(MemoryDeployVerificationObjectStore));
+    let context = DeployAppRequestContext {
+        tenant_id: 7,
+        actor_id: Some(11),
+        organization_id: Some(9),
+        ..DeployAppRequestContext::default()
+    };
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let apex = format!("edge{suffix}.dev");
+    let zone = service
+        .create_domain_zone(
+            &context,
+            &CreateDomainZoneRequest {
+                apex_hostname: apex.clone(),
+                display_name: None,
+                dns_provider: Some("manual".to_owned()),
+                provider_zone_ref: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("register the root domain");
+    let hostname = service
+        .create_domain_hostname(
+            &context,
+            &zone.id,
+            &CreateDomainHostnameRequest {
+                relative_name: "www".to_owned(),
+            },
+        )
+        .await
+        .expect("add the subdomain the platform will verify");
+    let content = "verification-token";
+    let file = service
+        .create_domain_zone_verification_file(
+            &context,
+            &zone.id,
+            &CreateDomainVerificationFileRequest {
+                platform: "WECHAT_OFFICIAL_ACCOUNT".to_owned(),
+                file_name: "MP_verify_edge.txt".to_owned(),
+                content: content.to_owned(),
+            },
+        )
+        .await
+        .expect("upload the platform's file");
+
+    // The edge asks the same question this lookup answers: which files does this
+    // exact hostname resolve to, and with which bytes.
+    let served = repository
+        .verification_files_by_hostname_lookup(&hostname.hostname)
+        .await
+        .expect("resolve the hostname");
+    assert_eq!(
+        served,
+        vec![("MP_verify_edge.txt".to_owned(), content.to_owned())],
+        "the edge must serve the uploaded file for the subdomain it was added to"
+    );
+    // The apex is served too: a platform may fetch the file from the root.
+    assert_eq!(
+        repository
+            .verification_files_by_hostname_lookup(&apex)
+            .await
+            .expect("resolve the apex"),
+        vec![("MP_verify_edge.txt".to_owned(), content.to_owned())]
+    );
+
+    // The row's inline copy is the drive object's bytes, proven by the digest.
+    let digest: Option<String> = sqlx::query_scalar(
+        "SELECT content_sha256 FROM deploy_dns_zone_verification_file WHERE uuid = $1",
+    )
+    .bind(&file.id)
+    .fetch_one(&pool)
+    .await
+    .expect("read the recorded digest");
+    assert_eq!(
+        digest.as_deref(),
+        Some(sdkwork_utils_rust::sha256_hash(content.as_bytes()).as_str()),
+        "the edge's serving copy must be the drive object's bytes"
+    );
+
+    service
+        .delete_domain_zone_verification_file(&context, &zone.id, &file.id)
+        .await
+        .expect("delete the verification file");
+    assert!(
+        repository
+            .verification_files_by_hostname_lookup(&hostname.hostname)
+            .await
+            .expect("resolve after delete")
+            .is_empty(),
+        "a deleted file must stop being served"
+    );
+}
