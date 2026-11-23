@@ -18,6 +18,7 @@ sdkwork-database-id.workspace = true
 # adapter and the space/node primitives this port composes.
 sdkwork-drive-workspace-service.workspace = true
 sdkwork-drive-object-runtime.workspace = true
+sdkwork-drive-storage-contract.workspace = true
 sdkwork_drive_app_sdk_generated_rust.workspace = true
 sqlx.workspace = true
 

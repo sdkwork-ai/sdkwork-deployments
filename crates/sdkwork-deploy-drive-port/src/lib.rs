@@ -9,6 +9,7 @@ mod drive_http_adapter;
 mod in_process;
 mod memory;
 mod selection;
+mod verification;
 
 use async_trait::async_trait;
 use sdkwork_deploy_contract::{
@@ -25,6 +26,11 @@ pub use memory::MemoryDeployDrivePort;
 pub use selection::{
     deploy_drive_port_from_env, deploy_drive_port_from_pool, select_deploy_drive_port,
     DeployDrivePortSelection, DeployDrivePortSelectionInput, DRIVE_MODE_ENV, USE_MEMORY_DRIVE_ENV,
+};
+pub use verification::{
+    DeployVerificationObjectStore, DriveVerificationFileRef,
+    InProcessDeployVerificationObjectStore, MemoryDeployVerificationObjectStore,
+    StoreVerificationFileCommand, VERIFICATION_SPACE_NAME,
 };
 
 /// Per-request caller credentials, forwarded to the split-deployment HTTP
