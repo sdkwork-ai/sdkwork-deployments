@@ -104,6 +104,49 @@ impl std::fmt::Display for ValidationMethod {
     }
 }
 
+/// Who presents a challenge response to the CA.
+///
+/// This is deliberately orthogonal to [`ValidationMethod`]: DNS-01 can be proven
+/// either by a configured DNS provider credential (managed) or by an operator
+/// pasting a TXT record (manual), and both are legitimate for the same
+/// certificate. HTTP-01 is managed-only, because the edge webroot is written by
+/// the platform and an operator has no path to serve the token.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ChallengePresentation {
+    /// The platform publishes and withdraws the challenge response itself.
+    #[default]
+    Managed,
+    /// The platform returns the exact record and waits for an operator to publish
+    /// it before validation is released.
+    Manual,
+}
+
+impl ChallengePresentation {
+    pub const ALL: [Self; 2] = [Self::Managed, Self::Manual];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Managed => "MANAGED",
+            Self::Manual => "MANUAL",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "MANAGED" => Some(Self::Managed),
+            "MANUAL" => Some(Self::Manual),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ChallengePresentation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 /// Who owns a domain zone, and therefore what the zone means.
 ///
 /// The domain inventory holds two kinds of row that look alike but answer

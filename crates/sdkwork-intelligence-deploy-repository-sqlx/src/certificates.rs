@@ -391,9 +391,9 @@ fn validate_create_certificate(
         ));
     }
     if request.domain_ids.is_empty() || request.domain_ids.len() > MAX_CERTIFICATE_IDENTIFIERS {
-        return Err(DeployServiceError::validation(
-            "domainIds must contain between 1 and 100 hostnames",
-        ));
+        return Err(DeployServiceError::validation(format!(
+            "domainIds must contain between 1 and {MAX_CERTIFICATE_IDENTIFIERS} hostnames"
+        )));
     }
     let unique_domain_ids = request.domain_ids.iter().collect::<BTreeSet<_>>();
     if unique_domain_ids.len() != request.domain_ids.len()

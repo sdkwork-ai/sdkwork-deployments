@@ -7,14 +7,17 @@
 
 use std::collections::BTreeSet;
 
-use crate::dto::{wildcard_apex, CertificateScope, ValidationMethod};
+use crate::dto::{wildcard_apex, CertificateScope, ChallengePresentation, ValidationMethod};
 
 /// Upper bound on identifiers per certificate.
 ///
-/// Matches `deploy_certificate_identifier.position BETWEEN 0 AND 99`; the plan
-/// aligns the product cap with the storage cap instead of letting the two
-/// drift.
-pub const MAX_CERTIFICATE_IDENTIFIERS: usize = 100;
+/// This is the **product** ceiling and must equal the ACME engine's own
+/// identifier ceiling: an order the engine refuses is an order the API should
+/// have refused, and a request that passes validation only to fail at issuance
+/// burns the CA's order budget and the operator's time. The storage DDL keeps a
+/// wider `position` bound because it is a row-count bound, not a product rule;
+/// the API gate below is what actually applies this number.
+pub const MAX_CERTIFICATE_IDENTIFIERS: usize = 8;
 
 /// Shape of one certificate identifier, as persisted in
 /// `deploy_certificate_identifier.identifier_type`.
@@ -82,6 +85,14 @@ pub enum CertificatePlanError {
     WildcardApexMissing,
     /// `HTTP_01` cannot authorize a wildcard.
     Http01NotAllowedForWildcard,
+    /// A manual presentation was requested for HTTP-01, which only the platform
+    /// can serve (the edge webroot is not operator-addressable).
+    ManualRequiresDns01,
+    /// DNS-01 was requested as managed but no DNS provider account covers every
+    /// identifier.
+    NoDnsProviderConfigured,
+    /// HTTP-01 was requested as managed but the deployment serves no webroot.
+    Http01WebrootNotConfigured,
     /// A single-domain scope was planned with anything other than exactly one
     /// exact identifier.
     SingleDomainRequiresOneIdentifier,
@@ -103,6 +114,9 @@ impl CertificatePlanError {
             }
             Self::WildcardApexMissing => "CERTIFICATE_WILDCARD_APEX_CLAIM_REQUIRED",
             Self::Http01NotAllowedForWildcard => "CERTIFICATE_WILDCARD_REQUIRES_DNS01",
+            Self::ManualRequiresDns01 => "CERTIFICATE_MANUAL_REQUIRES_DNS01",
+            Self::NoDnsProviderConfigured => "CERTIFICATE_NO_DNS_PROVIDER",
+            Self::Http01WebrootNotConfigured => "CERTIFICATE_HTTP01_WEBROOT_MISSING",
             Self::SingleDomainRequiresOneIdentifier => "CERTIFICATE_SINGLE_DOMAIN_IDENTIFIER_COUNT",
             Self::TooManyIdentifiers => "CERTIFICATE_IDENTIFIER_LIMIT_EXCEEDED",
         }
@@ -130,11 +144,21 @@ impl CertificatePlanError {
             Self::Http01NotAllowedForWildcard => {
                 "wildcard identifiers require the DNS_01 validation method"
             }
+            Self::ManualRequiresDns01 => {
+                "a manual presentation requires the DNS_01 validation method"
+            }
+            Self::NoDnsProviderConfigured => {
+                "no DNS provider account covers every identifier; bind one or use the manual \
+                 DNS-01 presentation"
+            }
+            Self::Http01WebrootNotConfigured => {
+                "this deployment serves no webroot for HTTP-01; use the DNS_01 validation method"
+            }
             Self::SingleDomainRequiresOneIdentifier => {
                 "a single-domain certificate covers exactly one hostname"
             }
             Self::TooManyIdentifiers => {
-                "a certificate may cover at most 100 hostname identifiers"
+                "a certificate may cover at most 8 hostname identifiers"
             }
         }
     }
@@ -278,6 +302,82 @@ pub fn plan_certificate_identifiers(
             .then_with(|| left.hostname.cmp(&right.hostname))
     });
     Ok(planned)
+}
+
+/// What this deployment can actually present for one request.
+///
+/// Computed by the caller from live configuration rather than assumed here, so
+/// the decision function stays pure and the same matrix is used by the API
+/// validation path and by the order orchestrator.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ChallengeAvailability {
+    /// A DNS provider account covers every identifier in the request.
+    pub dns01_provider_available: bool,
+    /// The deployment has a webroot the edge already serves.
+    pub http01_webroot_configured: bool,
+}
+
+/// The challenge a request resolved to, and who presents it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PresentationPlan {
+    pub presentation: ChallengePresentation,
+    pub method: ValidationMethod,
+}
+
+/// Resolves the (method, presentation) pair for one certificate request.
+///
+/// The rules, in evaluation order:
+///
+/// 1. A wildcard identifier can only be proven by DNS-01, whatever was asked.
+/// 2. Manual presentation exists only for DNS-01; HTTP-01 is served by the edge,
+///    whose webroot an operator cannot write.
+/// 3. `AUTO` resolves through the scope first, then, for a manual request, to
+///    DNS-01 (a manual request is by definition "I will publish the record").
+/// 4. A managed method this deployment cannot actually present is refused with a
+///    stable code instead of failing later at the CA, which would burn its
+///    order and failed-validation budget.
+pub fn resolve_presentation(
+    scope: CertificateScope,
+    requested_method: ValidationMethod,
+    requested_presentation: ChallengePresentation,
+    availability: ChallengeAvailability,
+) -> Result<PresentationPlan, CertificatePlanError> {
+    if scope == CertificateScope::Wildcard && requested_method == ValidationMethod::Http01 {
+        return Err(CertificatePlanError::Http01NotAllowedForWildcard);
+    }
+    if requested_presentation == ChallengePresentation::Manual
+        && requested_method == ValidationMethod::Http01
+    {
+        return Err(CertificatePlanError::ManualRequiresDns01);
+    }
+
+    let method = match (requested_presentation, requested_method) {
+        (ChallengePresentation::Manual, ValidationMethod::Auto) => ValidationMethod::Dns01,
+        (_, method) => {
+            if scope == CertificateScope::Wildcard {
+                ValidationMethod::Dns01
+            } else {
+                method.resolve_for_scope(scope)
+            }
+        }
+    };
+
+    match (requested_presentation, method) {
+        (ChallengePresentation::Managed, ValidationMethod::Dns01)
+            if !availability.dns01_provider_available =>
+        {
+            Err(CertificatePlanError::NoDnsProviderConfigured)
+        }
+        (ChallengePresentation::Managed, ValidationMethod::Http01)
+            if !availability.http01_webroot_configured =>
+        {
+            Err(CertificatePlanError::Http01WebrootNotConfigured)
+        }
+        _ => Ok(PresentationPlan {
+            presentation: requested_presentation,
+            method,
+        }),
+    }
 }
 
 /// Rolling CA budget dimension.
@@ -492,6 +592,146 @@ mod tests {
     }
 
     #[test]
+    fn a_manual_request_resolves_to_dns01_and_needs_no_provider_account() {
+        // The whole point of manual presentation: it must work exactly when no
+        // DNS provider credential exists.
+        for requested in [ValidationMethod::Auto, ValidationMethod::Dns01] {
+            let plan = resolve_presentation(
+                CertificateScope::SingleDomain,
+                requested,
+                ChallengePresentation::Manual,
+                ChallengeAvailability::default(),
+            )
+            .expect("manual DNS-01 needs no provider account");
+            assert_eq!(plan.method, ValidationMethod::Dns01);
+            assert_eq!(plan.presentation, ChallengePresentation::Manual);
+        }
+    }
+
+    #[test]
+    fn a_manual_http01_request_is_refused_with_its_own_code() {
+        assert_eq!(
+            resolve_presentation(
+                CertificateScope::SingleDomain,
+                ValidationMethod::Http01,
+                ChallengePresentation::Manual,
+                ChallengeAvailability {
+                    http01_webroot_configured: true,
+                    ..ChallengeAvailability::default()
+                },
+            ),
+            Err(CertificatePlanError::ManualRequiresDns01)
+        );
+    }
+
+    #[test]
+    fn a_wildcard_manual_request_stays_dns01() {
+        let plan = resolve_presentation(
+            CertificateScope::Wildcard,
+            ValidationMethod::Auto,
+            ChallengePresentation::Manual,
+            ChallengeAvailability::default(),
+        )
+        .expect("wildcard manual DNS-01");
+        assert_eq!(plan.method, ValidationMethod::Dns01);
+        assert_eq!(plan.presentation, ChallengePresentation::Manual);
+    }
+
+    #[test]
+    fn a_managed_method_the_deployment_cannot_present_is_refused() {
+        assert_eq!(
+            resolve_presentation(
+                CertificateScope::SingleDomain,
+                ValidationMethod::Dns01,
+                ChallengePresentation::Managed,
+                ChallengeAvailability::default(),
+            ),
+            Err(CertificatePlanError::NoDnsProviderConfigured)
+        );
+        assert_eq!(
+            resolve_presentation(
+                CertificateScope::SingleDomain,
+                ValidationMethod::Http01,
+                ChallengePresentation::Managed,
+                ChallengeAvailability::default(),
+            ),
+            Err(CertificatePlanError::Http01WebrootNotConfigured)
+        );
+    }
+
+    #[test]
+    fn a_fully_available_managed_request_keeps_its_method() {
+        let availability = ChallengeAvailability {
+            dns01_provider_available: true,
+            http01_webroot_configured: true,
+        };
+        let plan = resolve_presentation(
+            CertificateScope::SingleDomain,
+            ValidationMethod::Auto,
+            ChallengePresentation::Managed,
+            availability,
+        )
+        .expect("managed auto");
+        assert_eq!(plan.method, ValidationMethod::Http01);
+        assert_eq!(plan.presentation, ChallengePresentation::Managed);
+
+        let plan = resolve_presentation(
+            CertificateScope::SingleDomain,
+            ValidationMethod::Dns01,
+            ChallengePresentation::Managed,
+            availability,
+        )
+        .expect("managed dns-01");
+        assert_eq!(plan.method, ValidationMethod::Dns01);
+    }
+
+    #[test]
+    fn presentation_tokens_round_trip() {
+        for presentation in ChallengePresentation::ALL {
+            assert_eq!(
+                ChallengePresentation::parse(presentation.as_str()),
+                Some(presentation)
+            );
+        }
+        assert_eq!(
+            ChallengePresentation::default(),
+            ChallengePresentation::Managed
+        );
+    }
+
+    #[test]
+    fn the_product_identifier_cap_matches_the_engine_ceiling() {
+        // The engine refuses an order above its own ceiling before contacting the
+        // CA. If this number were larger, a request would pass validation and then
+        // fail at issuance, after the account/order budget was already spent.
+        assert_eq!(MAX_CERTIFICATE_IDENTIFIERS, 8);
+        let four_wildcards = [
+            "*.a.example.com",
+            "*.b.example.com",
+            "*.c.example.com",
+            "*.d.example.com",
+        ];
+        // Each wildcard plans its apex too, so four wildcards fill the cap exactly.
+        assert_eq!(
+            plan(CertificateScope::Wildcard, &four_wildcards)
+                .unwrap()
+                .len(),
+            8
+        );
+        let five_wildcards = [
+            "*.a.example.com",
+            "*.b.example.com",
+            "*.c.example.com",
+            "*.d.example.com",
+            "*.e.example.com",
+        ];
+        assert_eq!(
+            plan(CertificateScope::Wildcard, &five_wildcards),
+            Err(CertificatePlanError::TooManyIdentifiers)
+        );
+    }
+
+    #[test]
     fn error_codes_are_stable_and_unique() {
         let all = [
             CertificatePlanError::EmptyIdentifierSet,
@@ -502,6 +742,9 @@ mod tests {
             CertificatePlanError::WildcardScopeRequiresWildcardIdentifier,
             CertificatePlanError::WildcardApexMissing,
             CertificatePlanError::Http01NotAllowedForWildcard,
+            CertificatePlanError::ManualRequiresDns01,
+            CertificatePlanError::NoDnsProviderConfigured,
+            CertificatePlanError::Http01WebrootNotConfigured,
             CertificatePlanError::SingleDomainRequiresOneIdentifier,
             CertificatePlanError::TooManyIdentifiers,
         ];
