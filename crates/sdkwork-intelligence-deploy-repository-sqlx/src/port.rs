@@ -146,9 +146,10 @@ impl DeployRepositoryPort for DeployRepository {
         platform: &str,
         file_name: &str,
         content: &str,
+        drive: Option<&sdkwork_intelligence_deploy_service::VerificationFileDriveRef>,
     ) -> DeployServiceResult<VerificationFileRecord> {
         self.upsert_dns_zone_verification_file_repo(
-            tenant_id, owner, zone_id, platform, file_name, content,
+            tenant_id, owner, zone_id, platform, file_name, content, drive,
         )
         .await
     }

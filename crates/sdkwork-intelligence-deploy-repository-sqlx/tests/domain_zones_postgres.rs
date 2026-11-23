@@ -8,7 +8,7 @@ use sdkwork_deploy_contract::{
     DeployAppApi, DeployAppRequestContext, DeployServiceErrorKind, ListDomainZonesQuery,
     OwnershipReach, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
 };
-use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
+use sdkwork_deploy_drive_port::{MemoryDeployDrivePort, MemoryDeployVerificationObjectStore};
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::{DeployRepositoryPort, DeployService};
 
@@ -1377,4 +1377,84 @@ async fn postgres_verification_files_follow_the_platform_shape() {
             .all(|item| item.content == "verification-token"),
         "the stored content is the byte-for-byte value the caller sent"
     );
+}
+
+/// A registered verification file records where its bytes live in sdkwork-drive.
+///
+/// The row keeps the inline copy on purpose (the edge serves from it while the
+/// Drive object is the durable original), so both halves have to be written:
+/// the node reference, digest, length and content type describe the object, and
+/// `content` stays byte-for-byte what the platform issued.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_verification_file_records_its_drive_object() {
+    let pool = common::postgres_pool().await;
+    let repository = Arc::new(DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    ));
+    let service = DeployService::new(repository, Arc::new(MemoryDeployDrivePort))
+        .with_verification_store(Arc::new(MemoryDeployVerificationObjectStore));
+    let context = DeployAppRequestContext {
+        tenant_id: 7,
+        actor_id: Some(11),
+        organization_id: Some(9),
+        ..DeployAppRequestContext::default()
+    };
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let zone = service
+        .create_domain_zone(
+            &context,
+            &CreateDomainZoneRequest {
+                apex_hostname: format!("drive{suffix}.dev"),
+                display_name: None,
+                dns_provider: Some("manual".to_owned()),
+                provider_zone_ref: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("create the zone");
+    let created = service
+        .create_domain_zone_verification_file(
+            &context,
+            &zone.id,
+            &CreateDomainVerificationFileRequest {
+                platform: "WECHAT_OFFICIAL_ACCOUNT".to_owned(),
+                file_name: "MP_verify_drive.txt".to_owned(),
+                content: "verification-token".to_owned(),
+            },
+        )
+        .await
+        .expect("register the verification file");
+    assert_eq!(created.content, "verification-token");
+
+    let row: (
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+        Option<String>,
+        String,
+    ) = sqlx::query_as(
+        "SELECT drive_node_id, content_sha256, content_bytes, content_type, content
+           FROM deploy_dns_zone_verification_file WHERE uuid = $1",
+    )
+    .bind(&created.id)
+    .fetch_one(&pool)
+    .await
+    .expect("read the registered row");
+    let (node_id, sha256, bytes, content_type, inline) = row;
+    assert!(
+        node_id.is_some_and(|node_id| node_id.starts_with("mem-verification-")),
+        "the row must name the drive node the store returned"
+    );
+    assert_eq!(
+        sha256.as_deref(),
+        Some(sdkwork_utils_rust::sha256_hash(b"verification-token").as_str()),
+        "the digest must describe the bytes that were stored"
+    );
+    assert_eq!(bytes, Some("verification-token".len() as i64));
+    assert_eq!(content_type.as_deref(), Some("text/plain; charset=utf-8"));
+    assert_eq!(inline, "verification-token", "the inline copy stays intact");
 }

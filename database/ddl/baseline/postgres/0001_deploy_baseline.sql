@@ -319,6 +319,7 @@ CREATE TABLE IF NOT EXISTS deploy_certificate (
     ca_profile              VARCHAR(32)  NOT NULL DEFAULT 'LETS_ENCRYPT_PRODUCTION',
     certificate_scope       VARCHAR(16)  NOT NULL DEFAULT 'SINGLE_DOMAIN',
     validation_method       VARCHAR(16)  NOT NULL DEFAULT 'AUTO',
+    presentation_mode       VARCHAR(16)  NOT NULL DEFAULT 'MANAGED',
     preferred_key_algorithm VARCHAR(16)  NOT NULL DEFAULT 'ECDSA',
     auto_renew              BOOLEAN      NOT NULL DEFAULT TRUE,
     renewal_status          VARCHAR(16)  NOT NULL DEFAULT 'NONE',
@@ -373,6 +374,7 @@ CREATE TABLE IF NOT EXISTS deploy_certificate (
     CONSTRAINT chk_deploy_certificate_ca_profile CHECK (ca_profile IN ('LETS_ENCRYPT_STAGING', 'LETS_ENCRYPT_PRODUCTION', 'CUSTOM')),
     CONSTRAINT chk_deploy_certificate_scope CHECK (certificate_scope IN ('SINGLE_DOMAIN', 'WILDCARD')),
     CONSTRAINT chk_deploy_certificate_validation_method CHECK (validation_method IN ('AUTO', 'HTTP_01', 'DNS_01')),
+    CONSTRAINT chk_deploy_certificate_presentation_mode CHECK (presentation_mode IN ('MANAGED', 'MANUAL')),
     -- A wildcard SAN never covers its apex, so a wildcard product scope must
     -- present DNS-01; the edge HTTP proof path cannot authorize a wildcard.
     CONSTRAINT chk_deploy_certificate_wildcard_requires_dns01 CHECK (
@@ -1468,6 +1470,9 @@ CREATE TABLE IF NOT EXISTS deploy_certificate_order (
     last_error_code       VARCHAR(64),
     caa_decision          VARCHAR(32),
     caa_checked_at        TIMESTAMPTZ,
+    presentation_mode     VARCHAR(16)  NOT NULL DEFAULT 'MANAGED',
+    external_order_url    VARCHAR(1024),
+    presentation_ready_at TIMESTAMPTZ,
     created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     version               BIGINT       NOT NULL DEFAULT 1,
@@ -1496,6 +1501,17 @@ CREATE TABLE IF NOT EXISTS deploy_certificate_order (
         (caa_decision IS NULL AND caa_checked_at IS NULL)
         OR (caa_decision IS NOT NULL AND caa_checked_at IS NOT NULL
             AND caa_decision IN ('PERMITTED', 'UNAUTHORIZED_CA', 'LOOKUP_FAILED'))
+    ),
+    CONSTRAINT chk_deploy_certificate_order_presentation_mode CHECK (
+        presentation_mode IN ('MANAGED', 'MANUAL')
+    ),
+    CONSTRAINT chk_deploy_certificate_order_external_order_url CHECK (
+        external_order_url IS NULL OR external_order_url ~ '^https://'
+    ),
+    -- MANAGED orders are presented by the platform and never carry an operator
+    -- release; a MANUAL order is parked until that release exists.
+    CONSTRAINT chk_deploy_certificate_order_presentation_ready CHECK (
+        presentation_mode = 'MANUAL' OR presentation_ready_at IS NULL
     )
 );
 
@@ -5758,3 +5774,73 @@ CREATE UNIQUE INDEX IF NOT EXISTS uk_deploy_channel_domain_value
     ON deploy_channel_domain (tenant_id, app_id, domain_kind, domain);
 
 COMMIT;
+CREATE TABLE IF NOT EXISTS deploy_certificate_archive (
+    id                      BIGINT       NOT NULL,
+    uuid                    VARCHAR(36)  NOT NULL,
+    tenant_id               BIGINT       NOT NULL,
+    certificate_id          BIGINT       NOT NULL,
+    certificate_version_id  BIGINT       NOT NULL,
+    bundle_kind             VARCHAR(8)   NOT NULL DEFAULT 'PUBLIC',
+    status                  VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    drive_space_id          VARCHAR(64),
+    drive_folder_node_id    VARCHAR(64),
+    drive_manifest_node_id  VARCHAR(64),
+    attempt_count           INTEGER      NOT NULL DEFAULT 0,
+    next_attempt_at         TIMESTAMPTZ,
+    last_error_code         VARCHAR(64),
+    manifest_sha256         VARCHAR(64),
+    created_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    version                 BIGINT       NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    CONSTRAINT uk_deploy_certificate_archive_uuid UNIQUE (uuid),
+    CONSTRAINT uk_deploy_certificate_archive_version_kind UNIQUE (certificate_version_id, bundle_kind),
+    CONSTRAINT fk_deploy_certificate_archive_certificate
+        FOREIGN KEY (certificate_id) REFERENCES deploy_certificate(id),
+    CONSTRAINT fk_deploy_certificate_archive_version
+        FOREIGN KEY (certificate_version_id) REFERENCES deploy_certificate_version(id),
+    CONSTRAINT chk_deploy_certificate_archive_kind CHECK (bundle_kind IN ('PUBLIC', 'FULL')),
+    CONSTRAINT chk_deploy_certificate_archive_status
+        CHECK (status IN ('PENDING', 'STORING', 'ARCHIVED', 'FAILED', 'SKIPPED')),
+    CONSTRAINT chk_deploy_certificate_archive_located CHECK (
+        status <> 'ARCHIVED'
+        OR (drive_space_id IS NOT NULL AND drive_folder_node_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_deploy_certificate_archive_attempts CHECK (attempt_count BETWEEN 0 AND 100),
+    CONSTRAINT chk_deploy_certificate_archive_manifest CHECK (
+        manifest_sha256 IS NULL OR manifest_sha256 ~ '^[0-9a-f]{64}$'
+    ),
+    CONSTRAINT chk_deploy_certificate_archive_version CHECK (version >= 1)
+);
+
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_archive_due
+    ON deploy_certificate_archive (status, next_attempt_at, id)
+    WHERE status IN ('PENDING', 'STORING');
+
+CREATE INDEX IF NOT EXISTS idx_deploy_certificate_archive_certificate
+    ON deploy_certificate_archive (tenant_id, certificate_id, created_at DESC);
+-- folded migration: migrations/postgres/0020_domain_verification_drive_objects.up.sql
+-- Migration: 0020_domain_verification_drive_objects
+--
+--   A verification file's bytes get a durable home in sdkwork-drive. The row
+--   keeps its inline `content` as the edge's serving copy; the Drive reference,
+--   digest, length and content type describe the object that was written.
+--   NULL drive_node_id means the row predates Drive storage and is served from
+--   `content` alone.
+ALTER TABLE deploy_dns_zone_verification_file
+    ADD COLUMN IF NOT EXISTS drive_node_id    VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS drive_space_id   VARCHAR(128),
+    ADD COLUMN IF NOT EXISTS content_sha256   VARCHAR(64),
+    ADD COLUMN IF NOT EXISTS content_bytes    BIGINT,
+    ADD COLUMN IF NOT EXISTS content_type     VARCHAR(64);
+
+COMMENT ON COLUMN deploy_dns_zone_verification_file.drive_node_id IS
+    'sdkwork-drive 节点 id；NULL 表示该行在 Drive 存储上线前登记，内容仍在 content 列';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.drive_space_id IS
+    'sdkwork-drive 空间 id（每租户一个「域名验证」空间）';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.content_sha256 IS
+    '写入 Drive 的字节的 SHA-256（hex），用于证明行内容与对象一致';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.content_bytes IS
+    '字节长度，边缘 HEAD 应答与上限复核使用';
+COMMENT ON COLUMN deploy_dns_zone_verification_file.content_type IS
+    '按扩展名推断的 Content-Type，边缘按它应答';

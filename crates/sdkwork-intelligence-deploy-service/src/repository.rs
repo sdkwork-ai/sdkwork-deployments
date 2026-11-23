@@ -421,6 +421,9 @@ pub trait DeployRepositoryPort:
         platform: &str,
         file_name: &str,
         content: &str,
+        // Where the bytes were written in sdkwork-drive, when a store is
+        // installed; `None` keeps the pre-Drive shape (inline content only).
+        drive: Option<&crate::verification_file::VerificationFileDriveRef>,
     ) -> DeployServiceResult<crate::verification_file::VerificationFileRecord>;
 
     /// Reads one verification file by its own id; `not_found` when the zone has

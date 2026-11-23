@@ -121,9 +121,10 @@ pub use runtime_publication::{
     RuntimePublicationBatchResult, RuntimePublicationService,
 };
 pub use verification_file::{
-    verification_platforms, UnconfiguredVerificationFileProbe, VerificationFileProbePort,
-    VerificationFileRecord, VerificationProbeOutcome, MAX_VERIFICATION_FILES_PER_ZONE,
-    VERIFICATION_FILE_CONTENT_MAX, VERIFICATION_FILE_EXTENSIONS, VERIFICATION_FILE_NAME_MAX,
+    verification_platforms, UnconfiguredVerificationFileProbe, VerificationFileDriveRef,
+    VerificationFileProbePort, VerificationFileRecord, VerificationProbeOutcome,
+    MAX_VERIFICATION_FILES_PER_ZONE, VERIFICATION_FILE_CONTENT_MAX, VERIFICATION_FILE_EXTENSIONS,
+    VERIFICATION_FILE_NAME_MAX,
 };
 pub use wechat_channel_rules::{
     domain_quota_exhausted, normalize_domain, validate_wechat_audit_submission,
@@ -139,7 +140,7 @@ use sdkwork_deploy_certificate_material::{MaterialKeyProvider, TrustAnchorBundle
 use sdkwork_deploy_cloud_account_port::{DeployCloudAccountPort, DeployCloudAccountPortAdapter};
 use sdkwork_deploy_content_provider_port::{ContentProviderPort, MemoryContentProviderPort};
 use sdkwork_deploy_contract::DeployServiceResult;
-use sdkwork_deploy_drive_port::DeployDrivePort;
+use sdkwork_deploy_drive_port::{DeployDrivePort, DeployVerificationObjectStore};
 use sdkwork_deploy_identity_lifecycle_port::{
     DeployInstallationLifecyclePort, UnconfiguredInstallationLifecyclePort,
 };
@@ -151,6 +152,13 @@ use sdkwork_deploy_identity_provisioning_port::{
 pub struct DeployService {
     pub(crate) repository: Arc<dyn DeployRepositoryPort>,
     pub(crate) drive: Arc<dyn DeployDrivePort>,
+    /// Durable home for verification-file bytes.
+    ///
+    /// `Option` because the split (HTTP) Drive facade has no in-process object
+    /// store: without it a verification file is registered from its inline copy,
+    /// which is exactly the behaviour before Drive storage existed. Installing
+    /// it turns "the bytes live in Drive" on.
+    pub(crate) verification_store: Option<Arc<dyn DeployVerificationObjectStore>>,
     pub(crate) content_provider: Arc<dyn ContentProviderPort>,
     pub(crate) domain_ownership_verifier: Arc<dyn DomainOwnershipVerifierPort>,
     pub(crate) certificate_caa: Arc<dyn CertificateAuthorityAuthorizationPort>,
@@ -223,6 +231,7 @@ impl DeployService {
         Self {
             repository,
             drive,
+            verification_store: None,
             content_provider: Arc::new(MemoryContentProviderPort),
             domain_ownership_verifier: Arc::new(UnconfiguredDomainOwnershipVerifier),
             certificate_caa: Arc::new(UnconfiguredCertificateAuthorityAuthorization),
@@ -245,6 +254,20 @@ impl DeployService {
         }
     }
 
+    /// Installs the Drive-backed store verification files are written to.
+    ///
+    /// Optional by design: a deployment that selected the split (HTTP) Drive
+    /// facade has no in-process object store, and a verification file is then
+    /// registered from its inline copy exactly as before. Installing the store
+    /// is what turns "the bytes live in sdkwork-drive" on.
+    pub fn with_verification_store(
+        mut self,
+        store: Arc<dyn DeployVerificationObjectStore>,
+    ) -> Self {
+        self.verification_store = Some(store);
+        self
+    }
+
     pub fn new_with_runtime_publication(
         repository: Arc<dyn DeployRepositoryPort>,
         drive: Arc<dyn DeployDrivePort>,
@@ -255,6 +278,7 @@ impl DeployService {
         Self {
             repository,
             drive,
+            verification_store: None,
             content_provider,
             domain_ownership_verifier,
             certificate_caa: Arc::new(UnconfiguredCertificateAuthorityAuthorization),

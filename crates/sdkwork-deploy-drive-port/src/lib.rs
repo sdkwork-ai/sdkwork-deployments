@@ -24,8 +24,9 @@ pub use in_process::{
 };
 pub use memory::MemoryDeployDrivePort;
 pub use selection::{
-    deploy_drive_port_from_env, deploy_drive_port_from_pool, select_deploy_drive_port,
-    DeployDrivePortSelection, DeployDrivePortSelectionInput, DRIVE_MODE_ENV, USE_MEMORY_DRIVE_ENV,
+    deploy_drive_port_from_env, deploy_drive_port_from_pool, deploy_verification_store_from_env,
+    select_deploy_drive_port, DeployDrivePortSelection, DeployDrivePortSelectionInput,
+    DRIVE_MODE_ENV, USE_MEMORY_DRIVE_ENV,
 };
 pub use verification::{
     DeployVerificationObjectStore, DriveVerificationFileRef,

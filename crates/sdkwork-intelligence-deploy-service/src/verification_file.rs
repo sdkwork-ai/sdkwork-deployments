@@ -97,6 +97,20 @@ impl VerificationFileProbePort for UnconfiguredVerificationFileProbe {
     }
 }
 
+/// 一份校验文件在 sdkwork-drive 里的落点。
+///
+/// 行内仍保留 `content` 作为边缘的即时副本（迁移期与 Drive 不可用时的回退），
+/// 这份引用是"字节已经被 Drive 持久化"的证据：节点、空间、摘要、长度与
+/// `Content-Type`。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerificationFileDriveRef {
+    pub node_id: String,
+    pub space_id: Option<String>,
+    pub content_sha256: String,
+    pub content_bytes: i64,
+    pub content_type: String,
+}
+
 /// 一份已登记的校验文件，按仓储层交回的形态。
 #[derive(Clone, Debug)]
 pub struct VerificationFileRecord {
@@ -106,6 +120,9 @@ pub struct VerificationFileRecord {
     pub platform: String,
     pub file_name: String,
     pub content: String,
+    /// `None` 表示该行在 Drive 存储上线前登记（或写入 Drive 失败时的退让），
+    /// 内容只存在于 `content` 列。
+    pub drive: Option<VerificationFileDriveRef>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -272,13 +289,83 @@ impl crate::DeployService {
             .map(|record| record.file_name)
             .collect();
         ensure_verification_file_capacity(&existing, &file_name)?;
+        // The bytes go to sdkwork-drive when the host installed a store. The
+        // inline copy is written either way: the edge serves from it today, and
+        // a Drive outage must not turn a working verification file into a 500.
+        let drive_ref = self
+            .persist_verification_object(tenant_id, owner, zone_id, &file_name, &content)
+            .await;
         let record = self
             .repository
             .upsert_dns_zone_verification_file(
-                tenant_id, owner, zone_id, &platform, &file_name, &content,
+                tenant_id,
+                owner,
+                zone_id,
+                &platform,
+                &file_name,
+                &content,
+                drive_ref.as_ref(),
             )
             .await?;
         Ok(to_response(zone_id, record))
+    }
+
+    /// Writes the file to sdkwork-drive, answering the reference to record.
+    ///
+    /// Best-effort by design: a deployment that selected the split (HTTP) Drive
+    /// facade, or whose Drive write fails, still registers a working file from
+    /// its inline copy. The failure is logged rather than raised, because the
+    /// operator's upload did succeed — only its durable home is missing, and the
+    /// next re-upload retries it.
+    async fn persist_verification_object(
+        &self,
+        tenant_id: i64,
+        owner: sdkwork_deploy_contract::OwnershipReach,
+        zone_id: &str,
+        file_name: &str,
+        content: &str,
+    ) -> Option<VerificationFileDriveRef> {
+        let store = self.verification_store.as_ref()?;
+        let zone = self
+            .repository
+            .retrieve_domain_zone(tenant_id, owner, zone_id)
+            .await
+            .ok()?;
+        let extension = file_name
+            .rsplit_once('.')
+            .map(|(_, extension)| extension)
+            .unwrap_or("");
+        let command = sdkwork_deploy_drive_port::StoreVerificationFileCommand {
+            scope: sdkwork_deploy_drive_port::DeployDriveScope {
+                tenant_id,
+                operator: owner.actor_id().map(|actor_id| {
+                    sdkwork_deploy_drive_port::DeployDriveActor::user(actor_id.to_string())
+                }),
+            },
+            apex_hostname: zone.apex_hostname,
+            file_name: file_name.to_owned(),
+            content_type: sdkwork_deploy_contract::content_type_for_extension(extension).to_owned(),
+            content: content.to_owned(),
+        };
+        match store.store_verification_file(command).await {
+            Ok(reference) => Some(VerificationFileDriveRef {
+                node_id: reference.node_id,
+                space_id: Some(reference.space_id),
+                content_sha256: reference.content_sha256,
+                content_bytes: reference.content_length,
+                content_type: sdkwork_deploy_contract::content_type_for_extension(extension)
+                    .to_owned(),
+            }),
+            Err(error) => {
+                tracing::warn!(
+                    zone_id,
+                    file_name,
+                    error = %format!("{error:?}"),
+                    "storing the verification file in drive failed; the row keeps its inline copy"
+                );
+                None
+            }
+        }
     }
 
     pub(crate) async fn delete_verification_file(

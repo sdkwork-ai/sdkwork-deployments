@@ -12,7 +12,7 @@ use sdkwork_deploy_content_provider_port::{
     content_provider_port_from_env, website_provider_event_delivery_port_from_env,
 };
 use sdkwork_deploy_database_host::bootstrap_deploy_database_from_env;
-use sdkwork_deploy_drive_port::deploy_drive_port_from_env;
+use sdkwork_deploy_drive_port::{deploy_drive_port_from_env, deploy_verification_store_from_env};
 use sdkwork_deploy_identity_lifecycle_port::{
     resolve_lifecycle_mode, DeployInstallationLifecyclePort, HttpInstallationLifecycleAdapter,
     InProcessInstallationLifecycleAdapter, InstallationLifecycleMode,
@@ -423,6 +423,12 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     )
     .with_certificate_caa_authorization(certificate_caa_from_env()?)
     .with_cloud_accounts(cloud_accounts.clone());
+    // Verification files live in sdkwork-drive whenever this deployment has an
+    // in-process Drive. The split facade has no object store, and a verification
+    // file is then registered from its inline copy exactly as before.
+    if let Some(verification_store) = deploy_verification_store_from_env(&drive_pool)? {
+        service = service.with_verification_store(verification_store);
+    }
     // WeChat channel publishing runs through IAM capability invocations. Both
     // values are optional: an installation without them keeps the fail-closed
     // provider, so a publish command reports "not configured" instead of

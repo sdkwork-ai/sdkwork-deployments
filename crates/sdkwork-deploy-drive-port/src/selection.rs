@@ -14,7 +14,8 @@ use sqlx::PgPool;
 
 use crate::drive_http_adapter::{SdkDriveAppFacade, DRIVE_APP_API_URL_ENV};
 use crate::{
-    DeployDrivePort, DeployDrivePortAdapter, InProcessDeployDrivePort, MemoryDeployDrivePort,
+    DeployDrivePort, DeployDrivePortAdapter, DeployVerificationObjectStore,
+    InProcessDeployDrivePort, MemoryDeployDrivePort,
 };
 
 /// `in_process` (default) | `http` (explicit split deployment) | `memory` (dev only).
@@ -121,6 +122,27 @@ pub fn deploy_drive_port_from_env(pool: &PgPool) -> Result<Arc<dyn DeployDrivePo
         }
     };
     Ok(Arc::new(adapter))
+}
+
+/// Builds the verification-file store that matches the selected drive mode.
+///
+/// `None` for the split (HTTP) facade: it has no in-process object store, so a
+/// verification file is registered from its inline copy — the behaviour every
+/// deployment had before Drive storage existed. The in-memory mode gets the
+/// in-memory store so a development deployment never writes a real Drive space
+/// by accident.
+pub fn deploy_verification_store_from_env(
+    pool: &PgPool,
+) -> Result<Option<Arc<dyn DeployVerificationObjectStore>>, String> {
+    match selection_from_env()? {
+        DeployDrivePortSelection::Memory => {
+            Ok(Some(Arc::new(crate::MemoryDeployVerificationObjectStore)))
+        }
+        DeployDrivePortSelection::InProcess => Ok(Some(Arc::new(
+            crate::InProcessDeployVerificationObjectStore::new(pool.clone()),
+        ))),
+        DeployDrivePortSelection::Http { .. } => Ok(None),
+    }
 }
 
 #[cfg(test)]

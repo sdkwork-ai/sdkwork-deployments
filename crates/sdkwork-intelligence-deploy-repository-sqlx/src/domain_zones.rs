@@ -6,7 +6,7 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_intelligence_deploy_service::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, DomainVerificationChallenge,
-    VerificationFileRecord,
+    VerificationFileDriveRef, VerificationFileRecord,
 };
 use sdkwork_utils_rust::crypto::sha256_hash;
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
@@ -77,11 +77,45 @@ fn verification_file_from_row(row: &PgRow) -> DeployServiceResult<VerificationFi
         row.try_get(column)
             .map_err(|error| DeployServiceError::Internal(format!("map {column}: {error}")))
     };
+    // The Drive reference is absent for rows written before Drive storage
+    // existed, and for a write that fell back to the inline copy. Its presence
+    // is what tells the control plane the bytes have a durable home.
+    let drive_node_id: Option<String> = row
+        .try_get("drive_node_id")
+        .map_err(|error| DeployServiceError::Internal(format!("map drive_node_id: {error}")))?;
+    let drive = match drive_node_id {
+        Some(node_id) => Some(VerificationFileDriveRef {
+            node_id,
+            space_id: row.try_get("drive_space_id").map_err(|error| {
+                DeployServiceError::Internal(format!("map drive_space_id: {error}"))
+            })?,
+            content_sha256: row
+                .try_get::<Option<String>, _>("content_sha256")
+                .map_err(|error| {
+                    DeployServiceError::Internal(format!("map content_sha256: {error}"))
+                })?
+                .unwrap_or_default(),
+            content_bytes: row
+                .try_get::<Option<i64>, _>("content_bytes")
+                .map_err(|error| {
+                    DeployServiceError::Internal(format!("map content_bytes: {error}"))
+                })?
+                .unwrap_or_default(),
+            content_type: row
+                .try_get::<Option<String>, _>("content_type")
+                .map_err(|error| {
+                    DeployServiceError::Internal(format!("map content_type: {error}"))
+                })?
+                .unwrap_or_default(),
+        }),
+        None => None,
+    };
     Ok(VerificationFileRecord {
         id: text("uuid")?,
         platform: text("platform")?,
         file_name: text("file_name")?,
         content: text("content")?,
+        drive,
         created_at: datetime_from_row(row, "created_at")
             .map_err(|error| DeployServiceError::Internal(format!("map created_at: {error}")))?,
         updated_at: datetime_from_row(row, "updated_at")
@@ -455,7 +489,8 @@ impl DeployRepository {
         zone_id: &str,
     ) -> DeployServiceResult<Vec<VerificationFileRecord>> {
         let rows = sqlx::query(AssertSqlSafe(format!(
-            "SELECT v.uuid, v.platform, v.file_name, v.content, v.created_at, v.updated_at
+            "SELECT v.uuid, v.platform, v.file_name, v.content, v.drive_node_id, v.drive_space_id,
+                     v.content_sha256, v.content_bytes, v.content_type, v.created_at, v.updated_at
              FROM deploy_dns_zone_verification_file v
              JOIN deploy_dns_zone z ON z.id = v.zone_id
              WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
@@ -484,6 +519,7 @@ impl DeployRepository {
         platform: &str,
         file_name: &str,
         content: &str,
+        drive: Option<&VerificationFileDriveRef>,
     ) -> DeployServiceResult<VerificationFileRecord> {
         let zone = sqlx::query(AssertSqlSafe(format!(
             "SELECT id, organization_id FROM deploy_dns_zone z
@@ -509,16 +545,23 @@ impl DeployRepository {
         let row = sqlx::query(
             "INSERT INTO deploy_dns_zone_verification_file (
                 id, uuid, tenant_id, organization_id, zone_id, platform, file_name, content,
+                drive_node_id, drive_space_id, content_sha256, content_bytes, content_type,
                 user_id, created_by, updated_by
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
              ON CONFLICT (zone_id, file_name) DO UPDATE
                SET platform = EXCLUDED.platform,
                    content = EXCLUDED.content,
+                   drive_node_id = EXCLUDED.drive_node_id,
+                   drive_space_id = EXCLUDED.drive_space_id,
+                   content_sha256 = EXCLUDED.content_sha256,
+                   content_bytes = EXCLUDED.content_bytes,
+                   content_type = EXCLUDED.content_type,
                    user_id = EXCLUDED.user_id,
                    updated_by = EXCLUDED.updated_by,
                    updated_at = NOW(),
                    version = deploy_dns_zone_verification_file.version + 1
-             RETURNING uuid, platform, file_name, content, created_at, updated_at",
+             RETURNING uuid, platform, file_name, content, drive_node_id, drive_space_id,
+                       content_sha256, content_bytes, content_type, created_at, updated_at",
         )
         .bind(row_id)
         .bind(&row_uuid)
@@ -528,7 +571,15 @@ impl DeployRepository {
         .bind(platform)
         .bind(file_name)
         .bind(content)
-        // $9 is the row's owner and $10 the audit pair; both are the acting
+        // The Drive reference describes the object the service just wrote; a
+        // deployment without a store (or a failed write) binds NULLs and the row
+        // keeps answering from its inline copy.
+        .bind(drive.map(|drive| drive.node_id.as_str()))
+        .bind(drive.and_then(|drive| drive.space_id.as_deref()))
+        .bind(drive.map(|drive| drive.content_sha256.as_str()))
+        .bind(drive.map(|drive| drive.content_bytes))
+        .bind(drive.map(|drive| drive.content_type.as_str()))
+        // $14 is the row's owner and $15 the audit pair; both are the acting
         // caller here, which is why the actor is bound twice. Binding it once
         // left the statement one parameter short and every create/upsert of a
         // verification file failed with a bind-count error.
@@ -549,7 +600,8 @@ impl DeployRepository {
         file_id: &str,
     ) -> DeployServiceResult<VerificationFileRecord> {
         let row = sqlx::query(AssertSqlSafe(format!(
-            "SELECT v.uuid, v.platform, v.file_name, v.content, v.created_at, v.updated_at
+            "SELECT v.uuid, v.platform, v.file_name, v.content, v.drive_node_id, v.drive_space_id,
+                     v.content_sha256, v.content_bytes, v.content_type, v.created_at, v.updated_at
              FROM deploy_dns_zone_verification_file v
              JOIN deploy_dns_zone z ON z.id = v.zone_id
              WHERE z.tenant_id = $1 AND z.uuid = $2 AND z.deleted_at IS NULL
