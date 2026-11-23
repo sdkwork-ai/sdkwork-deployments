@@ -116,8 +116,10 @@ async fn ensure_platform_zone_in_tx(
         )));
     }
     // No zone owns the apex, but an existing zone may still contain it or be
-    // contained by it. Refusing here preserves the "zones never overlap"
-    // invariant that `create_domain_zone_repo` enforces for operator zones.
+    // contained by it. Refusing both keeps the platform from claiming a
+    // namespace on either side of an existing zone: it must never carve a
+    // publishing zone out of an operator's domain, and it must not hoist one
+    // above a namespace someone else already declared.
     let overlapping: Option<String> = sqlx::query_scalar(
         "SELECT apex_hostname FROM deploy_dns_zone
          WHERE deleted_at IS NULL

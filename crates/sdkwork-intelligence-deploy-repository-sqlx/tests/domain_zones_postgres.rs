@@ -240,6 +240,189 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .expect("delete recreated zone");
 }
 
+/// A root domain may contain the platform zone the deployment provisioned.
+///
+/// The deployment pre-provisions `app.<suffix>` for every publishing suffix, so
+/// the tenant that owns the registrable `<suffix>` must still be able to
+/// register it: the console's "Register root domain" action exists for exactly
+/// that name. The two zones coexist rather than overlap, because a hostname
+/// resolves to its zone through its own `deploy_domain` row and never by suffix
+/// matching, so each zone keeps exclusive ownership of the names declared
+/// beneath it.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_root_domain_may_contain_a_platform_zone() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let suffix = format!(
+        "contain{}.dev",
+        sdkwork_database_id::uuid_v4().replace('-', "")
+    );
+    let platform_apex = format!("app.{suffix}");
+    // The platform zone, as `ensure_platform_app_zones` provisions it: tenant
+    // level (no user owner), plus the auto-verified apex hostname.
+    sqlx::query(
+        "INSERT INTO deploy_dns_zone (
+            id,uuid,tenant_id,organization_id,apex_hostname,display_name,dns_provider,
+            provider_zone_ref,status,user_id,created_by,updated_by
+         ) VALUES (901,'zone-901',7,9,$1,'Platform publishing zone','platform',$2,
+                   'ACTIVE',NULL,11,11)",
+    )
+    .bind(&platform_apex)
+    .bind(format!("app.*.{suffix}"))
+    .execute(&pool)
+    .await
+    .expect("seed platform zone");
+    // The platform apex is auto-verified, and the baseline's
+    // `chk_deploy_domain_verified_at` requires a timestamp behind that state.
+    sqlx::query(
+        "INSERT INTO deploy_domain (
+            id,uuid,tenant_id,organization_id,zone_id,hostname_ascii,hostname_type,
+            verification_status,verified_at,status,created_by,updated_by
+         ) VALUES (9011,'domain-9011',7,9,901,$1,'EXACT','VERIFIED',NOW(),'ACTIVE',11,11)",
+    )
+    .bind(&platform_apex)
+    .execute(&pool)
+    .await
+    .expect("seed platform apex hostname");
+
+    let zone = repository
+        .create_domain_zone(
+            7,
+            Some(9),
+            Some(11),
+            &CreateDomainZoneRequest {
+                apex_hostname: suffix.clone(),
+                display_name: Some("Registrable apex".to_owned()),
+                dns_provider: Some("manual".to_owned()),
+                provider_zone_ref: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("the apex that contains a platform zone must be registrable");
+    assert_eq!(zone.apex_hostname, suffix);
+
+    let apexes: Vec<String> = sqlx::query_scalar(
+        "SELECT apex_hostname FROM deploy_dns_zone WHERE deleted_at IS NULL ORDER BY apex_hostname",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("list zones");
+    assert_eq!(
+        apexes,
+        vec![platform_apex, suffix],
+        "both zones coexist, each owning its own namespace"
+    );
+}
+
+/// A zone may not be carved out of an existing zone's namespace.
+///
+/// The enclosing zone owns that namespace, so a nested zone would mint names
+/// inside a domain the operator (or another tenant) controls. The refusal names
+/// the blocking apex, which is what makes the 409 actionable.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_zone_nested_under_an_existing_zone_is_refused() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let parent = format!(
+        "enclosing{}.dev",
+        sdkwork_database_id::uuid_v4().replace('-', "")
+    );
+    let request = |apex: &str| CreateDomainZoneRequest {
+        apex_hostname: apex.to_owned(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    repository
+        .create_domain_zone(7, Some(9), Some(11), &request(&parent))
+        .await
+        .expect("create the enclosing zone");
+
+    let error = repository
+        .create_domain_zone(7, Some(9), Some(11), &request(&format!("www.{parent}")))
+        .await
+        .expect_err("a zone nested under an existing one must be refused");
+    match error {
+        sdkwork_deploy_contract::DeployServiceError::Conflict(detail) => {
+            assert!(
+                detail.contains(&parent),
+                "the conflict must name the enclosing zone: {detail}"
+            );
+        }
+        other => panic!("expected a conflict, got {other:?}"),
+    }
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM deploy_dns_zone WHERE deleted_at IS NULL AND apex_hostname = $1",
+    )
+    .bind(format!("www.{parent}"))
+    .fetch_one(&pool)
+    .await
+    .expect("count nested zone");
+    assert_eq!(count, 0, "the refused zone must not have been written");
+}
+
+/// A second zone on an apex that already is a zone stays its own conflict.
+///
+/// This used to surface as "already registered as a hostname", because every
+/// zone carries an apex `deploy_domain` row and that probe ran first. The
+/// honest answer is that the zone itself exists.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_duplicate_apex_names_the_existing_zone() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let apex = format!(
+        "duplicate{}.dev",
+        sdkwork_database_id::uuid_v4().replace('-', "")
+    );
+    let request = CreateDomainZoneRequest {
+        apex_hostname: apex.clone(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    repository
+        .create_domain_zone(7, Some(9), Some(11), &request)
+        .await
+        .expect("create the first zone");
+
+    let error = repository
+        .create_domain_zone(7, Some(9), Some(11), &request)
+        .await
+        .expect_err("a second zone on the same apex must be refused");
+    match error {
+        sdkwork_deploy_contract::DeployServiceError::Conflict(detail) => {
+            assert!(
+                detail.contains("already exists"),
+                "the duplicate must name the existing zone, not a hostname: {detail}"
+            );
+            assert!(
+                detail.contains(&apex),
+                "the conflict must name the apex: {detail}"
+            );
+        }
+        other => panic!("expected a conflict, got {other:?}"),
+    }
+}
+
 /// The console's domain inventory is user-private.
 ///
 /// A zone belongs to the user who created it, so a second user in the same

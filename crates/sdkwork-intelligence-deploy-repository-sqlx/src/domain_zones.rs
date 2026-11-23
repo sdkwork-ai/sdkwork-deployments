@@ -176,32 +176,63 @@ impl DeployRepository {
         request: &CreateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse> {
         let apex = request.apex_hostname.as_str();
-        // The apex must not already be registered as a hostname (zone apexes
-        // live in deploy_domain as well), and it must not nest under or
-        // contain an existing zone apex so zones never overlap. Both checks
-        // are global, matching the global unique indexes.
-        let conflicts: (bool, bool) = sqlx::query_as(
+        // A zone is one namespace, and the three probes below are the three
+        // ways a second zone could claim part of an existing one. All three are
+        // global, matching the global unique indexes they guard
+        // (`uk_deploy_dns_zone_active_apex` and
+        // `uk_deploy_domain_active_hostname`): another tenant's apex is not free
+        // either, and answering "free" for it would die later as a masked
+        // unique violation instead of a diagnosable conflict.
+        //
+        // 1. The apex is already a zone: the exact same namespace twice.
+        // 2. The apex is already a hostname: the name is owned somewhere below,
+        //    and every zone apex carries its own `deploy_domain` row (the create
+        //    path below writes it), so the insert would violate the hostname
+        //    index rather than refuse in words the operator can act on.
+        // 3. The apex is nested inside an existing zone: a zone carved out of
+        //    another zone's namespace. Refused, because the enclosing zone owns
+        //    that namespace and the platform must never mint `VERIFIED` names
+        //    inside a domain an operator controls.
+        //
+        // The reverse containment - the new apex *containing* existing zones -
+        // is deliberately allowed, and it is the case this surface exists for:
+        // the deployment pre-provisions `app.<suffix>` for every publishing
+        // suffix, so the tenant that owns the registrable `<suffix>` must still
+        // be able to register it. Nothing becomes ambiguous, because a hostname
+        // resolves to its zone through its own `deploy_domain` row
+        // (`retrieve_dns_challenge_zone_repo`) and never by suffix matching: the
+        // platform zone keeps every name declared beneath it, and the new zone
+        // owns only the names declared beneath the new apex.
+        let probes: (bool, bool, Option<String>) = sqlx::query_as(
             "SELECT
+                EXISTS (SELECT 1 FROM deploy_dns_zone
+                        WHERE deleted_at IS NULL AND apex_hostname = $1),
                 EXISTS (SELECT 1 FROM deploy_domain
                         WHERE deleted_at IS NULL AND hostname_ascii = $1),
-                EXISTS (SELECT 1 FROM deploy_dns_zone
-                        WHERE deleted_at IS NULL AND (apex_hostname = $1
-                            OR apex_hostname LIKE '%.' || $1
-                            OR $1 LIKE '%.' || apex_hostname))",
+                (SELECT apex_hostname FROM deploy_dns_zone
+                  WHERE deleted_at IS NULL AND $1 LIKE '%.' || apex_hostname
+                  ORDER BY LENGTH(apex_hostname) DESC
+                  LIMIT 1)",
         )
         .bind(apex)
         .fetch_one(&self.pool)
         .await
         .map_err(|error| store_error("check deploy_dns_zone conflicts", error))?;
-        if conflicts.0 {
-            return Err(DeployServiceError::conflict(
-                "apex hostname is already registered as a hostname",
-            ));
+        let (apex_taken, hostname_taken, enclosing_apex) = probes;
+        if apex_taken {
+            return Err(DeployServiceError::conflict(format!(
+                "domain zone {apex} already exists"
+            )));
         }
-        if conflicts.1 {
-            return Err(DeployServiceError::conflict(
-                "zone apex overlaps an existing domain zone",
-            ));
+        if hostname_taken {
+            return Err(DeployServiceError::conflict(format!(
+                "apex hostname {apex} is already registered as a hostname"
+            )));
+        }
+        if let Some(enclosing) = enclosing_apex {
+            return Err(DeployServiceError::conflict(format!(
+                "domain zone {apex} is nested inside the existing domain zone {enclosing}"
+            )));
         }
         let zone_id = next_id(self.id_generator())?;
         let zone_uuid = new_uuid();
