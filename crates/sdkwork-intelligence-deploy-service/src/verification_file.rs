@@ -213,12 +213,12 @@ impl crate::DeployService {
     pub(crate) async fn list_verification_files(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<DomainVerificationFilePage> {
         let records = self
             .repository
-            .list_dns_zone_verification_files(tenant_id, owner_user_id, zone_id)
+            .list_dns_zone_verification_files(tenant_id, owner, zone_id)
             .await?;
         let items: Vec<DomainVerificationFileResponse> = records
             .into_iter()
@@ -242,7 +242,7 @@ impl crate::DeployService {
     pub(crate) async fn create_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         request: &CreateDomainVerificationFileRequest,
     ) -> DeployServiceResult<DomainVerificationFileResponse> {
@@ -251,7 +251,7 @@ impl crate::DeployService {
         let content = normalize_content(&request.content)?;
         let existing: Vec<String> = self
             .repository
-            .list_dns_zone_verification_files(tenant_id, owner_user_id, zone_id)
+            .list_dns_zone_verification_files(tenant_id, owner, zone_id)
             .await?
             .into_iter()
             .map(|record| record.file_name)
@@ -260,12 +260,7 @@ impl crate::DeployService {
         let record = self
             .repository
             .upsert_dns_zone_verification_file(
-                tenant_id,
-                owner_user_id,
-                zone_id,
-                &platform,
-                &file_name,
-                &content,
+                tenant_id, owner, zone_id, &platform, &file_name, &content,
             )
             .await?;
         Ok(to_response(zone_id, record))
@@ -274,13 +269,13 @@ impl crate::DeployService {
     pub(crate) async fn delete_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         file_id: &str,
     ) -> DeployServiceResult<()> {
         let deleted = self
             .repository
-            .delete_dns_zone_verification_file(tenant_id, owner_user_id, zone_id, file_id)
+            .delete_dns_zone_verification_file(tenant_id, owner, zone_id, file_id)
             .await?;
         if !deleted {
             return Err(DeployServiceError::not_found(
@@ -299,17 +294,17 @@ impl crate::DeployService {
     pub(crate) async fn check_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         file_id: &str,
     ) -> DeployServiceResult<DomainVerificationFileCheckResponse> {
         let record = self
             .repository
-            .retrieve_dns_zone_verification_file(tenant_id, owner_user_id, zone_id, file_id)
+            .retrieve_dns_zone_verification_file(tenant_id, owner, zone_id, file_id)
             .await?;
         let apex = self
             .repository
-            .retrieve_domain_zone(tenant_id, owner_user_id, zone_id)
+            .retrieve_domain_zone(tenant_id, owner, zone_id)
             .await?
             .apex_hostname;
         let checked_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

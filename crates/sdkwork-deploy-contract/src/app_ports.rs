@@ -63,6 +63,16 @@ impl DeployAppRequestContext {
             .any(|granted| permission_matches(granted, required))
     }
 
+    /// The reach this caller has over rows another user owns.
+    ///
+    /// Derived from the verified principal — the actor for audit and
+    /// [`crate::permissions::PERM_MANAGE_ALL_OWNERSHIP`] for the lift — so a
+    /// resource query can gate ownership without the service having to re-derive
+    /// the decision at every call site.
+    pub fn ownership_reach(&self) -> crate::permissions::OwnershipReach {
+        crate::permissions::OwnershipReach::from_context(self)
+    }
+
     /// Gate for an environment promotion that records an approval.
     ///
     /// `deploy.apps.write` lets an operator promote; recording an approval is a

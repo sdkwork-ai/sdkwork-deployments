@@ -238,13 +238,13 @@ impl DeployService {
     async fn advance_hostname_ownership(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerifyResponse> {
         let challenge = self
             .repository
-            .domain_hostname_verification_challenge(tenant_id, owner_user_id, zone_id, hostname_id)
+            .domain_hostname_verification_challenge(tenant_id, owner, zone_id, hostname_id)
             .await?;
         // A challenge this call just opened cannot have a published record yet, so
         // there is nothing to look up: hand the operator the record to publish.
@@ -280,7 +280,7 @@ impl DeployService {
             .repository
             .confirm_domain_hostname_verification(
                 tenant_id,
-                owner_user_id,
+                owner,
                 zone_id,
                 hostname_id,
                 verification_id,
@@ -301,7 +301,7 @@ impl DeployService {
         }
         let current = self
             .repository
-            .domain_hostname_verification_challenge(tenant_id, owner_user_id, zone_id, hostname_id)
+            .domain_hostname_verification_challenge(tenant_id, owner, zone_id, hostname_id)
             .await?;
         if current.verified {
             Ok(current.response())
@@ -375,7 +375,7 @@ impl DeployAppApi for DeployService {
         // The caller's own subject, not the tenant: the console lists the
         // domains this user maintains and nothing else.
         self.repository
-            .list_domain_zones(tenant_id, context.actor_id, query)
+            .list_domain_zones(tenant_id, context.ownership_reach(), query)
             .await
     }
 
@@ -414,7 +414,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainZoneResponse> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.ownership_reach(), zone_id)
             .await
     }
 
@@ -454,7 +454,7 @@ impl DeployAppApi for DeployService {
             Some(None) => request.provider_account_id = Some(String::new()),
         }
         self.repository
-            .update_domain_zone(tenant_id, context.actor_id, zone_id, &request)
+            .update_domain_zone(tenant_id, context.ownership_reach(), zone_id, &request)
             .await
     }
 
@@ -465,7 +465,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .delete_domain_zone(tenant_id, context.actor_id, zone_id)
+            .delete_domain_zone(tenant_id, context.ownership_reach(), zone_id)
             .await
     }
 
@@ -475,7 +475,7 @@ impl DeployAppApi for DeployService {
         zone_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerificationFilePage> {
         let tenant_id = Self::require_tenant(context)?;
-        self.list_verification_files(tenant_id, context.actor_id, zone_id)
+        self.list_verification_files(tenant_id, context.ownership_reach(), zone_id)
             .await
     }
 
@@ -486,7 +486,7 @@ impl DeployAppApi for DeployService {
         request: &sdkwork_deploy_contract::CreateDomainVerificationFileRequest,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerificationFileResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.create_verification_file(tenant_id, context.actor_id, zone_id, request)
+        self.create_verification_file(tenant_id, context.ownership_reach(), zone_id, request)
             .await
     }
 
@@ -497,7 +497,7 @@ impl DeployAppApi for DeployService {
         file_id: &str,
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
-        self.delete_verification_file(tenant_id, context.actor_id, zone_id, file_id)
+        self.delete_verification_file(tenant_id, context.ownership_reach(), zone_id, file_id)
             .await
     }
 
@@ -508,7 +508,7 @@ impl DeployAppApi for DeployService {
         file_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerificationFileCheckResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.check_verification_file(tenant_id, context.actor_id, zone_id, file_id)
+        self.check_verification_file(tenant_id, context.ownership_reach(), zone_id, file_id)
             .await
     }
 
@@ -521,7 +521,13 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainHostnamePage> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .list_domain_hostnames(tenant_id, context.actor_id, zone_id, page, page_size)
+            .list_domain_hostnames(
+                tenant_id,
+                context.ownership_reach(),
+                zone_id,
+                page,
+                page_size,
+            )
             .await
     }
 
@@ -536,14 +542,14 @@ impl DeployAppApi for DeployService {
         // reported as missing rather than lending its apex to the request.
         let zone = self
             .repository
-            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.ownership_reach(), zone_id)
             .await?;
         let relative_name =
             normalize_relative_hostname(&request.relative_name, &zone.apex_hostname)?;
         self.repository
             .create_domain_hostname(
                 tenant_id,
-                context.actor_id,
+                context.ownership_reach(),
                 zone_id,
                 &CreateDomainHostnameRequest { relative_name },
             )
@@ -558,7 +564,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainHostnameResponse> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .retrieve_domain_hostname(tenant_id, context.actor_id, zone_id, hostname_id)
+            .retrieve_domain_hostname(tenant_id, context.ownership_reach(), zone_id, hostname_id)
             .await
     }
 
@@ -570,7 +576,7 @@ impl DeployAppApi for DeployService {
     ) -> DeployServiceResult<()> {
         let tenant_id = Self::require_tenant(context)?;
         self.repository
-            .delete_domain_hostname(tenant_id, context.actor_id, zone_id, hostname_id)
+            .delete_domain_hostname(tenant_id, context.ownership_reach(), zone_id, hostname_id)
             .await
     }
 
@@ -584,14 +590,14 @@ impl DeployAppApi for DeployService {
         let tenant_id = Self::require_tenant(context)?;
         let zone = self
             .repository
-            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.ownership_reach(), zone_id)
             .await?;
         let relative_name =
             normalize_relative_hostname(&request.relative_name, &zone.apex_hostname)?;
         self.repository
             .update_domain_hostname(
                 tenant_id,
-                context.actor_id,
+                context.ownership_reach(),
                 zone_id,
                 hostname_id,
                 &UpdateDomainHostnameRequest { relative_name },
@@ -606,7 +612,7 @@ impl DeployAppApi for DeployService {
         hostname_id: &str,
     ) -> DeployServiceResult<sdkwork_deploy_contract::DomainVerifyResponse> {
         let tenant_id = Self::require_tenant(context)?;
-        self.advance_hostname_ownership(tenant_id, context.actor_id, zone_id, hostname_id)
+        self.advance_hostname_ownership(tenant_id, context.ownership_reach(), zone_id, hostname_id)
             .await
     }
 
@@ -620,7 +626,7 @@ impl DeployAppApi for DeployService {
         crate::domain_dns_records::list_zone_dns_records(
             &self.repository,
             tenant_id,
-            context.actor_id,
+            context.ownership_reach(),
             zone_id,
             &crate::repository::DomainDnsRecordFilter {
                 hostname_id: query.hostname_id.clone(),
@@ -643,7 +649,7 @@ impl DeployAppApi for DeployService {
             &self.repository,
             &self.certificate_dns01,
             tenant_id,
-            context.actor_id,
+            context.ownership_reach(),
             zone_id,
         )
         .await
@@ -663,7 +669,7 @@ impl DeployAppApi for DeployService {
             &self.repository,
             &self.certificate_dns01,
             tenant_id,
-            context.actor_id,
+            context.ownership_reach(),
             zone_id,
         )
         .await?;
@@ -676,12 +682,12 @@ impl DeployAppApi for DeployService {
             .map_err(crate::domain_dns_records::map_dns_sync_error)?;
         let hostname_assets = self
             .repository
-            .list_domain_hostname_assets(tenant_id, context.actor_id, zone_id)
+            .list_domain_hostname_assets(tenant_id, context.ownership_reach(), zone_id)
             .await?;
         self.repository
             .insert_domain_zone_dns_record(
                 tenant_id,
-                context.actor_id,
+                context.ownership_reach(),
                 zone_id,
                 &crate::repository::DomainDnsRecordUpsert {
                     record_name: record.record_name.clone(),
@@ -717,13 +723,13 @@ impl DeployAppApi for DeployService {
             &self.repository,
             &self.certificate_dns01,
             tenant_id,
-            context.actor_id,
+            context.ownership_reach(),
             zone_id,
         )
         .await?;
         let record_ref = self
             .repository
-            .domain_zone_dns_record_ref(tenant_id, context.actor_id, zone_id, record_id)
+            .domain_zone_dns_record_ref(tenant_id, context.ownership_reach(), zone_id, record_id)
             .await?
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::NotFound(
@@ -739,12 +745,12 @@ impl DeployAppApi for DeployService {
             .map_err(crate::domain_dns_records::map_dns_sync_error)?;
         let hostname_assets = self
             .repository
-            .list_domain_hostname_assets(tenant_id, context.actor_id, zone_id)
+            .list_domain_hostname_assets(tenant_id, context.ownership_reach(), zone_id)
             .await?;
         self.repository
             .update_domain_zone_dns_record(
                 tenant_id,
-                context.actor_id,
+                context.ownership_reach(),
                 zone_id,
                 record_id,
                 &crate::repository::DomainDnsRecordUpsert {
@@ -780,13 +786,13 @@ impl DeployAppApi for DeployService {
             &self.repository,
             &self.certificate_dns01,
             tenant_id,
-            context.actor_id,
+            context.ownership_reach(),
             zone_id,
         )
         .await?;
         let record_ref = self
             .repository
-            .domain_zone_dns_record_ref(tenant_id, context.actor_id, zone_id, record_id)
+            .domain_zone_dns_record_ref(tenant_id, context.ownership_reach(), zone_id, record_id)
             .await?
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::NotFound(
@@ -799,7 +805,7 @@ impl DeployAppApi for DeployService {
             .await
             .map_err(crate::domain_dns_records::map_dns_sync_error)?;
         self.repository
-            .delete_domain_zone_dns_record(tenant_id, context.actor_id, zone_id, record_id)
+            .delete_domain_zone_dns_record(tenant_id, context.ownership_reach(), zone_id, record_id)
             .await
     }
 
@@ -818,13 +824,13 @@ impl DeployAppApi for DeployService {
             &self.repository,
             &self.certificate_dns01,
             tenant_id,
-            context.actor_id,
+            context.ownership_reach(),
             zone_id,
         )
         .await?;
         let record_ref = self
             .repository
-            .domain_zone_dns_record_ref(tenant_id, context.actor_id, zone_id, record_id)
+            .domain_zone_dns_record_ref(tenant_id, context.ownership_reach(), zone_id, record_id)
             .await?
             .ok_or_else(|| {
                 sdkwork_deploy_contract::DeployServiceError::NotFound(
@@ -839,7 +845,7 @@ impl DeployAppApi for DeployService {
         self.repository
             .set_domain_zone_dns_record_status(
                 tenant_id,
-                context.actor_id,
+                context.ownership_reach(),
                 zone_id,
                 record_id,
                 request.enabled,
@@ -878,7 +884,7 @@ impl DeployAppApi for DeployService {
         }
         let zone = self
             .repository
-            .retrieve_domain_zone(tenant_id, context.actor_id, zone_id)
+            .retrieve_domain_zone(tenant_id, context.ownership_reach(), zone_id)
             .await?;
         let mut relative_names = Vec::with_capacity(request.hostnames.len());
         for hostname in &request.hostnames {
@@ -898,7 +904,12 @@ impl DeployAppApi for DeployService {
         for relative_name in &relative_names {
             let hostname = self
                 .repository
-                .ensure_domain_hostname(tenant_id, context.actor_id, zone_id, relative_name)
+                .ensure_domain_hostname(
+                    tenant_id,
+                    context.ownership_reach(),
+                    zone_id,
+                    relative_name,
+                )
                 .await?;
             // A row that is already proven needs no lookup: DNS cannot un-verify
             // it, and re-asking would spend the attempt's budget on an answer
@@ -909,7 +920,7 @@ impl DeployAppApi for DeployService {
                 Some(
                     self.advance_hostname_ownership(
                         tenant_id,
-                        context.actor_id,
+                        context.ownership_reach(),
                         zone_id,
                         &hostname.id,
                     )

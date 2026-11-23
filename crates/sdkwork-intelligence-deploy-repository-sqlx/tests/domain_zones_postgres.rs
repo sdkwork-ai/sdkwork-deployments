@@ -5,7 +5,8 @@ use std::sync::Arc;
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployAppApi, DeployAppRequestContext,
-    ListDomainZonesQuery, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
+    ListDomainZonesQuery, OwnershipReach, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
+    ZoneScope,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -48,7 +49,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     let listed = repository
         .list_domain_zones(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &ListDomainZonesQuery {
                 page: 1,
                 page_size: 20,
@@ -65,7 +66,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     let hostname = repository
         .create_domain_hostname(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &CreateDomainHostnameRequest {
                 relative_name: "docs".to_owned(),
@@ -76,12 +77,22 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     assert_eq!(hostname.hostname, format!("docs.{apex}"));
 
     let first_challenge = repository
-        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("create verification challenge");
     assert!(first_challenge.token.is_some());
     let repeated_challenge = repository
-        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("reload verification challenge");
     // The published value is `base64url(sha256(attempt id))`, so reloading the
@@ -106,7 +117,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     let renamed = repository
         .update_domain_hostname(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &hostname.id,
             &UpdateDomainHostnameRequest {
@@ -120,7 +131,12 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     assert_eq!(renamed.verification_status, "PENDING");
     assert!(renamed.verified_at.is_none());
     let renamed_challenge = repository
-        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("challenge after rename");
     assert_ne!(
@@ -138,7 +154,13 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     // The apex hostname is owned by the zone and cannot be renamed, and a
     // hostname cannot be renamed back onto the apex.
     let apex_hostname = repository
-        .list_domain_hostnames(7, Some(11), &zone.id, 1, 20)
+        .list_domain_hostnames(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            1,
+            20,
+        )
         .await
         .expect("list apex hostname")
         .items
@@ -149,7 +171,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         repository
             .update_domain_hostname(
                 7,
-                Some(11),
+                OwnershipReach::new(Some(11), None, false),
                 &zone.id,
                 &apex_hostname.id,
                 &UpdateDomainHostnameRequest {
@@ -164,7 +186,7 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         repository
             .update_domain_hostname(
                 7,
-                Some(11),
+                OwnershipReach::new(Some(11), None, false),
                 &zone.id,
                 &hostname.id,
                 &UpdateDomainHostnameRequest {
@@ -177,15 +199,26 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
     );
 
     assert!(repository
-        .delete_domain_zone(7, Some(11), &zone.id)
+        .delete_domain_zone(7, OwnershipReach::new(Some(11), None, false), &zone.id)
         .await
         .is_err());
     repository
-        .delete_domain_hostname(7, Some(11), &zone.id, &hostname.id)
+        .delete_domain_hostname(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("delete unbound child hostname");
     let apex_hostname = repository
-        .list_domain_hostnames(7, Some(11), &zone.id, 1, 20)
+        .list_domain_hostnames(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            1,
+            20,
+        )
         .await
         .expect("list apex hostname")
         .items
@@ -194,13 +227,18 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .expect("apex hostname");
     assert!(
         repository
-            .delete_domain_hostname(7, Some(11), &zone.id, &apex_hostname.id)
+            .delete_domain_hostname(
+                7,
+                OwnershipReach::new(Some(11), None, false),
+                &zone.id,
+                &apex_hostname.id
+            )
             .await
             .is_err(),
         "the apex hostname belongs to the zone and cannot be deleted independently"
     );
     repository
-        .delete_domain_zone(7, Some(11), &zone.id)
+        .delete_domain_zone(7, OwnershipReach::new(Some(11), None, false), &zone.id)
         .await
         .expect("delete root domain zone with its apex hostname");
 
@@ -220,7 +258,13 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .await
         .expect("reuse soft-deleted apex");
     let recreated_apex = repository
-        .list_domain_hostnames(7, Some(11), &recreated.id, 1, 20)
+        .list_domain_hostnames(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &recreated.id,
+            1,
+            20,
+        )
         .await
         .expect("list recreated apex")
         .items
@@ -229,13 +273,18 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .expect("recreated apex hostname");
     assert!(
         repository
-            .delete_domain_hostname(7, Some(11), &recreated.id, &recreated_apex.id)
+            .delete_domain_hostname(
+                7,
+                OwnershipReach::new(Some(11), None, false),
+                &recreated.id,
+                &recreated_apex.id
+            )
             .await
             .is_err(),
         "the recreated apex hostname belongs to the zone and cannot be deleted independently"
     );
     repository
-        .delete_domain_zone(7, Some(11), &recreated.id)
+        .delete_domain_zone(7, OwnershipReach::new(Some(11), None, false), &recreated.id)
         .await
         .expect("delete recreated zone");
 }
@@ -487,7 +536,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         .expect("create a tenant-level zone");
 
     let owner_ids = ids(repository
-        .list_domain_zones(7, Some(11), &listing())
+        .list_domain_zones(7, OwnershipReach::new(Some(11), None, false), &listing())
         .await
         .expect("list as the owner"));
     assert!(
@@ -504,7 +553,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
     );
 
     let neighbour_ids = ids(repository
-        .list_domain_zones(7, Some(12), &listing())
+        .list_domain_zones(7, OwnershipReach::new(Some(12), None, false), &listing())
         .await
         .expect("list as the neighbour"));
     assert!(
@@ -514,7 +563,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
     assert!(neighbour_ids.contains(&neighbour_zone.id));
 
     let unowned_ids = ids(repository
-        .list_domain_zones(7, None, &listing())
+        .list_domain_zones(7, OwnershipReach::new(None, None, false), &listing())
         .await
         .expect("list without a user subject"));
     assert_eq!(
@@ -527,21 +576,35 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
     // only the listing would leave a deep link into the hostname page open.
     assert!(
         repository
-            .retrieve_domain_zone(7, Some(12), &owner_zone.id)
+            .retrieve_domain_zone(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id
+            )
             .await
             .is_err(),
         "reading another user's zone must be refused"
     );
     assert!(
         repository
-            .list_domain_hostnames(7, Some(12), &owner_zone.id, 1, 20)
+            .list_domain_hostnames(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id,
+                1,
+                20
+            )
             .await
             .is_err(),
         "listing another user's hostnames must be refused"
     );
     assert!(
         repository
-            .delete_domain_zone(7, Some(12), &owner_zone.id)
+            .delete_domain_zone(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id
+            )
             .await
             .is_err(),
         "deleting another user's zone must be refused"
@@ -550,7 +613,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         repository
             .update_domain_zone(
                 7,
-                Some(12),
+                OwnershipReach::new(Some(12), None, false),
                 &owner_zone.id,
                 &UpdateDomainZoneRequest {
                     display_name: None,
@@ -568,7 +631,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         repository
             .create_domain_hostname(
                 7,
-                Some(12),
+                OwnershipReach::new(Some(12), None, false),
                 &owner_zone.id,
                 &CreateDomainHostnameRequest {
                     relative_name: "docs".to_owned(),
@@ -580,14 +643,23 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
     );
     assert!(
         repository
-            .ensure_domain_hostname(7, Some(12), &owner_zone.id, "docs")
+            .ensure_domain_hostname(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id,
+                "docs"
+            )
             .await
             .is_err(),
         "claiming a hostname under another user's zone must be refused"
     );
     assert_eq!(
         repository
-            .retrieve_domain_zone(7, Some(11), &owner_zone.id)
+            .retrieve_domain_zone(
+                7,
+                OwnershipReach::new(Some(11), None, false),
+                &owner_zone.id
+            )
             .await
             .expect("the owner still reaches it")
             .status,
@@ -600,7 +672,7 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
     let hostname = repository
         .create_domain_hostname(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &owner_zone.id,
             &CreateDomainHostnameRequest {
                 relative_name: "docs".to_owned(),
@@ -610,28 +682,48 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
         .expect("create the owner's hostname");
     assert!(
         repository
-            .domain_hostname_verification_challenge(7, Some(12), &owner_zone.id, &hostname.id)
+            .domain_hostname_verification_challenge(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id,
+                &hostname.id
+            )
             .await
             .is_err(),
         "starting another user's ownership proof must be refused"
     );
     assert!(
         repository
-            .retrieve_domain_hostname(7, Some(12), &owner_zone.id, &hostname.id)
+            .retrieve_domain_hostname(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id,
+                &hostname.id
+            )
             .await
             .is_err(),
         "reading another user's hostname must be refused"
     );
     assert!(
         repository
-            .delete_domain_hostname(7, Some(12), &owner_zone.id, &hostname.id)
+            .delete_domain_hostname(
+                7,
+                OwnershipReach::new(Some(12), None, false),
+                &owner_zone.id,
+                &hostname.id
+            )
             .await
             .is_err(),
         "deleting another user's hostname must be refused"
     );
     assert!(
         repository
-            .domain_hostname_verification_challenge(7, Some(11), &owner_zone.id, &hostname.id)
+            .domain_hostname_verification_challenge(
+                7,
+                OwnershipReach::new(Some(11), None, false),
+                &owner_zone.id,
+                &hostname.id
+            )
             .await
             .is_ok(),
         "the owner's own proof path stays open"
@@ -640,11 +732,15 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
     // The tenant-level zone is reachable from both members and from a caller
     // with no user subject, which is what keeps the platform inventory usable.
     assert!(repository
-        .retrieve_domain_zone(7, Some(12), &shared_zone.id)
+        .retrieve_domain_zone(
+            7,
+            OwnershipReach::new(Some(12), None, false),
+            &shared_zone.id
+        )
         .await
         .is_ok());
     assert!(repository
-        .retrieve_domain_zone(7, None, &shared_zone.id)
+        .retrieve_domain_zone(7, OwnershipReach::new(None, None, false), &shared_zone.id)
         .await
         .is_ok());
 }
@@ -753,6 +849,46 @@ async fn service_domain_inventory_is_scoped_to_the_calling_subject() {
         "the subjectless inventory is exactly the tenant-level zone"
     );
 
+    // The administrator surface carries `deploy.ownership.manage_all` (the
+    // platform administrator's `*` grant matches it), so the console's list is
+    // the tenant's whole inventory and its row actions reach zones that belong
+    // to somebody else.
+    let granted = |permissions: Vec<String>| DeployAppRequestContext {
+        tenant_id: 7,
+        actor_id: Some(1),
+        organization_id: Some(9),
+        permissions,
+        ..DeployAppRequestContext::default()
+    };
+    let administrator = granted(vec!["*".to_owned()]);
+    let admin_ids = ids(&service
+        .list_domain_zones(&administrator, &query)
+        .await
+        .expect("the administrator lists the tenant's domains"));
+    assert!(
+        admin_ids.contains(&alice.id)
+            && admin_ids.contains(&bob.id)
+            && admin_ids.contains(&platform.id),
+        "the tenant-wide reach must list every owner: {admin_ids:?}"
+    );
+    let administered = service
+        .retrieve_domain_zone(&administrator, &alice.id)
+        .await
+        .expect("the administrator may read a zone another user owns");
+    assert_eq!(administered.id, alice.id);
+
+    // The lift is the grant, not "an authenticated caller": a credential with a
+    // different deploy read code keeps the user-private inventory.
+    let unrelated = granted(vec!["deploy.apps.read".to_owned()]);
+    let unrelated_ids = ids(&service
+        .list_domain_zones(&unrelated, &query)
+        .await
+        .expect("a caller without the grant lists its own inventory"));
+    assert!(
+        !unrelated_ids.contains(&bob.id),
+        "a resource-level read code must not widen the inventory"
+    );
+
     // Every console action on a zone runs through the service too, so one
     // foreign zone has to stay closed for reads and for writes alike.
     assert!(
@@ -853,7 +989,7 @@ async fn domain_zone_listing_puts_operator_zones_first_and_labels_their_scope() 
     .expect("seed the platform zone");
 
     let page = repository
-        .list_domain_zones(7, Some(11), &listing())
+        .list_domain_zones(7, OwnershipReach::new(Some(11), None, false), &listing())
         .await
         .expect("list the operator's zones");
 
@@ -957,7 +1093,11 @@ async fn domain_zone_listing_filters_by_scope() {
     .expect("seed the platform zone");
 
     let user_page = repository
-        .list_domain_zones(7, Some(11), &listing(Some(ZoneScope::User)))
+        .list_domain_zones(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &listing(Some(ZoneScope::User)),
+        )
         .await
         .expect("list with scope=USER");
     assert_eq!(
@@ -974,7 +1114,11 @@ async fn domain_zone_listing_filters_by_scope() {
     assert_eq!(user_page.items[0].scope, ZoneScope::User);
 
     let platform_page = repository
-        .list_domain_zones(7, Some(11), &listing(Some(ZoneScope::Platform)))
+        .list_domain_zones(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &listing(Some(ZoneScope::Platform)),
+        )
         .await
         .expect("list with scope=PLATFORM");
     assert_eq!(
@@ -995,8 +1139,141 @@ async fn domain_zone_listing_filters_by_scope() {
     // picker in particular, since a certificate over a platform zone is
     // legitimate.
     let both = repository
-        .list_domain_zones(7, Some(11), &listing(None))
+        .list_domain_zones(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &listing(None),
+        )
         .await
         .expect("list without a scope filter");
     assert_eq!(both.total, 2, "no filter must return both kinds");
+}
+
+/// A tenant-wide reach presents every owner's inventory, and stops at the tenant.
+///
+/// The Domain Center is an administrator surface: it carries
+/// `deploy.ownership.manage_all` (the platform administrator's `*` grant matches
+/// it), so the root-domain list is the tenant's whole estate rather than the
+/// share one operator happens to own. The lift is the *only* difference — an
+/// ordinary caller keeps the user-private inventory it always had, audit columns
+/// still record the real actor rather than the row's owner, and neither reach
+/// crosses the tenant boundary.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_tenant_wide_reach_lists_every_owner_and_stops_at_the_tenant() {
+    fn ids(page: sdkwork_deploy_contract::DomainZonePage) -> Vec<String> {
+        page.items.into_iter().map(|item| item.id).collect()
+    }
+
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let suffix = sdkwork_database_id::uuid_v4().replace('-', "");
+    let request = |apex: &str| CreateDomainZoneRequest {
+        apex_hostname: apex.to_owned(),
+        display_name: None,
+        dns_provider: Some("manual".to_owned()),
+        provider_zone_ref: None,
+        provider_account_id: None,
+    };
+    let listing = || ListDomainZonesQuery {
+        page: 1,
+        page_size: 50,
+        ..Default::default()
+    };
+    let own = repository
+        .create_domain_zone(7, Some(9), Some(11), &request(&format!("own{suffix}.dev")))
+        .await
+        .expect("create the caller's own zone");
+    let neighbour = repository
+        .create_domain_zone(
+            7,
+            Some(9),
+            Some(12),
+            &request(&format!("neighbour{suffix}.dev")),
+        )
+        .await
+        .expect("create another user's zone in the same tenant");
+    let other_tenant = repository
+        .create_domain_zone(
+            8,
+            Some(9),
+            Some(21),
+            &request(&format!("other{suffix}.dev")),
+        )
+        .await
+        .expect("create a zone in another tenant");
+
+    // An ordinary caller reaches only its own zone.
+    let own_ids = ids(repository
+        .list_domain_zones(7, OwnershipReach::new(Some(11), Some(9), false), &listing())
+        .await
+        .expect("list with the caller's own reach"));
+    assert!(own_ids.contains(&own.id));
+    assert!(
+        !own_ids.contains(&neighbour.id),
+        "a user-private reach must not list another user's zone"
+    );
+
+    // The administrator's reach lists every owner inside its tenant, and nothing
+    // from the tenant next door.
+    let admin_ids = ids(repository
+        .list_domain_zones(7, OwnershipReach::new(Some(1), Some(9), true), &listing())
+        .await
+        .expect("list with the tenant-wide reach"));
+    assert!(
+        admin_ids.contains(&own.id) && admin_ids.contains(&neighbour.id),
+        "the tenant-wide reach must list every owner: {admin_ids:?}"
+    );
+    assert!(
+        !admin_ids.contains(&other_tenant.id),
+        "the reach must stop at the tenant boundary"
+    );
+
+    // A gated write reaches the row and records the admin as the audit actor
+    // rather than writing the row's owner into the audit column.
+    let renamed = repository
+        .update_domain_zone(
+            7,
+            OwnershipReach::new(Some(1), Some(9), true),
+            &neighbour.id,
+            &UpdateDomainZoneRequest {
+                display_name: Some("Administered".to_owned()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("the admin may update another user's zone");
+    assert_eq!(renamed.display_name.as_deref(), Some("Administered"));
+    let audit: Option<i64> =
+        sqlx::query_scalar("SELECT updated_by FROM deploy_dns_zone WHERE uuid = $1")
+            .bind(&neighbour.id)
+            .fetch_one(&pool)
+            .await
+            .expect("read the audit column");
+    assert_eq!(
+        audit,
+        Some(1),
+        "audit records the acting administrator, not the row's owner"
+    );
+
+    // The same write stays refused for a caller without the grant.
+    assert!(
+        repository
+            .update_domain_zone(
+                7,
+                OwnershipReach::new(Some(11), Some(9), false),
+                &neighbour.id,
+                &UpdateDomainZoneRequest {
+                    display_name: Some("Not mine".to_owned()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .is_err(),
+        "the user-private reach must not reach another user's zone"
+    );
 }

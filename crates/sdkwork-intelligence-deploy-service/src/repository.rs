@@ -29,14 +29,15 @@ use sdkwork_deploy_contract::{
     ListApplicationScaffoldsQuery, ListAppsQuery, ListDomainZonesQuery,
     ListMarketplaceScaffoldsQuery, ListNginxConfigsQuery, NginxConfigPage, NginxConfigResponse,
     NginxReloadResponse, NginxStatusResponse, NginxValidateResponse, NodeClusterPage,
-    NodeClusterResponse, PackagePage, PackageResponse, PlatformTargetPage, PlatformTargetResponse,
-    PromoteChannelRequest, PromoteEnvironmentRequest, ProvisionAppDomainsResult,
-    RegisterPackageRequest, ReleaseStatus, RequestCertificateOrderRequest, ResolvedDeployServer,
-    RetentionRunResponse, RunnerHealthPage, ScaffoldCategoryPage, ScaffoldCategoryResponse,
-    ServerPage, ServerResponse, SigningIdentityHealthPage, SigningIdentityPage,
-    SigningIdentityResponse, SourceEventPage, SourceEventResponse, SourceRepositoryPage,
-    SourceRepositoryResponse, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
-    UpdateAppRequest, UpdateApplicationScaffoldAdminRequest, UpdateApplicationScaffoldRequest,
+    NodeClusterResponse, OwnershipReach, PackagePage, PackageResponse, PlatformTargetPage,
+    PlatformTargetResponse, PromoteChannelRequest, PromoteEnvironmentRequest,
+    ProvisionAppDomainsResult, RegisterPackageRequest, ReleaseStatus,
+    RequestCertificateOrderRequest, ResolvedDeployServer, RetentionRunResponse, RunnerHealthPage,
+    ScaffoldCategoryPage, ScaffoldCategoryResponse, ServerPage, ServerResponse,
+    SigningIdentityHealthPage, SigningIdentityPage, SigningIdentityResponse, SourceEventPage,
+    SourceEventResponse, SourceRepositoryPage, SourceRepositoryResponse,
+    UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest, UpdateAppRequest,
+    UpdateApplicationScaffoldAdminRequest, UpdateApplicationScaffoldRequest,
     UpdateBuildStateRequest, UpdateDomainZoneRequest, UpdateNginxConfigRequest,
     UpdateNodeClusterRequest, UpdateScaffoldCategoryRequest, UpdateServerRequest, UsageEventPage,
     UsageEventResponse, UsageReconciliationResponse,
@@ -349,19 +350,23 @@ pub trait DeployRepositoryPort:
         hostname: &str,
     ) -> DeployServiceResult<Option<DnsChallengeZone>>;
 
-    /// Lists the root domains this caller owns, plus the tenant-level zones
-    /// that carry no owner.
+    /// Lists the root domains this caller may reach.
     ///
-    /// `owner_user_id` is the caller's own subject. The domain inventory is
-    /// user-private (`IAM_SPEC.md` 5.1: a personal session's data domain is the
-    /// authenticated user's own data), so a zone owned by somebody else is not
-    /// listed even though it lives in the same tenant. NULL-owner zones are the
-    /// platform's `app.<suffix>` inventory, which is tenant-level by nature and
-    /// stays visible to every member.
+    /// `owner` carries the caller's own subject and the reach it was granted. The
+    /// domain inventory is user-private by default (`IAM_SPEC.md` 5.1: a personal
+    /// session's data domain is the authenticated user's own data), so a zone
+    /// owned by somebody else is not listed even though it lives in the same
+    /// tenant. NULL-owner zones are the platform's `app.<suffix>` inventory, which
+    /// is tenant-level by nature and stays visible to every member.
+    ///
+    /// [`OwnershipReach::can_manage_all_ownership`] is what the administrator
+    /// surface carries: it lifts the per-user half of the predicate so the
+    /// tenant's whole domain inventory is listed, while the tenant half is always
+    /// bound by the caller and the reach never crosses it.
     async fn list_domain_zones(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         query: &ListDomainZonesQuery,
     ) -> DeployServiceResult<DomainZonePage>;
 
@@ -373,29 +378,27 @@ pub trait DeployRepositoryPort:
         request: &CreateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn retrieve_domain_zone(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<DomainZoneResponse>;
 
     async fn update_domain_zone(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         request: &UpdateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn delete_domain_zone(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<()>;
 
@@ -403,7 +406,7 @@ pub trait DeployRepositoryPort:
     async fn list_dns_zone_verification_files(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<Vec<crate::verification_file::VerificationFileRecord>>;
 
@@ -413,7 +416,7 @@ pub trait DeployRepositoryPort:
     async fn upsert_dns_zone_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         platform: &str,
         file_name: &str,
@@ -425,7 +428,7 @@ pub trait DeployRepositoryPort:
     async fn retrieve_dns_zone_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         file_id: &str,
     ) -> DeployServiceResult<crate::verification_file::VerificationFileRecord>;
@@ -434,17 +437,16 @@ pub trait DeployRepositoryPort:
     async fn delete_dns_zone_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         file_id: &str,
     ) -> DeployServiceResult<bool>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn list_domain_hostnames(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         page: i32,
         page_size: i32,
@@ -455,7 +457,7 @@ pub trait DeployRepositoryPort:
     async fn domain_zone_dns_sync_target(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<Option<ZoneDnsSyncTarget>>;
 
@@ -465,7 +467,7 @@ pub trait DeployRepositoryPort:
     async fn list_domain_hostname_assets(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<Vec<DomainHostnameAsset>>;
 
@@ -476,19 +478,19 @@ pub trait DeployRepositoryPort:
     async fn replace_domain_zone_dns_records(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         snapshot: &DomainDnsSnapshotWrite,
     ) -> DeployServiceResult<i64>;
 
     /// Pages the stored snapshot, optionally restricted to one hostname.
     /// Store-level pagination: the page bounds bound the query, not a
-    /// post-read slice. `owner_user_id` scopes the read to the caller's own
+    /// post-read slice. `owner` scopes the read to the caller's own
     /// zones; see [`Self::list_domain_zones`].
     async fn list_domain_zone_dns_records(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         filter: &DomainDnsRecordFilter,
         page: i32,
@@ -501,7 +503,7 @@ pub trait DeployRepositoryPort:
     async fn insert_domain_zone_dns_record(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse>;
@@ -510,7 +512,7 @@ pub trait DeployRepositoryPort:
     async fn update_domain_zone_dns_record(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         record_id: &str,
         record: &DomainDnsRecordUpsert,
@@ -521,7 +523,7 @@ pub trait DeployRepositoryPort:
     async fn set_domain_zone_dns_record_status(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         record_id: &str,
         enabled: bool,
@@ -531,7 +533,7 @@ pub trait DeployRepositoryPort:
     async fn delete_domain_zone_dns_record(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<()>;
@@ -541,7 +543,7 @@ pub trait DeployRepositoryPort:
     async fn domain_zone_dns_record_ref(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<Option<String>>;
@@ -549,7 +551,7 @@ pub trait DeployRepositoryPort:
     async fn create_domain_hostname(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         request: &CreateDomainHostnameRequest,
     ) -> DeployServiceResult<DomainHostnameResponse>;
@@ -559,17 +561,16 @@ pub trait DeployRepositoryPort:
     async fn ensure_domain_hostname(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         relative_name: &str,
     ) -> DeployServiceResult<DomainHostnameResponse>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn retrieve_domain_hostname(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainHostnameResponse>;
@@ -577,38 +578,35 @@ pub trait DeployRepositoryPort:
     async fn update_domain_hostname(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
         request: &sdkwork_deploy_contract::UpdateDomainHostnameRequest,
     ) -> DeployServiceResult<DomainHostnameResponse>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn delete_domain_hostname(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<()>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn domain_hostname_verification_challenge(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainVerificationChallenge>;
 
-    /// `owner_user_id` scopes the read to the caller's own zones; see
-    /// [`Self::list_domain_zones`].
+    /// owner is the caller's reach; see [Self::list_domain_zones].
     async fn confirm_domain_hostname_verification(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
         verification_id: &str,

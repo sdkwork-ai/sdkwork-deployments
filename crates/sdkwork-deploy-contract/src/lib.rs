@@ -11,6 +11,7 @@ pub mod certificate_plan;
 pub mod channel_release;
 pub mod downloads;
 pub mod dto;
+pub mod permissions;
 pub mod problem;
 pub mod runtime_env;
 pub mod scaffold_market;
@@ -31,6 +32,7 @@ pub use certificate_plan::*;
 pub use channel_release::*;
 pub use downloads::*;
 pub use dto::*;
+pub use permissions::{OwnershipReach, DEPLOY_OWNERSHIP_PERMISSIONS, PERM_MANAGE_ALL_OWNERSHIP};
 pub use problem::{DeployServiceError, DeployServiceErrorKind, DeployServiceResult};
 pub use runtime_env::{
     deploy_dev_auth_bypass_enabled, deploy_environment_name, deploy_is_production_like_environment,

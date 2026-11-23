@@ -1,7 +1,9 @@
 mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
-use sdkwork_deploy_contract::{CreateDomainHostnameRequest, CreateDomainZoneRequest};
+use sdkwork_deploy_contract::{
+    CreateDomainHostnameRequest, CreateDomainZoneRequest, OwnershipReach,
+};
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
 
@@ -36,7 +38,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     let hostname = repository
         .create_domain_hostname(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &CreateDomainHostnameRequest {
                 relative_name: "docs".to_owned(),
@@ -46,7 +48,12 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .expect("create pending hostname");
 
     let pending = repository
-        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("load pending challenge");
     let token = pending
@@ -76,7 +83,12 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     // proof that can never be completed, a hostname stuck at `PENDING`, and a
     // certificate that can never be ordered, which is the whole loop this pins.
     let reloaded = repository
-        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("reload pending challenge");
     assert!(!reloaded.created, "a reload did not open the attempt");
@@ -98,7 +110,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     assert!(!repository
         .confirm_domain_hostname_verification(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &hostname.id,
             &verification_id,
@@ -109,7 +121,12 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .expect("reject mismatched observation"));
     assert!(
         !repository
-            .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+            .domain_hostname_verification_challenge(
+                7,
+                OwnershipReach::new(Some(11), None, false),
+                &zone.id,
+                &hostname.id
+            )
             .await
             .expect("reload pending challenge")
             .verified
@@ -118,7 +135,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     assert!(repository
         .confirm_domain_hostname_verification(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &hostname.id,
             &verification_id,
@@ -128,7 +145,12 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
         .await
         .expect("confirm exact observed digest"));
     let verified = repository
-        .domain_hostname_verification_challenge(7, Some(11), &zone.id, &hostname.id)
+        .domain_hostname_verification_challenge(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &hostname.id,
+        )
         .await
         .expect("load verified hostname");
     assert!(verified.verified);
@@ -136,7 +158,7 @@ async fn domain_activation_requires_external_evidence_for_the_current_attempt() 
     assert!(!repository
         .confirm_domain_hostname_verification(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &hostname.id,
             &verification_id,
@@ -185,20 +207,30 @@ async fn ensure_domain_hostname_reuses_existing_rows_and_leaves_create_strict() 
     // The apex row ships with the zone, so `@` must resolve to it rather than
     // failing the way `create_domain_hostname` deliberately does.
     let apex_row = repository
-        .ensure_domain_hostname(7, Some(11), &zone.id, "@")
+        .ensure_domain_hostname(7, OwnershipReach::new(Some(11), None, false), &zone.id, "@")
         .await
         .expect("ensure the apex reuses the row the zone created");
     assert_eq!(apex_row.hostname, apex);
 
     let first = repository
-        .ensure_domain_hostname(7, Some(11), &zone.id, "www")
+        .ensure_domain_hostname(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            "www",
+        )
         .await
         .expect("ensure declares the missing hostname");
     assert_eq!(first.hostname, format!("www.{apex}"));
     assert_eq!(first.verification_status, "PENDING");
 
     let second = repository
-        .ensure_domain_hostname(7, Some(11), &zone.id, "www")
+        .ensure_domain_hostname(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            "www",
+        )
         .await
         .expect("ensure is idempotent for an owned hostname");
     assert_eq!(
@@ -209,7 +241,12 @@ async fn ensure_domain_hostname_reuses_existing_rows_and_leaves_create_strict() 
     // A wildcard keeps its leading label through the fold, which is the defect
     // the batch endpoint exists to make impossible for callers to reintroduce.
     let wildcard = repository
-        .ensure_domain_hostname(7, Some(11), &zone.id, "*.shop")
+        .ensure_domain_hostname(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            "*.shop",
+        )
         .await
         .expect("ensure declares the wildcard hostname");
     assert_eq!(wildcard.hostname, format!("*.shop.{apex}"));
@@ -220,7 +257,7 @@ async fn ensure_domain_hostname_reuses_existing_rows_and_leaves_create_strict() 
     let strict = repository
         .create_domain_hostname(
             7,
-            Some(11),
+            OwnershipReach::new(Some(11), None, false),
             &zone.id,
             &CreateDomainHostnameRequest {
                 relative_name: "www".to_owned(),

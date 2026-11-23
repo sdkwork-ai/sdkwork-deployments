@@ -71,11 +71,10 @@ impl DeployRepositoryPort for DeployRepository {
     async fn list_domain_zones(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         query: &ListDomainZonesQuery,
     ) -> DeployServiceResult<DomainZonePage> {
-        self.list_domain_zones_repo(tenant_id, owner_user_id, query)
-            .await
+        self.list_domain_zones_repo(tenant_id, owner, query).await
     }
 
     async fn retrieve_dns_challenge_zone(
@@ -101,60 +100,55 @@ impl DeployRepositoryPort for DeployRepository {
     async fn retrieve_domain_zone(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<DomainZoneResponse> {
-        self.retrieve_domain_zone_repo(tenant_id, owner_user_id, zone_id)
+        self.retrieve_domain_zone_repo(tenant_id, owner, zone_id)
             .await
     }
 
     async fn update_domain_zone(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         request: &UpdateDomainZoneRequest,
     ) -> DeployServiceResult<DomainZoneResponse> {
-        self.update_domain_zone_repo(tenant_id, actor_id, zone_id, request)
+        self.update_domain_zone_repo(tenant_id, owner, zone_id, request)
             .await
     }
 
     async fn delete_domain_zone(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<()> {
-        self.delete_domain_zone_repo(tenant_id, owner_user_id, zone_id)
+        self.delete_domain_zone_repo(tenant_id, owner, zone_id)
             .await
     }
 
     async fn list_dns_zone_verification_files(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<Vec<VerificationFileRecord>> {
-        self.list_dns_zone_verification_files_repo(tenant_id, owner_user_id, zone_id)
+        self.list_dns_zone_verification_files_repo(tenant_id, owner, zone_id)
             .await
     }
 
     async fn upsert_dns_zone_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         platform: &str,
         file_name: &str,
         content: &str,
     ) -> DeployServiceResult<VerificationFileRecord> {
         self.upsert_dns_zone_verification_file_repo(
-            tenant_id,
-            owner_user_id,
-            zone_id,
-            platform,
-            file_name,
-            content,
+            tenant_id, owner, zone_id, platform, file_name, content,
         )
         .await
     }
@@ -162,233 +156,209 @@ impl DeployRepositoryPort for DeployRepository {
     async fn retrieve_dns_zone_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         file_id: &str,
     ) -> DeployServiceResult<VerificationFileRecord> {
-        self.retrieve_dns_zone_verification_file_repo(tenant_id, owner_user_id, zone_id, file_id)
+        self.retrieve_dns_zone_verification_file_repo(tenant_id, owner, zone_id, file_id)
             .await
     }
 
     async fn delete_dns_zone_verification_file(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         file_id: &str,
     ) -> DeployServiceResult<bool> {
-        self.delete_dns_zone_verification_file_repo(tenant_id, owner_user_id, zone_id, file_id)
+        self.delete_dns_zone_verification_file_repo(tenant_id, owner, zone_id, file_id)
             .await
     }
 
     async fn list_domain_hostnames(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainHostnamePage> {
-        self.list_domain_hostnames_repo(tenant_id, owner_user_id, zone_id, page, page_size)
+        self.list_domain_hostnames_repo(tenant_id, owner, zone_id, page, page_size)
             .await
     }
 
     async fn domain_zone_dns_sync_target(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<Option<ZoneDnsSyncTarget>> {
-        self.domain_zone_dns_sync_target_repo(tenant_id, owner_user_id, zone_id)
+        self.domain_zone_dns_sync_target_repo(tenant_id, owner, zone_id)
             .await
     }
 
     async fn list_domain_hostname_assets(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
     ) -> DeployServiceResult<Vec<DomainHostnameAsset>> {
-        self.list_domain_hostname_assets_repo(tenant_id, owner_user_id, zone_id)
+        self.list_domain_hostname_assets_repo(tenant_id, owner, zone_id)
             .await
     }
 
     async fn replace_domain_zone_dns_records(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         snapshot: &DomainDnsSnapshotWrite,
     ) -> DeployServiceResult<i64> {
-        self.replace_domain_zone_dns_records_repo(tenant_id, owner_user_id, zone_id, snapshot)
+        self.replace_domain_zone_dns_records_repo(tenant_id, owner, zone_id, snapshot)
             .await
     }
 
     async fn list_domain_zone_dns_records(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         filter: &DomainDnsRecordFilter,
         page: i32,
         page_size: i32,
     ) -> DeployServiceResult<DomainDnsRecordPage> {
-        self.list_domain_zone_dns_records_repo(
-            tenant_id,
-            owner_user_id,
-            zone_id,
-            filter,
-            page,
-            page_size,
-        )
-        .await
+        self.list_domain_zone_dns_records_repo(tenant_id, owner, zone_id, filter, page, page_size)
+            .await
     }
 
     async fn insert_domain_zone_dns_record(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.insert_domain_zone_dns_record_repo(tenant_id, owner_user_id, zone_id, record)
+        self.insert_domain_zone_dns_record_repo(tenant_id, owner, zone_id, record)
             .await
     }
 
     async fn update_domain_zone_dns_record(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         record_id: &str,
         record: &DomainDnsRecordUpsert,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.update_domain_zone_dns_record_repo(
-            tenant_id,
-            owner_user_id,
-            zone_id,
-            record_id,
-            record,
-        )
-        .await
+        self.update_domain_zone_dns_record_repo(tenant_id, owner, zone_id, record_id, record)
+            .await
     }
 
     async fn set_domain_zone_dns_record_status(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         record_id: &str,
         enabled: bool,
     ) -> DeployServiceResult<DomainDnsRecordResponse> {
-        self.set_domain_zone_dns_record_status_repo(
-            tenant_id,
-            owner_user_id,
-            zone_id,
-            record_id,
-            enabled,
-        )
-        .await
+        self.set_domain_zone_dns_record_status_repo(tenant_id, owner, zone_id, record_id, enabled)
+            .await
     }
 
     async fn delete_domain_zone_dns_record(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<()> {
-        self.delete_domain_zone_dns_record_repo(tenant_id, owner_user_id, zone_id, record_id)
+        self.delete_domain_zone_dns_record_repo(tenant_id, owner, zone_id, record_id)
             .await
     }
 
     async fn domain_zone_dns_record_ref(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         record_id: &str,
     ) -> DeployServiceResult<Option<String>> {
-        self.domain_zone_dns_record_ref_repo(tenant_id, owner_user_id, zone_id, record_id)
+        self.domain_zone_dns_record_ref_repo(tenant_id, owner, zone_id, record_id)
             .await
     }
 
     async fn create_domain_hostname(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         request: &CreateDomainHostnameRequest,
     ) -> DeployServiceResult<DomainHostnameResponse> {
-        self.create_domain_hostname_repo(tenant_id, actor_id, zone_id, request)
+        self.create_domain_hostname_repo(tenant_id, owner, zone_id, request)
             .await
     }
 
     async fn ensure_domain_hostname(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         relative_name: &str,
     ) -> DeployServiceResult<DomainHostnameResponse> {
-        self.ensure_domain_hostname_repo(tenant_id, actor_id, zone_id, relative_name)
+        self.ensure_domain_hostname_repo(tenant_id, owner, zone_id, relative_name)
             .await
     }
 
     async fn retrieve_domain_hostname(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainHostnameResponse> {
-        self.retrieve_domain_hostname_repo(tenant_id, owner_user_id, zone_id, hostname_id)
+        self.retrieve_domain_hostname_repo(tenant_id, owner, zone_id, hostname_id)
             .await
     }
 
     async fn delete_domain_hostname(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<()> {
-        self.delete_domain_hostname_repo(tenant_id, owner_user_id, zone_id, hostname_id)
+        self.delete_domain_hostname_repo(tenant_id, owner, zone_id, hostname_id)
             .await
     }
 
     async fn update_domain_hostname(
         &self,
         tenant_id: i64,
-        actor_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
         request: &UpdateDomainHostnameRequest,
     ) -> DeployServiceResult<DomainHostnameResponse> {
-        self.update_domain_hostname_repo(tenant_id, actor_id, zone_id, hostname_id, request)
+        self.update_domain_hostname_repo(tenant_id, owner, zone_id, hostname_id, request)
             .await
     }
 
     async fn domain_hostname_verification_challenge(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
     ) -> DeployServiceResult<DomainVerificationChallenge> {
-        self.domain_hostname_verification_challenge_repo(
-            tenant_id,
-            owner_user_id,
-            zone_id,
-            hostname_id,
-        )
-        .await
+        self.domain_hostname_verification_challenge_repo(tenant_id, owner, zone_id, hostname_id)
+            .await
     }
 
     async fn confirm_domain_hostname_verification(
         &self,
         tenant_id: i64,
-        owner_user_id: Option<i64>,
+        owner: sdkwork_deploy_contract::OwnershipReach,
         zone_id: &str,
         hostname_id: &str,
         verification_id: &str,
@@ -397,7 +367,7 @@ impl DeployRepositoryPort for DeployRepository {
     ) -> DeployServiceResult<bool> {
         self.confirm_domain_hostname_verification_repo(
             tenant_id,
-            owner_user_id,
+            owner,
             zone_id,
             hostname_id,
             verification_id,
