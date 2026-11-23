@@ -428,11 +428,19 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     // file is then registered from its inline copy exactly as before.
     if let Some(verification_store) = deploy_verification_store_from_env(&drive_pool)? {
         service = service.with_verification_store(verification_store);
-    }
-    // WeChat channel publishing runs through IAM capability invocations. Both
-    // values are optional: an installation without them keeps the fail-closed
-    // provider, so a publish command reports "not configured" instead of
-    // pretending a release happened.
+    } else {
+        // The split Drive facade has no in-process object store. Say so at
+        // startup: the flow still works, but the file is registered from its
+        // inline copy instead of being written to Drive, and an operator
+        // wondering why no Drive object appears should not have to read the
+        // source to find out.
+        tracing::warn!(
+            "sdkwork-drive is configured as an external facade (SDKWORK_DEPLOY_DRIVE_MODE=http): domain verification files are registered from their inline copy only; set SDKWORK_DEPLOY_DRIVE_MODE=in-process to store them in sdkwork-drive"
+        );
+    } // WeChat channel publishing runs through IAM capability invocations. Both
+      // values are optional: an installation without them keeps the fail-closed
+      // provider, so a publish command reports "not configured" instead of
+      // pretending a release happened.
     if let Some(provider) = channel_release_provider_from_env()? {
         service = service.with_channel_release_provider(provider);
     }
