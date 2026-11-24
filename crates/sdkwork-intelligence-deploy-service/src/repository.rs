@@ -176,6 +176,12 @@ pub struct CertificateOrderClaim {
     /// Attempts consumed so far, including the one this claim just charged.
     pub attempt_count: i32,
     pub requested_version_no: i64,
+    /// `MANAGED` or `MANUAL`. The executor branches on this: a manual order
+    /// without a CA order yet must prepare challenges and park, not issue.
+    pub presentation_mode: String,
+    /// The CA order URL recorded by the preparation pass. `None` on a manual
+    /// order means "challenges not prepared yet"; `Some` means the resume pass.
+    pub external_order_url: Option<String>,
 }
 
 /// What one expiry sweep changed.
@@ -715,6 +721,93 @@ pub trait DeployRepositoryPort:
         tenant_id: i64,
         certificate_id: &str,
     ) -> DeployServiceResult<CertificateResponse>;
+
+    /// Stores the CA-suggested renewal window for one certificate.
+    ///
+    /// Defaulted to a no-op so a repository double keeps compiling: recording an
+    /// advisory suggestion is not something every implementation must implement.
+    async fn record_certificate_ari_window(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        window_start: &str,
+        window_end: &str,
+        checked_at: &str,
+    ) -> DeployServiceResult<()> {
+        let _ = (tenant_id, certificate_id, window_start, window_end, checked_at);
+        Ok(())
+    }
+
+    /// Records the manual DNS-01 presentation for one challenge of an order.
+    ///
+    /// Defaulted to a no-op so repository doubles that never run a manual order
+    /// keep compiling.
+    #[allow(clippy::too_many_arguments)]
+    async fn record_challenge_presentation(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        hostname: &str,
+        record_name: &str,
+        record_value: &str,
+        expires_at: &str,
+        presentation_ref: Option<&str>,
+    ) -> DeployServiceResult<()> {
+        let _ = (
+            tenant_id,
+            order_id,
+            hostname,
+            record_name,
+            record_value,
+            expires_at,
+            presentation_ref,
+        );
+        Ok(())
+    }
+
+    /// Releases a parked manual order, returning whether this call released it.
+    async fn mark_order_presentation_ready(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        ready_at: &str,
+    ) -> DeployServiceResult<bool> {
+        let _ = (tenant_id, order_id, ready_at);
+        Ok(false)
+    }
+
+    /// Records the CA order URL produced by a two-phase preparation pass.
+    async fn record_certificate_order_external_url(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        external_order_url: &str,
+    ) -> DeployServiceResult<()> {
+        let _ = (tenant_id, order_id, external_order_url);
+        Ok(())
+    }
+
+    /// Releases the parked manual order of one certificate.
+    async fn release_manual_order_for_certificate(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        ready_at: &str,
+    ) -> DeployServiceResult<bool> {
+        let _ = (tenant_id, certificate_id, ready_at);
+        Ok(false)
+    }
+
+    /// Reads the manual presentation instructions of a certificate's latest
+    /// manual order.
+    async fn list_certificate_presentations(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateChallengePresentationList> {
+        let _ = (tenant_id, certificate_id);
+        Ok(Default::default())
+    }
 
     async fn list_health_checks(
         &self,

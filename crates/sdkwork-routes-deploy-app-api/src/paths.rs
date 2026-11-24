@@ -59,6 +59,13 @@ pub const APP_HEALTH_CHECKS: &str = "/app/v3/api/apps/{appId}/health_checks";
 pub const CERTIFICATES: &str = "/app/v3/api/certificates";
 pub const CERTIFICATE: &str = "/app/v3/api/certificates/{certificateId}";
 pub const CERTIFICATE_RENEW: &str = "/app/v3/api/certificates/{certificateId}/renew";
+/// Explicit "re-read current state" command. Does not request a new version.
+pub const CERTIFICATE_REFRESH: &str = "/app/v3/api/certificates/{certificateId}/refresh";
+/// Manual DNS-01 instructions of the certificate's current order.
+pub const CERTIFICATE_CHALLENGES: &str = "/app/v3/api/certificates/{certificateId}/challenges";
+/// Releases a parked manual presentation so the worker validates it.
+pub const CERTIFICATE_CHALLENGE_VERIFY: &str =
+    "/app/v3/api/certificates/{certificateId}/challenge/verify";
 pub const CERTIFICATE_RENEWALS: &str = "/app/v3/api/certificates/{certificateId}/renewals";
 pub const UPLOAD_SESSIONS: &str = "/app/v3/api/upload_sessions";
 pub const UPLOAD_SESSION: &str = "/app/v3/api/upload_sessions/{uploadSessionId}";

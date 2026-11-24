@@ -13,6 +13,7 @@ pub mod certificate_dns;
 pub mod certificate_dns_account;
 pub mod certificate_issuance;
 pub mod certificate_material;
+pub mod certificate_presentation;
 pub mod certificate_renewal;
 pub mod channel_capability_client;
 pub mod channel_capability_provider;
@@ -62,7 +63,8 @@ pub use certificate_dns_account::AccountBackedDns01PresenterResolver;
 pub use certificate_issuance::{
     resolve_challenge_type, CertificateDns01Context, CertificateDns01PresenterPort,
     CertificateDns01Selector, CertificateIssuancePort, CertificateIssuanceRequest,
-    CertificateOrderBatchResult, UnconfiguredCertificateDns01Presenter,
+    CertificateOrderBatchResult, PreparedCertificateChallenge, PreparedCertificateOrder,
+    UnconfiguredCertificateDns01Presenter,
 };
 pub use certificate_material::{seal_issued_material, DeclaredCertificateEvidence};
 pub use certificate_renewal::{
@@ -188,6 +190,14 @@ pub struct DeployService {
     /// DNS-01 certificates can be validated without an operator pasting records.
     /// The default answers "no provider", which is a fact rather than a failure.
     pub(crate) certificate_dns01: Arc<dyn CertificateDns01PresenterPort>,
+    /// Looks up the TXT records a manual DNS-01 order asked an operator to publish.
+    ///
+    /// `Option` because a deployment may have no resolvers it trusts. Absent means
+    /// the release command is the operator's assertion alone; present means a
+    /// record that is checked-and-absent blocks the release instead of spending
+    /// one of the CA's failed-validation allowances.
+    pub(crate) certificate_presentation_inspector:
+        Option<Arc<dyn crate::certificate_presentation::CertificatePresentationInspectorPort>>,
     /// The cloud account center, as Deploy consumes it.
     ///
     /// The default reports that no account center is reachable rather than an
@@ -239,6 +249,7 @@ impl DeployService {
             certificate_trust_anchors: None,
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
+            certificate_presentation_inspector: None,
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
             identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
             identity_lifecycle: Arc::new(UnconfiguredInstallationLifecyclePort),
@@ -286,6 +297,7 @@ impl DeployService {
             certificate_trust_anchors: None,
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
+            certificate_presentation_inspector: None,
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
             identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
             identity_lifecycle: Arc::new(UnconfiguredInstallationLifecyclePort),
@@ -419,6 +431,15 @@ impl DeployService {
     /// seeing an empty inventory instead of a wiring error would conclude the
     /// tenant has no credentials when the truth is that nobody configured the
     /// port.
+    /// Installs the TXT visibility checker used by the manual DNS-01 release.
+    pub fn with_certificate_presentation_inspector(
+        mut self,
+        inspector: Arc<dyn crate::certificate_presentation::CertificatePresentationInspectorPort>,
+    ) -> Self {
+        self.certificate_presentation_inspector = Some(inspector);
+        self
+    }
+
     pub fn with_cloud_accounts(mut self, port: Arc<dyn DeployCloudAccountPort>) -> Self {
         self.cloud_accounts = port;
         self

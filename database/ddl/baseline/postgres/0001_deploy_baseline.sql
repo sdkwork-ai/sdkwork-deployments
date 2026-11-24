@@ -360,6 +360,12 @@ CREATE TABLE IF NOT EXISTS deploy_certificate (
     renewal_next_attempt_at TIMESTAMPTZ,
     renewal_failure_count   INTEGER      NOT NULL DEFAULT 0,
     last_renewal_at         TIMESTAMPTZ,
+    -- CA-suggested renewal window (RFC 9773 ARI). Adopted only when earlier than
+    -- the local rule; NULL means the CA did not publish one (or does not support
+    -- ARI), and the local window stays in charge.
+    ari_window_start        TIMESTAMPTZ,
+    ari_window_end          TIMESTAMPTZ,
+    ari_checked_at          TIMESTAMPTZ,
     -- Overrides the zone's account for DNS-01 on this certificate.
     --
     -- NULL means "use whatever account the zone owning the identifier resolves
@@ -381,6 +387,15 @@ CREATE TABLE IF NOT EXISTS deploy_certificate (
         certificate_scope <> 'WILDCARD' OR validation_method IN ('AUTO', 'DNS_01')
     ),
     CONSTRAINT chk_deploy_certificate_key_algorithm CHECK (preferred_key_algorithm IN ('RSA', 'ECDSA')),
+    CONSTRAINT chk_deploy_certificate_ari_window CHECK (
+        (ari_window_start IS NULL AND ari_window_end IS NULL AND ari_checked_at IS NULL)
+        OR (
+            ari_window_start IS NOT NULL
+            AND ari_window_end IS NOT NULL
+            AND ari_checked_at IS NOT NULL
+            AND ari_window_start < ari_window_end
+        )
+    ),
     CONSTRAINT chk_deploy_certificate_renewal_status CHECK (renewal_status IN ('NONE', 'PLANNED', 'PROCESSING', 'FAILED')),
     CONSTRAINT chk_deploy_certificate_status CHECK (status IN ('PENDING', 'ISSUING', 'ACTIVE', 'EXPIRED', 'FAILED', 'REVOKED')),
     CONSTRAINT chk_deploy_certificate_request_hash CHECK (request_sha256 ~ '^[0-9a-f]{64}$'),

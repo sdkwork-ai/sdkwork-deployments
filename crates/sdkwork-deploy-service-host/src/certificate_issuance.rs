@@ -22,11 +22,12 @@ use async_trait::async_trait;
 use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult};
 use sdkwork_intelligence_deploy_service::{
     CertificateDns01Context, CertificateDns01PresenterPort, CertificateDns01Selector,
-    CertificateIssuancePort, CertificateIssuanceRequest,
+    CertificateIssuancePort, CertificateIssuanceRequest, PreparedCertificateChallenge,
+    PreparedCertificateOrder,
 };
 use sdkwork_webserver_acme_service::{
     AcmeAccountStore, AcmeConfig, AcmeDns01Context, AcmeHttpClientFactory, AcmeServiceError,
-    CertificateIssuer, EncryptedFileAcmeAccountStore, ExtraRootsClientFactory,
+    CertificateIssuer, Dns01RecordHandle, EncryptedFileAcmeAccountStore, ExtraRootsClientFactory,
     IssuedCertificateMaterial, MemoryAcmeAccountStore, PlatformVerifierClientFactory,
     SingleZoneResolver, DEFAULT_ACME_OPERATION_TIMEOUT_MS,
 };
@@ -72,6 +73,92 @@ impl CertificateIssuancePort for AcmeCertificateIssuance {
                 &request.key_algorithm,
                 dns01,
             )
+            .await
+            .map_err(map_acme_error)
+    }
+
+    async fn prepare(
+        &self,
+        request: CertificateIssuanceRequest,
+    ) -> DeployServiceResult<PreparedCertificateOrder> {
+        let zone_resolver = request.dns01.as_ref().map(|context| SingleZoneResolver {
+            zone_apex: context.zone_apex.clone(),
+        });
+        let dns01 = request
+            .dns01
+            .as_ref()
+            .zip(zone_resolver.as_ref())
+            .map(|(context, zones)| AcmeDns01Context {
+                presenter: Arc::clone(&context.presenter),
+                zones,
+            });
+        let prepared = self
+            .issuer
+            .prepare_order(&request.hostnames, &request.key_algorithm, dns01)
+            .await
+            .map_err(map_acme_error)?;
+        Ok(PreparedCertificateOrder {
+            order_url: prepared.order_url,
+            challenges: prepared
+                .presentations
+                .iter()
+                .filter(|presentation| !presentation.already_valid)
+                .map(|presentation| PreparedCertificateChallenge {
+                    identifier: presentation.identifier.clone(),
+                    record_name: presentation.record_name.clone(),
+                    record_value: presentation.record_value.clone(),
+                })
+                .collect(),
+            already_valid: prepared
+                .presentations
+                .iter()
+                .filter(|presentation| presentation.already_valid)
+                .map(|presentation| presentation.identifier.clone())
+                .collect(),
+        })
+    }
+
+    async fn complete(
+        &self,
+        order_url: &str,
+        request: CertificateIssuanceRequest,
+        managed_records: &[Dns01RecordHandle],
+    ) -> DeployServiceResult<IssuedCertificateMaterial> {
+        // The same context construction as `prepare`, on purpose: the challenge
+        // type and the withdrawal presenter both come from it, so a resume can
+        // never validate one proof and clean up another.
+        let zone_resolver = request.dns01.as_ref().map(|context| SingleZoneResolver {
+            zone_apex: context.zone_apex.clone(),
+        });
+        let dns01 = request
+            .dns01
+            .as_ref()
+            .zip(zone_resolver.as_ref())
+            .map(|(context, zones)| AcmeDns01Context {
+                presenter: Arc::clone(&context.presenter),
+                zones,
+            });
+        self.issuer
+            .complete_order(
+                order_url,
+                &request.hostnames,
+                &request.cert_name,
+                &request.key_algorithm,
+                dns01,
+                managed_records,
+            )
+            .await
+            .map_err(map_acme_error)
+    }
+
+    async fn renewal_window(
+        &self,
+        cert_pem: &str,
+    ) -> DeployServiceResult<Option<sdkwork_webserver_acme_service::AriRenewalWindow>> {
+        // The engine already treats "the CA does not implement ARI" as `None`
+        // rather than an error, so the adoption decision stays a business one.
+        self.issuer
+            .renewal_info(cert_pem)
             .await
             .map_err(map_acme_error)
     }

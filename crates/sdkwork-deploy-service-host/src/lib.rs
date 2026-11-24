@@ -38,6 +38,7 @@ use sdkwork_intelligence_deploy_service::{
 
 mod certificate_caa;
 mod certificate_issuance;
+mod certificate_presentation;
 mod domain_verification;
 mod verification_file_probe;
 
@@ -492,6 +493,22 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     if let Some(issuance) = certificate_issuance_from_env()? {
         service = service.with_certificate_issuance(issuance);
     }
+    // The manual DNS-01 release self-checks the TXT records first when the host
+    // has resolvers it trusts; without this the release is the operator's
+    // assertion alone.
+    match certificate_presentation::HickoryPresentationInspector::from_system_config() {
+        Ok(inspector) => {
+            service = service
+                .with_certificate_presentation_inspector(std::sync::Arc::new(inspector));
+        }
+        Err(error) => {
+            tracing::warn!(
+                "DNS presentation inspector unavailable; manual DNS-01 releases will not be \
+                 self-checked: {error}"
+            );
+        }
+    }
+
     // The DNS-01 chain, in the order an issuance falls through it: the certificate's
     // account pin, its zone's pin, the account the center picks for the zone's
     // declared provider, then this deployment's own credential. The deployment-level

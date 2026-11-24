@@ -745,6 +745,61 @@ fn default_environment() -> String {
     "production".to_string()
 }
 
+/// The renewal attempt currently running for one certificate, if any.
+///
+/// Present only while the ledger row is `PLANNED`, `PROCESSING` or `ORDERED`.
+/// The console uses it to show progress and to poll the attempt instead of
+/// re-clicking "renew"; its absence means the next renewal would open a new
+/// attempt rather than join one.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateRenewalInProgress {
+    #[serde(rename = "renewalId")]
+    pub renewal_id: String,
+    /// `PLANNED`, `PROCESSING` or `ORDERED` — the ledger's own vocabulary.
+    pub status: String,
+}
+
+/// One manual DNS-01 record an operator has to publish.
+///
+/// This is the wire shape of the instruction the console renders: the exact TXT
+/// owner and value, the instant the CA stops accepting it, and the challenge's own
+/// state. The value is a public ACME proof, so echoing it here exposes nothing that
+/// DNS itself does not.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateChallengePresentationResponse {
+    pub identifier: String,
+    #[serde(rename = "recordName", skip_serializing_if = "Option::is_none")]
+    pub record_name: Option<String>,
+    #[serde(rename = "recordType", skip_serializing_if = "Option::is_none")]
+    pub record_type: Option<String>,
+    #[serde(rename = "recordValue", skip_serializing_if = "Option::is_none")]
+    pub record_value: Option<String>,
+    #[serde(rename = "expiresAt", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+    pub status: String,
+}
+
+/// The manual presentation of one certificate's current order.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateChallengePresentationList {
+    /// `MANAGED` or `MANUAL`; a managed certificate has no instructions to show.
+    #[serde(rename = "presentationMode")]
+    pub presentation_mode: String,
+    /// Whether the operator's release has already been recorded.
+    #[serde(rename = "presentationReleased")]
+    pub presentation_released: bool,
+    pub items: Vec<CertificateChallengePresentationResponse>,
+}
+
+/// Outcome of an operator's "release this presentation for validation" command.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateChallengeReleaseResult {
+    /// `true` when this call recorded the release. `false` means there was
+    /// nothing left to release (already released, already finished, or no parked
+    /// manual order) — a retry, not an error.
+    pub accepted: bool,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CertificateResponse {
     pub id: String,
@@ -816,6 +871,19 @@ pub struct CertificateResponse {
     /// same as one that has never been tried.
     #[serde(rename = "renewalFailureCount")]
     pub renewal_failure_count: i32,
+    /// The renewal attempt running right now, if any.
+    ///
+    /// A second "renew" click joins this attempt instead of opening another one,
+    /// so the console needs its id to poll. Absent means no attempt is in flight.
+    #[serde(rename = "renewalInProgress", skip_serializing_if = "Option::is_none")]
+    pub renewal_in_progress: Option<CertificateRenewalInProgress>,
+    /// Graded alert state derived from the served version's window and the
+    /// renewal failure count (30/14/7/3/1 ladder).
+    ///
+    /// Sent by the server so the console, alerting and the scheduler all agree on
+    /// one ladder instead of each carrying its own thresholds.
+    #[serde(rename = "alertPhase", skip_serializing_if = "Option::is_none")]
+    pub alert_phase: Option<String>,
     pub status: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,

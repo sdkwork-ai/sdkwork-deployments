@@ -2,9 +2,10 @@ use std::collections::{BTreeSet, HashMap};
 
 use sdkwork_deploy_contract::{
     plan_certificate_identifiers, resolve_validation_method, CertificatePage, CertificatePlanError,
-    CertificateResponse, CertificateScope, CreateCertificateRequest, DeployServiceError,
-    DeployServiceResult, ValidationMethod, CERTIFICATE_RENEWAL_STATUS_PLANNED,
-    CERTIFICATE_SOURCE_MANAGED, CERTIFICATE_STATUS_REVOKED, MAX_CERTIFICATE_IDENTIFIERS,
+    CertificateRenewalInProgress, CertificateResponse, CertificateScope, CreateCertificateRequest,
+    DeployServiceError, DeployServiceResult, ValidationMethod,
+    CERTIFICATE_RENEWAL_STATUS_PLANNED, CERTIFICATE_SOURCE_MANAGED, CERTIFICATE_STATUS_REVOKED,
+    MAX_CERTIFICATE_IDENTIFIERS,
 };
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
@@ -16,6 +17,14 @@ use crate::DeployRepository;
 use chrono::Utc;
 use sdkwork_intelligence_deploy_service::certificate_renewal::ValidityWindow;
 
+/// Why a manual renewal request is allowed, refused, or already running.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RenewalEligibility {
+    Allowed,
+    NotRenewable,
+    InProgress,
+}
+
 const CERTIFICATE_SELECT: &str = "c.uuid, c.cert_name, c.certificate_source, c.ca_profile,
      c.certificate_scope, c.validation_method, c.provider_account_id,
      c.preferred_key_algorithm, c.auto_renew, c.renewal_status, c.status,
@@ -26,7 +35,18 @@ const CERTIFICATE_SELECT: &str = "c.uuid, c.cert_name, c.certificate_source, c.c
          SELECT jsonb_agg(ci.hostname_ascii ORDER BY ci.position)
          FROM deploy_certificate_identifier ci
          WHERE ci.certificate_id = c.id
-     ), '[]'::jsonb) AS identifiers";
+     ), '[]'::jsonb) AS identifiers,
+     -- The running renewal attempt, if any. Kept as a correlated subquery rather
+     -- than a join so the list query cannot multiply rows when a certificate
+     -- accumulated several attempts.
+     (SELECT r.uuid FROM deploy_certificate_renewal r
+       WHERE r.certificate_id = c.id
+         AND r.status IN ('PLANNED', 'PROCESSING', 'ORDERED')
+       ORDER BY r.id DESC LIMIT 1) AS active_renewal_uuid,
+     (SELECT r.status FROM deploy_certificate_renewal r
+       WHERE r.certificate_id = c.id
+         AND r.status IN ('PLANNED', 'PROCESSING', 'ORDERED')
+       ORDER BY r.id DESC LIMIT 1) AS active_renewal_status";
 
 impl DeployRepository {
     pub(super) async fn list_certificates_repo(
@@ -347,16 +367,98 @@ impl DeployRepository {
         Ok(())
     }
 
+    /// Why a manual renewal request may be refused before any row is touched.
+    ///
+    /// Kept as a pure decision so the rule is testable without a database, and so
+    /// the reason reaches the caller as a stable code instead of "0 rows
+    /// affected".
+    fn renewal_eligibility(
+        certificate_source: &str,
+        status: &str,
+        renewal_status: &str,
+    ) -> RenewalEligibility {
+        // `auto_renew` is deliberately absent: it governs the scheduler, not the
+        // operator. A certificate excluded from automatic renewal is the one an
+        // operator is most likely to refresh by hand.
+        if certificate_source != CERTIFICATE_SOURCE_MANAGED
+            || !matches!(status, "ACTIVE" | "FAILED" | "EXPIRED")
+        {
+            return RenewalEligibility::NotRenewable;
+        }
+        if matches!(renewal_status, "PLANNED" | "PROCESSING") {
+            return RenewalEligibility::InProgress;
+        }
+        RenewalEligibility::Allowed
+    }
+
+    /// Records the CA's suggested renewal window (RFC 9773 ARI) for a certificate.
+    ///
+    /// `version` is deliberately not bumped: the suggestion is CA metadata, and
+    /// bumping the row version would invalidate optimistic updates the renewal
+    /// scheduler already holds for a certificate whose content did not change.
+    pub(super) async fn record_certificate_ari_window_repo(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        window_start: &str,
+        window_end: &str,
+        checked_at: &str,
+    ) -> DeployServiceResult<()> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate
+                SET ari_window_start = CAST($3 AS TIMESTAMPTZ),
+                    ari_window_end = CAST($4 AS TIMESTAMPTZ),
+                    ari_checked_at = CAST($5 AS TIMESTAMPTZ)
+              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(certificate_id)
+        .bind(window_start)
+        .bind(window_end)
+        .bind(checked_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("record deploy_certificate ARI window", error))?;
+        if result.rows_affected() == 0 {
+            return Err(DeployServiceError::not_found("certificate not found"));
+        }
+        Ok(())
+    }
+
     pub(super) async fn renew_certificate_repo(
         &self,
         tenant_id: i64,
         certificate_id: &str,
     ) -> DeployServiceResult<CertificateResponse> {
+        let current = self
+            .retrieve_certificate_repo(tenant_id, certificate_id)
+            .await?;
+        match Self::renewal_eligibility(
+            &current.certificate_source,
+            &current.status,
+            &current.renewal_status,
+        ) {
+            RenewalEligibility::Allowed => {}
+            RenewalEligibility::InProgress => {
+                return Err(DeployServiceError::conflict(format!(
+                    "CERTIFICATE_RENEWAL_IN_PROGRESS: renewal for {} is already {}",
+                    current.cert_name, current.renewal_status
+                )));
+            }
+            RenewalEligibility::NotRenewable => {
+                return Err(DeployServiceError::validation(format!(
+                    "CERTIFICATE_NOT_RENEWABLE: only managed certificates in ACTIVE, FAILED or \
+                     EXPIRED can be renewed (source={}, status={})",
+                    current.certificate_source, current.status
+                )));
+            }
+        }
         let result = sqlx::query(
             "UPDATE deploy_certificate
              SET renewal_status = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2 AND certificate_source = $4
-               AND auto_renew = TRUE AND status IN ('ACTIVE', 'FAILED')
+               AND status IN ('ACTIVE', 'FAILED', 'EXPIRED')
+               AND renewal_status NOT IN ('PLANNED', 'PROCESSING')
                AND deleted_at IS NULL",
         )
         .bind(tenant_id)
@@ -367,8 +469,11 @@ impl DeployRepository {
         .await
         .map_err(|error| store_error("schedule deploy_certificate renewal", error))?;
         if result.rows_affected() == 0 {
-            return Err(DeployServiceError::validation(
-                "only active managed certificates with auto-renew enabled can be renewed",
+            // The row changed between the decision and the update: another caller
+            // has just scheduled or started a renewal, which is the in-progress
+            // case rather than a validation failure.
+            return Err(DeployServiceError::conflict(
+                "CERTIFICATE_RENEWAL_IN_PROGRESS: a renewal was scheduled concurrently",
             ));
         }
         self.retrieve_certificate_repo(tenant_id, certificate_id)
@@ -486,6 +591,7 @@ fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> 
             _ => (None, None, None),
         };
 
+    let renewal_failure_count: i32 = row.try_get("renewal_failure_count").unwrap_or(0);
     Ok(CertificateResponse {
         id: row.try_get("uuid")?,
         cert_name: row.try_get("cert_name")?,
@@ -507,10 +613,92 @@ fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> 
         days_until_expiry,
         validity_phase,
         last_renewal_at: optional_datetime_from_row(row, "last_renewal_at")?,
-        renewal_failure_count: row.try_get("renewal_failure_count")?,
+        renewal_failure_count,
+        renewal_in_progress: {
+            let renewal_id: Option<String> = row.try_get("active_renewal_uuid").unwrap_or(None);
+            let renewal_status: Option<String> =
+                row.try_get("active_renewal_status").unwrap_or(None);
+            match (renewal_id, renewal_status) {
+                (Some(renewal_id), Some(status)) if !renewal_id.is_empty() => {
+                    Some(CertificateRenewalInProgress {
+                        renewal_id,
+                        status,
+                    })
+                }
+                _ => None,
+            }
+        },
+        alert_phase: days_until_expiry.map(|days| {
+            sdkwork_intelligence_deploy_service::certificate_renewal::expiry_alert_phase(
+                days,
+                renewal_failure_count,
+            )
+            .as_str()
+            .to_owned()
+        }),
         status: row.try_get("status")?,
         created_at: datetime_from_row(row, "created_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,
         version: row.try_get::<i64, _>("version")?.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DeployRepository, RenewalEligibility};
+
+    fn eligibility(source: &str, status: &str, renewal_status: &str) -> RenewalEligibility {
+        DeployRepository::renewal_eligibility(source, status, renewal_status)
+    }
+
+    #[test]
+    fn a_managed_certificate_is_renewable_while_healthy_expired_or_failed() {
+        for status in ["ACTIVE", "FAILED", "EXPIRED"] {
+            assert_eq!(
+                eligibility("MANAGED", status, "NONE"),
+                RenewalEligibility::Allowed,
+                "{status} must be manually renewable"
+            );
+        }
+    }
+
+    #[test]
+    fn an_in_flight_renewal_is_reported_as_such() {
+        // The distinction matters: "already running" is a retry-safe answer with a
+        // renewal to poll, while "not renewable" is a rejected request.
+        for renewal_status in ["PLANNED", "PROCESSING"] {
+            assert_eq!(
+                eligibility("MANAGED", "ACTIVE", renewal_status),
+                RenewalEligibility::InProgress
+            );
+        }
+    }
+
+    #[test]
+    fn imported_revoked_and_pending_certificates_are_not_renewable() {
+        assert_eq!(
+            eligibility("CUSTOM", "ACTIVE", "NONE"),
+            RenewalEligibility::NotRenewable
+        );
+        assert_eq!(
+            eligibility("MANAGED", "REVOKED", "NONE"),
+            RenewalEligibility::NotRenewable
+        );
+        assert_eq!(
+            eligibility("MANAGED", "PENDING", "NONE"),
+            RenewalEligibility::NotRenewable
+        );
+    }
+
+    #[test]
+    fn auto_renew_is_not_part_of_the_manual_decision() {
+        // A certificate excluded from automatic renewal must still be refreshable
+        // by hand; it is the case manual refresh exists for. The decision function
+        // therefore takes no `auto_renew` input at all, and this test is the note
+        // explaining why it never should.
+        assert_eq!(
+            eligibility("MANAGED", "ACTIVE", "NONE"),
+            RenewalEligibility::Allowed
+        );
+    }
 }

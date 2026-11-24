@@ -781,6 +781,27 @@ mod tests {
     }
 
     #[test]
+    fn a_running_renewal_is_published_and_an_idle_one_is_omitted() {
+        // The console distinguishes "nothing running" from "running" by the
+        // field's presence: an idle certificate must not serialize a null that a
+        // client would have to special-case.
+        let idle = serde_json::to_value(crate::CertificateResponse::default())
+            .expect("serialize idle certificate");
+        assert!(idle.get("renewalInProgress").is_none());
+
+        let running = crate::CertificateResponse {
+            renewal_in_progress: Some(crate::CertificateRenewalInProgress {
+                renewal_id: "renewal-1".to_owned(),
+                status: "ORDERED".to_owned(),
+            }),
+            ..Default::default()
+        };
+        let json = serde_json::to_value(running).expect("serialize running certificate");
+        assert_eq!(json["renewalInProgress"]["renewalId"], "renewal-1");
+        assert_eq!(json["renewalInProgress"]["status"], "ORDERED");
+    }
+
+    #[test]
     fn error_codes_are_stable_and_unique() {
         let all = [
             CertificatePlanError::EmptyIdentifierSet,

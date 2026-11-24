@@ -99,6 +99,126 @@ const MAXIMUM_RENEWAL_RETRY_SHIFT: u32 = 20;
 
 const SECONDS_PER_DAY: i64 = 86_400;
 
+/// Upper bound on the per-certificate renewal jitter.
+///
+/// Three days is a tenth of the default 30-day lead time, so a certificate can
+/// never be nudged so late that it enters the emergency window. The bound also
+/// keeps the jitter meaningful for a 90-day certificate whose window is long.
+pub const MAXIMUM_RENEWAL_JITTER_SECONDS: i64 = 3 * SECONDS_PER_DAY;
+
+/// The instant renewal becomes due, after folding in the CA's ARI suggestion.
+///
+/// ARI (RFC 9773) lets a CA ask for earlier renewal — it knows about a planned
+/// revocation or an upcoming CA change before the local window would notice.
+/// Only an **earlier** suggestion is adopted: a CA window later than the local
+/// one would let a certificate expire inside the window the operator configured,
+/// and that configured window is the contractual promise. A malformed (`None`al)
+/// value is ignored rather than guessed at.
+pub fn effective_renewal_due_at(
+    local_due_at: DateTime<Utc>,
+    ari_window_start: Option<&str>,
+) -> DateTime<Utc> {
+    let Some(start) = ari_window_start else {
+        return local_due_at;
+    };
+    let Ok(parsed) = DateTime::parse_from_rfc3339(start) else {
+        return local_due_at;
+    };
+    let ari_start = parsed.with_timezone(&Utc);
+    if ari_start < local_due_at {
+        ari_start
+    } else {
+        local_due_at
+    }
+}
+
+/// The graded alert state of a certificate's validity.
+///
+/// Thresholds follow the industry convention (30/14/7/3/1 days) so an operator
+/// moving between providers recognises the ladder. `RenewalFailing` exists because
+/// a repeatedly failing renewal is a leading indicator: it surfaces days before any
+/// day-based tier would.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExpiryAlertPhase {
+    Healthy,
+    Warning,
+    Urgent,
+    Critical,
+    Emergency,
+    Expired,
+    RenewalFailing,
+}
+
+impl ExpiryAlertPhase {
+    /// Stable token for an audit event or a metric label.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Healthy => "HEALTHY",
+            Self::Warning => "WARNING",
+            Self::Urgent => "URGENT",
+            Self::Critical => "CRITICAL",
+            Self::Emergency => "EMERGENCY",
+            Self::Expired => "EXPIRED",
+            Self::RenewalFailing => "RENEWAL_FAILING",
+        }
+    }
+}
+
+/// Consecutive failures at which a renewal counts as failing rather than unlucky.
+///
+/// Three attempts span the retry backoff (5 min → 10 min → 20 min) and therefore
+/// about half an hour of a genuine outage; fewer would alarm on a single blip.
+pub const RENEWAL_FAILING_THRESHOLD: i32 = 3;
+
+/// Classifies one certificate for alerting.
+///
+/// Expiry is a fact and outranks everything: a certificate that is already expired
+/// must not be reported as merely "failing". Otherwise a repeated renewal failure
+/// outranks the day tiers, because it predicts the expiry rather than reacting to
+/// it.
+pub fn expiry_alert_phase(days_until_expiry: i64, renewal_failure_count: i32) -> ExpiryAlertPhase {
+    if days_until_expiry <= 0 {
+        return ExpiryAlertPhase::Expired;
+    }
+    if renewal_failure_count >= RENEWAL_FAILING_THRESHOLD {
+        return ExpiryAlertPhase::RenewalFailing;
+    }
+    match days_until_expiry {
+        1 => ExpiryAlertPhase::Emergency,
+        2..=3 => ExpiryAlertPhase::Critical,
+        4..=7 => ExpiryAlertPhase::Urgent,
+        8..=14 => ExpiryAlertPhase::Warning,
+        _ => ExpiryAlertPhase::Healthy,
+    }
+}
+
+/// Deterministic delay applied to one certificate's scheduled renewal.
+///
+/// Without it, every certificate that shares a renewal window becomes due in the
+/// same sweep tick and the tenant orders them all at once, which is exactly the
+/// pattern a CA's new-order rate limit punishes. The delay is derived from the
+/// certificate id, so it is stable across ticks (no certificate is starved or
+/// delayed twice) and needs no column to remember it.
+///
+/// The value is in `0..=min(lead/10, MAXIMUM_RENEWAL_JITTER_SECONDS)`. Manual
+/// renewals never consult it: an operator's request is not a scheduling
+/// decision.
+pub fn renewal_jitter_seconds(certificate_uuid: &str, renew_before_days: i32) -> i64 {
+    let lead_seconds = i64::from(renew_before_days.max(0)) * SECONDS_PER_DAY;
+    let ceiling = (lead_seconds / 10).min(MAXIMUM_RENEWAL_JITTER_SECONDS);
+    if ceiling <= 0 {
+        return 0;
+    }
+    // FNV-1a: stable, dependency-free, and spread well enough for identifiers
+    // that differ in their last few characters.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in certificate_uuid.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    (hash % (ceiling as u64 + 1)) as i64
+}
+
 /// Rejects a lead time the database would reject anyway.
 ///
 /// Checked before the value reaches SQL so the caller gets a `422` naming the
@@ -529,6 +649,84 @@ mod tests {
     fn window(lifetime_days: i64) -> ValidityWindow {
         let start = instant("2026-01-01T00:00:00Z");
         ValidityWindow::new(start, start + Duration::days(lifetime_days)).expect("valid window")
+    }
+
+    #[test]
+    fn ari_moves_renewal_earlier_but_never_later() {
+        let local = instant("2026-03-01T00:00:00Z");
+        // No suggestion: the local window stands.
+        assert_eq!(effective_renewal_due_at(local, None), local);
+        // An earlier CA window wins: the CA knows something the local rule cannot.
+        assert_eq!(
+            effective_renewal_due_at(local, Some("2026-02-20T00:00:00Z")),
+            instant("2026-02-20T00:00:00Z")
+        );
+        // A later CA window is refused: the configured lead time is the promise.
+        assert_eq!(
+            effective_renewal_due_at(local, Some("2026-03-10T00:00:00Z")),
+            local
+        );
+        // Unparsable values are ignored, not guessed at.
+        assert_eq!(effective_renewal_due_at(local, Some("not-a-time")), local);
+        // An equal instant is indistinguishable from the local rule.
+        assert_eq!(
+            effective_renewal_due_at(local, Some("2026-03-01T00:00:00Z")),
+            local
+        );
+    }
+
+    #[test]
+    fn expiry_alert_ladder_follows_the_industry_thresholds() {
+        // Days map to tiers exactly at the boundaries; a certificate is never
+        // reported as healthier than its worst day count.
+        for (days, expected) in [
+            (365, ExpiryAlertPhase::Healthy),
+            (15, ExpiryAlertPhase::Healthy),
+            (14, ExpiryAlertPhase::Warning),
+            (8, ExpiryAlertPhase::Warning),
+            (7, ExpiryAlertPhase::Urgent),
+            (4, ExpiryAlertPhase::Urgent),
+            (3, ExpiryAlertPhase::Critical),
+            (2, ExpiryAlertPhase::Critical),
+            (1, ExpiryAlertPhase::Emergency),
+            (0, ExpiryAlertPhase::Expired),
+            (-5, ExpiryAlertPhase::Expired),
+        ] {
+            assert_eq!(expiry_alert_phase(days, 0), expected, "{days} days");
+        }
+    }
+
+    #[test]
+    fn a_repeatedly_failing_renewal_outranks_the_day_tiers_but_never_expiry() {
+        assert_eq!(
+            expiry_alert_phase(60, RENEWAL_FAILING_THRESHOLD),
+            ExpiryAlertPhase::RenewalFailing
+        );
+        // Two failures are still noise; three are a signal.
+        assert_eq!(expiry_alert_phase(60, 2), ExpiryAlertPhase::Healthy);
+        // Expiry is a fact and outranks the prediction.
+        assert_eq!(
+            expiry_alert_phase(0, RENEWAL_FAILING_THRESHOLD),
+            ExpiryAlertPhase::Expired
+        );
+    }
+
+    #[test]
+    fn renewal_jitter_is_stable_bounded_and_spread() {
+        // Stable: a second tick must not delay the same certificate again.
+        let first = renewal_jitter_seconds("cert-uuid-1", 30);
+        assert_eq!(first, renewal_jitter_seconds("cert-uuid-1", 30));
+        // Bounded by a tenth of the lead time, and by the three-day ceiling.
+        assert!((0..=3 * SECONDS_PER_DAY).contains(&first));
+        assert_eq!(renewal_jitter_seconds("cert-uuid-1", 7), renewal_jitter_seconds("cert-uuid-1", 7));
+        assert!(renewal_jitter_seconds("cert-uuid-1", 7) <= 7 * SECONDS_PER_DAY / 10);
+        // Spread: different identifiers do not all land on the same delay.
+        let spread = (0..32)
+            .map(|index| renewal_jitter_seconds(&format!("cert-{index}"), 30))
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(spread.len() > 1, "jitter must actually decorrelate certificates");
+        // A zero lead time cannot be jittered later.
+        assert_eq!(renewal_jitter_seconds("cert-uuid-1", 0), 0);
     }
 
     #[test]

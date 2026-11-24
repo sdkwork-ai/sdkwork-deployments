@@ -131,6 +131,15 @@ pub fn build_certificate_management_router() -> Router<AppState> {
             get(retrieve_certificate).delete(delete_certificate),
         )
         .route(paths::CERTIFICATE_RENEW, post(renew_certificate))
+        .route(paths::CERTIFICATE_REFRESH, post(refresh_certificate))
+        .route(
+            paths::CERTIFICATE_CHALLENGES,
+            get(list_certificate_challenges),
+        )
+        .route(
+            paths::CERTIFICATE_CHALLENGE_VERIFY,
+            post(verify_certificate_challenge),
+        )
         .route(paths::CERTIFICATE_RENEWALS, get(list_certificate_renewals))
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
@@ -1073,6 +1082,56 @@ async fn delete_certificate(
     )
 }
 
+/// Manual DNS-01 instructions for the certificate's current order.
+///
+/// The values are public ACME proofs, so returning them here exposes nothing DNS
+/// itself does not; the console renders them for copy-and-paste and for the
+/// operator's own visibility check.
+async fn list_certificate_challenges(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(certificate_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .list_certificate_challenges(&context, &certificate_id)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Releases a parked manual presentation so the worker validates it.
+///
+/// A command rather than a state write: the operator asserts "the records are
+/// published", the durable release is recorded once, and repeating the call is a
+/// retry that answers `accepted: false` instead of failing.
+async fn verify_certificate_challenge(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(certificate_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .verify_certificate_challenge(&context, &certificate_id)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
 async fn renew_certificate(
     ctx: WebRequestContext,
     State(state): State<AppState>,
@@ -1093,8 +1152,33 @@ async fn renew_certificate(
     )
 }
 
-/// Renewal history for one certificate.
+/// Re-reads one certificate's current state.
 ///
+/// A command (`POST`) rather than a `GET` because the console calls it as an
+/// explicit "refresh" action and because it is the place a later revision will
+/// reconcile CA-side state; it changes nothing today, which is why it answers
+/// with the same resource envelope as `retrieve`.
+async fn refresh_certificate(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(certificate_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .refresh_certificate(&context, &certificate_id)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Renewal history for one certificate.///
 /// Returns the paged SDKWork envelope rather than a bare payload, so no
 /// `ok_json` passthrough is involved here and nothing needs an envelope mapping
 /// exemption.

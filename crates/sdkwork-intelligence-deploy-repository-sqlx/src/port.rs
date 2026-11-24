@@ -518,6 +518,89 @@ impl DeployRepositoryPort for DeployRepository {
         self.renew_certificate_repo(tenant_id, certificate_id).await
     }
 
+    async fn record_certificate_ari_window(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        window_start: &str,
+        window_end: &str,
+        checked_at: &str,
+    ) -> DeployServiceResult<()> {
+        self.record_certificate_ari_window_repo(
+            tenant_id,
+            certificate_id,
+            window_start,
+            window_end,
+            checked_at,
+        )
+        .await
+    }
+
+    async fn record_challenge_presentation(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        hostname: &str,
+        record_name: &str,
+        record_value: &str,
+        expires_at: &str,
+        presentation_ref: Option<&str>,
+    ) -> DeployServiceResult<()> {
+        self.record_challenge_presentation_repo(
+            tenant_id,
+            order_id,
+            hostname,
+            record_name,
+            record_value,
+            expires_at,
+            presentation_ref,
+        )
+        .await
+    }
+
+    async fn mark_order_presentation_ready(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        ready_at: &str,
+    ) -> DeployServiceResult<bool> {
+        self.mark_order_presentation_ready_repo(tenant_id, order_id, ready_at)
+            .await
+    }
+
+    async fn record_certificate_order_external_url(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        external_order_url: &str,
+    ) -> DeployServiceResult<()> {
+        self.record_certificate_order_external_url_repo(
+            tenant_id,
+            order_id,
+            external_order_url,
+        )
+        .await
+    }
+
+    async fn release_manual_order_for_certificate(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        ready_at: &str,
+    ) -> DeployServiceResult<bool> {
+        self.release_manual_order_for_certificate_repo(tenant_id, certificate_id, ready_at)
+            .await
+    }
+
+    async fn list_certificate_presentations(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateChallengePresentationList> {
+        self.list_certificate_presentations_repo(tenant_id, certificate_id)
+            .await
+    }
+
     async fn list_health_checks(
         &self,
         tenant_id: i64,

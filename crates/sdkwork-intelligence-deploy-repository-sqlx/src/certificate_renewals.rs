@@ -17,15 +17,15 @@
 //! rule to hold; the decision comes from calling the same code the console calls
 //! when it renders `daysUntilExpiry`.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sdkwork_deploy_contract::{
     CertificateRenewalPage, CertificateRenewalResponse, DeployServiceError, DeployServiceResult,
     RENEWAL_STATUS_CANCELLED, RENEWAL_STATUS_FAILED, RENEWAL_STATUS_ORDERED,
     RENEWAL_STATUS_PLANNED, RENEWAL_TRIGGER_MANUAL, RENEWAL_TRIGGER_SCHEDULED,
 };
 use sdkwork_intelligence_deploy_service::certificate_renewal::{
-    renewal_retry_delay, ValidityWindow, MAXIMUM_RENEWAL_FAILURE_COUNT, RENEWAL_OVERDUE_GRACE_DAYS,
-    SWEEP_LOOKAHEAD_DAYS,
+    effective_renewal_due_at, renewal_jitter_seconds, renewal_retry_delay, ValidityWindow,
+    MAXIMUM_RENEWAL_FAILURE_COUNT, RENEWAL_OVERDUE_GRACE_DAYS, SWEEP_LOOKAHEAD_DAYS,
 };
 use sdkwork_intelligence_deploy_service::{CertificateRenewalClaim, ExpiredCertificateSweep};
 use sqlx::postgres::PgRow;
@@ -59,14 +59,19 @@ const VERSION_STATUS_EXPIRED: &str = "EXPIRED";
 /// The lease is what makes "only one worker renews this" true, so only a row whose
 /// previous lease has lapsed is selectable and a live worker is never preempted.
 const CANDIDATE_SELECT: &str = "SELECT c.id, c.uuid, c.tenant_id, c.renew_before_days,
-        c.current_version_id, c.renewal_status,
+        c.current_version_id, c.renewal_status, c.ari_window_start,
         v.uuid AS current_version_uuid,
         COALESCE(v.not_before, c.active_not_before) AS window_start,
         COALESCE(v.not_after, c.active_not_after) AS window_end
    FROM deploy_certificate c
    LEFT JOIN deploy_certificate_version v ON v.id = c.current_version_id
-  WHERE c.auto_renew = TRUE
-    AND c.status IN ('ACTIVE', 'EXPIRED')
+  WHERE (c.auto_renew = TRUE
+         -- A manual renewal is an operator decision and must run exactly when
+         -- auto-renew is off: that configuration is what manual refresh exists
+         -- for. Without this arm the scheduler would set PLANNED and then never
+         -- claim the row, so the button would silently do nothing.
+         OR c.renewal_status IN ('PLANNED', 'PROCESSING'))
+    AND c.status IN ('ACTIVE', 'FAILED', 'EXPIRED')
     AND c.certificate_source = 'MANAGED'
     AND c.deleted_at IS NULL
     AND c.active_not_after IS NOT NULL
@@ -144,6 +149,9 @@ impl DeployRepository {
             let renew_before_days: i32 = row.try_get("renew_before_days").unwrap_or(0);
             let previous_not_before = optional_datetime(&row, "window_start")?;
             let previous_not_after = optional_datetime(&row, "window_end")?;
+            let certificate_uuid: String = row
+                .try_get("uuid")
+                .map_err(|error| store_error("read certificate uuid for renewal", error))?;
 
             // A certificate carrying pending work is renewed because it was asked
             // for, not because the window says so. Everything else has to earn it
@@ -152,12 +160,26 @@ impl DeployRepository {
                 renewal_status.as_str(),
                 RENEWAL_STATUS_PLANNED | CERTIFICATE_RENEWAL_PROCESSING
             );
+            // The jitter is subtracted from "now" rather than added to the due
+            // instant: the shared window rule keeps making the decision, and this
+            // only decides whether *this tick* is the one that acts on it. A
+            // cohort of certificates therefore spreads across ticks instead of
+            // being ordered together, and none of them is delayed twice because
+            // the delay is derived from the id.
+            let scheduled_at = claimed_at
+                - Duration::seconds(renewal_jitter_seconds(&certificate_uuid, renew_before_days));
+            // The CA's earlier suggestion, when one was recorded at issuance.
+            // Decoded through the shared timestamp helper rather than `try_get`:
+            // a TIMESTAMPTZ does not decode into `String`, and swallowing that
+            // error would silently disable ARI forever.
+            let ari_window_start = optional_datetime(&row, "ari_window_start")?;
             if !carrying_pending_work
                 && !is_due_by_window(
                     previous_not_before.as_deref(),
                     previous_not_after.as_deref(),
                     renew_before_days,
-                    claimed_at,
+                    ari_window_start.as_deref(),
+                    scheduled_at,
                 )
             {
                 continue;
@@ -166,9 +188,6 @@ impl DeployRepository {
             // Bound as locals rather than read inside the literal below: a
             // temporary borrowed into `ClaimInput` would otherwise be dropped at
             // the end of the statement that builds it.
-            let certificate_uuid: String = row
-                .try_get("uuid")
-                .map_err(|error| store_error("read certificate uuid for renewal", error))?;
             let previous_version_uuid: Option<String> =
                 row.try_get("current_version_uuid").map_err(|error| {
                     store_error("read certificate current version for renewal", error)
@@ -627,6 +646,7 @@ fn is_due_by_window(
     not_before: Option<&str>,
     not_after: Option<&str>,
     renew_before_days: i32,
+    ari_window_start: Option<&str>,
     at: DateTime<Utc>,
 ) -> bool {
     let (Some(not_before), Some(not_after)) = (not_before, not_after) else {
@@ -634,7 +654,15 @@ fn is_due_by_window(
     };
     match ValidityWindow::from_rfc3339(not_before, not_after) {
         Ok(window) => {
-            window.is_renewal_due(renew_before_days, at) && window.is_within_renewal_reach(at)
+            // The local instant is the contractual window; the CA suggestion may
+            // only move it earlier (see `effective_renewal_due_at`). Folding it
+            // in here keeps one decision path for scheduled and ARI-driven
+            // renewal instead of a second, disagreeing rule.
+            let due = effective_renewal_due_at(
+                window.renewal_due_at(renew_before_days),
+                ari_window_start,
+            );
+            at >= due && window.is_within_renewal_reach(at)
         }
         // A stored window the rule cannot reason about is left alone rather than
         // guessed at; the certificate stays listed and visible.

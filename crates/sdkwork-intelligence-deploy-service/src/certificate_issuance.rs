@@ -26,7 +26,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{SecondsFormat, Utc};
+use chrono::{Duration, SecondsFormat, Utc};
 use sdkwork_deploy_contract::{
     CertificateMaterialPayload, CertificateScope, DeployServiceError, DeployServiceResult,
     ValidationMethod, CHALLENGE_TYPE_DNS_01, CHALLENGE_TYPE_HTTP_01, ORDER_ERROR_CONFLICT,
@@ -69,6 +69,29 @@ pub struct CertificateIssuanceRequest {
     pub dns01: Option<CertificateDns01Context>,
 }
 
+/// One challenge response a two-phase order has to present.
+///
+/// Only the fields the console can act on: the identity to prove, and — for
+/// DNS-01 — the exact TXT record name and value. An HTTP-01 token is deliberately
+/// not surfaced, because that proof is presented by the edge, never by hand.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreparedCertificateChallenge {
+    pub identifier: String,
+    pub record_name: Option<String>,
+    pub record_value: Option<String>,
+}
+
+/// A CA order created by [`CertificateIssuancePort::prepare`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PreparedCertificateOrder {
+    /// The CA's order URL; the only state needed to resume the order.
+    pub order_url: String,
+    pub challenges: Vec<PreparedCertificateChallenge>,
+    /// The identifiers the CA already considers authorized, which need no
+    /// presentation at all.
+    pub already_valid: Vec<String>,
+}
+
 /// Issues one certificate through a CA.
 ///
 /// A port rather than a direct dependency, so the control plane carries no
@@ -80,6 +103,57 @@ pub trait CertificateIssuancePort: Send + Sync {
         &self,
         request: CertificateIssuanceRequest,
     ) -> DeployServiceResult<IssuedCertificateMaterial>;
+
+    /// Phase one: create the order and return every challenge response as data.
+    ///
+    /// Nothing is told to the CA here — no `set_ready`. For a manual request the
+    /// caller persists the returned challenges, parks the order, and resumes with
+    /// [`Self::complete`] once an operator has published them.
+    ///
+    /// Defaulted to an "unsupported" error so a port that only knows the
+    /// single-shot path keeps compiling; a deployment that offers manual issuance
+    /// must install an engine that implements both phases.
+    async fn prepare(
+        &self,
+        request: CertificateIssuanceRequest,
+    ) -> DeployServiceResult<PreparedCertificateOrder> {
+        let _ = request;
+        Err(DeployServiceError::Internal(
+            "this deployment cannot prepare a two-phase certificate order".to_owned(),
+        ))
+    }
+
+    /// Phase two: resume `order_url` and drive it to validated, sealed material.
+    ///
+    /// `managed_records` are the provider records the caller persisted in phase
+    /// one; they are withdrawn after the exchange. A manual presentation passes an
+    /// empty slice because the operator owns those records.
+    async fn complete(
+        &self,
+        order_url: &str,
+        request: CertificateIssuanceRequest,
+        managed_records: &[sdkwork_webserver_acme_service::Dns01RecordHandle],
+    ) -> DeployServiceResult<IssuedCertificateMaterial> {
+        let _ = (order_url, request, managed_records);
+        Err(DeployServiceError::Internal(
+            "this deployment cannot complete a two-phase certificate order".to_owned(),
+        ))
+    }
+
+    /// The CA's suggested renewal window (RFC 9773 ARI) for an issued leaf, when
+    /// the CA publishes one.
+    ///
+    /// Defaulted to `Ok(None)` so a port without ARI support (a test double, an
+    /// internal CA) keeps compiling and simply leaves the local window rule in
+    /// charge. `None` is also the honest answer for a CA that does not implement
+    /// ARI, which is not an error.
+    async fn renewal_window(
+        &self,
+        cert_pem: &str,
+    ) -> DeployServiceResult<Option<sdkwork_webserver_acme_service::AriRenewalWindow>> {
+        let _ = cert_pem;
+        Ok(None)
+    }
 }
 
 /// What a presenter resolver is told about one DNS-01 presentation.
@@ -193,7 +267,93 @@ pub fn resolve_challenge_type(scope: CertificateScope, method: ValidationMethod)
     }
 }
 
+/// How long a manual order waits for an operator to publish its records.
+///
+/// Capped well below the CA's own order lifetime: an order nobody acted on is
+/// dead weight, and LE counts every rejected attempt against the account.
+const MANUAL_PRESENTATION_TTL_HOURS: i64 = 72;
+
+/// Builds the two-phase request for a manual certificate.
+///
+/// The presenter publishes nothing — the operator does. The zone apex is derived
+/// from the identifiers rather than looked up, because no provider is contacted in
+/// this mode; it only has to be an apex the `_acme-challenge` record name sits
+/// under, and the shortest identifier is the closest honest answer. A certificate
+/// whose identifiers span two registrable zones is rejected by the planning rules
+/// before it reaches an order.
+fn manual_issuance_request(
+    certificate: &sdkwork_deploy_contract::CertificateResponse,
+) -> DeployServiceResult<CertificateIssuanceRequest> {
+    let zone_apex = certificate
+        .identifiers
+        .iter()
+        .map(|hostname| hostname.trim_start_matches("*."))
+        .min_by_key(|hostname| hostname.matches('.').count())
+        .ok_or_else(|| {
+            DeployServiceError::validation("certificate has no hostname identifiers to issue for")
+        })?
+        .to_owned();
+    Ok(CertificateIssuanceRequest {
+        hostnames: certificate.identifiers.clone(),
+        cert_name: certificate.cert_name.clone(),
+        key_algorithm: certificate.preferred_key_algorithm.clone(),
+        dns01: Some(CertificateDns01Context {
+            presenter: Arc::new(sdkwork_webserver_acme_service::ManualDns01Presenter),
+            zone_apex,
+            provider_account_id: None,
+        }),
+    })
+}
+
 impl DeployService {
+    /// Releases the parked manual order of one certificate so the worker validates.
+    ///
+    /// The caller (the app API) is expected to run the presentation self-check
+    /// first: releasing an order whose records are not visible spends one of the
+    /// CA's failed-validation allowances. This method is the durable half of that
+    /// command and stays idempotent: a second release reports "already released"
+    /// rather than failing.
+    pub async fn release_manual_presentation(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<bool> {
+        // Self-check first: a record the configured resolvers can see is absent
+        // must not be handed to the CA, which would spend one of its
+        // failed-validation allowances. "Unverifiable" (nobody answered, or a
+        // lookup error) does not block: the operator asserted the record exists,
+        // and refusing there would make manual mode unusable on a deployment with
+        // no trusted resolver.
+        if let Some(inspector) = self.certificate_presentation_inspector.as_ref() {
+            let presentations = self
+                .repository
+                .list_certificate_presentations(tenant_id, certificate_id)
+                .await?;
+            for item in &presentations.items {
+                let (Some(record_name), Some(record_value)) =
+                    (item.record_name.as_deref(), item.record_value.as_deref())
+                else {
+                    continue;
+                };
+                let report = inspector
+                    .inspect_dns_txt(record_name, &[record_value.to_owned()])
+                    .await?;
+                if crate::certificate_presentation::presentation_release_decision(&report)
+                    == crate::certificate_presentation::PresentationReleaseDecision::Blocked
+                {
+                    return Err(DeployServiceError::conflict(format!(
+                        "CERTIFICATE_DNS_RECORD_NOT_VISIBLE: {record_name} is not published \
+                         with the expected TXT value"
+                    )));
+                }
+            }
+        }
+        let ready_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        self.repository
+            .release_manual_order_for_certificate(tenant_id, certificate_id, &ready_at)
+            .await
+    }
+
     /// Claims due orders and drives each to a stored version.
     ///
     /// Bounded and leased, so several workers can run this concurrently without
@@ -310,6 +470,85 @@ impl DeployService {
         Ok(result)
     }
 
+    /// First pass of a manual order: create the CA order, persist the records the
+    /// operator must publish, and park the order.
+    ///
+    /// Returns `Abandoned`, not `Stored`: the worker did stop working on this
+    /// order, but it neither stored a version nor failed the order. Failing it
+    /// would destroy a request that is waiting on a human.
+    async fn prepare_manual_presentation(
+        &self,
+        worker_id: &str,
+        claim: &CertificateOrderClaim,
+        certificate: &sdkwork_deploy_contract::CertificateResponse,
+    ) -> DeployServiceResult<OrderFulfilment> {
+        let issuer = self.certificate_issuer.as_ref().ok_or_else(|| {
+            DeployServiceError::Internal(
+                "certificate issuance is not configured for this deployment".to_owned(),
+            )
+        })?;
+        // Stop at CHALLENGE_PRESENTING: the remaining transition is the one that
+        // tells the CA to validate, and that belongs to the release pass.
+        let held = self
+            .advance_order_through(
+                worker_id,
+                claim,
+                &[
+                    ORDER_STATUS_REQUESTED,
+                    ORDER_STATUS_ACCOUNT_READY,
+                    ORDER_STATUS_ORDER_PENDING,
+                    ORDER_STATUS_CHALLENGE_PRESENTING,
+                ],
+            )
+            .await?;
+        if !held {
+            return Ok(OrderFulfilment::Abandoned);
+        }
+        let request = manual_issuance_request(certificate)?;
+        let prepared = issuer.prepare(request).await?;
+        self.repository
+            .record_certificate_order_external_url(
+                claim.tenant_id,
+                &claim.order_uuid,
+                &prepared.order_url,
+            )
+            .await?;
+        let expires_at = (Utc::now() + chrono::Duration::hours(MANUAL_PRESENTATION_TTL_HOURS))
+            .to_rfc3339_opts(SecondsFormat::Millis, true);
+        for challenge in &prepared.challenges {
+            let (Some(record_name), Some(record_value)) = (
+                challenge.record_name.as_deref(),
+                challenge.record_value.as_deref(),
+            ) else {
+                // A manual certificate is DNS-01 by planning rule; if the engine
+                // ever hands back a non-DNS challenge here, the order's mode and
+                // its challenge disagree and continuing would strand it.
+                return Err(DeployServiceError::validation(
+                    "a manual certificate can only be prepared as a DNS-01 challenge",
+                ));
+            };
+            self.repository
+                .record_challenge_presentation(
+                    claim.tenant_id,
+                    &claim.order_uuid,
+                    &challenge.identifier,
+                    record_name,
+                    record_value,
+                    &expires_at,
+                    None,
+                )
+                .await?;
+        }
+        tracing::info!(
+            certificate = %claim.certificate_uuid,
+            order = %claim.order_uuid,
+            records = prepared.challenges.len(),
+            already_valid = prepared.already_valid.len(),
+            "manual certificate order prepared; awaiting operator presentation"
+        );
+        Ok(OrderFulfilment::Abandoned)
+    }
+
     /// Drives one claimed order from wherever it stopped to a stored version.
     async fn fulfil_certificate_order(
         &self,
@@ -332,6 +571,15 @@ impl DeployService {
             ));
         }
 
+        // Two-phase manual issuance: the first pass only prepares the challenge
+        // records and parks the order. It must not advance to validation, because
+        // nobody has published anything yet.
+        if claim.presentation_mode == "MANUAL" && claim.external_order_url.is_none() {
+            return self
+                .prepare_manual_presentation(worker_id, claim, &certificate)
+                .await;
+        }
+
         // Walk the prefix of the state machine before any network call. Doing it
         // in one place keeps the "one legal step at a time" rule in a single
         // function instead of scattering status writes through the flow.
@@ -350,6 +598,24 @@ impl DeployService {
             .await?;
         if !held {
             return Ok(OrderFulfilment::Abandoned);
+        }
+
+        // Second pass of a manual order: the operator has published the records,
+        // so the resume is the same conversation the atomic path runs, minus the
+        // presentation work (nothing for the platform to withdraw).
+        if claim.presentation_mode == "MANUAL" {
+            let order_url = claim.external_order_url.as_deref().ok_or_else(|| {
+                DeployServiceError::validation(
+                    "manual certificate order has no external order url to resume",
+                )
+            })?;
+            let request = manual_issuance_request(&certificate)?;
+            let issued = issuer.complete(order_url, request, &[]).await?;
+            self.repository
+                .record_challenge_result(claim.tenant_id, &claim.order_uuid, None, true, None)
+                .await?;
+            self.store_issued_version(claim, &issued).await?;
+            return Ok(OrderFulfilment::Stored);
         }
 
         let challenge_type = resolve_challenge_type(
@@ -561,7 +827,59 @@ impl DeployService {
                 &material,
             )
             .await?;
+        self.record_ari_window(claim, issued).await;
         Ok(())
+    }
+
+    /// Records the CA's suggested renewal window for the version just stored.
+    ///
+    /// Best effort by design: a CA without ARI, a transient lookup failure, or a
+    /// persistence error must not turn a successful issuance into a failed one.
+    /// The certificate keeps the local window rule until a suggestion exists, and
+    /// a failure here is only ever a log line.
+    async fn record_ari_window(
+        &self,
+        claim: &CertificateOrderClaim,
+        issued: &IssuedCertificateMaterial,
+    ) {
+        let Some(issuance) = self.certificate_issuer.as_ref() else {
+            return;
+        };
+        let window = match issuance.renewal_window(&issued.cert_pem).await {
+            Ok(window) => window,
+            Err(error) => {
+                tracing::warn!(
+                    certificate = %claim.certificate_uuid,
+                    order = %claim.order_uuid,
+                    error = %error,
+                    "ARI lookup failed; the local renewal window stays in charge"
+                );
+                return;
+            }
+        };
+        let Some(window) = window else {
+            // The CA does not publish ARI (or has none for this certificate).
+            // Leaving the columns NULL is the honest record of that.
+            return;
+        };
+        let checked_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        if let Err(error) = self
+            .repository
+            .record_certificate_ari_window(
+                claim.tenant_id,
+                &claim.certificate_uuid,
+                &window.window_start,
+                &window.window_end,
+                &checked_at,
+            )
+            .await
+        {
+            tracing::warn!(
+                certificate = %claim.certificate_uuid,
+                error = %error,
+                "recorded ARI window could not be persisted"
+            );
+        }
     }
 }
 

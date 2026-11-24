@@ -1045,6 +1045,51 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    /// Re-reads a certificate's current state without requesting a new version.
+    ///
+    /// The read path already recomputes the validity phase and renewal window on
+    /// every call; this command exists so a console can ask for a fresh snapshot
+    /// explicitly (after an operator changed something elsewhere) without
+    /// implying that a renewal was requested.
+    async fn refresh_certificate(
+        &self,
+        _context: &DeployAppRequestContext,
+        _certificate_id: &str,
+    ) -> DeployServiceResult<CertificateResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "certificate API is not implemented".to_owned(),
+        ))
+    }
+
+    /// The manual DNS-01 instructions of a certificate's current order.
+    ///
+    /// Empty for a managed certificate: there is nothing for an operator to
+    /// publish.
+    async fn list_certificate_challenges(
+        &self,
+        _context: &DeployAppRequestContext,
+        _certificate_id: &str,
+    ) -> DeployServiceResult<CertificateChallengePresentationList> {
+        Err(crate::DeployServiceError::Internal(
+            "certificate challenge API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Releases a parked manual order so the worker asks the CA to validate.
+    ///
+    /// The caller is expected to run the presentation self-check first; releasing
+    /// records whose TXT values are not visible spends one of the CA's
+    /// failed-validation allowances.
+    async fn verify_certificate_challenge(
+        &self,
+        _context: &DeployAppRequestContext,
+        _certificate_id: &str,
+    ) -> DeployServiceResult<CertificateChallengeReleaseResult> {
+        Err(crate::DeployServiceError::Internal(
+            "certificate challenge API is not implemented".to_owned(),
+        ))
+    }
+
     async fn list_certificate_renewals(
         &self,
         _context: &DeployAppRequestContext,

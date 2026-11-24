@@ -1445,6 +1445,44 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn refresh_certificate(
+        &self,
+        context: &DeployAppRequestContext,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        // Read-only on purpose: "refresh" re-reads the aggregate (the read model
+        // recomputes the validity phase, the renewal window and the running
+        // attempt on every call) and must never be mistaken for a renewal
+        // request, which is the separate `renew` command.
+        self.repository
+            .retrieve_certificate(tenant_id, certificate_id)
+            .await
+    }
+
+    async fn list_certificate_challenges(
+        &self,
+        context: &DeployAppRequestContext,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateChallengePresentationList> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.repository
+            .list_certificate_presentations(tenant_id, certificate_id)
+            .await
+    }
+
+    async fn verify_certificate_challenge(
+        &self,
+        context: &DeployAppRequestContext,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateChallengeReleaseResult> {
+        let tenant_id = Self::require_tenant(context)?;
+        let accepted = self
+            .release_manual_presentation(tenant_id, certificate_id)
+            .await?;
+        Ok(sdkwork_deploy_contract::CertificateChallengeReleaseResult { accepted })
+    }
+
     async fn list_health_checks(
         &self,
         context: &DeployAppRequestContext,

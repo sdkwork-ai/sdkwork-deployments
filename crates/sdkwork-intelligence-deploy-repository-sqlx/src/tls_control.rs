@@ -8,12 +8,14 @@ use sdkwork_deploy_certificate_material::{
     MaterialKind, Protection, SealedCertificateFile, SealedMaterial,
 };
 use sdkwork_deploy_contract::{
-    next_order_transition, AcmeAccountPage, AcmeAccountResponse, CertificateChallengePage,
-    CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificateScope,
-    CreateAcmeAccountRequest, DeployServiceError, DeployServiceResult, ValidationMethod,
-    CAA_DECISION_LOOKUP_FAILED, CAA_DECISION_PERMITTED, CAA_DECISION_UNAUTHORIZED_CA,
-    ORDER_ERROR_DEADLINE_EXCEEDED, ORDER_STATUS_CANCELLED, ORDER_STATUS_FAILED,
-    ORDER_STATUS_FINALIZING, ORDER_STATUS_VERSION_STORED, RENEWAL_STATUS_SUCCEEDED,
+    next_order_transition, AcmeAccountPage, AcmeAccountResponse,
+    CertificateChallengePresentationList, CertificateChallengePresentationResponse,
+    CertificateChallengePage, CertificateChallengeResponse, CertificateOrderPage,
+    CertificateOrderResponse, CertificateScope, CreateAcmeAccountRequest, DeployServiceError,
+    DeployServiceResult, ValidationMethod, CAA_DECISION_LOOKUP_FAILED, CAA_DECISION_PERMITTED,
+    CAA_DECISION_UNAUTHORIZED_CA, ORDER_ERROR_DEADLINE_EXCEEDED, ORDER_STATUS_CANCELLED,
+    ORDER_STATUS_FAILED, ORDER_STATUS_FINALIZING, ORDER_STATUS_VERSION_STORED,
+    RENEWAL_STATUS_SUCCEEDED,
 };
 use sdkwork_intelligence_deploy_service::{
     resolve_challenge_type, CertificateOrderCaaSubject, CertificateOrderClaim,
@@ -574,11 +576,24 @@ impl DeployRepository {
                        AND (deadline_at IS NULL OR deadline_at > CAST($4 AS TIMESTAMPTZ))
                        AND (next_attempt_at IS NULL OR next_attempt_at <= CAST($4 AS TIMESTAMPTZ))
                        AND (lease_expires_at IS NULL OR lease_expires_at <= CAST($4 AS TIMESTAMPTZ))
+                       -- A manual order needs exactly two worker passes. The first
+                       -- has no CA order yet (`external_order_url IS NULL`) and
+                       -- prepares the challenge records; after that it is parked
+                       -- until an operator releases it. Without the first arm the
+                       -- order would never be prepared at all, and without the
+                       -- third it would be validated before anyone published the
+                       -- records.
+                       AND (
+                           presentation_mode <> 'MANUAL'
+                           OR external_order_url IS NULL
+                           OR presentation_ready_at IS NOT NULL
+                       )
                      ORDER BY created_at, id
                      LIMIT $3
                      FOR UPDATE SKIP LOCKED
               )
              RETURNING o.uuid, o.tenant_id, o.status, o.attempt_count, o.requested_version_no,
+                       o.presentation_mode, o.external_order_url,
                        (SELECT c.uuid FROM deploy_certificate c WHERE c.id = o.certificate_id)
                            AS certificate_uuid",
         )
@@ -609,6 +624,10 @@ impl DeployRepository {
                 status: row.try_get("status").unwrap_or_default(),
                 attempt_count: row.try_get("attempt_count").unwrap_or(0),
                 requested_version_no: row.try_get("requested_version_no").unwrap_or(1),
+                presentation_mode: row
+                    .try_get("presentation_mode")
+                    .unwrap_or_else(|_| "MANAGED".to_owned()),
+                external_order_url: row.try_get("external_order_url").unwrap_or(None),
             });
         }
         Ok(claims)
@@ -784,6 +803,218 @@ impl DeployRepository {
             .await
             .map_err(|error| store_error("commit challenge result", error))?;
         Ok(())
+    }
+
+    /// Records the manual DNS-01 presentation for one challenge.
+    ///
+    /// Keyed by `(order, hostname)` rather than challenge uuid because the caller
+    /// that computed the presentation (the ACME engine) knows the identifier, not
+    /// the control plane's challenge row. A challenge already terminal is left
+    /// alone: presenting a record for a validated authorization would only
+    /// resurrect an instruction nobody needs.
+    pub(super) async fn record_challenge_presentation_repo(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        hostname: &str,
+        record_name: &str,
+        record_value: &str,
+        expires_at: &str,
+        presentation_ref: Option<&str>,
+    ) -> DeployServiceResult<()> {
+        let order_internal_id =
+            resolve_certificate_order_internal_id(&self.pool, tenant_id, order_id).await?;
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_challenge ch
+                SET presentation_record_name = $3,
+                    presentation_record_value = $4,
+                    presentation_expires_at = CAST($5 AS TIMESTAMPTZ),
+                    presentation_ref = COALESCE($6, ch.presentation_ref),
+                    status = 'PRESENTING',
+                    updated_at = NOW(), version = ch.version + 1
+               FROM deploy_certificate_identifier i
+              WHERE ch.identifier_id = i.id
+                AND ch.order_id = $1
+                AND i.hostname_ascii = $2
+                AND ch.tenant_id = $7
+                AND ch.status NOT IN ('VALID', 'FAILED', 'CLEANED')",
+        )
+        .bind(order_internal_id)
+        .bind(hostname)
+        .bind(record_name)
+        .bind(record_value)
+        .bind(expires_at)
+        .bind(presentation_ref)
+        .bind(tenant_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("record deploy_certificate_challenge presentation", error))?;
+        if result.rows_affected() == 0 {
+            return Err(DeployServiceError::not_found(
+                "certificate challenge not found for presentation",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Releases a parked manual order so the issuance worker may validate it.
+    ///
+    /// Only a `MANUAL` order still sitting in `CHALLENGE_PRESENTING` can be
+    /// released, and only once: a second release is a no-op rather than an error,
+    /// because two operators clicking "verify" at the same moment is a retry, not
+    /// a mistake. Returns whether this call was the one that released it.
+    pub(super) async fn mark_order_presentation_ready_repo(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        ready_at: &str,
+    ) -> DeployServiceResult<bool> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_order
+                SET presentation_ready_at = CAST($3 AS TIMESTAMPTZ),
+                    next_attempt_at = NULL,
+                    updated_at = NOW(), version = version + 1
+              WHERE tenant_id = $1 AND uuid = $2
+                AND presentation_mode = 'MANUAL'
+                AND status = 'CHALLENGE_PRESENTING'
+                AND presentation_ready_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(order_id)
+        .bind(ready_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("release deploy_certificate_order presentation", error))?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Records the CA order URL produced by a two-phase preparation pass.
+    ///
+    /// Written once: the resume pass needs it, and overwriting it with a second
+    /// order's URL would orphan the challenges already published for the first.
+    pub(super) async fn record_certificate_order_external_url_repo(
+        &self,
+        tenant_id: i64,
+        order_id: &str,
+        external_order_url: &str,
+    ) -> DeployServiceResult<()> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_order
+                SET external_order_url = $3,
+                    updated_at = NOW(), version = version + 1
+              WHERE tenant_id = $1 AND uuid = $2 AND external_order_url IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(order_id)
+        .bind(external_order_url)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("record deploy_certificate_order external url", error))?;
+        if result.rows_affected() == 0 {
+            return Err(DeployServiceError::conflict(
+                "certificate order already has an external order url",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Reads the manual presentation instructions of a certificate's latest
+    /// manual order.
+    ///
+    /// Only the newest manual order is reported: an earlier parked order was
+    /// superseded, and showing both would hand the operator two TXT values for the
+    /// same name with no way to tell which one the CA is waiting for.
+    pub(super) async fn list_certificate_presentations_repo(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<CertificateChallengePresentationList> {
+        let rows = sqlx::query(
+            "SELECT o.presentation_mode,
+                    (o.presentation_ready_at IS NOT NULL) AS released,
+                    i.hostname_ascii AS identifier,
+                    ch.presentation_record_name,
+                    ch.presentation_record_value,
+                    ch.presentation_expires_at,
+                    ch.status
+               FROM deploy_certificate_order o
+               JOIN deploy_certificate c ON c.id = o.certificate_id
+               LEFT JOIN deploy_certificate_challenge ch ON ch.order_id = o.id
+               LEFT JOIN deploy_certificate_identifier i ON i.id = ch.identifier_id
+              WHERE c.tenant_id = $1 AND c.uuid = $2
+                AND o.id = (
+                    SELECT MAX(o2.id) FROM deploy_certificate_order o2
+                     WHERE o2.certificate_id = c.id
+                       AND o2.presentation_mode = 'MANUAL'
+                )
+              ORDER BY i.position",
+        )
+        .bind(tenant_id)
+        .bind(certificate_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| store_error("list deploy_certificate presentations", error))?;
+
+        let mut list = CertificateChallengePresentationList::default();
+        for row in rows {
+            list.presentation_mode = row
+                .try_get("presentation_mode")
+                .unwrap_or_else(|_| "MANAGED".to_owned());
+            list.presentation_released = row.try_get("released").unwrap_or(false);
+            let identifier: Option<String> = row.try_get("identifier").ok();
+            let Some(identifier) = identifier else {
+                // A challenge row without its identifier cannot be presented; the
+                // join is LEFT so the order itself still reports its mode.
+                continue;
+            };
+            list.items
+                .push(CertificateChallengePresentationResponse {
+                    record_type: row
+                        .try_get::<Option<String>, _>("presentation_record_name")
+                        .ok()
+                        .flatten()
+                        .map(|_| "TXT".to_owned()),
+                    record_name: row.try_get("presentation_record_name").unwrap_or(None),
+                    record_value: row.try_get("presentation_record_value").unwrap_or(None),
+                    expires_at: optional_datetime(&row, "presentation_expires_at")?,
+                    status: row.try_get("status").unwrap_or_default(),
+                    identifier,
+                });
+        }
+        Ok(list)
+    }
+
+    /// Releases the parked manual order of one certificate.
+    ///
+    /// Keyed by certificate rather than order id because the console acts on a
+    /// certificate; the parked order is a detail. Returns whether this call was
+    /// the one that released it, so a double click is a retry and not an error.
+    pub(super) async fn release_manual_order_for_certificate_repo(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        ready_at: &str,
+    ) -> DeployServiceResult<bool> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_order o
+                SET presentation_ready_at = CAST($3 AS TIMESTAMPTZ),
+                    next_attempt_at = NULL,
+                    updated_at = NOW(), version = o.version + 1
+               FROM deploy_certificate c
+              WHERE c.id = o.certificate_id
+                AND c.uuid = $2
+                AND o.tenant_id = $1
+                AND o.presentation_mode = 'MANUAL'
+                AND o.status = 'CHALLENGE_PRESENTING'
+                AND o.presentation_ready_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(certificate_id)
+        .bind(ready_at)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("release manual deploy_certificate_order", error))?;
+        Ok(result.rows_affected() > 0)
     }
 
     /// Stores the issued certificate version (CANDIDATE), activates it, writes
