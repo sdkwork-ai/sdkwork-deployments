@@ -116,6 +116,7 @@ async fn create_certificate(repository: &DeployRepository, tenant_id: i64) -> (S
                 auto_renew: true,
                 renew_before_days: sdkwork_deploy_core::CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS,
                 provider_account_id: None,
+                challenge_presentation: Default::default(),
             },
         )
         .await

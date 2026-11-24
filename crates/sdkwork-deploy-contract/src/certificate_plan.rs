@@ -732,6 +732,55 @@ mod tests {
     }
 
     #[test]
+    fn an_absent_challenge_presentation_defaults_to_managed() {
+        // Clients that predate the switch keep working: an omitted
+        // `challengePresentation` must mean "the platform presents it", which is
+        // exactly the behaviour those clients already relied on.
+        let request: crate::CreateCertificateRequest = serde_json::from_value(serde_json::json!({
+            "certName": "example.com",
+            "domainIds": ["example.com"],
+        }))
+        .expect("request parses without the new field");
+        assert_eq!(
+            request.challenge_presentation,
+            crate::ChallengePresentation::Managed
+        );
+        assert_eq!(request.validation_method, ValidationMethod::Auto);
+
+        let with_manual: crate::CreateCertificateRequest =
+            serde_json::from_value(serde_json::json!({
+                "certName": "example.com",
+                "domainIds": ["example.com"],
+                "validationMethod": "DNS_01",
+                "challengePresentation": "MANUAL",
+            }))
+            .expect("manual presentation parses");
+        assert_eq!(
+            with_manual.challenge_presentation,
+            crate::ChallengePresentation::Manual
+        );
+    }
+
+    #[test]
+    fn validation_method_wire_values_match_their_stable_tokens() {
+        // The wire value, `as_str`, and the DDL CHECK are one vocabulary. They
+        // drifted once (`HTTP01` in JSON vs `HTTP_01` in the column), which made a
+        // console request that selected DNS-01 fail to deserialize.
+        for method in ValidationMethod::ALL {
+            let json = serde_json::to_value(method).expect("serialize method");
+            assert_eq!(json, serde_json::Value::String(method.as_str().to_owned()));
+            let parsed: ValidationMethod =
+                serde_json::from_value(json).expect("deserialize method");
+            assert_eq!(parsed, method);
+            assert_eq!(ValidationMethod::parse(method.as_str()), Some(method));
+        }
+        assert_eq!(
+            serde_json::to_value(CertificateScope::Wildcard).unwrap(),
+            serde_json::Value::String("WILDCARD".to_owned())
+        );
+    }
+
+    #[test]
     fn error_codes_are_stable_and_unique() {
         let all = [
             CertificatePlanError::EmptyIdentifierSet,

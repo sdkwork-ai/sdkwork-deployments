@@ -58,9 +58,16 @@ pub enum ValidationMethod {
     #[default]
     Auto,
     /// `/.well-known/acme-challenge/<token>` served by the edge. Exact names only.
+    ///
+    /// The wire spelling is `HTTP_01`, matching `as_str`, the DDL
+    /// `chk_deploy_certificate_validation_method` and every client: the
+    /// `rename_all` on the enum would otherwise produce `HTTP01`, which no client
+    /// sends and no column stores.
+    #[serde(rename = "HTTP_01")]
     Http01,
     /// `_acme-challenge.<host>` TXT record, presented manually by an operator or
     /// automatically through a configured DNS provider credential.
+    #[serde(rename = "DNS_01")]
     Dns01,
 }
 
@@ -902,6 +909,16 @@ pub struct CreateCertificateRequest {
     /// single-domain scope and always to DNS-01 for a wildcard scope.
     #[serde(rename = "validationMethod", default)]
     pub validation_method: ValidationMethod,
+    /// Who presents the challenge response. `MANAGED` (default) means the
+    /// platform publishes and withdraws it; `MANUAL` means the API returns the
+    /// record and waits for an operator to publish it before validation is
+    /// released.
+    ///
+    /// Orthogonal to `validation_method` on purpose: DNS-01 is legitimate in both
+    /// modes. `MANUAL` with `HTTP_01` is refused by the planning rules because the
+    /// edge webroot is not operator-addressable.
+    #[serde(rename = "challengePresentation", default)]
+    pub challenge_presentation: ChallengePresentation,
     #[serde(rename = "caProfile", default = "default_certificate_ca_profile")]
     pub ca_profile: String,
     #[serde(

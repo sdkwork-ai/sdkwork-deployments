@@ -229,6 +229,7 @@ async fn create_certificate(
                 // rather than tested, and a fixture that names a path it never walks
                 // is how a suite starts lying about its coverage.
                 provider_account_id: None,
+                challenge_presentation: Default::default(),
             },
         )
         .await
@@ -286,6 +287,7 @@ fn console_request(
         auto_renew: true,
         renew_before_days: 30,
         provider_account_id: None,
+        challenge_presentation: Default::default(),
     }
 }
 

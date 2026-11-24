@@ -141,6 +141,7 @@ fn scoped_request(
         // Left unset: resolution then walks past the pin to the zone and the
         // deployment-level configuration, which is the path these tests exercise.
         provider_account_id: None,
+        challenge_presentation: Default::default(),
     }
 }
 

@@ -88,6 +88,7 @@ async fn repository_lifecycle(repository: &DeployRepository) {
                 // presenter, and a pin would send resolution through the account
                 // center that the suite deliberately does not assemble.
                 provider_account_id: None,
+                challenge_presentation: Default::default(),
             },
         )
         .await

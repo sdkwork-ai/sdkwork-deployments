@@ -125,6 +125,7 @@ async fn create_certificate(
                 // resolution must reach the deployment-level configuration exactly as
                 // it does for a certificate created without an account pin.
                 provider_account_id: None,
+                challenge_presentation: Default::default(),
             },
         )
         .await
@@ -690,6 +691,7 @@ fn console_create_request() -> CreateCertificateRequest {
         // Unset on purpose: this is the create the console performs, and the console
         // only sends a pin when the operator picked an account.
         provider_account_id: None,
+        challenge_presentation: Default::default(),
     }
 }
 
