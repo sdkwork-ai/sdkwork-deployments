@@ -152,6 +152,26 @@ impl InProcessDeployVerificationObjectStore {
 /// storage class.
 const VERIFICATION_SPACE_TYPE: &str = "app_upload";
 
+/// The Drive app identity this control plane uploads as.
+///
+/// The upload runs as `UploaderActor::System`, and Drive derives that actor's
+/// space ownership from this id (`app:<app_id>:system`). The space created by
+/// [`InProcessDeployVerificationObjectStore`] therefore has to carry the same
+/// app id, or Drive's `ensure_target_space_upload_allowed` refuses the write.
+const VERIFICATION_UPLOAD_APP_ID: &str = "sdkwork-deploy";
+
+/// Drive's `ck_dr_drive_space_owner_subject_type` admits exactly `user`,
+/// `group`, `organization` and `app`, and `DriveSpaceService` validates the same
+/// set. An upload on behalf of an app belongs to that app, so the verification
+/// space is app-owned.
+const VERIFICATION_SPACE_OWNER_TYPE: &str = "app";
+
+/// Owner id Drive derives for `UploaderActor::System` uploads; it must match the
+/// pair Drive checks against the target space, or the write is denied.
+fn verification_space_owner_id() -> String {
+    format!("app:{VERIFICATION_UPLOAD_APP_ID}:system")
+}
+
 mod in_process_store {
     use super::*;
     use sdkwork_drive_object_runtime::{DriveObjectStoreRuntime, ProviderAccessIntent};
@@ -159,16 +179,18 @@ mod in_process_store {
     use sdkwork_drive_workspace_service::application::node_service::{
         CreateNodeCommand, DriveNodeService,
     };
+    use sdkwork_drive_workspace_service::application::space_service::{
+        CreateSpaceCommand, SqlDriveSpaceService,
+    };
     use sdkwork_drive_workspace_service::application::uploader_service::{
         CompleteStoredUploaderUploadCommand, DriveUploaderService, MarkUploaderPartUploadedCommand,
         PrepareUploaderUploadCommand, UploaderActor, UploaderRetention, UploaderTarget,
     };
     use sdkwork_drive_workspace_service::domain::node::DriveNodeType;
+    use sdkwork_drive_workspace_service::domain::space::DriveSpaceType;
     use sdkwork_drive_workspace_service::infrastructure::sql::node_store::SqlNodeStore;
     use sdkwork_drive_workspace_service::infrastructure::sql::uploader_store::SqlUploaderStore;
-    use sdkwork_drive_workspace_service::ports::uploader_store::{
-        DriveUploaderStore, NewDriveUploaderSpace,
-    };
+    use sdkwork_drive_workspace_service::ports::uploader_store::DriveUploaderStore;
     use sdkwork_drive_workspace_service::DriveServiceError;
     use sdkwork_utils_rust::to_unix_millis;
 
@@ -203,29 +225,56 @@ mod in_process_store {
     }
 
     impl InProcessDeployVerificationObjectStore {
+        /// Resolves the tenant's verification space, creating it through Drive's
+        /// own space service on first use.
+        ///
+        /// The service — not a raw insert — is what validates the owner pair
+        /// against Drive's contract. Writing `dr_drive_space` directly is how the
+        /// previous implementation shipped an owner type (`tenant`) that the
+        /// table's check constraint has never admitted, so every store attempt
+        /// failed and no verification file ever reached Drive.
         async fn ensure_space(&self, tenant: &str, operator: &str) -> DeployServiceResult<String> {
             let store = SqlUploaderStore::new(self.pool.clone());
+            let owner_type = VERIFICATION_SPACE_OWNER_TYPE;
+            let owner_id = verification_space_owner_id();
             if let Some(space_id) = store
-                .find_upload_space(tenant, "tenant", tenant, VERIFICATION_SPACE_TYPE)
+                .find_upload_space(tenant, owner_type, &owner_id, VERIFICATION_SPACE_TYPE)
                 .await
                 .map_err(map_drive_error)?
             {
                 return Ok(space_id);
             }
             let id = space_id(tenant.parse().unwrap_or_default());
-            store
-                .insert_upload_space(&NewDriveUploaderSpace {
+            let created = SqlDriveSpaceService::new(self.pool.clone())
+                .create_space(CreateSpaceCommand {
                     id: id.clone(),
                     tenant_id: tenant.to_owned(),
-                    owner_subject_type: "tenant".to_owned(),
-                    owner_subject_id: tenant.to_owned(),
-                    space_type: VERIFICATION_SPACE_TYPE.to_owned(),
+                    owner_subject_type: owner_type.to_owned(),
+                    owner_subject_id: owner_id.clone(),
                     display_name: VERIFICATION_SPACE_NAME.to_owned(),
+                    space_type: DriveSpaceType::AppUpload,
+                    presentation_icon: None,
+                    presentation_color: None,
+                    description: None,
                     operator_id: operator.to_owned(),
                 })
-                .await
-                .map_err(map_drive_error)?;
-            Ok(id)
+                .await;
+            match created {
+                Ok(_) => Ok(id),
+                // A concurrent upload created the same tenant/owner/type space
+                // first: reuse it instead of failing the upload.
+                Err(DriveServiceError::Conflict(_)) => store
+                    .find_upload_space(tenant, owner_type, &owner_id, VERIFICATION_SPACE_TYPE)
+                    .await
+                    .map_err(map_drive_error)?
+                    .ok_or_else(|| {
+                        DeployServiceError::Internal(
+                            "drive reported the verification space as existing but it is not readable"
+                                .to_owned(),
+                        )
+                    }),
+                Err(error) => Err(map_drive_error(error)),
+            }
         }
 
         async fn ensure_folder(
@@ -290,7 +339,7 @@ mod in_process_store {
                     actor: UploaderActor::System {
                         operator_id: operator.clone(),
                     },
-                    app_id: "sdkwork-deploy".to_owned(),
+                    app_id: VERIFICATION_UPLOAD_APP_ID.to_owned(),
                     app_resource_type: "domain_verification_file".to_owned(),
                     app_resource_id: command.apex_hostname.clone(),
                     scene: Some("domain_verification".to_owned()),
@@ -401,6 +450,15 @@ mod in_process_store {
 
 #[cfg(test)]
 mod tests {
+    use sdkwork_drive_workspace_service::application::space_service::{
+        CreateSpaceCommand, DriveSpaceService,
+    };
+    use sdkwork_drive_workspace_service::domain::space::{DriveSpace, DriveSpaceType};
+    use sdkwork_drive_workspace_service::ports::space_store::{
+        DriveSpaceStore, ListAccessibleSpacesQuery, NewDriveSpace,
+    };
+    use sdkwork_drive_workspace_service::DriveServiceError;
+
     use super::*;
     use crate::{DeployDriveActor, DeployDriveScope};
 
@@ -479,5 +537,138 @@ mod tests {
             .await
             .expect("read")
             .is_none());
+    }
+
+    /// Records the row Drive's space service is about to insert, then refuses the
+    /// insert: reaching the store already proves `create_space` validated the
+    /// owner pair against Drive's contract.
+    #[derive(Clone, Default)]
+    struct RecordingSpaceStore {
+        inserted: std::sync::Arc<std::sync::Mutex<Vec<NewDriveSpace>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl DriveSpaceStore for RecordingSpaceStore {
+        async fn insert_space(
+            &self,
+            new_space: &NewDriveSpace,
+        ) -> Result<DriveSpace, DriveServiceError> {
+            self.inserted
+                .lock()
+                .map_err(|_| {
+                    DriveServiceError::Internal("recording store poisoned".to_string())
+                })?
+                .push(new_space.clone());
+            Err(DriveServiceError::Internal(
+                "recorded: the test store never inserts".to_string(),
+            ))
+        }
+
+        async fn insert_website_space(
+            &self,
+            _new_space: &NewDriveSpace,
+        ) -> Result<DriveSpace, DriveServiceError> {
+            Err(DriveServiceError::Internal(
+                "the test store only records plain spaces".to_string(),
+            ))
+        }
+
+        async fn list_spaces(
+            &self,
+            _tenant_id: &str,
+            _owner_subject_type: Option<&str>,
+            _owner_subject_id: Option<&str>,
+            _space_type: Option<&str>,
+            _offset: i64,
+            _limit: i64,
+        ) -> Result<Vec<DriveSpace>, DriveServiceError> {
+            Ok(Vec::new())
+        }
+
+        async fn list_accessible_spaces(
+            &self,
+            _query: ListAccessibleSpacesQuery<'_>,
+        ) -> Result<Vec<DriveSpace>, DriveServiceError> {
+            Ok(Vec::new())
+        }
+
+        async fn get_space(
+            &self,
+            _tenant_id: &str,
+            _space_id: &str,
+        ) -> Result<DriveSpace, DriveServiceError> {
+            Err(DriveServiceError::NotFound(
+                "the test store holds no spaces".to_string(),
+            ))
+        }
+
+        async fn update_space(
+            &self,
+            _tenant_id: &str,
+            _space_id: &str,
+            _display_name: Option<&str>,
+            _presentation_icon: Option<&str>,
+            _presentation_color: Option<&str>,
+            _description: Option<&str>,
+            _operator_id: &str,
+        ) -> Result<DriveSpace, DriveServiceError> {
+            Err(DriveServiceError::NotFound(
+                "the test store holds no spaces".to_string(),
+            ))
+        }
+
+        async fn delete_space(
+            &self,
+            _tenant_id: &str,
+            _space_id: &str,
+            _operator_id: &str,
+        ) -> Result<DriveSpace, DriveServiceError> {
+            Err(DriveServiceError::NotFound(
+                "the test store holds no spaces".to_string(),
+            ))
+        }
+    }
+
+    /// The regression this pins: the store used to write `dr_drive_space`
+    /// directly with owner type `tenant`, which the table's check constraint has
+    /// never admitted, so every verification file failed to reach Drive.
+    ///
+    /// The owner pair is checked by Drive's own `create_space` validation here,
+    /// not by a second copy of the allowed set that could drift with it.
+    #[tokio::test]
+    async fn the_verification_space_owner_pair_is_one_drive_accepts() {
+        let store = RecordingSpaceStore::default();
+        let service = DriveSpaceService::new(store.clone());
+        let created = service
+            .create_space(CreateSpaceCommand {
+                id: "deploy-domain-verification-space-7".to_string(),
+                tenant_id: "7".to_string(),
+                owner_subject_type: VERIFICATION_SPACE_OWNER_TYPE.to_string(),
+                owner_subject_id: verification_space_owner_id(),
+                display_name: VERIFICATION_SPACE_NAME.to_string(),
+                space_type: DriveSpaceType::AppUpload,
+                presentation_icon: None,
+                presentation_color: None,
+                description: None,
+                operator_id: "11".to_string(),
+            })
+            .await;
+        // The recording store answers Internal *after* recording, so an
+        // Internal error is the success path; a Validation error would mean
+        // Drive refused the owner pair.
+        assert!(
+            matches!(created, Err(DriveServiceError::Internal(_))),
+            "drive must accept the verification space owner pair, got {created:?}"
+        );
+        let inserted = store.inserted.lock().expect("recording store");
+        assert_eq!(inserted.len(), 1);
+        assert_eq!(inserted[0].owner_subject_type, "app");
+        assert_eq!(inserted[0].owner_subject_id, "app:sdkwork-deploy:system");
+        assert_eq!(inserted[0].space_type, "app_upload");
+    }
+
+    #[test]
+    fn the_space_type_constant_matches_the_drive_enum() {
+        assert_eq!(DriveSpaceType::AppUpload.as_str(), VERIFICATION_SPACE_TYPE);
     }
 }
