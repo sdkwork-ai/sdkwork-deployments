@@ -555,9 +555,7 @@ mod tests {
         ) -> Result<DriveSpace, DriveServiceError> {
             self.inserted
                 .lock()
-                .map_err(|_| {
-                    DriveServiceError::Internal("recording store poisoned".to_string())
-                })?
+                .map_err(|_| DriveServiceError::Internal("recording store poisoned".to_string()))?
                 .push(new_space.clone());
             Err(DriveServiceError::Internal(
                 "recorded: the test store never inserts".to_string(),
