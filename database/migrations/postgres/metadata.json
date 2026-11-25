@@ -12,6 +12,32 @@
       "lock": "access-exclusive",
       "lock_timeout": "2s",
       "statement_timeout": "30s"
+    },
+    "0018_deploy_certificate_presentation.up.sql": {
+      "rollback": "down-migration",
+      "correctionReason": "The header named the down file (0018_deploy_certificate_presentation.down.sql) instead of the down-migration strategy token; the file it names is already shipped, so the strategy and the artifact agree."
+    },
+    "0020_domain_verification_drive_objects.up.sql": {
+      "engine": "postgres",
+      "reversible": "false",
+      "rollback": "forward-fix (the columns are part of the consolidated baseline shape; the migration only adds nullable columns, so a rollback drops columns the baseline still declares)",
+      "transactional": "true",
+      "lock": "access-exclusive",
+      "lock_timeout": "2s",
+      "statement_timeout": "30s"
+    },
+    "0021_deploy_certificate_ari_window.up.sql": {
+      "rollback": "down-migration",
+      "correctionReason": "The header named the down file (0021_deploy_certificate_ari_window.down.sql) instead of the down-migration strategy token; the file it names is already shipped, so the strategy and the artifact agree."
+    },
+    "0022_deploy_dns_zone_verification_file_updated_by_reconciliation.up.sql": {
+      "engine": "postgres",
+      "reversible": "false",
+      "rollback": "forward-fix (the column is part of the consolidated baseline shape; dropping it again would re-break the verification-file upsert)",
+      "transactional": "true",
+      "lock": "exclusive",
+      "lock_timeout": "2s",
+      "statement_timeout": "30s"
     }
   }
 }
