@@ -144,8 +144,17 @@ smuggled into a backfill.
 - **Deletion is soft.** `DELETE` retires the row (`deleted_at`, `version + 1`) so the audit trail keeps
   answering "which account used to serve production".
 - **Reach.** Every operation runs the credential's application-scope gate
-  (`APPLICATION_IDENTITY_SPEC.md` §4.1) before the owner gate and before any row is touched, so a token
-  bound to application A cannot read, rebind, or retire application B's bindings.
+  (`APPLICATION_IDENTITY_SPEC.md` §4.1) before the owner gate and before any row is touched, so a
+  **machine credential** bound to application A cannot read, rebind, or retire application B's
+  bindings. The gate is a machine-credential rule, not a blanket path check: the tenant console is
+  itself a deploy application, so its operator's **user session** proves the console's anchor while
+  the page addresses the target application's uuid. Binding that claim to the path answered `40301`
+  for every row on the applications page (2026-11-25). A user session is decided by RBAC
+  (`deploy.apps.read` / `deploy.apps.write`) plus the owner gate instead.
+- **Identity forms.** The IAM claim is the decimal deploy application anchor (`deploy_app.id`,
+  `AppResponse.deployApplicationId`); the wire address is the opaque uuid (`AppResponse.id`). The
+  synchronous scope gate refuses a same-form mismatch before any I/O, and defers the anchor-versus-uuid
+  case to `assert_app_reachable`, which compares the claim against the retrieved row in both forms.
 
 ## 6. Data Migration And Reconciliation
 

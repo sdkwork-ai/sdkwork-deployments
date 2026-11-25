@@ -1620,6 +1620,20 @@ pub(crate) fn assert_app_reachable(
     context: &DeployAppRequestContext,
     app: &AppResponse,
 ) -> DeployServiceResult<()> {
+    // A machine credential acts as exactly one application. Its claim carries the
+    // deploy application **anchor** (`deploy_app.id`, decimal) while every wire
+    // address is the uuid, so the binding is decided here, against the row, not
+    // by the string comparison the path gate can make. An interactive user
+    // session has no such binding (`enforced_app_scope` is `None`) and is decided
+    // by the owner gate below.
+    if let Some(scope) = context.enforced_app_scope() {
+        let anchor = app.deploy_application_id.to_string();
+        if scope != app.id && scope != anchor {
+            return Err(DeployServiceError::forbidden(
+                "a credential bound to one application cannot act on another application",
+            ));
+        }
+    }
     match app.owner_type {
         AppOwnerType::Platform | AppOwnerType::Tenant => Ok(()),
         AppOwnerType::Organization => {
@@ -1850,5 +1864,84 @@ mod identity_provisioning_tests {
         );
         assert_eq!(normalize_identity_status("ACTIVE"), "pending_identity");
         assert_eq!(normalize_identity_status(""), "pending_identity");
+    }
+}
+
+/// The row-level half of the application-scope binding: the credential claim is
+/// the decimal deploy application anchor while the wire address is the uuid, so
+/// only a row can decide whether they name the same application.
+#[cfg(test)]
+mod app_scope_row_tests {
+    use super::assert_app_reachable;
+    use sdkwork_deploy_contract::{
+        AppOwnerType, AppResponse, DeployAppRequestContext, DeployCredentialKind,
+        DeployServiceErrorKind,
+    };
+
+    const APP_UUID: &str = "ef45ca0e-0093-4eaf-ab03-964d8ef6227c";
+    const APP_ANCHOR: i64 = 381_764_687_714_324_480;
+    const OTHER_ANCHOR: &str = "382429273660592128";
+    const OTHER_UUID: &str = "10e8c045-f2fc-41c4-bdfe-48fb2344a9a6";
+
+    fn app() -> AppResponse {
+        AppResponse {
+            id: APP_UUID.to_owned(),
+            deploy_application_id: APP_ANCHOR,
+            owner_type: AppOwnerType::Tenant,
+            ..AppResponse::default()
+        }
+    }
+
+    fn context(kind: DeployCredentialKind, app_id: &str) -> DeployAppRequestContext {
+        DeployAppRequestContext {
+            tenant_id: 7,
+            actor_id: Some(11),
+            organization_id: Some(0),
+            app_id: Some(app_id.to_owned()),
+            credential_kind: kind,
+            ..DeployAppRequestContext::default()
+        }
+    }
+
+    /// The machine credential of the addressed application may read its own row in
+    /// either identity form — this is what the path string comparison could never
+    /// do (decimal claim versus uuid address).
+    #[test]
+    fn machine_credential_matches_its_anchor_or_uuid() {
+        assert!(assert_app_reachable(
+            &context(DeployCredentialKind::Application, &APP_ANCHOR.to_string()),
+            &app()
+        )
+        .is_ok());
+        assert!(assert_app_reachable(
+            &context(DeployCredentialKind::Application, APP_UUID),
+            &app()
+        )
+        .is_ok());
+    }
+
+    /// A machine credential of another application is refused at the row, before
+    /// any owner check, whichever identity form it carries.
+    #[test]
+    fn machine_credential_for_another_application_is_refused() {
+        for foreign in [OTHER_ANCHOR.to_owned(), OTHER_UUID.to_owned()] {
+            let error = assert_app_reachable(
+                &context(DeployCredentialKind::Application, &foreign),
+                &app(),
+            )
+            .expect_err("a machine credential must not address another application");
+            assert_eq!(error.kind(), DeployServiceErrorKind::Forbidden);
+        }
+    }
+
+    /// The console user session is not an application binding: its claim names the
+    /// console application, and the tenant/owner gate decides reach.
+    #[test]
+    fn user_session_is_decided_by_the_owner_gate() {
+        assert!(assert_app_reachable(
+            &context(DeployCredentialKind::UserSession, OTHER_ANCHOR),
+            &app()
+        )
+        .is_ok());
     }
 }

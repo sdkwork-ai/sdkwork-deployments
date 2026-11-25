@@ -169,29 +169,43 @@ impl DeployService {
             && stored.checksum == request.checksum
     }
 
-    /// The deploy application this caller's credential proves, if any.
+    /// The deploy application this caller's credential proves, if any, **as a
+    /// data-access binding**.
     ///
-    /// `APPLICATION_IDENTITY_SPEC.md` §4.2 makes the token's `app_id` the deploy
-    /// application identity; §4.3 requires data-plane queries to filter by
-    /// `(tenant_id, app_id)`. The value comes from the verified principal only.
+    /// `APPLICATION_IDENTITY_SPEC.md` §4.2 makes a machine credential's `app_id`
+    /// the deploy application identity, and §4.3 requires its data-plane queries
+    /// to filter by `(tenant_id, app_id)`. An interactive user session is not
+    /// that credential: its `app_id` is the application the user signed in
+    /// through (the tenant console is itself a deploy application), so binding
+    /// data access to it rejected every cross-application console read with
+    /// `40301`. [`DeployAppRequestContext::enforced_app_scope`] draws the line;
+    /// the tenant/owner gate keeps deciding a user session's reach.
     fn caller_app_scope(context: &DeployAppRequestContext) -> Option<&str> {
-        context.app_scope()
+        context.enforced_app_scope()
     }
 
     /// Proves that a write may only name the application the credential proves,
     /// and answers the `app_id` the row must be attributed to.
     ///
-    /// Three cases, and none of them widens an existing boundary:
+    /// Cases, and none of them widens an existing boundary:
     ///
-    /// * no app identity in the credential — the body's `appId` stands, which is
-    ///   the pre-existing tenant/owner-scoped behaviour;
-    /// * app identity present, body silent — the row is attributed to the
+    /// * no application binding in the credential — the body's `appId` stands,
+    ///   which is the pre-existing tenant/owner-scoped behaviour (and the
+    ///   console's, whose session is not an application binding);
+    /// * application binding present, body silent — the row is attributed to the
     ///   caller's own application, so it stays readable by that caller instead of
     ///   becoming an un-attributed row;
-    /// * app identity present, body names the same application — accepted;
-    /// * app identity present, body names a different application — refused.
-    ///   Silently rewriting the field would answer with a row the caller did not
-    ///   ask for, which is worse than a 403.
+    /// * application binding present, body names the same application — accepted;
+    /// * application binding present, body names a different application in the
+    ///   **same identity form** — refused. Silently rewriting the field would
+    ///   answer with a row the caller did not ask for, which is worse than a 403;
+    /// * the two values are different identity forms of the same identity — the
+    ///   credential claim is the deploy application **anchor** (`deploy_app.id`,
+    ///   decimal) while the body/path address is `deploy_app.uuid`. They cannot
+    ///   be compared without the row, so the value is carried through and the
+    ///   row-level gate (`assert_app_reachable`, which sees `deploy_application_id`
+    ///   and `id`) makes the authoritative decision. Rejecting here would refuse
+    ///   an application its own data.
     fn bind_caller_app_scope(
         context: &DeployAppRequestContext,
         requested_app_id: Option<&str>,
@@ -203,23 +217,27 @@ impl DeployService {
             (None, requested) => Ok(requested.map(str::to_owned)),
             (Some(scope), None) => Ok(Some(scope.to_owned())),
             (Some(scope), Some(requested)) if requested == scope => Ok(Some(scope.to_owned())),
+            (Some(scope), Some(requested)) if app_identity_forms_differ(scope, requested) => {
+                Ok(Some(requested.to_owned()))
+            }
             (Some(_), Some(_)) => Err(sdkwork_deploy_contract::DeployServiceError::forbidden(
                 "a credential bound to one application cannot act on another application",
             )),
         }
     }
 
-    /// Requires that a **path-addressed** application is the one the credential
-    /// proves (`APPLICATION_IDENTITY_SPEC.md` §4.1: a token must not be accepted
-    /// by another application).
+    /// Requires that a **path-addressed** application is the one the machine
+    /// credential proves (`APPLICATION_IDENTITY_SPEC.md` §4.1: a token must not
+    /// be accepted by another application).
     ///
     /// The path segment is the same untrusted input a body field is, so it is
     /// checked against the verified principal rather than trusted: a credential
     /// bound to application A may address A and nothing else, for reads exactly
-    /// as for writes. A credential that names no application keeps the existing
+    /// as for writes. A credential that carries no application binding — a user
+    /// session, or a token without an `app_id` claim — keeps the existing
     /// tenant/owner boundary, which the caller checks separately
-    /// (`assert_app_access` / `assert_app_reachable`) — this helper never
-    /// replaces that gate, it runs in front of it.
+    /// (`assert_app_access` / `assert_app_reachable`); this helper never replaces
+    /// that gate, it runs in front of it.
     pub(crate) fn assert_caller_app_scope(
         context: &DeployAppRequestContext,
         addressed_app_id: &str,
@@ -311,6 +329,34 @@ impl DeployService {
             ))
         }
     }
+}
+
+/// Whether `value` is a `deploy_app.uuid` (canonical 8-4-4-4-12 hexadecimal).
+fn is_deploy_app_uuid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 36 {
+        return false;
+    }
+    bytes.iter().enumerate().all(|(index, byte)| match index {
+        8 | 13 | 18 | 23 => *byte == b'-',
+        _ => byte.is_ascii_hexdigit(),
+    })
+}
+
+/// Whether `value` is the decimal `deploy_app.id` anchor the IAM installation and
+/// its tokens carry (`AppResponse.deployApplicationId`).
+fn is_deploy_app_anchor(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 20 && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// Whether two application identities are stated in the two forms that cannot be
+/// compared without the row: the decimal anchor versus the uuid.
+///
+/// Two uuids, two anchors, or two arbitrary identifiers stay comparable, so a
+/// same-form mismatch is still refused before any I/O.
+fn app_identity_forms_differ(left: &str, right: &str) -> bool {
+    (is_deploy_app_anchor(left) && is_deploy_app_uuid(right))
+        || (is_deploy_app_uuid(left) && is_deploy_app_anchor(right))
 }
 
 fn normalize_optional_text(
@@ -2771,10 +2817,29 @@ mod app_scope_tests {
             organization_id: Some(9),
             session_id: Some("session-1".to_owned()),
             app_id: app_id.map(str::to_owned),
+            credential_kind: sdkwork_deploy_contract::DeployCredentialKind::Application,
             auth_token: None,
             access_token: None,
             permissions: Vec::new(),
         }
+    }
+
+    /// The console is an application too, so its operator's session proves the
+    /// console's `app_id` while the page manages other applications. That claim is
+    /// not a data-access binding: binding it answered `40301` for every app on the
+    /// page. The tenant/owner gate decides instead.
+    #[test]
+    fn user_session_app_claim_does_not_bind_data_access() {
+        let console = DeployAppRequestContext {
+            credential_kind: sdkwork_deploy_contract::DeployCredentialKind::UserSession,
+            ..context_with_app(Some("381764687714324480"))
+        };
+        assert_eq!(console.app_scope(), Some("381764687714324480"));
+        assert_eq!(DeployService::caller_app_scope(&console), None);
+        assert!(
+            DeployService::assert_caller_app_scope(&console, "another-application").is_ok(),
+            "a console session must reach the owner gate, not be refused here"
+        );
     }
 
     /// `APPLICATION_IDENTITY_SPEC.md` §4.3: the data-plane filter follows the
@@ -2845,6 +2910,55 @@ mod app_scope_tests {
             DeployService::bind_caller_app_scope(&unscoped, None).expect("tenant caller"),
             None
         );
+    }
+
+    /// The claim is the deploy application anchor (`deploy_app.id`, decimal); the
+    /// wire address is the uuid. The path gate cannot compare the two forms
+    /// without the row, so it carries the value through and the row gate
+    /// (`assert_app_reachable`) decides. Refusing here would refuse an
+    /// application its own data.
+    #[test]
+    fn path_gate_defers_the_anchor_versus_uuid_identity_form() {
+        let machine = context_with_app(Some("381764687714324480"));
+        assert!(
+            DeployService::assert_caller_app_scope(
+                &machine,
+                "ef45ca0e-0093-4eaf-ab03-964d8ef6227c"
+            )
+            .is_ok(),
+            "the decimal anchor and the uuid are the same identity in two forms"
+        );
+        assert_eq!(
+            DeployService::bind_caller_app_scope(
+                &machine,
+                Some("ef45ca0e-0093-4eaf-ab03-964d8ef6227c")
+            )
+            .expect("the row gate decides the cross-form case"),
+            Some("ef45ca0e-0093-4eaf-ab03-964d8ef6227c".to_owned())
+        );
+    }
+
+    /// Same-form identities remain comparable without I/O: two anchors, two
+    /// uuids, and arbitrary identifiers are compared directly.
+    #[test]
+    fn identity_forms_are_only_deferred_when_anchor_meets_uuid() {
+        assert!(app_identity_forms_differ(
+            "381764687714324480",
+            "ef45ca0e-0093-4eaf-ab03-964d8ef6227c"
+        ));
+        assert!(app_identity_forms_differ(
+            "ef45ca0e-0093-4eaf-ab03-964d8ef6227c",
+            "381764687714324480"
+        ));
+        assert!(!app_identity_forms_differ(
+            "381764687714324480",
+            "382429273660592128"
+        ));
+        assert!(!app_identity_forms_differ(
+            "ef45ca0e-0093-4eaf-ab03-964d8ef6227c",
+            "10e8c045-f2fc-41c4-bdfe-48fb2344a9a6"
+        ));
+        assert!(!app_identity_forms_differ("app-a", "app-b"));
     }
 
     /// A **path-addressed** application is checked against the credential exactly

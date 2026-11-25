@@ -12,6 +12,12 @@
 //! app_id)`. Real-database coverage of the same tables lives in
 //! `artifact_app_scope_postgres.rs`, which is skipped without
 //! `SDKWORK_DATABASE_TEST_POSTGRES_URL`.
+//!
+//! A **machine** credential carries the binding. An **interactive user session**
+//! does not: its `app_id` is the application the user signed in through — the
+//! tenant console is itself a deploy application — so binding it to the path
+//! `appId` made every console management read answer `40301`. The tests at the
+//! bottom pin that distinction down for both credential families.
 
 use std::sync::Arc;
 
@@ -19,9 +25,9 @@ use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     AppPublishEnvironment, AppResourceKind, AppResourceLinkStatus, AppSourceGitInput,
     AppSourceKind, CreateEnvVariableRequest, CreateHealthCheckRequest, DeployAppApi,
-    DeployAppRequestContext, DeployServiceErrorKind, ListAppResourceLinksQuery,
-    UpdateAppCompositionRequest, UpdateAppRemixRequest, UpdateAppSourceRequest,
-    UpsertAppResourceLinkRequest,
+    DeployAppRequestContext, DeployCredentialKind, DeployServiceErrorKind,
+    ListAppResourceLinksQuery, UpdateAppCompositionRequest, UpdateAppRemixRequest,
+    UpdateAppSourceRequest, UpsertAppResourceLinkRequest,
 };
 use sdkwork_deploy_drive_port::MemoryDeployDrivePort;
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -55,6 +61,7 @@ fn service() -> DeployService {
     )
 }
 
+/// A machine credential: the token acts as the application named in `app_id`.
 fn caller(app_id: Option<&str>) -> DeployAppRequestContext {
     DeployAppRequestContext {
         tenant_id: TENANT_ID,
@@ -62,9 +69,19 @@ fn caller(app_id: Option<&str>) -> DeployAppRequestContext {
         organization_id: Some(9),
         session_id: Some("app-scope-gate".to_owned()),
         app_id: app_id.map(str::to_owned),
+        credential_kind: DeployCredentialKind::Application,
         auth_token: None,
         access_token: None,
         permissions: Vec::new(),
+    }
+}
+
+/// The console operator: an interactive user session signed in through the
+/// tenant console, which is itself deployed as application `app_id`.
+fn console_session(app_id: &str) -> DeployAppRequestContext {
+    DeployAppRequestContext {
+        credential_kind: DeployCredentialKind::UserSession,
+        ..caller(Some(app_id))
     }
 }
 
@@ -182,9 +199,9 @@ async fn application_a_still_addresses_itself() {
     }
 }
 
-/// A credential that names no application (console / user auth token) must keep
-/// the pre-existing tenant/owner boundary, which is decided downstream — never by
-/// this scope gate.
+/// A machine credential that names no application (a token without an `app_id`
+/// claim) must keep the pre-existing tenant/owner boundary, which is decided
+/// downstream — never by this scope gate.
 #[tokio::test]
 async fn unscoped_credential_is_decided_by_the_owner_gate_not_the_scope_gate() {
     let service = service();
@@ -368,4 +385,87 @@ async fn application_a_still_addresses_its_own_resource_links() {
             "the credential's own application must pass the scope gate: {error}"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive user sessions (the tenant console)
+// ---------------------------------------------------------------------------
+
+/// The tenant console is itself a deploy application, so its operator's user
+/// session proves an `app_id` that is **not** the application being managed.
+/// Treating that claim as a data-access binding answered `40301` ("a credential
+/// bound to one application cannot act on another application") for every
+/// row on the applications page — the production incident this regression test
+/// pins down. The owner gate keeps deciding whether the session may reach the
+/// addressed application; the scope gate must not.
+#[tokio::test]
+async fn console_user_session_may_address_another_application() {
+    let service = service();
+    let api: &dyn DeployAppApi = &service;
+    // The console's own numeric anchor, addressing a different application's
+    // uuid — exactly the production shape.
+    let console = console_session("381764687714324480");
+
+    for error in [
+        api.list_health_checks(&console, APP_B_UUID)
+            .await
+            .unwrap_err(),
+        api.create_health_check(&console, APP_B_UUID, &health_check())
+            .await
+            .unwrap_err(),
+        api.list_env_variables(&console, APP_B_UUID, None)
+            .await
+            .unwrap_err(),
+        api.create_env_variable(&console, APP_B_UUID, &env_variable())
+            .await
+            .unwrap_err(),
+        api.list_app_resource_links(&console, APP_B_UUID, &resource_link_query())
+            .await
+            .unwrap_err(),
+        api.upsert_app_resource_link(&console, APP_B_UUID, &resource_link())
+            .await
+            .unwrap_err(),
+        api.delete_app_resource_link(&console, APP_B_UUID, APP_A_UUID)
+            .await
+            .unwrap_err(),
+        api.retrieve_app_source(&console, APP_B_UUID)
+            .await
+            .unwrap_err(),
+        api.update_app_remix(&console, APP_B_UUID, &remix_state(true))
+            .await
+            .unwrap_err(),
+        api.update_app_composition(&console, APP_B_UUID, 0, "idem-console", &composition())
+            .await
+            .unwrap_err(),
+    ] {
+        assert_ne!(
+            error.kind(),
+            DeployServiceErrorKind::Forbidden,
+            "a console user session must not be refused by the application-scope \
+             gate; the owner gate decides: {error}"
+        );
+    }
+}
+
+/// The binding still holds for a machine credential of the **same** shape and
+/// app identity. This is what makes the exemption a credential-class rule rather
+/// than a blanket removal of the gate. The console's wire uuid is used so the two
+/// identities stay comparable before any I/O (the decimal-anchor-versus-uuid case
+/// is decided at the row, covered by the service unit tests).
+#[tokio::test]
+async fn machine_credential_with_the_console_app_identity_is_still_bound() {
+    let service = service();
+    let api: &dyn DeployAppApi = &service;
+    const CONSOLE_UUID: &str = "ef45ca0e-0093-4eaf-ab03-964d8ef6227c";
+    let machine = caller(Some(CONSOLE_UUID));
+
+    assert_forbidden!(
+        "apps.resourceLinks.list (machine)",
+        api.list_app_resource_links(&machine, APP_B_UUID, &resource_link_query())
+            .await
+    );
+    assert_forbidden!(
+        "apps.envVariables.list (machine)",
+        api.list_env_variables(&machine, APP_B_UUID, None).await
+    );
 }

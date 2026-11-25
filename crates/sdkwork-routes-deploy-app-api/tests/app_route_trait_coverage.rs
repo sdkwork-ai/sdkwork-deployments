@@ -86,6 +86,7 @@ fn probe_context() -> DeployAppRequestContext {
         // so an app-scoped query must reach "not found"/"validation" (a real
         // body) instead of short-circuiting into a default one.
         app_id: None,
+        credential_kind: sdkwork_deploy_contract::DeployCredentialKind::Application,
         auth_token: None,
         access_token: None,
         permissions: Vec::new(),

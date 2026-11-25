@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::Router;
-use sdkwork_deploy_contract::DeployAppRequestContext;
+use sdkwork_deploy_contract::{DeployAppRequestContext, DeployCredentialKind};
 use sdkwork_iam_web_adapter::IamWebRequestContextResolver;
 use sdkwork_routes_deploy_common::{
     deploy_web_auth_mode_from_env, with_problem_correlation, DeployWebAuthMode,
@@ -9,8 +9,8 @@ use sdkwork_routes_deploy_common::{
 };
 use sdkwork_web_axum::{with_web_request_context, WebFrameworkLayer};
 use sdkwork_web_core::{
-    DefaultWebRequestContextResolver, DomainContextInjector, WebRequestContext,
-    WebRequestContextProfile,
+    DefaultWebRequestContextResolver, DomainContextInjector, WebAuthMode, WebRequestContext,
+    WebRequestContextProfile, WebSubjectType,
 };
 
 use crate::http_route_manifest::app_route_manifest;
@@ -66,10 +66,37 @@ fn deploy_app_context_from_web_request(
         organization_id,
         session_id,
         app_id: (!app_id.is_empty()).then(|| app_id.to_owned()),
+        // A dual-token request authenticated by a **user** session is the
+        // console operator: its `app_id` is the console application the user
+        // signed in through, not a machine binding. Every other credential
+        // family (service account, API key, application access token) acts as
+        // the application named in `app_id`.
+        credential_kind: deploy_credential_kind(context),
         permissions: principal.scopes.permission_scope.clone(),
         auth_token: None,
         access_token: None,
     })
+}
+
+/// Classifies the verified credential so the service layer knows whether `app_id`
+/// binds data access (`DeployCredentialKind`).
+///
+/// Deliberately keyed on **both** the authentication mode and the subject type:
+/// an interactive user session arrives as a dual token with a user subject,
+/// while a service-account session shares the dual-token mode but is a machine
+/// credential and keeps the binding. Any credential resolved on another channel
+/// (API key, application access token) is a machine credential whatever subject
+/// it projects.
+fn deploy_credential_kind(context: &WebRequestContext) -> DeployCredentialKind {
+    let is_user_subject = context
+        .principal
+        .as_ref()
+        .is_some_and(|principal| principal.subject.subject_type == WebSubjectType::User);
+    if context.auth_mode == WebAuthMode::DualToken && is_user_subject {
+        DeployCredentialKind::UserSession
+    } else {
+        DeployCredentialKind::Application
+    }
 }
 
 fn deploy_app_context_from_request(

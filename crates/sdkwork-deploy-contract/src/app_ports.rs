@@ -10,6 +10,36 @@ use crate::dto::*;
 use crate::problem::{DeployServiceError, DeployServiceResult};
 use crate::usage::{IngestUsageEventsRequest, UsageIngestResult};
 
+/// The credential family a [`DeployAppRequestContext`] was built from.
+///
+/// The deploy app-api is consumed from two different places, and the difference
+/// decides what `app_id` is allowed to mean:
+///
+/// * the **tenant console** authenticates with an interactive user session, and
+///   that session is itself bound to an application (the console is a deploy
+///   application like any other). Its `app_id` therefore records *the console
+///   the user signed in through*, not "the only application this caller may
+///   manage". Tenancy and permission scopes plus the owner gate decide reach.
+/// * a **runtime application** authenticates with a machine credential (a
+///   service-account session, an application access token, or an API key). There
+///   `app_id` names the application the credential acts as, and
+///   `APPLICATION_IDENTITY_SPEC.md` §4.1 rule 3 binds its data-plane reads to
+///   `(tenant_id, app_id)`.
+///
+/// Conflating the two made every console read address "another application" and
+/// answer `40301` — the console can only ever see its own numeric anchor while
+/// the path names the target application's uuid.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeployCredentialKind {
+    /// A machine credential that acts as the application in `app_id`.
+    #[default]
+    Application,
+    /// An interactive user session; `app_id` is the application it signed in
+    /// through, not a management boundary.
+    UserSession,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeployAppRequestContext {
     pub tenant_id: i64,
@@ -24,9 +54,14 @@ pub struct DeployAppRequestContext {
     /// client cannot widen it. `None` means the credential names no application —
     /// a user auth token without an `app_id` claim — and leaves the pre-existing
     /// tenant/owner boundary in force. Data-plane reads of application-scoped
-    /// rows must be narrowed by this value while it is present.
+    /// rows must be narrowed by this value while it binds the credential; see
+    /// [`Self::enforced_app_scope`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app_id: Option<String>,
+    /// Which credential family produced this context; decides whether `app_id`
+    /// binds data access (see [`DeployCredentialKind`]).
+    #[serde(default)]
+    pub credential_kind: DeployCredentialKind,
     /// Permission codes the caller's credential actually carries.
     ///
     /// The route manifest's required permission gates the surface; the approval
@@ -53,6 +88,19 @@ impl DeployAppRequestContext {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
+    }
+
+    /// The application scope that **binds data access** for this credential.
+    ///
+    /// `None` for an interactive user session: its `app_id` is the application
+    /// the user signed in through, and the tenant/owner gate plus RBAC is the
+    /// boundary. Machine credentials keep the binding, so a runtime token for
+    /// application A can still never read or write application B's data.
+    pub fn enforced_app_scope(&self) -> Option<&str> {
+        match self.credential_kind {
+            DeployCredentialKind::Application => self.app_scope(),
+            DeployCredentialKind::UserSession => None,
+        }
     }
 
     /// Whether the credential carries `required`, honoring the `*` wildcard

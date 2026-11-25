@@ -265,6 +265,7 @@ fn app_context() -> DeployAppRequestContext {
         organization_id: Some(ORGANIZATION_ID),
         session_id: Some("pebble-e2e".to_owned()),
         app_id: None,
+        credential_kind: sdkwork_deploy_contract::DeployCredentialKind::Application,
         auth_token: None,
         access_token: None,
         permissions: Vec::new(),
