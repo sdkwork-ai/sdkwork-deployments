@@ -227,6 +227,12 @@ pub(crate) async fn resolve_app_internal_id(
 /// credential proved (`APPLICATION_IDENTITY_SPEC.md` §4) — to the internal id
 /// that `*_app_id` columns store.
 ///
+/// The identity is accepted in **both** forms the platform uses: the decimal
+/// `deploy_app.id` anchor (`AppResponse.deployApplicationId`, which the IAM
+/// installation and every token carry) and the uuid (`AppResponse.id`, which every
+/// wire address uses). Comparing or resolving only the uuid made a real
+/// machine credential's scope unresolvable and failed every scoped read closed.
+///
 /// `None` in, `None` out: a credential that names no application keeps the
 /// pre-existing tenant/owner boundary. A credential that *does* name one fails
 /// closed when this tenant has no such row (deleted, or a foreign id replayed
@@ -237,12 +243,42 @@ pub(crate) async fn resolve_scope_app_internal_id(
     tenant_id: i64,
     app_scope: Option<&str>,
 ) -> Result<Option<i64>, DeployServiceError> {
-    match app_scope {
-        Some(app_uuid) => resolve_app_internal_id(pool, tenant_id, app_uuid)
+    match app_scope.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(identity) => resolve_app_internal_id_by_identity(pool, tenant_id, identity)
             .await
             .map(Some),
         None => Ok(None),
     }
+}
+
+async fn resolve_app_internal_id_by_identity(
+    pool: &PgPool,
+    tenant_id: i64,
+    identity: &str,
+) -> Result<i64, DeployServiceError> {
+    let row = match identity.parse::<i64>() {
+        Ok(anchor) => sqlx::query(
+            "SELECT id FROM deploy_app
+             WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(anchor)
+        .fetch_optional(pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_app id by anchor", error))?,
+        Err(_) => sqlx::query(
+            "SELECT id FROM deploy_app
+             WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(identity)
+        .fetch_optional(pool)
+        .await
+        .map_err(|error| store_error("resolve deploy_app id by uuid", error))?,
+    };
+
+    row.and_then(|row| row.try_get::<i64, _>("id").ok())
+        .ok_or_else(|| DeployServiceError::not_found("app not found"))
 }
 
 pub(crate) async fn resolve_platform_target_internal_id(

@@ -154,7 +154,10 @@ smuggled into a backfill.
 - **Identity forms.** The IAM claim is the decimal deploy application anchor (`deploy_app.id`,
   `AppResponse.deployApplicationId`); the wire address is the opaque uuid (`AppResponse.id`). The
   synchronous scope gate refuses a same-form mismatch before any I/O, and defers the anchor-versus-uuid
-  case to `assert_app_reachable`, which compares the claim against the retrieved row in both forms.
+  case to `assert_app_reachable`, which compares the claim against the retrieved row in both forms. The
+  data-plane scope resolver (`resolve_scope_app_internal_id`) accepts both forms as well, so a machine
+  credential's artifact and upload queries resolve to its own application instead of failing closed on a
+  uuid-only lookup.
 
 ## 6. Data Migration And Reconciliation
 
