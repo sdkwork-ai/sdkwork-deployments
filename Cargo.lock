@@ -4067,6 +4067,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdkwork-deploy-certificate-archive-port"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "sdkwork-database-id",
+ "sdkwork-deploy-certificate-material",
+ "sdkwork-deploy-contract",
+ "sdkwork-drive-object-runtime",
+ "sdkwork-drive-storage-contract",
+ "sdkwork-drive-workspace-service",
+ "sdkwork-utils-rust",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sdkwork-deploy-certificate-material"
 version = "0.1.0"
 dependencies = [

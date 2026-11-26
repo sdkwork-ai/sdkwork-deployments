@@ -29,6 +29,7 @@ members = [
   "crates/sdkwork-deploy-package-validator",
   "crates/sdkwork-deploy-archive",
   "crates/sdkwork-deploy-certificate-material",
+  "crates/sdkwork-deploy-certificate-archive-port",
   "crates/sdkwork-deploy-certificate-renewal-worker",
   "crates/sdkwork-deploy-certificate-worker",
 ]
@@ -115,6 +116,7 @@ sdkwork-api-deployments-assembly = { path = "crates/sdkwork-api-deployments-asse
 sdkwork-deploy-build-runner = { path = "crates/sdkwork-deploy-build-runner" }
 sdkwork-deploy-package-validator = { path = "crates/sdkwork-deploy-package-validator" }
 sdkwork-deploy-certificate-material = { path = "crates/sdkwork-deploy-certificate-material" }
+sdkwork-deploy-certificate-archive-port = { path = "crates/sdkwork-deploy-certificate-archive-port" }
 
 sdkwork-iam-web-adapter = { path = "../sdkwork-iam/crates/sdkwork-iam-web-adapter" }
 sdkwork-iam-provider-account-service = { path = "../sdkwork-iam/crates/sdkwork-iam-provider-account-service" }

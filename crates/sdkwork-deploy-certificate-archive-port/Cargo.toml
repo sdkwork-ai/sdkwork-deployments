@@ -1,0 +1,37 @@
+[package]
+rust-version.workspace = true
+name = "sdkwork-deploy-certificate-archive-port"
+version.workspace = true
+edition.workspace = true
+description = "Archives issued certificate versions into sdkwork-drive (public material only)"
+
+[lib]
+name = "sdkwork_deploy_certificate_archive_port"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+# The in-process adapter drives Drive's own space/node/uploader services on the
+# host PostgreSQL pool (MODULE_SPEC.md §4.2); Drive owns the state machine, the
+# writer ACL and the object storage, and this crate only chooses the space, the
+# folders and the file list.
+sdkwork-database-id.workspace = true
+sdkwork-deploy-certificate-material.workspace = true
+sdkwork-deploy-contract.workspace = true
+sdkwork-drive-object-runtime.workspace = true
+sdkwork-drive-storage-contract.workspace = true
+sdkwork-drive-workspace-service.workspace = true
+sdkwork-utils-rust.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

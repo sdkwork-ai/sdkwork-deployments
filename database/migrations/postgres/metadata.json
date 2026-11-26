@@ -38,6 +38,15 @@
       "lock": "exclusive",
       "lock_timeout": "2s",
       "statement_timeout": "30s"
+    },
+    "0023_deploy_certificate_archive_index.up.sql": {
+      "engine": "postgres",
+      "reversible": "true",
+      "rollback": "down-migration",
+      "transactional": "true",
+      "lock": "exclusive (share) on deploy_certificate_archive; index rebuild only, no table scan",
+      "lock_timeout": "2s",
+      "statement_timeout": "30s"
     }
   }
 }
