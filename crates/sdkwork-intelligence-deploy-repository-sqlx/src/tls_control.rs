@@ -1275,6 +1275,35 @@ impl DeployRepository {
                 .map_err(|error| store_error("record certificate last renewal", error))?;
             }
         }
+        // The archive intent is written in the SAME transaction as the version it
+        // archives, which is the whole point of the outbox: a version that exists
+        // always has a row saying "these bytes belong in Drive", so a process that
+        // dies between committing the version and starting the upload leaves work
+        // the backlog drain can still find instead of a silently unarchived leaf.
+        //
+        // Only a brand-new version gets one. `deploy_certificate_archive` is unique
+        // on `(certificate_version_id, bundle_kind)`, so a replay of the same order
+        // converges on the row the first attempt wrote rather than queueing a second
+        // copy of the same files.
+        if inserted.rows_affected() > 0 {
+            sqlx::query(
+                "INSERT INTO deploy_certificate_archive
+                    (id, uuid, tenant_id, certificate_id, certificate_version_id,
+                     bundle_kind, status, attempt_count, created_at, updated_at, version)
+                 VALUES ($1, $2, $3, $4, $5, 'PUBLIC', 'PENDING', 0,
+                         CAST($6 AS TIMESTAMPTZ), CAST($6 AS TIMESTAMPTZ), 1)
+                 ON CONFLICT (certificate_version_id, bundle_kind) DO NOTHING",
+            )
+            .bind(next_id(self.id_generator())?)
+            .bind(new_uuid())
+            .bind(tenant_id)
+            .bind(certificate_internal_id)
+            .bind(version_id)
+            .bind(&now)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|error| store_error("insert deploy_certificate_archive", error))?;
+        }
         sqlx::query(
             "UPDATE deploy_certificate_order
                 SET status = $1, updated_at = NOW(), version = version + 1
