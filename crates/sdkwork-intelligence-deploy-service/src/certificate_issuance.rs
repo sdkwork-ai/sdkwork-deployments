@@ -37,6 +37,7 @@ use sdkwork_deploy_contract::{
 };
 use sdkwork_webserver_acme_service::{Dns01Presenter, IssuedCertificateMaterial};
 
+use crate::certificate_archive::CertificateArchiveAttempt;
 use crate::certificate_material::{seal_issued_material, DeclaredCertificateEvidence};
 use crate::repository::CertificateOrderClaim;
 use crate::DeployService;
@@ -828,6 +829,35 @@ impl DeployService {
             )
             .await?;
         self.record_ari_window(claim, issued).await;
+        // Archiving is best effort by contract (¡ì4.6.4): the version is stored and
+        // the order is `VERSION_STORED` before this runs, and nothing it returns can
+        // change either. The row it reads was written in the version's own
+        // transaction, so a crash between the commit and this line leaves a
+        // `PENDING` row the worker's drain picks up rather than a version with no
+        // archive intent.
+        //
+        // A deployment with no archive store marks the row `SKIPPED` here, which is
+        // the honest report for "switched off" ¡ª the alternative, leaving it
+        // `PENDING` forever, would show every certificate as perpetually archiving.
+        if self.certificate_archive_configured() {
+            let attempt = self
+                .archive_certificate_version(
+                    &certificate_version_uuid,
+                    self.certificate_archive_attempt_timeout(),
+                )
+                .await;
+            if !attempt.is_quiet() && !matches!(attempt, CertificateArchiveAttempt::Archived) {
+                tracing::info!(
+                    certificate = %claim.certificate_uuid,
+                    certificate_version = %certificate_version_uuid,
+                    outcome = ?attempt,
+                    "certificate version stored; its drive archive is still pending"
+                );
+            }
+        } else {
+            self.skip_certificate_archive_version(claim.tenant_id, &certificate_version_uuid)
+                .await;
+        }
         Ok(())
     }
 
