@@ -33,7 +33,8 @@ pub const CERTIFICATE_ARCHIVE_ENV: &str = "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE";
 pub const CERTIFICATE_ARCHIVE_BUNDLE_ENV: &str = "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_BUNDLE";
 
 /// Display name override for the tenant's certificate space.
-pub const CERTIFICATE_ARCHIVE_SPACE_NAME_ENV: &str = "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_SPACE_NAME";
+pub const CERTIFICATE_ARCHIVE_SPACE_NAME_ENV: &str =
+    "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_SPACE_NAME";
 
 /// Attempt ceiling before an archive row becomes `FAILED`.
 pub const CERTIFICATE_ARCHIVE_MAX_ATTEMPTS_ENV: &str =
@@ -150,17 +151,13 @@ pub fn select_certificate_archive(
         .to_owned();
     match mode.as_str() {
         "off" | "false" | "0" | "disabled" | "none" => Ok(CertificateArchiveSelection::Off),
-        "drive" | "on" | "true" | "1" => Ok(CertificateArchiveSelection::Drive {
-            bundle,
-            space_name,
-        }),
+        "drive" | "on" | "true" | "1" => {
+            Ok(CertificateArchiveSelection::Drive { bundle, space_name })
+        }
         "memory" if production_like => Err(format!(
             "production-like environments cannot set {CERTIFICATE_ARCHIVE_ENV}=memory"
         )),
-        "memory" => Ok(CertificateArchiveSelection::Memory {
-            bundle,
-            space_name,
-        }),
+        "memory" => Ok(CertificateArchiveSelection::Memory { bundle, space_name }),
         other => Err(format!(
             "{CERTIFICATE_ARCHIVE_ENV} must be drive, off, or memory (got {other})"
         )),
@@ -210,9 +207,8 @@ pub fn certificate_archive_config_from_env() -> Result<CertificateArchiveConfig,
     )?;
     let max_attempts = i32::try_from(max_attempts)
         .map_err(|_| format!("{CERTIFICATE_ARCHIVE_MAX_ATTEMPTS_ENV} is out of range"))?;
-    let retry = crate::retry::ArchiveRetryPolicy::new(max_attempts).map_err(|error| {
-        format!("{CERTIFICATE_ARCHIVE_MAX_ATTEMPTS_ENV}: {error}")
-    })?;
+    let retry = crate::retry::ArchiveRetryPolicy::new(max_attempts)
+        .map_err(|error| format!("{CERTIFICATE_ARCHIVE_MAX_ATTEMPTS_ENV}: {error}"))?;
     let attempt_timeout_millis = parse_u64(
         CERTIFICATE_ARCHIVE_ATTEMPT_TIMEOUT_ENV,
         DEFAULT_ATTEMPT_TIMEOUT_MILLIS,
@@ -301,8 +297,9 @@ mod tests {
 
     #[test]
     fn the_space_name_can_be_overridden() {
-        let selection = select_certificate_archive(Some("drive"), None, Some("Certificates"), false)
-            .expect("selection");
+        let selection =
+            select_certificate_archive(Some("drive"), None, Some("Certificates"), false)
+                .expect("selection");
         assert_eq!(selection.space_name(), "Certificates");
     }
 
@@ -348,11 +345,9 @@ mod tests {
             .max_connections(1)
             .connect_lazy("postgres://deploy:deploy@127.0.0.1:1/deploy")
             .expect("lazy pool");
-        let store = certificate_archive_store_from_selection(
-            &pool,
-            &CertificateArchiveSelection::Off,
-        )
-        .expect("selection");
+        let store =
+            certificate_archive_store_from_selection(&pool, &CertificateArchiveSelection::Off)
+                .expect("selection");
         assert!(store.is_none());
         let store = certificate_archive_store_from_selection(
             &pool,

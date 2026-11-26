@@ -53,8 +53,8 @@ use sdkwork_drive_workspace_service::DriveServiceError;
 use sdkwork_utils_rust::to_unix_millis;
 
 use crate::layout::{
-    certificate_folder_name, sha256_hex, version_folder_name, ArchiveBundleKind,
-    ArchiveName, CERTIFICATE_SPACE_NAME, MANIFEST_FILE_NAME,
+    certificate_folder_name, sha256_hex, version_folder_name, ArchiveBundleKind, ArchiveName,
+    CERTIFICATE_SPACE_NAME, MANIFEST_FILE_NAME,
 };
 use crate::{
     ArchivedCertificateVersion, CertificateArchiveScope, CertificateArchiveStore,
@@ -121,10 +121,7 @@ pub fn resolve_archive_folders(
         .map_err(|error| DeployServiceError::validation(error.to_string()))?;
     let version_folder = version_folder_name(version_no, not_after)
         .map_err(|error| DeployServiceError::validation(error.to_string()))?;
-    let certificate_node = format!(
-        "cert-segment-{tenant_id}-{}",
-        certificate_folder.as_str()
-    );
+    let certificate_node = format!("cert-segment-{tenant_id}-{}", certificate_folder.as_str());
     let version_node = format!(
         "cert-version-{tenant_id}-{}-{version_no}",
         certificate_folder.as_str()

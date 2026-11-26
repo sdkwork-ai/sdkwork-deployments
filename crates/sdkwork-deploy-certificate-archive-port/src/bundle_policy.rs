@@ -47,11 +47,13 @@ pub fn public_bundle_files(
     }
     let mut plan = Vec::with_capacity(crate::layout::PUBLIC_BUNDLE_FILES.len() + 1);
     for kind in crate::layout::PUBLIC_BUNDLE_FILES {
-        let file = files.iter().find(|file| file.kind == kind).ok_or(
-            ArchiveBundleError::MissingFile {
-                kind: kind.as_str(),
-            },
-        )?;
+        let file =
+            files
+                .iter()
+                .find(|file| file.kind == kind)
+                .ok_or(ArchiveBundleError::MissingFile {
+                    kind: kind.as_str(),
+                })?;
         plan.push(ArchiveFileContent {
             file_name: archived_file_name(kind)?.to_owned(),
             content: file.content.clone(),
@@ -115,7 +117,8 @@ mod tests {
 
     #[test]
     fn the_private_key_never_reaches_the_plan() {
-        let plan = public_bundle_files(ArchiveBundleKind::Public, &bundle(), b"{}\n").expect("plan");
+        let plan =
+            public_bundle_files(ArchiveBundleKind::Public, &bundle(), b"{}\n").expect("plan");
         let names: Vec<&str> = plan.iter().map(|file| file.file_name.as_str()).collect();
         assert_eq!(
             names,

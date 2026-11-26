@@ -51,8 +51,8 @@ pub use selection::{
     certificate_archive_config_from_env, certificate_archive_store_from_env,
     certificate_archive_store_from_selection, select_certificate_archive, CertificateArchiveConfig,
     CertificateArchiveSelection, CERTIFICATE_ARCHIVE_ATTEMPT_TIMEOUT_ENV,
-    CERTIFICATE_ARCHIVE_BUNDLE_ENV, CERTIFICATE_ARCHIVE_ENV,
-    CERTIFICATE_ARCHIVE_MAX_ATTEMPTS_ENV, CERTIFICATE_ARCHIVE_SPACE_NAME_ENV,
+    CERTIFICATE_ARCHIVE_BUNDLE_ENV, CERTIFICATE_ARCHIVE_ENV, CERTIFICATE_ARCHIVE_MAX_ATTEMPTS_ENV,
+    CERTIFICATE_ARCHIVE_SPACE_NAME_ENV,
 };
 
 /// Tenant the archive belongs to.
@@ -169,7 +169,7 @@ pub trait CertificateArchiveStore: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use sdkwork_deploy_certificate_material::{MaterialKind, CertificateFile};
+    use sdkwork_deploy_certificate_material::{CertificateFile, MaterialKind};
 
     use super::*;
     use crate::bundle_policy::public_bundle_files;
@@ -220,8 +220,13 @@ mod tests {
         let manifest_bytes = b"{}\n";
         let files = public_bundle_files(ArchiveBundleKind::Public, &bundle_files(), manifest_bytes)
             .expect("plan");
-        let manifest = request(files).manifest("2026-11-24T10:22:35Z").expect("manifest");
-        assert_eq!(manifest.certificate_version_id, "aa11bb22-cccc-4ddd-8eee-ffff00001111");
+        let manifest = request(files)
+            .manifest("2026-11-24T10:22:35Z")
+            .expect("manifest");
+        assert_eq!(
+            manifest.certificate_version_id,
+            "aa11bb22-cccc-4ddd-8eee-ffff00001111"
+        );
         assert_eq!(manifest.version_no, 2);
         assert_eq!(manifest.declared_files().len(), 5);
     }

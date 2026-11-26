@@ -521,7 +521,9 @@ mod tests {
     #[test]
     fn the_version_folder_is_the_documented_shape() {
         assert_eq!(
-            version_folder_name(2, "2027-02-22T09:00:00Z").expect("name").as_str(),
+            version_folder_name(2, "2027-02-22T09:00:00Z")
+                .expect("name")
+                .as_str(),
             "v2-2027-02-22T09-00-00Z"
         );
         // A zone offset is normalized to UTC rather than echoed, so two versions
@@ -557,18 +559,15 @@ mod tests {
     fn only_a_full_certificate_uuid_is_accepted() {
         // The prefix is quoted in the console, so a value that is not a uuid must
         // be refused rather than truncated into a folder nobody can match.
-        for value in [
-            "abc",
-            "zzzzzzzz",
-            "3f7c1a9b-1",
-            "3f7c1a9b-1111-4222-8333",
-        ] {
+        for value in ["abc", "zzzzzzzz", "3f7c1a9b-1", "3f7c1a9b-1111-4222-8333"] {
             assert!(
                 certificate_folder_name("example.com", value).is_err(),
                 "{value} must be refused"
             );
         }
-        assert!(certificate_folder_name("example.com", "3F7C1A9B-1111-4222-8333-444455556666").is_ok());
+        assert!(
+            certificate_folder_name("example.com", "3F7C1A9B-1111-4222-8333-444455556666").is_ok()
+        );
     }
 
     #[test]
@@ -585,7 +584,10 @@ mod tests {
             let sanitized = sanitize_certificate_name(input);
             assert_eq!(sanitized, expected, "input {input:?}");
             assert!(!sanitized.contains('/'), "input {input:?} kept a slash");
-            assert!(!sanitized.contains('\\'), "input {input:?} kept a backslash");
+            assert!(
+                !sanitized.contains('\\'),
+                "input {input:?} kept a backslash"
+            );
             assert!(!sanitized.contains('*'), "input {input:?} kept a wildcard");
         }
     }
@@ -661,7 +663,10 @@ mod tests {
             "",
             "FULLCHAIN.PEM",
         ] {
-            assert!(!is_archived_file_name(name), "{name} must not be addressable");
+            assert!(
+                !is_archived_file_name(name),
+                "{name} must not be addressable"
+            );
         }
     }
 
@@ -713,7 +718,10 @@ mod tests {
             value["identifiers"],
             serde_json::json!(["example.com", "*.example.com"])
         );
-        assert_eq!(serde_json::from_slice::<ArchiveManifest>(&bytes).expect("decode"), manifest);
+        assert_eq!(
+            serde_json::from_slice::<ArchiveManifest>(&bytes).expect("decode"),
+            manifest
+        );
     }
 
     #[test]

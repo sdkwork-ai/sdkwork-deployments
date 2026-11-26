@@ -139,7 +139,9 @@ mod tests {
         // Four failures leave one attempt, so the row still retries...
         assert_eq!(
             policy.after_failure(4),
-            ArchiveRetryDecision::Retry { delay_seconds: 3_600 }
+            ArchiveRetryDecision::Retry {
+                delay_seconds: 3_600
+            }
         );
         // ...and the fifth spends it.
         assert_eq!(policy.after_failure(5), ArchiveRetryDecision::Exhausted);
@@ -173,7 +175,11 @@ mod tests {
 
     #[test]
     fn attempts_beyond_the_ladder_repeat_its_last_step() {
-        assert_eq!(backoff_after(0), 30, "a zero count is treated as one failure");
+        assert_eq!(
+            backoff_after(0),
+            30,
+            "a zero count is treated as one failure"
+        );
         assert_eq!(backoff_after(-3), 30);
         assert_eq!(backoff_after(5), 21_600);
         assert_eq!(backoff_after(99), 21_600);
@@ -184,7 +190,9 @@ mod tests {
         let policy = ArchiveRetryPolicy::new(8).expect("policy");
         assert_eq!(
             policy.after_failure(6),
-            ArchiveRetryDecision::Retry { delay_seconds: 21_600 }
+            ArchiveRetryDecision::Retry {
+                delay_seconds: 21_600
+            }
         );
         assert_eq!(policy.after_failure(8), ArchiveRetryDecision::Exhausted);
     }

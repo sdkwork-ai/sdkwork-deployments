@@ -11,9 +11,7 @@ use async_trait::async_trait;
 use sdkwork_deploy_contract::{DeployServiceError, DeployServiceResult};
 
 use crate::layout::{certificate_folder_name, sha256_hex, version_folder_name};
-use crate::{
-    ArchivedCertificateVersion, CertificateArchiveStore, StoreCertificateVersionArchive,
-};
+use crate::{ArchivedCertificateVersion, CertificateArchiveStore, StoreCertificateVersionArchive};
 
 /// One file as the double recorded it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,9 +91,7 @@ impl MemoryCertificateArchiveStore {
             .collect())
     }
 
-    fn lock(
-        &self,
-    ) -> DeployServiceResult<std::sync::MutexGuard<'_, Vec<RecordedArchive>>> {
+    fn lock(&self) -> DeployServiceResult<std::sync::MutexGuard<'_, Vec<RecordedArchive>>> {
         self.recorded.lock().map_err(|_| {
             DeployServiceError::Internal("memory certificate archive poisoned".to_owned())
         })
@@ -120,11 +116,9 @@ impl CertificateArchiveStore for MemoryCertificateArchiveStore {
                 "certificate archiving is not configured".to_owned(),
             ));
         }
-        let certificate_folder = certificate_folder_name(
-            &request.cert_name,
-            &request.certificate_id,
-        )
-        .map_err(|error| DeployServiceError::Internal(error.to_string()))?;
+        let certificate_folder =
+            certificate_folder_name(&request.cert_name, &request.certificate_id)
+                .map_err(|error| DeployServiceError::Internal(error.to_string()))?;
         let version_folder = version_folder_name(request.version_no, &request.facts.not_after)
             .map_err(|error| DeployServiceError::Internal(error.to_string()))?;
         let space_id = format!("mem-certificate-space-{}", request.scope.tenant_id);
@@ -168,8 +162,7 @@ impl CertificateArchiveStore for MemoryCertificateArchiveStore {
         if let Some(existing) = recorded
             .iter()
             .find(|archive| {
-                archive.archived.certificate_folder_node_id
-                    == archived.certificate_folder_node_id
+                archive.archived.certificate_folder_node_id == archived.certificate_folder_node_id
                     && archive.archived.version_folder_node_id == archived.version_folder_node_id
             })
             .cloned()
@@ -196,10 +189,12 @@ mod tests {
     fn request() -> StoreCertificateVersionArchive {
         let files = MaterialKind::ALL
             .into_iter()
-            .map(|kind| sdkwork_deploy_certificate_material::CertificateFile {
-                kind,
-                content: kind.as_str().as_bytes().to_vec(),
-            })
+            .map(
+                |kind| sdkwork_deploy_certificate_material::CertificateFile {
+                    kind,
+                    content: kind.as_str().as_bytes().to_vec(),
+                },
+            )
             .collect::<Vec<_>>();
         let files = public_bundle_files(ArchiveBundleKind::Public, &files, b"{}\n").expect("plan");
         StoreCertificateVersionArchive {
@@ -235,8 +230,13 @@ mod tests {
             archived.certificate_folder_name.as_str(),
             "example.com-3f7c1a9b"
         );
-        assert_eq!(archived.version_folder_name.as_str(), "v2-2027-02-22T09-00-00Z");
-        assert!(archived.version_folder_node_id.ends_with("/v2-2027-02-22T09-00-00Z"));
+        assert_eq!(
+            archived.version_folder_name.as_str(),
+            "v2-2027-02-22T09-00-00Z"
+        );
+        assert!(archived
+            .version_folder_node_id
+            .ends_with("/v2-2027-02-22T09-00-00Z"));
         assert!(archived.manifest_node_id.ends_with("/manifest.json"));
         let names: Vec<String> = store
             .files()
