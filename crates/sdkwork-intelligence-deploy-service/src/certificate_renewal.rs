@@ -718,13 +718,19 @@ mod tests {
         assert_eq!(first, renewal_jitter_seconds("cert-uuid-1", 30));
         // Bounded by a tenth of the lead time, and by the three-day ceiling.
         assert!((0..=3 * SECONDS_PER_DAY).contains(&first));
-        assert_eq!(renewal_jitter_seconds("cert-uuid-1", 7), renewal_jitter_seconds("cert-uuid-1", 7));
+        assert_eq!(
+            renewal_jitter_seconds("cert-uuid-1", 7),
+            renewal_jitter_seconds("cert-uuid-1", 7)
+        );
         assert!(renewal_jitter_seconds("cert-uuid-1", 7) <= 7 * SECONDS_PER_DAY / 10);
         // Spread: different identifiers do not all land on the same delay.
         let spread = (0..32)
             .map(|index| renewal_jitter_seconds(&format!("cert-{index}"), 30))
             .collect::<std::collections::BTreeSet<_>>();
-        assert!(spread.len() > 1, "jitter must actually decorrelate certificates");
+        assert!(
+            spread.len() > 1,
+            "jitter must actually decorrelate certificates"
+        );
         // A zero lead time cannot be jittered later.
         assert_eq!(renewal_jitter_seconds("cert-uuid-1", 0), 0);
     }

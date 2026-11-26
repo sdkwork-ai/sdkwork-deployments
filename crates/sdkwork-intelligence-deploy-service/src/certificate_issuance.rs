@@ -342,9 +342,18 @@ impl DeployService {
                 if crate::certificate_presentation::presentation_release_decision(&report)
                     == crate::certificate_presentation::PresentationReleaseDecision::Blocked
                 {
+                    // The detail names who looked and what they saw. Without it the
+                    // operator is told "not visible" while the console's own dig
+                    // (against their resolver, which may be inside a split-horizon
+                    // view the control plane cannot see) shows the record — an
+                    // unfixable disagreement. Resolvers that failed to answer are
+                    // named too, so "nobody could check" is not mistaken for "it is
+                    // absent".
+                    let evidence =
+                        crate::certificate_presentation::describe_presentation_report(&report);
                     return Err(DeployServiceError::conflict(format!(
                         "CERTIFICATE_DNS_RECORD_NOT_VISIBLE: {record_name} is not published \
-                         with the expected TXT value"
+                         with the expected TXT value ({evidence})"
                     )));
                 }
             }

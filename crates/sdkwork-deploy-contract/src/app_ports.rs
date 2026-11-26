@@ -1150,6 +1150,23 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    /// Re-arms the Drive archive of a certificate's served version.
+    ///
+    /// The console calls this after showing `archiveStatus = FAILED` (or a stale
+    /// `PENDING`). It is an idempotent command returning `200` with
+    /// `accepted: false` when there is nothing to retry — the archive is already
+    /// in Drive, or archiving is switched off on this deployment — so a
+    /// double-click is a retry-safe answer rather than an error.
+    async fn retry_certificate_archive(
+        &self,
+        _context: &DeployAppRequestContext,
+        _certificate_id: &str,
+    ) -> DeployServiceResult<CertificateArchiveRetryResult> {
+        Err(crate::DeployServiceError::Internal(
+            "certificate archive retry is not implemented".to_owned(),
+        ))
+    }
+
     async fn list_health_checks(
         &self,
         _context: &DeployAppRequestContext,

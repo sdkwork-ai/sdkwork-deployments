@@ -24,7 +24,13 @@ pub struct PresentationResolverReport {
 }
 
 /// What a presentation check established.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// The derived `Default` is an empty report: no resolver answered, so nothing is
+/// visible and nothing was checked. That is a real state rather than a
+/// placeholder — it is distinct from [`PresentationReport::unverifiable`], which
+/// names *why* nobody looked — and it is what the release decision treats as "no
+/// evidence against the operator".
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PresentationReport {
     pub visible: bool,
     pub reports: Vec<PresentationResolverReport>,
@@ -96,6 +102,44 @@ pub fn presentation_release_decision(report: &PresentationReport) -> Presentatio
     }
 }
 
+/// One sentence naming which resolver saw what, for the operator-facing conflict.
+///
+/// The refusal detail has to be actionable: "not visible" alone leaves an
+/// operator who *did* publish the record with nothing to check, and their own
+/// resolver (often inside a split-horizon view the control plane cannot see) will
+/// happily show it. Naming the resolver and echoing the values it observed — or
+/// its lookup error — turns the refusal into a diff the operator can act on.
+///
+/// Values are quoted because they are public ACME proofs; the expected value is
+/// deliberately not echoed, so a typo in the operator's record reads as a
+/// difference rather than as the server agreeing with itself.
+pub fn describe_presentation_report(report: &PresentationReport) -> String {
+    if report.reports.is_empty() {
+        return "no resolver answered".to_owned();
+    }
+    report
+        .reports
+        .iter()
+        .map(|entry| match &entry.error {
+            Some(error) => format!("{} could not check: {error}", entry.resolver),
+            None if entry.observed.is_empty() => {
+                format!("{} sees no TXT record", entry.resolver)
+            }
+            None => format!(
+                "{} sees {}",
+                entry.resolver,
+                entry
+                    .observed
+                    .iter()
+                    .map(|value| format!("`{value}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 #[cfg(test)]
 mod release_decision_tests {
     use super::*;
@@ -151,6 +195,109 @@ mod release_decision_tests {
             )),
             PresentationReleaseDecision::Blocked
         );
+    }
+
+    #[test]
+    fn a_refusal_names_the_resolver_and_what_it_saw() {
+        // The operator needs a diff, not a verdict: their own resolver may be
+        // inside a split-horizon view the control plane cannot see, and "not
+        // visible" alone gives them nothing to check.
+        let blocked = PresentationReport {
+            visible: false,
+            reports: vec![PresentationResolverReport {
+                resolver: "1.1.1.1".to_owned(),
+                observed: vec!["some-other-token".to_owned()],
+                error: None,
+            }],
+        };
+        let detail = describe_presentation_report(&blocked);
+        assert!(detail.contains("1.1.1.1"), "{detail}");
+        assert!(detail.contains("some-other-token"), "{detail}");
+
+        // A resolver that answered with nothing says exactly that, instead of
+        // rendering an empty value list.
+        let empty = PresentationReport {
+            visible: false,
+            reports: vec![PresentationResolverReport {
+                resolver: "8.8.8.8".to_owned(),
+                observed: Vec::new(),
+                error: None,
+            }],
+        };
+        assert_eq!(
+            describe_presentation_report(&empty),
+            "8.8.8.8 sees no TXT record"
+        );
+
+        // A lookup error is reported as a failure to check, never as an absence:
+        // the two mean different things to the operator and to the decision above.
+        let errored = PresentationReport {
+            visible: false,
+            reports: vec![PresentationResolverReport {
+                resolver: "9.9.9.9".to_owned(),
+                observed: Vec::new(),
+                error: Some("timeout".to_owned()),
+            }],
+        };
+        assert_eq!(
+            describe_presentation_report(&errored),
+            "9.9.9.9 could not check: timeout"
+        );
+        assert_eq!(
+            describe_presentation_report(&PresentationReport::default()),
+            "no resolver answered"
+        );
+    }
+
+    #[test]
+    fn a_manual_release_is_blocked_exactly_when_a_record_is_checked_and_absent() {
+        // The command's decision, stated once end to end: the operator's release
+        // is refused only on evidence, never on an outage. This is the rule the
+        // app-api `verify` operation answers `409 CERTIFICATE_DNS_RECORD_NOT_VISIBLE`
+        // from.
+        let cases = [
+            // (visible, resolver errors, expected decision)
+            (true, vec![None], PresentationReleaseDecision::Allowed),
+            (false, vec![None], PresentationReleaseDecision::Blocked),
+            (
+                false,
+                vec![Some("timeout")],
+                PresentationReleaseDecision::Allowed,
+            ),
+            (
+                false,
+                vec![Some("SERVFAIL"), None],
+                PresentationReleaseDecision::Blocked,
+            ),
+            (
+                true,
+                vec![Some("timeout")],
+                PresentationReleaseDecision::Allowed,
+            ),
+        ];
+        for (visible, errors, expected) in cases {
+            let entries = errors
+                .into_iter()
+                .enumerate()
+                .map(|(index, error)| (format!("resolver-{index}"), error))
+                .collect::<Vec<_>>();
+            let built = PresentationReport {
+                visible,
+                reports: entries
+                    .into_iter()
+                    .map(|(resolver, error)| PresentationResolverReport {
+                        resolver,
+                        observed: Vec::new(),
+                        error: error.map(str::to_owned),
+                    })
+                    .collect(),
+            };
+            assert_eq!(
+                presentation_release_decision(&built),
+                expected,
+                "visible={visible} report={built:?}"
+            );
+        }
     }
 }
 

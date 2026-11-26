@@ -1479,6 +1479,230 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/certificates/{certificateId}/refresh:
+    parameters:
+    - $ref: '#/components/parameters/CertificateIdParam'
+    post:
+      operationId: certificates.refresh
+      summary: 重新读取证书当前状态
+      description: >-
+        只读命令：重新计算该证书当前的有效期阶段、续期窗口与在途续期尝试，
+        并以最新快照返回。它不会申请新版本，也不等价于 renew；
+        控制台显式刷新时调用，而不是把「刷新」误当成一次续期。
+      tags:
+      - certificate
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: deploy.certificates.write
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/CertificateResponse'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/certificates/{certificateId}/challenges:
+    parameters:
+    - $ref: '#/components/parameters/CertificateIdParam'
+    get:
+      operationId: certificates.challenges.list
+      summary: 获取证书当前的 DNS-01 展示指令
+      description: >-
+        返回该证书当前订单需要操作者自行发布的 DNS-01 TXT 记录，逐条给出精确的
+        记录名、记录值、失效时间与挑战状态。`presentationMode` 说明这张证书由谁
+        完成挑战：`MANAGED` 由平台自动发布并撤回记录，`items` 因此为空；
+        `MANUAL` 需要操作者按返回的记录在自己 DNS 中发布后，再调用
+        `certificates.challenge.verify` 放行校验。记录值是公开的 ACME 证明值，
+        与 DNS 本身可见内容一致，因此不会泄露机密。
+      tags:
+      - certificate
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-permission: deploy.certificates.read
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/CertificateChallengePresentationList'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/certificates/{certificateId}/challenge/verify:
+    parameters:
+    - $ref: '#/components/parameters/CertificateIdParam'
+    post:
+      operationId: certificates.challenge.verify
+      summary: 放行人工 DNS-01 校验
+      description: >-
+        操作者确认 TXT 记录已发布后的放行命令。平台会先用配置的解析器自查记录是否
+        可见：可见（或无法检查）才把订单交给 ACME worker 去校验；已检查但确认不可见
+        时拒绝放行，以免白白消耗 CA 的失败校验配额。重复调用是安全的：已经放行、
+        已完成或没有待放行的人工订单都返回 `accepted: false`，是重试而不是错误。
+      tags:
+      - certificate
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      x-sdkwork-permission: deploy.certificates.write
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      responses:
+        '200':
+          description: >-
+            已放行，或此前已放行（`accepted: false`）。重复调用不视为错误。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/CertificateChallengeReleaseResult'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: >-
+            记录已检查但不可见（`code` 携带 `CERTIFICATE_DNS_RECORD_NOT_VISIBLE`），
+            此时订单未被放行，未消耗 CA 的失败校验配额
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: 校验错误
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /app/v3/api/certificates/{certificateId}/archive/retry:
+    parameters:
+    - $ref: '#/components/parameters/CertificateIdParam'
+    post:
+      operationId: certificates.archive.retry
+      summary: 重试将证书档案归档到 Drive
+      description: >-
+        重新触发这张证书已签发证书材料的 Drive 归档。归档是异步且可重试的，
+        因此命令语义是幂等的：已经归档、已跳过或正在归档时返回 `accepted: false`
+        并给出当前 `archiveStatus`，这是重试而不是错误。
+
+        本操作**不会等待上传完成**，也**不会在响应中返回 Drive 的标识**：
+        `accepted: true` 只表示该归档行已被重新置为 `PENDING`，
+        证书 worker 会在其下一次调度时领取并上传。控制台应当轮询
+        `GET /app/v3/api/certificates/{certificateId}` 观察 `archiveStatus`
+        变为 `ARCHIVED`，此时 `archiveSpaceId` 与 `archiveFolderNodeId` 才有值，
+        可据此链接到 Drive 目录。
+
+        读回的 `accepted: false` 有两种含义，用 `archiveStatus` 区分：
+        `ARCHIVED` 表示归档此前已完成；`SKIPPED` 表示本部署根本没有开启归档。
+      tags:
+      - certificate
+      security:
+      - AuthToken: []
+        AccessToken: []
+      x-sdkwork-idempotent: true
+      x-sdkwork-permission: deploy.certificates.write
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKeyParam'
+      responses:
+        '200':
+          description: >-
+            归档已重新排队，或此前已归档/已跳过（`accepted: false`）。重复调用不视为错误。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - $ref: '#/components/schemas/SdkWorkApiResponse'
+                - type: object
+                  required:
+                  - data
+                  properties:
+                    data:
+                      type: object
+                      required:
+                      - item
+                      properties:
+                        item:
+                          $ref: '#/components/schemas/CertificateArchiveRetryResult'
+        '401':
+          description: 未认证
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: 资源不存在
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /app/v3/api/upload_sessions:
     post:
       operationId: uploadSessions.create
@@ -9243,9 +9467,12 @@ components:
           x-sdkwork-int64-string: true
     CreateCertificateRequest:
       type: object
+      description: >-
+        Identifier set 由 `domainIds` 或 `requestedIdentifiers` 二者之一给出，必须恰好提供其中一个。
+        两者同时出现是校验错误（`CERTIFICATE_IDENTIFIER_SOURCE_CONFLICT`），
+        而不是取并集或交集：任何一种隐式合并都等于改写操作者的请求。
       required:
       - certName
-      - domainIds
       properties:
         certName:
           type: string
@@ -9254,11 +9481,31 @@ components:
         domainIds:
           type: array
           minItems: 1
-          maxItems: 100
+          maxItems: 8
           uniqueItems: true
           items:
             type: string
             format: uuid
+          description: >-
+            以域名声明（`deploy_domain`）的 id 指定证书要覆盖的主机名，即控制台选择器选中的已验证主机名。
+            每个 id 都必须解析为本租户中 ACTIVE 且 VERIFIED、且其所属 DNS 区域对本调用者可见的声明；
+            命名一个 id 从不绕过该所有权校验。与 `requestedIdentifiers` 互斥。
+        requestedIdentifiers:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 253
+            format: hostname
+          description: >-
+            直接以 FQDN 指定证书要覆盖的主机名，即操作者在自由输入框中键入的域名，而不是预先选中的声明 id。
+            每个提交的主机名先按契约自身的规范化规则处理（小写、去掉尾部点、只允许单个前导通配符标签），
+            再解析为本租户中 ACTIVE 且 VERIFIED、且其所属 DNS 区域对本调用者可见的声明；
+            任一主机名不是本租户的已验证声明时，请求以校验错误拒绝，并在消息中点名该主机名。
+            所有权校验与 `domainIds` 完全相同，变化的只是入参形式。与 `domainIds` 互斥。
         certificateScope:
           type: string
           enum:
@@ -9280,6 +9527,18 @@ components:
             Operator preference. `AUTO` resolves to HTTP_01 for a
             `SINGLE_DOMAIN` scope and always to DNS_01 for `WILDCARD`.
             `HTTP_01` is rejected for a `WILDCARD` scope.
+        challengePresentation:
+          type: string
+          enum:
+          - MANAGED
+          - MANUAL
+          default: MANAGED
+          description: >-
+            由谁完成挑战应答。`MANAGED`（默认）由平台通过已配置的 DNS 供应商凭据
+            自动发布并撤回记录；`MANUAL` 由 API 返回精确的 TXT 记录，等待操作者在
+            自己的 DNS 中发布后调用 `certificates.challenge.verify` 放行校验。
+            与 `validationMethod` 正交：DNS_01 在两种模式下都合法，而
+            `MANUAL` 与 `HTTP_01` 组合会被规划规则拒绝（边缘 webroot 不可由操作者写入）。
         caProfile:
           type: string
           enum:
@@ -9412,6 +9671,119 @@ components:
         createdAt:
           type: string
           format: date-time
+    CertificateChallengePresentationResponse:
+      type: object
+      description: >-
+        One manual DNS-01 record an operator has to publish. The wire shape of the
+        instruction the console renders: the exact TXT owner and value, the instant
+        the CA stops accepting it, and the challenge's own state. The value is a
+        public ACME proof, so echoing it exposes nothing DNS itself does not.
+      required:
+      - identifier
+      - status
+      properties:
+        identifier:
+          type: string
+          format: hostname
+          description: The hostname this challenge authorizes.
+        recordName:
+          type: string
+          description: >-
+            The TXT owner to publish, e.g. `_acme-challenge.www.example.com`.
+            Absent when the challenge has no presentation yet.
+        recordType:
+          type: string
+          enum:
+          - TXT
+          description: The record type to publish. Present exactly when `recordName` is.
+        recordValue:
+          type: string
+          description: >-
+            The TXT value the CA expects. Compared exactly by the platform: case,
+            padding and interior spacing are part of the value.
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the CA stops accepting this challenge value.
+        status:
+          type: string
+          description: The challenge's own state, e.g. `PENDING`, `PROCESSING`, `VALID`.
+    CertificateChallengePresentationList:
+      type: object
+      description: >-
+        The manual presentation of one certificate's current order.
+      required:
+      - presentationMode
+      - presentationReleased
+      - items
+      properties:
+        presentationMode:
+          type: string
+          enum:
+          - MANAGED
+          - MANUAL
+          description: >-
+            `MANAGED` or `MANUAL`. A managed certificate has no instructions to
+            show, so `items` is empty; the mode is still reported so the console can
+            tell "nothing to publish" apart from "not prepared yet".
+        presentationReleased:
+          type: boolean
+          description: >-
+            Whether the operator's release has already been recorded. `true` means
+            the order is queued for CA validation and waiting on the CA, not on the
+            operator.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CertificateChallengePresentationResponse'
+    CertificateChallengeReleaseResult:
+      type: object
+      description: >-
+        Outcome of an operator's "release this presentation for validation" command.
+      required:
+      - accepted
+      properties:
+        accepted:
+          type: boolean
+          description: >-
+            `true` when this call recorded the release. `false` means there was
+            nothing left to release (already released, already finished, or no
+            parked manual order) — a retry, not an error. HTTP 200 carries both, so
+            clients must not treat `false` as a failure; only a `ProblemDetail`
+            body is a failure.
+    CertificateArchiveRetryResult:
+      type: object
+      description: >-
+        Outcome of an operator's "retry the Drive archive" command.
+      required:
+      - accepted
+      - archiveStatus
+      properties:
+        accepted:
+          type: boolean
+          description: >-
+            `true` when this call re-armed the archive: the row was reset to
+            `PENDING` and the certificate worker will upload on its next tick. The
+            operation does not wait for the upload and does not return the Drive
+            ids, so a client polls the certificate and watches `archiveStatus`
+            reach `ARCHIVED`. `false` means there was nothing to retry — already
+            `ARCHIVED`, or archiving is switched off on this deployment
+            (`SKIPPED`) — the idempotent answer to a double click or a second
+            operator, not an error.
+        archiveStatus:
+          type: string
+          enum:
+          - NONE
+          - PENDING
+          - STORING
+          - ARCHIVED
+          - FAILED
+          - SKIPPED
+          description: >-
+            The archive state as of this call, so the caller learns the outcome
+            without a second read. `ARCHIVED` on an `accepted: false` answer means
+            the archive was already done; `SKIPPED` means this deployment does not
+            archive at all.
     CertificateResponse:
       type: object
       required:
@@ -9421,12 +9793,14 @@ components:
       - caProfile
       - certificateScope
       - validationMethod
+      - presentationMode
       - preferredKeyAlgorithm
       - identifiers
       - autoRenew
       - renewalStatus
       - renewBeforeDays
       - renewalFailureCount
+      - archiveStatus
       - status
       - createdAt
       - updatedAt
@@ -9462,6 +9836,19 @@ components:
           description: >-
             The resolved method the challenge orchestrator must present. A
             `WILDCARD` certificate always reports `DNS_01`.
+        presentationMode:
+          type: string
+          enum:
+          - MANAGED
+          - MANUAL
+          description: >-
+            Who presents this certificate's challenge responses. `MANUAL` means the
+            order is parked until an operator publishes the TXT records and
+            releases it through `certificates.challenge.verify`; `MANAGED` means
+            the platform drives the whole issuance. Reported per certificate
+            because both modes look identical in `status`, and only this field
+            says whether the operator has work to do. Always present: rows written
+            before the switch read as `MANAGED`, which is what they were.
         providerAccountId:
           type: string
           description: >-
@@ -9552,6 +9939,36 @@ components:
             Exposed because the retry backoff hides repetition from the schedule:
             without it a certificate failing every day is indistinguishable from
             one that has never been tried.
+        archiveStatus:
+          type: string
+          enum:
+          - NONE
+          - PENDING
+          - STORING
+          - ARCHIVED
+          - FAILED
+          - SKIPPED
+          description: >-
+            Whether this certificate's issued material has been archived to Drive.
+            `NONE` means never issued and never attempted (the default, so a row
+            written before the archive feature existed reads honestly); `PENDING`
+            and `STORING` are queued and uploading; `ARCHIVED` means the material
+            is in Drive and `archiveSpaceId`/`archiveFolderNodeId` name where;
+            `FAILED` is the state `certificates.archive.retry` exists for; and
+            `SKIPPED` means archiving is switched off on this deployment, which is
+            a security-adjacent setting and must not read as a failure.
+        archiveSpaceId:
+          type: string
+          maxLength: 64
+          description: >-
+            Drive space holding the archived certificate material. An opaque string,
+            not a numeric id. Present only once the archive row names one.
+        archiveFolderNodeId:
+          type: string
+          maxLength: 64
+          description: >-
+            Drive folder node holding the archived certificate material. An opaque
+            string, not a numeric id.
         createdAt:
           type: string
           format: date-time

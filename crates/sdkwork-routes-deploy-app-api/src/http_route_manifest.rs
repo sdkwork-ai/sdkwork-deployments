@@ -228,6 +228,36 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     .with_required_permission("deploy.certificates.read"),
     HttpRoute::dual_token(
         HttpMethod::Post,
+        "/app/v3/api/certificates/{certificateId}/refresh",
+        "certificate",
+        "certificates.refresh",
+    )
+    .with_required_permission("deploy.certificates.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/certificates/{certificateId}/challenges",
+        "certificate",
+        "certificates.challenges.list",
+    )
+    .with_required_permission("deploy.certificates.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/certificates/{certificateId}/challenge/verify",
+        "certificate",
+        "certificates.challenge.verify",
+    )
+    .with_required_permission("deploy.certificates.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/certificates/{certificateId}/archive/retry",
+        "certificate",
+        "certificates.archive.retry",
+    )
+    .with_required_permission("deploy.certificates.write")
+    .with_idempotent(true),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
         "/app/v3/api/upload_sessions",
         "uploadSession",
         "uploadSessions.create",

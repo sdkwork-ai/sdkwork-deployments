@@ -1,9 +1,10 @@
 use std::collections::{BTreeSet, HashMap};
 
 use sdkwork_deploy_contract::{
-    plan_certificate_identifiers, resolve_validation_method, CertificatePage, CertificatePlanError,
-    CertificateRenewalInProgress, CertificateResponse, CertificateScope, CreateCertificateRequest,
-    DeployServiceError, DeployServiceResult, ValidationMethod,
+    plan_certificate_identifiers, resolve_certificate_identifier_source, resolve_validation_method,
+    CertificateArchiveStatus, CertificateIdentifierSource, CertificatePage, CertificatePlanError,
+    CertificateRenewalInProgress, CertificateResponse, CertificateScope, ChallengePresentation,
+    CreateCertificateRequest, DeployServiceError, DeployServiceResult, ValidationMethod,
     CERTIFICATE_RENEWAL_STATUS_PLANNED, CERTIFICATE_SOURCE_MANAGED, CERTIFICATE_STATUS_REVOKED,
     MAX_CERTIFICATE_IDENTIFIERS,
 };
@@ -27,7 +28,7 @@ enum RenewalEligibility {
 
 const CERTIFICATE_SELECT: &str = "c.uuid, c.cert_name, c.certificate_source, c.ca_profile,
      c.certificate_scope, c.validation_method, c.provider_account_id,
-     c.preferred_key_algorithm, c.auto_renew, c.renewal_status, c.status,
+     c.preferred_key_algorithm, c.presentation_mode, c.auto_renew, c.renewal_status, c.status,
      c.renew_before_days, c.renewal_failure_count, c.last_renewal_at,
      c.created_at, c.updated_at, c.version,
      v.uuid AS current_version_uuid, v.issuer, v.not_before, v.not_after,
@@ -46,7 +47,22 @@ const CERTIFICATE_SELECT: &str = "c.uuid, c.cert_name, c.certificate_source, c.c
      (SELECT r.status FROM deploy_certificate_renewal r
        WHERE r.certificate_id = c.id
          AND r.status IN ('PLANNED', 'PROCESSING', 'ORDERED')
-       ORDER BY r.id DESC LIMIT 1) AS active_renewal_status";
+       ORDER BY r.id DESC LIMIT 1) AS active_renewal_status,
+     -- Where the served version's material lives in Drive, and in what state.
+     --
+     -- Scoped to the current version (v.id) rather than to the certificate: the
+     -- question the console asks is whether the certificate that is being served
+     -- can be downloaded right now, and a previous version's ARCHIVED row would
+     -- answer yes while pointing at different bytes. The bundle kind is filtered
+     -- to PUBLIC explicitly because the unique key is (version, kind) and a
+     -- future FULL row for the same version must not decide what the public read
+     -- model reports.
+     --
+     -- A certificate with no current version (never issued, or issued before the
+     -- archive feature existed) joins to nothing and reads as no archive, which
+     -- is the honest answer: there is nothing to have archived.
+     a.status AS archive_status, a.drive_space_id AS archive_space_id,
+     a.drive_folder_node_id AS archive_folder_node_id";
 
 impl DeployRepository {
     pub(super) async fn list_certificates_repo(
@@ -69,6 +85,8 @@ impl DeployRepository {
             "SELECT {CERTIFICATE_SELECT}
              FROM deploy_certificate c
              LEFT JOIN deploy_certificate_version v ON v.id = c.current_version_id
+             LEFT JOIN deploy_certificate_archive a
+                    ON a.certificate_version_id = v.id AND a.bundle_kind = 'PUBLIC'
              WHERE c.tenant_id = $1 AND c.status <> $2 AND c.deleted_at IS NULL
              ORDER BY c.updated_at DESC, c.id DESC LIMIT $3 OFFSET $4"
         )))
@@ -103,6 +121,8 @@ impl DeployRepository {
             "SELECT {CERTIFICATE_SELECT}
              FROM deploy_certificate c
              LEFT JOIN deploy_certificate_version v ON v.id = c.current_version_id
+             LEFT JOIN deploy_certificate_archive a
+                    ON a.certificate_version_id = v.id AND a.bundle_kind = 'PUBLIC'
              WHERE c.tenant_id = $1 AND c.uuid = $2
                AND c.status <> $3 AND c.deleted_at IS NULL"
         )))
@@ -168,53 +188,132 @@ impl DeployRepository {
                 .await;
         }
 
-        let domain_ids = request
-            .domain_ids
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        // The gate is the tenant *and* the zone's owner, not the tenant alone.
+        // Two ways to name the identifier set, one gate behind both.
         //
-        // A tenant-scoped check is not enough: the same tenant also holds the
-        // platform's own `app.<suffix>` zones, whose hostnames the deployment
-        // verifies for app publishing. Those rows are `VERIFIED` + `ACTIVE`, so a
-        // tenant-only predicate accepts them, and any member of the tenant could
-        // then order a certificate covering platform infrastructure — the edge's
-        // own names. The zone is the unit of ownership (`deploy_dns_zone.user_id`),
-        // so it is the unit the gate has to speak in.
-        //
-        // "Reachable" is the same rule the domain inventory states, spelled the
-        // same way (`zone_owner_gate`): a zone is reachable when it is the
-        // caller's own, or when it is tenant-level (`user_id IS NULL`) and
-        // therefore shared with every member. It is deliberately *not* "the
-        // caller is the platform": no such caller exists here, and denying
-        // tenant-level zones outright would hide the platform zones the
-        // inventory documents as visible to everyone.
-        //
-        // `$3 IS NULL` (an unauthenticated actor) keeps the pre-existing
-        // tenant-wide behaviour rather than silently denying every request, since
-        // this path is also reached by internal callers that carry no user.
-        let requested_domains = sqlx::query(
-            "SELECT d.id, d.hostname_ascii
-             FROM deploy_domain d
-             JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE d.tenant_id = $1 AND d.uuid = ANY($2)
-               AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
-               AND d.deleted_at IS NULL
-               AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
-             FOR SHARE OF d",
+        // `domainIds` names claims by id; `requestedIdentifiers` names the same
+        // claims by their FQDN, which is what an operator typing into a free-form
+        // hostname field produces. Which channel was used changes only *how* the
+        // claims are looked up — never *whether* they are looked up: both resolve
+        // through the same ACTIVE + VERIFIED + zone-owner predicate below, so a
+        // submitted hostname that is not a verified claim of this tenant, or that
+        // belongs to a private zone this caller cannot reach, is refused exactly
+        // as an unusable domain id would be.
+        let (identifier_source, _) = resolve_certificate_identifier_source(
+            &request.domain_ids,
+            &request.requested_identifiers,
         )
-        .bind(tenant_id)
-        .bind(&domain_ids)
-        .bind(actor_id)
-        .fetch_all(&mut *transaction)
-        .await
-        .map_err(|error| store_error("resolve certificate hostname identifiers", error))?;
-        if requested_domains.len() != request.domain_ids.len() {
-            return Err(DeployServiceError::validation(
-                "every domainId must reference an active verified hostname in the current tenant",
-            ));
-        }
+        .map_err(map_certificate_plan_error)?;
+        let requested_domains = match identifier_source {
+            CertificateIdentifierSource::DomainIds => {
+                let domain_ids = request
+                    .domain_ids
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                // The gate is the tenant *and* the zone's owner, not the tenant alone.
+                //
+                // A tenant-scoped check is not enough: the same tenant also holds the
+                // platform's own `app.<suffix>` zones, whose hostnames the deployment
+                // verifies for app publishing. Those rows are `VERIFIED` + `ACTIVE`, so a
+                // tenant-only predicate accepts them, and any member of the tenant could
+                // then order a certificate covering platform infrastructure — the edge's
+                // own names. The zone is the unit of ownership (`deploy_dns_zone.user_id`),
+                // so it is the unit the gate has to speak in.
+                //
+                // "Reachable" is the same rule the domain inventory states, spelled the
+                // same way (`zone_owner_gate`): a zone is reachable when it is the
+                // caller's own, or when it is tenant-level (`user_id IS NULL`) and
+                // therefore shared with every member. It is deliberately *not* "the
+                // caller is the platform": no such caller exists here, and denying
+                // tenant-level zones outright would hide the platform zones the
+                // inventory documents as visible to everyone.
+                //
+                // `$3 IS NULL` (an unauthenticated actor) keeps the pre-existing
+                // tenant-wide behaviour rather than silently denying every request, since
+                // this path is also reached by internal callers that carry no user.
+                let rows = sqlx::query(
+                    "SELECT d.id, d.hostname_ascii
+                     FROM deploy_domain d
+                     JOIN deploy_dns_zone z ON z.id = d.zone_id
+                     WHERE d.tenant_id = $1 AND d.uuid = ANY($2)
+                       AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
+                       AND d.deleted_at IS NULL
+                       AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
+                     FOR SHARE OF d",
+                )
+                .bind(tenant_id)
+                .bind(&domain_ids)
+                .bind(actor_id)
+                .fetch_all(&mut *transaction)
+                .await
+                .map_err(|error| store_error("resolve certificate hostname identifiers", error))?;
+                if rows.len() != request.domain_ids.len() {
+                    return Err(DeployServiceError::validation(
+                        "every domainId must reference an active verified hostname in the \
+                         current tenant",
+                    ));
+                }
+                rows
+            }
+            CertificateIdentifierSource::RequestedIdentifiers => {
+                // Canonicalized before the lookup so `WWW.Example.COM.` finds the
+                // stored `www.example.com`, and so a name that is merely a
+                // different spelling of another submitted name is caught as a
+                // duplicate rather than looked up twice.
+                let (_, requested_hostnames) = resolve_certificate_identifier_source(
+                    &request.domain_ids,
+                    &request.requested_identifiers,
+                )
+                .map_err(map_certificate_plan_error)?;
+                let requested_hostnames = requested_hostnames.unwrap_or_default();
+                let hostnames = requested_hostnames
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                let rows = sqlx::query(
+                    "SELECT d.id, d.hostname_ascii
+                     FROM deploy_domain d
+                     JOIN deploy_dns_zone z ON z.id = d.zone_id
+                     WHERE d.tenant_id = $1 AND d.hostname_ascii = ANY($2)
+                       AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
+                       AND d.deleted_at IS NULL
+                       AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
+                     FOR SHARE OF d",
+                )
+                .bind(tenant_id)
+                .bind(&hostnames)
+                .bind(actor_id)
+                .fetch_all(&mut *transaction)
+                .await
+                .map_err(|error| {
+                    store_error("resolve requested certificate hostname identifiers", error)
+                })?;
+                // Name the offending hostname. Unlike a `domainId` failure — where
+                // the caller supplied opaque ids and the message must not confirm
+                // which ones exist — the operator typed these names themselves, so
+                // echoing the one that failed tells them what to fix without
+                // revealing anything they did not just send. Hostnames are also
+                // public by construction: the certificate would have printed them.
+                let resolved = rows
+                    .iter()
+                    .filter_map(|row| {
+                        row.try_get::<String, _>("hostname_ascii")
+                            .ok()
+                            .map(|hostname| (hostname, row))
+                    })
+                    .collect::<HashMap<String, &PgRow>>();
+                if let Some(missing) = requested_hostnames
+                    .iter()
+                    .find(|hostname| !resolved.contains_key(*hostname))
+                {
+                    return Err(DeployServiceError::validation(format!(
+                        "requestedIdentifiers contains a hostname that is not an active verified \
+                         hostname of this tenant: {missing}"
+                    )));
+                }
+                rows
+            }
+        };
         let requested_hostnames = requested_domains
             .iter()
             .map(|row| row.try_get::<String, _>("hostname_ascii"))
@@ -281,14 +380,21 @@ impl DeployRepository {
 
         let certificate_id = next_id(self.id_generator())?;
         let certificate_uuid = new_uuid();
+        // The presentation the operator chose, resolved through the same planner
+        // rules the orders follow. It is stored on the certificate rather than left
+        // to the order, because the first order is opened right after this insert
+        // and the claim the worker reads ("is this a manual order?") has to be
+        // answerable from the certificate itself. `MANAGED` + HTTP-01 is the
+        // platform-served default and needs no provider probe; a manual request is
+        // explicitly chosen by an operator who is going to publish the records.
         sqlx::query(
             "INSERT INTO deploy_certificate (
                 id, uuid, tenant_id, organization_id, cert_name, certificate_source,
                 ca_profile, certificate_scope, validation_method, preferred_key_algorithm,
-                auto_renew, renew_before_days, renewal_status, status, provider_account_id,
-                idempotency_key, request_sha256, created_by, updated_by
+                presentation_mode, auto_renew, renew_before_days, renewal_status, status,
+                provider_account_id, idempotency_key, request_sha256, created_by, updated_by
              ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'NONE','PENDING',$13,$14,$15,$16,$16
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'NONE','PENDING',$14,$15,$16,$17,$17
              )",
         )
         .bind(certificate_id)
@@ -301,6 +407,7 @@ impl DeployRepository {
         .bind(request.certificate_scope.as_str())
         .bind(validation_method.as_str())
         .bind(&request.preferred_key_algorithm)
+        .bind(request.challenge_presentation.as_str())
         .bind(request.auto_renew)
         .bind(request.renew_before_days)
         .bind(request.provider_account_id.as_deref())
@@ -495,18 +602,25 @@ fn validate_create_certificate(
             "Idempotency-Key must contain between 1 and 128 characters",
         ));
     }
-    if request.domain_ids.is_empty() || request.domain_ids.len() > MAX_CERTIFICATE_IDENTIFIERS {
-        return Err(DeployServiceError::validation(format!(
-            "domainIds must contain between 1 and {MAX_CERTIFICATE_IDENTIFIERS} hostnames"
-        )));
-    }
-    let unique_domain_ids = request.domain_ids.iter().collect::<BTreeSet<_>>();
-    if unique_domain_ids.len() != request.domain_ids.len()
-        || request.domain_ids.iter().any(|id| id.trim().is_empty())
-    {
-        return Err(DeployServiceError::validation(
-            "domainIds must contain unique non-empty hostname identifiers",
-        ));
+    // Which channel names the identifiers, and whether exactly one of them does.
+    // Resolved through the contract so the rule is the same one the service and
+    // the console describe, instead of a second copy that can drift.
+    resolve_certificate_identifier_source(&request.domain_ids, &request.requested_identifiers)
+        .map_err(map_certificate_plan_error)?;
+    if !request.domain_ids.is_empty() {
+        if request.domain_ids.len() > MAX_CERTIFICATE_IDENTIFIERS {
+            return Err(DeployServiceError::validation(format!(
+                "domainIds must contain between 1 and {MAX_CERTIFICATE_IDENTIFIERS} hostnames"
+            )));
+        }
+        let unique_domain_ids = request.domain_ids.iter().collect::<BTreeSet<_>>();
+        if unique_domain_ids.len() != request.domain_ids.len()
+            || request.domain_ids.iter().any(|id| id.trim().is_empty())
+        {
+            return Err(DeployServiceError::validation(
+                "domainIds must contain unique non-empty hostname identifiers",
+            ));
+        }
     }
     if !matches!(
         request.ca_profile.as_str(),
@@ -545,6 +659,44 @@ fn decode_certificate_scope(raw: &str) -> Result<CertificateScope, sqlx::Error> 
 fn decode_validation_method(raw: &str) -> Result<ValidationMethod, sqlx::Error> {
     ValidationMethod::parse(raw)
         .ok_or_else(|| sqlx::Error::Decode(format!("unknown validation_method: {raw}").into()))
+}
+
+/// Decodes a presentation mode column that the baseline constrains to
+/// `MANAGED` / `MANUAL`.
+///
+/// An unreadable value reads as `MANAGED` rather than failing the row: `MANAGED`
+/// is what every issuance before the switch was, so a row written by an older
+/// build (or carrying debris) is described as what it actually does instead of
+/// disappearing from the console.
+fn decode_presentation_mode(raw: Option<&str>) -> ChallengePresentation {
+    raw.and_then(ChallengePresentation::parse)
+        .unwrap_or(ChallengePresentation::Managed)
+}
+
+/// Decodes an archive status column that the baseline constrains to the six
+/// `deploy_certificate_archive.status` values.
+///
+/// An absent row (no archive intent for the served version) reads as `None`, and
+/// so does an unrecognised token: `None` is the statement "this control plane has
+/// nothing to report about archiving here", which is true for a value written by a
+/// newer build this one does not understand. Mapping it to `Failed` would send an
+/// operator to debug a Drive write that may have succeeded.
+fn decode_archive_status(raw: Option<&str>) -> CertificateArchiveStatus {
+    raw.and_then(CertificateArchiveStatus::parse)
+        .unwrap_or(CertificateArchiveStatus::None)
+}
+
+/// Reads an optional text column, treating a NULL and a decode failure alike.
+///
+/// Used for the Drive ids, which are nullable in both the table and the join. A
+/// value this driver cannot decode is reported as absent rather than failing the
+/// whole page: one unreadable Drive id must not hide every certificate a tenant
+/// owns.
+fn optional_text_column(row: &PgRow, column: &str) -> Option<String> {
+    row.try_get::<Option<String>, _>(column)
+        .ok()
+        .flatten()
+        .filter(|value| !value.trim().is_empty())
 }
 
 fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> {
@@ -599,6 +751,15 @@ fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> 
         ca_profile: row.try_get("ca_profile")?,
         certificate_scope,
         validation_method,
+        // Rows written before migration 0018 carry the column default; reading it
+        // back through `decode_presentation_mode` keeps a legacy `NULL` (or an
+        // unexpected token) described as `MANAGED` instead of failing the page.
+        presentation_mode: decode_presentation_mode(
+            row.try_get::<Option<String>, _>("presentation_mode")
+                .ok()
+                .flatten()
+                .as_deref(),
+        ),
         provider_account_id: row.try_get("provider_account_id")?,
         preferred_key_algorithm: row.try_get("preferred_key_algorithm")?,
         identifiers,
@@ -620,10 +781,7 @@ fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> 
                 row.try_get("active_renewal_status").unwrap_or(None);
             match (renewal_id, renewal_status) {
                 (Some(renewal_id), Some(status)) if !renewal_id.is_empty() => {
-                    Some(CertificateRenewalInProgress {
-                        renewal_id,
-                        status,
-                    })
+                    Some(CertificateRenewalInProgress { renewal_id, status })
                 }
                 _ => None,
             }
@@ -636,6 +794,20 @@ fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> 
             .as_str()
             .to_owned()
         }),
+        // The archive columns come from a LEFT JOIN on the current version, so
+        // their absence means "this version was never given an archive intent"
+        // rather than "the archive failed". The two ids are reported only when the
+        // row actually names them: an `ARCHIVED` row is guaranteed by
+        // `chk_deploy_certificate_archive_located` to carry both, and a link into
+        // a Drive location that does not exist is worse than no link.
+        archive_status: decode_archive_status(
+            row.try_get::<Option<String>, _>("archive_status")
+                .ok()
+                .flatten()
+                .as_deref(),
+        ),
+        archive_space_id: optional_text_column(row, "archive_space_id"),
+        archive_folder_node_id: optional_text_column(row, "archive_folder_node_id"),
         status: row.try_get("status")?,
         created_at: datetime_from_row(row, "created_at")?,
         updated_at: datetime_from_row(row, "updated_at")?,

@@ -800,6 +800,157 @@ pub struct CertificateChallengeReleaseResult {
     pub accepted: bool,
 }
 
+/// One archive row a worker has claimed and may now upload.
+///
+/// The repository returns this rather than the caller re-reading its own row: the
+/// claim is the moment the row became this worker's, and everything the upload
+/// needs is already on it. `attempt_count` is the value *before* the attempt, so
+/// the caller decides the next state from `attempt_count + 1`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CertificateArchiveClaim {
+    /// The archive row's own id, which the holder needs to address the outcome.
+    pub archive_row_id: i64,
+    pub tenant_id: i64,
+    pub certificate_id: String,
+    pub certificate_uuid: String,
+    pub certificate_version_id: String,
+    pub certificate_version_uuid: String,
+    pub bundle_kind: String,
+    pub cert_name: String,
+    pub ca_profile: String,
+    pub version_no: i64,
+    pub issuer: String,
+    pub subject: String,
+    pub key_algorithm: String,
+    pub serial_sha256: String,
+    pub fingerprint_sha256: String,
+    pub spki_sha256: String,
+    pub chain_sha256: String,
+    pub not_before: String,
+    pub not_after: String,
+    pub order_uuid: Option<String>,
+    pub identifiers: Vec<String>,
+    pub attempt_count: i32,
+}
+
+/// Where an archive landed, as the repository records it.
+///
+/// Mirrors the `(drive_space_id, drive_folder_node_id, drive_manifest_node_id,
+/// manifest_sha256)` columns. The three ids are what the console needs to open the
+/// folder and to name a file; the digest proves the folder is the one this control
+/// plane wrote.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CertificateArchiveOutcome {
+    pub space_id: String,
+    pub certificate_folder_node_id: String,
+    pub version_folder_node_id: String,
+    pub manifest_node_id: String,
+    pub manifest_sha256: String,
+}
+
+/// Outcome of an operator's "retry the Drive archive" command.
+///
+/// A command, not a query: it answers whether *this* call moved the certificate's
+/// archive, and the state the certificate is in afterwards. The archive itself
+/// still runs in the worker, so a successful retry usually reads back `PENDING`
+/// and the console polls `archiveStatus` exactly as it does after an issuance.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CertificateArchiveRetryResult {
+    /// `true` when this call re-armed the archive. `false` means there was
+    /// nothing to retry — already archived or archived, or archiving is switched
+    /// off on this deployment — and is a retry-safe answer rather than an error.
+    pub accepted: bool,
+    /// The certificate's archive state after the command, as [`Self::accepted`]
+    /// reports it. `SKIPPED` here is the honest refusal for a deployment that
+    /// does not archive.
+    #[serde(rename = "archiveStatus")]
+    pub archive_status: CertificateArchiveStatus,
+}
+
+/// Whether an issued certificate's material has been archived to Drive.
+///
+/// Archival is asynchronous and retriable, so it is a state rather than a
+/// timestamp: `PENDING` is "the archive step is queued or running", `ARCHIVED`
+/// is "the material is in Drive and the ids below name where", and `FAILED` is
+/// "the last attempt did not land" — the state the retry command exists for.
+/// `NONE` is a certificate that has never been issued, and the default, so a row
+/// written before the archive feature existed reads honestly instead of claiming
+/// a failed archive.
+///
+/// `STORING` and `SKIPPED` are the two states that keep the report from being a
+/// half-truth. `STORING` is a claimed row whose bytes are being uploaded right
+/// now, and `SKIPPED` is a deployment where archiving is switched off: reporting
+/// the second as `FAILED` would send an operator to debug a Drive they never
+/// configured, and reporting it as `ARCHIVED` would be a false claim that
+/// certificate files are downloadable.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CertificateArchiveStatus {
+    #[default]
+    None,
+    Pending,
+    Storing,
+    Archived,
+    Failed,
+    Skipped,
+}
+
+impl CertificateArchiveStatus {
+    pub const ALL: [Self; 6] = [
+        Self::None,
+        Self::Pending,
+        Self::Storing,
+        Self::Archived,
+        Self::Failed,
+        Self::Skipped,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "NONE",
+            Self::Pending => "PENDING",
+            Self::Storing => "STORING",
+            Self::Archived => "ARCHIVED",
+            Self::Failed => "FAILED",
+            Self::Skipped => "SKIPPED",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "NONE" => Some(Self::None),
+            "PENDING" => Some(Self::Pending),
+            "STORING" => Some(Self::Storing),
+            "ARCHIVED" => Some(Self::Archived),
+            "FAILED" => Some(Self::Failed),
+            "SKIPPED" => Some(Self::Skipped),
+            _ => None,
+        }
+    }
+
+    /// Whether the console should offer a retry for this state.
+    ///
+    /// `PENDING` (never attempted, or holding a backoff), `STORING` (a worker
+    /// died mid-upload and the row was left claimed) and `FAILED` (the attempt
+    /// budget is spent) are all states an explicit retry can move. `SKIPPED`
+    /// is not: nothing failed, and the fix is a deployment setting rather than a
+    /// button.
+    pub const fn is_retryable(self) -> bool {
+        matches!(self, Self::Pending | Self::Storing | Self::Failed)
+    }
+
+    /// Whether the archived driver location is known and may be linked.
+    pub const fn is_located(self) -> bool {
+        matches!(self, Self::Archived)
+    }
+}
+
+impl std::fmt::Display for CertificateArchiveStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CertificateResponse {
     pub id: String,
@@ -813,6 +964,16 @@ pub struct CertificateResponse {
     pub certificate_scope: CertificateScope,
     #[serde(rename = "validationMethod")]
     pub validation_method: ValidationMethod,
+    /// Who presents this certificate's challenge responses.
+    ///
+    /// Reported per certificate so the console can tell an order the platform
+    /// drives from one parked waiting for an operator to publish a TXT record:
+    /// the two look identical in `status`, and only this field says whether the
+    /// operator has work to do. Always serialized — including for legacy rows,
+    /// which read as `MANAGED` because that is what every pre-switch issuance
+    /// was.
+    #[serde(rename = "presentationMode")]
+    pub presentation_mode: ChallengePresentation,
     /// Cloud account pinned to present this certificate's DNS-01 challenges.
     ///
     /// The certificate-level pin overrides the zone's, which is what makes a
@@ -884,6 +1045,22 @@ pub struct CertificateResponse {
     /// one ladder instead of each carrying its own thresholds.
     #[serde(rename = "alertPhase", skip_serializing_if = "Option::is_none")]
     pub alert_phase: Option<String>,
+    /// Whether the issued certificate material has been archived to Drive.
+    ///
+    /// `NONE` until the archive feature runs for this certificate; the console
+    /// renders the retention story from this field rather than assuming the
+    /// certificate is only ever distributed to listeners.
+    #[serde(rename = "archiveStatus", default)]
+    pub archive_status: CertificateArchiveStatus,
+    /// Drive space the certificate material is archived in.
+    #[serde(rename = "archiveSpaceId", skip_serializing_if = "Option::is_none")]
+    pub archive_space_id: Option<String>,
+    /// Drive folder node holding the archived certificate material.
+    #[serde(
+        rename = "archiveFolderNodeId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub archive_folder_node_id: Option<String>,
     pub status: String,
     #[serde(rename = "createdAt")]
     pub created_at: String,
@@ -962,12 +1139,32 @@ impl CertificateQuotaWindow {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CreateCertificateRequest {
     #[serde(rename = "certName")]
     pub cert_name: String,
-    #[serde(rename = "domainIds")]
+    /// Identifiers named by their `deploy_domain` claim id.
+    ///
+    /// The original shape of this request: a console picker selected from the
+    /// tenant's verified hostnames. Still supported unchanged, and still
+    /// resolved against ACTIVE + VERIFIED claims — naming a claim by id never
+    /// bypasses the ownership gate.
+    #[serde(rename = "domainIds", default)]
     pub domain_ids: Vec<String>,
+    /// Identifiers named directly as FQDNs.
+    ///
+    /// What a free-form hostname field produces: an operator types
+    /// `www.example.com` instead of hunting for its claim id. Every submitted
+    /// name is canonicalized by the contract's own rule and then resolved
+    /// against the tenant's existing ACTIVE + VERIFIED claims, so a name that is
+    /// not a verified claim of this tenant is refused — the ownership gate is
+    /// identical to the one `domainIds` goes through, only its input differs.
+    ///
+    /// Mutually exclusive with [`Self::domain_ids`]: sending both is a
+    /// validation error rather than a union or an intersection, because either
+    /// interpretation would silently rewrite the operator's request.
+    #[serde(rename = "requestedIdentifiers", default)]
+    pub requested_identifiers: Vec<String>,
     /// `SINGLE_DOMAIN` (default) or `WILDCARD`. A wildcard scope plans the apex
     /// in addition to the wildcard itself, because a wildcard SAN does not
     /// cover its own apex.

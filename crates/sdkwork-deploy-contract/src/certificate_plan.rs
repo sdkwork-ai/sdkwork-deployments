@@ -98,6 +98,13 @@ pub enum CertificatePlanError {
     SingleDomainRequiresOneIdentifier,
     /// The planned identifier set exceeds [`MAX_CERTIFICATE_IDENTIFIERS`].
     TooManyIdentifiers,
+    /// Both `domainIds` and `requestedIdentifiers` were sent.
+    ///
+    /// The two are alternative descriptions of one identifier set, not two
+    /// additive sources. Accepting both would require deciding whether they
+    /// union, intersect, or must agree, and every answer would be a silent
+    /// reinterpretation of what the operator asked for.
+    ConflictingIdentifierSources,
 }
 
 impl CertificatePlanError {
@@ -119,6 +126,7 @@ impl CertificatePlanError {
             Self::Http01WebrootNotConfigured => "CERTIFICATE_HTTP01_WEBROOT_MISSING",
             Self::SingleDomainRequiresOneIdentifier => "CERTIFICATE_SINGLE_DOMAIN_IDENTIFIER_COUNT",
             Self::TooManyIdentifiers => "CERTIFICATE_IDENTIFIER_LIMIT_EXCEEDED",
+            Self::ConflictingIdentifierSources => "CERTIFICATE_IDENTIFIER_SOURCE_CONFLICT",
         }
     }
 
@@ -160,8 +168,32 @@ impl CertificatePlanError {
             Self::TooManyIdentifiers => {
                 "a certificate may cover at most 8 hostname identifiers"
             }
+            Self::ConflictingIdentifierSources => {
+                "send either domainIds or requestedIdentifiers, not both"
+            }
         }
     }
+}
+
+/// Canonicalizes one operator-submitted hostname and classifies its shape.
+///
+/// The single normalization rule the whole certificate surface shares: an
+/// operator typing `WWW.Example.COM.` and a stored claim of
+/// `www.example.com` must name the same identifier, otherwise the claim lookup
+/// behind an arbitrary-hostname request would reject names that are in fact
+/// verified, and two spellings of one name would slip past duplicate detection.
+///
+/// Canonicalization follows ADR-20260723 §2: lower-case ASCII, no trailing dot.
+/// A single leading `*.` is preserved; any other `*` position is rejected.
+///
+/// Exposed rather than duplicated because callers need the canonical form
+/// *before* they can look the name up: a service that lower-cased on its own
+/// would drift from [`plan_certificate_identifiers`] and accept a name the
+/// planner later refuses.
+pub fn normalize_certificate_identifier(
+    raw: &str,
+) -> Result<(String, CertificateIdentifierType), CertificatePlanError> {
+    normalize_and_classify(raw)
 }
 
 /// Normalizes a hostname and classifies it as exact or wildcard.
@@ -203,6 +235,56 @@ fn normalize_and_classify(
         CertificateIdentifierType::Exact => base.to_owned(),
     };
     Ok((hostname, identifier_type))
+}
+
+/// Which field of a create request names the certificate's identifiers.
+///
+/// An operator may describe the set two ways: by the ids of hostname claims they
+/// picked in the console (`domainIds`, the original shape), or by the FQDNs they
+/// typed (`requestedIdentifiers`, what a free-form form produces). They are
+/// mutually exclusive on one request — see
+/// [`CertificatePlanError::ConflictingIdentifierSources`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CertificateIdentifierSource {
+    /// Identifiers named by claim id; the repository resolves the hostnames.
+    DomainIds,
+    /// Hostnames named directly, already canonicalized.
+    RequestedIdentifiers,
+}
+
+/// Normalizes the two identifier channels of a create request into one source.
+///
+/// Returns the source that carries the set, plus the canonical hostnames when
+/// the caller named them directly. A `domainIds` request answers `None` for the
+/// hostnames because only the database knows which hostname an id names.
+///
+/// Deliberately pure: the conflict rule and the canonicalization are product
+/// rules that the repository layer, the service layer, and the console all have
+/// to agree on, and a rule living in a database path is a rule that only the
+/// database path enforces.
+pub fn resolve_certificate_identifier_source(
+    domain_ids: &[String],
+    requested_identifiers: &[String],
+) -> Result<(CertificateIdentifierSource, Option<Vec<String>>), CertificatePlanError> {
+    match (domain_ids.is_empty(), requested_identifiers.is_empty()) {
+        (false, false) => Err(CertificatePlanError::ConflictingIdentifierSources),
+        (true, true) => Err(CertificatePlanError::EmptyIdentifierSet),
+        (false, true) => Ok((CertificateIdentifierSource::DomainIds, None)),
+        (true, false) => {
+            if requested_identifiers.len() > MAX_CERTIFICATE_IDENTIFIERS {
+                return Err(CertificatePlanError::TooManyIdentifiers);
+            }
+            let mut canonical = Vec::with_capacity(requested_identifiers.len());
+            for raw in requested_identifiers {
+                let (hostname, _) = normalize_certificate_identifier(raw)?;
+                canonical.push(hostname);
+            }
+            Ok((
+                CertificateIdentifierSource::RequestedIdentifiers,
+                Some(canonical),
+            ))
+        }
+    }
 }
 
 /// Resolves the concrete ACME challenge method for a scope.
@@ -817,6 +899,7 @@ mod tests {
             CertificatePlanError::Http01WebrootNotConfigured,
             CertificatePlanError::SingleDomainRequiresOneIdentifier,
             CertificatePlanError::TooManyIdentifiers,
+            CertificatePlanError::ConflictingIdentifierSources,
         ];
         let codes = all
             .iter()
@@ -844,5 +927,300 @@ mod tests {
             .map(|kind| kind.as_str())
             .collect::<BTreeSet<_>>();
         assert_eq!(names.len(), kinds.len());
+    }
+
+    // -- operator-submitted hostnames ---------------------------------------
+    //
+    // A free-form hostname field means the canonical form is the *operator's*
+    // input, not a database value. Every case below is a spelling the console
+    // form can produce or a shape the field must refuse, and the resolved form is
+    // then what the claim lookup compares against `deploy_domain.hostname_ascii`.
+
+    fn canonical(raw: &str) -> Option<(String, CertificateIdentifierType)> {
+        normalize_certificate_identifier(raw).ok()
+    }
+
+    #[test]
+    fn a_submitted_hostname_is_lowercased_and_loses_its_trailing_dot() {
+        // `WWW.Example.COM.` is what a paste out of a browser's certificate panel
+        // looks like, and it names the same claim as the stored
+        // `www.example.com`. Rejecting it would tell an operator their own
+        // verified hostname is not verified.
+        assert_eq!(
+            canonical("WWW.Example.COM."),
+            Some((
+                "www.example.com".to_owned(),
+                CertificateIdentifierType::Exact
+            ))
+        );
+        // Surrounding whitespace is form input, not part of the name.
+        assert_eq!(
+            canonical("  api.example.com  "),
+            Some((
+                "api.example.com".to_owned(),
+                CertificateIdentifierType::Exact
+            ))
+        );
+    }
+
+    #[test]
+    fn a_submitted_wildcard_keeps_one_leading_label() {
+        assert_eq!(
+            canonical("*.Example.COM."),
+            Some((
+                "*.example.com".to_owned(),
+                CertificateIdentifierType::Wildcard
+            ))
+        );
+        assert_eq!(
+            canonical("*.a.example.com"),
+            Some((
+                "*.a.example.com".to_owned(),
+                CertificateIdentifierType::Wildcard
+            ))
+        );
+    }
+
+    #[test]
+    fn malformed_submitted_hostnames_are_refused() {
+        // A bare TLD, a leading dot, an empty label, a label that starts or ends
+        // with '-', a label over 63 bytes, an underscore, and non-ASCII: each is
+        // a name no CA will issue for, so it must fail here rather than at the
+        // order.
+        for raw in [
+            "",
+            "   ",
+            ".",
+            ".example.com",
+            "a..b.example.com",
+            "localhost",
+            "-bad.example.com",
+            "bad-.example.com",
+            "under_score.example.com",
+            "exämple.com",
+        ] {
+            assert!(
+                normalize_certificate_identifier(raw).is_err(),
+                "{raw:?} must be refused"
+            );
+        }
+        // Repeated trailing dots are a fully-qualified spelling, not an empty
+        // label: `example.com..` canonicalizes to `example.com` because the
+        // canonicalizer trims every trailing dot (`.trim_end_matches('.')`). It is
+        // asserted rather than removed so the acceptance is a decision on record:
+        // refusing it would be defensible too, but the answer must not be
+        // accidental.
+        assert_eq!(
+            normalize_certificate_identifier("example.com..").map(|(hostname, _)| hostname),
+            Ok("example.com".to_owned())
+        );
+        // A wildcard with nothing after the label (`*.`) is reported as a
+        // wildcard-depth problem: the `*.` prefix matched but left no apex.
+        assert_eq!(
+            normalize_certificate_identifier("*."),
+            Err(CertificatePlanError::MultiLevelWildcard)
+        );
+        let too_long_label = format!("{}.example.com", "a".repeat(64));
+        assert_eq!(
+            normalize_certificate_identifier(&too_long_label),
+            Err(CertificatePlanError::InvalidHostname)
+        );
+    }
+
+    #[test]
+    fn multi_label_wildcards_are_refused_with_their_own_code() {
+        // Distinct from `InvalidHostname` on purpose: "you cannot wildcard two
+        // labels" is a rule an operator can act on, while "not a hostname" gives
+        // them nothing to fix.
+        for raw in ["*", "*.*.example.com", "a.*.example.com", "**"] {
+            assert_eq!(
+                normalize_certificate_identifier(raw),
+                Err(CertificatePlanError::MultiLevelWildcard),
+                "{raw:?} must be refused as a wildcard-depth problem"
+            );
+        }
+    }
+
+    #[test]
+    fn the_public_canonicalizer_agrees_with_the_planner() {
+        // The whole reason this function is public: a service that canonicalized
+        // differently would resolve a claim the planner then refuses, and the
+        // operator would see "verified" and "invalid" for the same name.
+        for raw in ["WWW.Example.COM.", "*.Example.com", "a.b.example.co.uk"] {
+            let (hostname, _) = normalize_certificate_identifier(raw).expect("canonical");
+            let planned = plan(CertificateScope::Wildcard, &[raw])
+                .or_else(|_| plan(CertificateScope::SingleDomain, &[raw]))
+                .expect("plan");
+            assert!(
+                planned
+                    .iter()
+                    .any(|identifier| identifier.hostname == hostname),
+                "{hostname} must be one of the planned identifiers"
+            );
+        }
+    }
+
+    #[test]
+    fn sending_both_identifier_channels_is_refused() {
+        // A union would silently add names the operator did not keep selected, and
+        // an intersection would silently drop some they did. Neither is a
+        // reinterpretation the server may make on its own.
+        let domain_ids = vec!["9f1f0d1e-0000-4000-8000-000000000001".to_owned()];
+        let requested = vec!["www.example.com".to_owned()];
+        assert_eq!(
+            resolve_certificate_identifier_source(&domain_ids, &requested),
+            Err(CertificatePlanError::ConflictingIdentifierSources)
+        );
+        assert_eq!(
+            resolve_certificate_identifier_source(&domain_ids, &requested)
+                .expect_err("conflict")
+                .code(),
+            "CERTIFICATE_IDENTIFIER_SOURCE_CONFLICT"
+        );
+    }
+
+    #[test]
+    fn exactly_one_identifier_channel_is_required() {
+        assert_eq!(
+            resolve_certificate_identifier_source(&[], &[]),
+            Err(CertificatePlanError::EmptyIdentifierSet)
+        );
+        assert_eq!(
+            resolve_certificate_identifier_source(&["claim-1".to_owned()], &[]),
+            Ok((CertificateIdentifierSource::DomainIds, None))
+        );
+    }
+
+    #[test]
+    fn submitted_hostnames_are_canonicalized_and_capped() {
+        let (source, hostnames) = resolve_certificate_identifier_source(
+            &[],
+            &[
+                "WWW.Example.COM.".to_owned(),
+                "*.API.example.com".to_owned(),
+            ],
+        )
+        .expect("requested identifiers");
+        assert_eq!(source, CertificateIdentifierSource::RequestedIdentifiers);
+        assert_eq!(
+            hostnames,
+            Some(vec![
+                "www.example.com".to_owned(),
+                "*.api.example.com".to_owned()
+            ])
+        );
+
+        // The product cap applies to the submitted set itself: a request naming
+        // nine names would plan more than eight identifiers once a wildcard adds
+        // its apex, and the CA refuses that order after the budget is spent.
+        let too_many = (0..=MAX_CERTIFICATE_IDENTIFIERS)
+            .map(|index| format!("h{index}.example.com"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            resolve_certificate_identifier_source(&[], &too_many),
+            Err(CertificatePlanError::TooManyIdentifiers)
+        );
+    }
+
+    #[test]
+    fn a_bad_hostname_among_good_ones_refuses_the_whole_request() {
+        // Partial acceptance would create a certificate covering a subset the
+        // operator never asked for.
+        assert_eq!(
+            resolve_certificate_identifier_source(
+                &[],
+                &["www.example.com".to_owned(), "not_a_hostname".to_owned()],
+            ),
+            Err(CertificatePlanError::InvalidHostname)
+        );
+    }
+
+    #[test]
+    fn duplicate_submitted_spellings_collapse_to_one_name() {
+        // `WWW.example.com` and `www.example.com.` are one name after
+        // canonicalization; the planner's duplicate rule is what refuses the
+        // request, so the canonicalizer must not hide the collision by keeping
+        // both spellings.
+        let (_, hostnames) = resolve_certificate_identifier_source(
+            &[],
+            &["WWW.example.com".to_owned(), "www.example.com.".to_owned()],
+        )
+        .expect("both spellings canonicalize");
+        let hostnames = hostnames.expect("hostnames");
+        assert_eq!(hostnames[0], hostnames[1]);
+        assert_eq!(
+            plan_certificate_identifiers(CertificateScope::Wildcard, &hostnames),
+            Err(CertificatePlanError::DuplicateHostname)
+        );
+    }
+
+    #[test]
+    fn the_presentation_mode_is_reported_for_every_certificate() {
+        // Always serialized, including the default: the console reads it to
+        // decide whether an operator has a TXT record to publish, and an omitted
+        // field would read as "unknown" rather than "managed".
+        let managed =
+            serde_json::to_value(crate::CertificateResponse::default()).expect("serialize");
+        assert_eq!(managed["presentationMode"], "MANAGED");
+        let manual = serde_json::to_value(crate::CertificateResponse {
+            presentation_mode: ChallengePresentation::Manual,
+            ..Default::default()
+        })
+        .expect("serialize");
+        assert_eq!(manual["presentationMode"], "MANUAL");
+    }
+
+    #[test]
+    fn archive_status_round_trips_and_defaults_to_none() {
+        for status in crate::CertificateArchiveStatus::ALL {
+            assert_eq!(
+                crate::CertificateArchiveStatus::parse(status.as_str()),
+                Some(status)
+            );
+            let json = serde_json::to_value(status).expect("serialize archive status");
+            assert_eq!(json, serde_json::Value::String(status.as_str().to_owned()));
+        }
+        assert_eq!(
+            crate::CertificateArchiveStatus::default(),
+            crate::CertificateArchiveStatus::None
+        );
+        let certificate =
+            serde_json::to_value(crate::CertificateResponse::default()).expect("serialize");
+        assert_eq!(certificate["archiveStatus"], "NONE");
+        // Nothing is archived yet, so no Drive ids are invented.
+        assert!(certificate.get("archiveSpaceId").is_none());
+        assert!(certificate.get("archiveFolderNodeId").is_none());
+    }
+
+    #[test]
+    fn a_request_without_identifier_channels_parses_to_both_empty() {
+        // `default` on both channels is what keeps a client that sends neither
+        // reaching the validation error rather than a deserialization error.
+        let request: crate::CreateCertificateRequest = serde_json::from_value(serde_json::json!({
+            "certName": "example.com",
+        }))
+        .expect("request parses");
+        assert!(request.domain_ids.is_empty());
+        assert!(request.requested_identifiers.is_empty());
+        assert_eq!(
+            resolve_certificate_identifier_source(
+                &request.domain_ids,
+                &request.requested_identifiers
+            ),
+            Err(CertificatePlanError::EmptyIdentifierSet)
+        );
+    }
+
+    #[test]
+    fn a_request_naming_hostnames_directly_parses_to_the_new_channel() {
+        let request: crate::CreateCertificateRequest = serde_json::from_value(serde_json::json!({
+            "certName": "example.com",
+            "requestedIdentifiers": ["WWW.example.com."],
+            "validationMethod": "DNS_01",
+            "challengePresentation": "MANUAL",
+        }))
+        .expect("request parses");
+        assert!(request.domain_ids.is_empty());
+        assert_eq!(request.requested_identifiers, ["WWW.example.com."]);
     }
 }

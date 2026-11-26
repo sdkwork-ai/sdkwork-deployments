@@ -1529,6 +1529,16 @@ impl DeployAppApi for DeployService {
         Ok(sdkwork_deploy_contract::CertificateChallengeReleaseResult { accepted })
     }
 
+    async fn retry_certificate_archive(
+        &self,
+        context: &DeployAppRequestContext,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateArchiveRetryResult> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.retry_certificate_archive(tenant_id, certificate_id)
+            .await
+    }
+
     async fn list_health_checks(
         &self,
         context: &DeployAppRequestContext,

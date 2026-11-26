@@ -8,15 +8,14 @@ use sdkwork_deploy_certificate_material::{
     MaterialKind, Protection, SealedCertificateFile, SealedMaterial,
 };
 use sdkwork_deploy_contract::{
-    next_order_transition, AcmeAccountPage, AcmeAccountResponse,
-    CertificateArchiveClaim, CertificateArchiveOutcome, CertificateArchiveStatus,
+    next_order_transition, AcmeAccountPage, AcmeAccountResponse, CertificateArchiveClaim,
+    CertificateArchiveOutcome, CertificateArchiveStatus, CertificateChallengePage,
     CertificateChallengePresentationList, CertificateChallengePresentationResponse,
-    CertificateChallengePage, CertificateChallengeResponse, CertificateOrderPage,
-    CertificateOrderResponse, CertificateScope, CreateAcmeAccountRequest, DeployServiceError,
-    DeployServiceResult, ValidationMethod, CAA_DECISION_LOOKUP_FAILED, CAA_DECISION_PERMITTED,
-    CAA_DECISION_UNAUTHORIZED_CA, ORDER_ERROR_DEADLINE_EXCEEDED, ORDER_STATUS_CANCELLED,
-    ORDER_STATUS_FAILED, ORDER_STATUS_FINALIZING, ORDER_STATUS_VERSION_STORED,
-    RENEWAL_STATUS_SUCCEEDED,
+    CertificateChallengeResponse, CertificateOrderPage, CertificateOrderResponse, CertificateScope,
+    CreateAcmeAccountRequest, DeployServiceError, DeployServiceResult, ValidationMethod,
+    CAA_DECISION_LOOKUP_FAILED, CAA_DECISION_PERMITTED, CAA_DECISION_UNAUTHORIZED_CA,
+    ORDER_ERROR_DEADLINE_EXCEEDED, ORDER_STATUS_CANCELLED, ORDER_STATUS_FAILED,
+    ORDER_STATUS_FINALIZING, ORDER_STATUS_VERSION_STORED, RENEWAL_STATUS_SUCCEEDED,
 };
 use sdkwork_intelligence_deploy_service::{
     resolve_challenge_type, CertificateOrderCaaSubject, CertificateOrderClaim,
@@ -991,19 +990,18 @@ impl DeployRepository {
                 // join is LEFT so the order itself still reports its mode.
                 continue;
             };
-            list.items
-                .push(CertificateChallengePresentationResponse {
-                    record_type: row
-                        .try_get::<Option<String>, _>("presentation_record_name")
-                        .ok()
-                        .flatten()
-                        .map(|_| "TXT".to_owned()),
-                    record_name: row.try_get("presentation_record_name").unwrap_or(None),
-                    record_value: row.try_get("presentation_record_value").unwrap_or(None),
-                    expires_at: optional_datetime(&row, "presentation_expires_at")?,
-                    status: row.try_get("status").unwrap_or_default(),
-                    identifier,
-                });
+            list.items.push(CertificateChallengePresentationResponse {
+                record_type: row
+                    .try_get::<Option<String>, _>("presentation_record_name")
+                    .ok()
+                    .flatten()
+                    .map(|_| "TXT".to_owned()),
+                record_name: row.try_get("presentation_record_name").unwrap_or(None),
+                record_value: row.try_get("presentation_record_value").unwrap_or(None),
+                expires_at: optional_datetime(&row, "presentation_expires_at")?,
+                status: row.try_get("status").unwrap_or_default(),
+                identifier,
+            });
         }
         Ok(list)
     }
@@ -1393,7 +1391,10 @@ impl DeployRepository {
         Ok(Some(CertificateArchiveClaim {
             archive_row_id: row.try_get("id").unwrap_or_default(),
             tenant_id: row.try_get("tenant_id").unwrap_or_default(),
-            certificate_id: row.try_get::<i64, _>("certificate_id").unwrap_or_default().to_string(),
+            certificate_id: row
+                .try_get::<i64, _>("certificate_id")
+                .unwrap_or_default()
+                .to_string(),
             certificate_uuid: details.try_get("certificate_uuid").unwrap_or_default(),
             certificate_version_id: row
                 .try_get::<i64, _>("certificate_version_id")

@@ -633,12 +633,8 @@ impl DeployRepositoryPort for DeployRepository {
         order_id: &str,
         external_order_url: &str,
     ) -> DeployServiceResult<()> {
-        self.record_certificate_order_external_url_repo(
-            tenant_id,
-            order_id,
-            external_order_url,
-        )
-        .await
+        self.record_certificate_order_external_url_repo(tenant_id, order_id, external_order_url)
+            .await
     }
 
     async fn release_manual_order_for_certificate(

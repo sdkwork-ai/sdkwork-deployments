@@ -51,9 +51,7 @@ impl CertificatePresentationInspectorPort for HickoryPresentationInspector {
         let mut error = None;
         match lookup {
             Err(_) => error = Some("DNS TXT lookup timed out".to_owned()),
-            Ok(Err(lookup_error)) => {
-                error = Some(format!("DNS TXT lookup failed: {lookup_error}"))
-            }
+            Ok(Err(lookup_error)) => error = Some(format!("DNS TXT lookup failed: {lookup_error}")),
             Ok(Ok(records)) => {
                 for record in records.iter() {
                     if let hickory_resolver::proto::rr::RData::TXT(txt) = record {
