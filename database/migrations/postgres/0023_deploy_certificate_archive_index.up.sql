@@ -28,7 +28,9 @@
 --   would then report as drift forever.
 --
 -- reversible: true
--- rollback: 0023_deploy_certificate_archive_index.down.sql restores the original predicate
+-- rollback: down-migration
+--   (0023_deploy_certificate_archive_index.down.sql restores the predicate
+--   `0019` created and drops the read-model index)
 -- transactional: true
 -- lock: exclusive (share) on deploy_certificate_archive; index-only rebuild, no table scan
 -- lock_timeout: 2s
