@@ -1,8 +1,61 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CertificateRenewalResponse, CertificateResponse, CreateCertificateRequest, PageInfo } from '../types';
+import type { CertificateArchiveRetryResult, CertificateChallengePresentationList, CertificateChallengeReleaseResult, CertificateRenewalResponse, CertificateResponse, CreateCertificateRequest, PageInfo } from '../types';
 
+
+export interface CertificateArchiveRetryParams {
+  idempotencyKey: string;
+}
+
+export class CertificateArchiveApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 重试将证书档案归档到 Drive */
+  async retry(certificateId: string, params: CertificateArchiveRetryParams, requestOptions?: ApiRequestOptions): Promise<CertificateArchiveRetryResult> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<CertificateArchiveRetryResult>(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/archive/retry`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface CertificateChallengesVerifyParams {
+  idempotencyKey: string;
+}
+
+export class CertificateChallengesApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 获取证书当前的 DNS-01 展示指令 */
+  async list(certificateId: string, requestOptions?: ApiRequestOptions): Promise<CertificateChallengePresentationList> {
+    return this.client.request<CertificateChallengePresentationList>(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/challenges`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** 放行人工 DNS-01 校验 */
+  async verify(certificateId: string, params: CertificateChallengesVerifyParams, requestOptions?: ApiRequestOptions): Promise<CertificateChallengeReleaseResult> {
+    const requestHeaders = buildRequestHeaders(
+      {
+        'Idempotency-Key': { value: params.idempotencyKey, style: 'simple', explode: false },
+      },
+      {}
+    );
+    return this.client.request<CertificateChallengeReleaseResult>(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/challenge/verify`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+}
 
 export interface CertificateRenewalsListParams {
   page?: number;
@@ -43,10 +96,14 @@ export interface CertificateRenewParams {
 export class CertificateApi {
   private client: HttpClient;
   public readonly renewals: CertificateRenewalsApi;
+  public readonly challenges: CertificateChallengesApi;
+  public readonly archive: CertificateArchiveApi;
 
   constructor(client: HttpClient) {
     this.client = client;
     this.renewals = new CertificateRenewalsApi(client);
+    this.challenges = new CertificateChallengesApi(client);
+    this.archive = new CertificateArchiveApi(client);
   }
 
 
@@ -89,6 +146,11 @@ export class CertificateApi {
       {}
     );
     return this.client.request<CertificateResponse>(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/renew`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, ...(requestHeaders !== undefined ? { headers: requestHeaders } : {}), sdkworkUnwrapKind: 'item' });
+  }
+
+/** 重新读取证书当前状态 */
+  async refresh(certificateId: string, requestOptions?: ApiRequestOptions): Promise<CertificateResponse> {
+    return this.client.request<CertificateResponse>(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/refresh`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, sdkworkUnwrapKind: 'item' });
   }
 }
 

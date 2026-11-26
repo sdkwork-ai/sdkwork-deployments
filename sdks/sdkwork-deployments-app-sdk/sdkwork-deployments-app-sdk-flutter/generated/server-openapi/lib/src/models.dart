@@ -4448,9 +4448,11 @@ class EnvVariableResponse {
 
 class CreateCertificateRequest {
   final String certName;
-  final List<String> domainIds;
+  final List<String>? domainIds;
+  final List<String>? requestedIdentifiers;
   final String? certificateScope;
   final String? validationMethod;
+  final String? challengePresentation;
   final String? caProfile;
   final String? preferredKeyAlgorithm;
   final bool? autoRenew;
@@ -4459,9 +4461,11 @@ class CreateCertificateRequest {
 
   CreateCertificateRequest({
     required this.certName,
-    required this.domainIds,
+    this.domainIds,
+    this.requestedIdentifiers,
     this.certificateScope,
     this.validationMethod,
+    this.challengePresentation,
     this.caProfile,
     this.preferredKeyAlgorithm,
     this.autoRenew,
@@ -4481,7 +4485,17 @@ class CreateCertificateRequest {
       domainIds: (() {
         final list = _sdkworkAsList(json['domainIds']);
         if (list == null) {
-          throw FormatException('CreateCertificateRequest.domainIds is required');
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      requestedIdentifiers: (() {
+        final list = _sdkworkAsList(json['requestedIdentifiers']);
+        if (list == null) {
+          return null;
         }
         return list
             .map((item) => item?.toString())
@@ -4490,6 +4504,7 @@ class CreateCertificateRequest {
       })(),
       certificateScope: json['certificateScope']?.toString(),
       validationMethod: json['validationMethod']?.toString(),
+      challengePresentation: json['challengePresentation']?.toString(),
       caProfile: json['caProfile']?.toString(),
       preferredKeyAlgorithm: json['preferredKeyAlgorithm']?.toString(),
       autoRenew: json['autoRenew'] is bool ? json['autoRenew'] : null,
@@ -4501,9 +4516,11 @@ class CreateCertificateRequest {
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'certName': certName,
-      'domainIds': domainIds.map((item) => item).toList(),
+      'domainIds': domainIds?.map((item) => item).toList(),
+      'requestedIdentifiers': requestedIdentifiers?.map((item) => item).toList(),
       'certificateScope': certificateScope,
       'validationMethod': validationMethod,
+      'challengePresentation': challengePresentation,
       'caProfile': caProfile,
       'preferredKeyAlgorithm': preferredKeyAlgorithm,
       'autoRenew': autoRenew,
@@ -4635,6 +4652,172 @@ class CertificateRenewalResponse {
   }
 }
 
+class CertificateChallengePresentationResponse {
+  final String identifier;
+  final String? recordName;
+  final String? recordType;
+  final String? recordValue;
+  final String? expiresAt;
+  final String status;
+
+  CertificateChallengePresentationResponse({
+    required this.identifier,
+    this.recordName,
+    this.recordType,
+    this.recordValue,
+    this.expiresAt,
+    required this.status
+  });
+
+  factory CertificateChallengePresentationResponse.fromJson(Map<String, dynamic> json) {
+    return CertificateChallengePresentationResponse(
+      identifier: (() {
+        final value = json['identifier']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateChallengePresentationResponse.identifier is required');
+        }
+        return value;
+      })(),
+      recordName: json['recordName']?.toString(),
+      recordType: json['recordType']?.toString(),
+      recordValue: json['recordValue']?.toString(),
+      expiresAt: json['expiresAt']?.toString(),
+      status: (() {
+        final value = json['status']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateChallengePresentationResponse.status is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'identifier': identifier,
+      'recordName': recordName,
+      'recordType': recordType,
+      'recordValue': recordValue,
+      'expiresAt': expiresAt,
+      'status': status,
+    };
+  }
+}
+
+class CertificateChallengePresentationList {
+  final String presentationMode;
+  final bool presentationReleased;
+  final List<CertificateChallengePresentationResponse> items;
+
+  CertificateChallengePresentationList({
+    required this.presentationMode,
+    required this.presentationReleased,
+    required this.items
+  });
+
+  factory CertificateChallengePresentationList.fromJson(Map<String, dynamic> json) {
+    return CertificateChallengePresentationList(
+      presentationMode: (() {
+        final value = json['presentationMode']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateChallengePresentationList.presentationMode is required');
+        }
+        return value;
+      })(),
+      presentationReleased: (() {
+        final value = json['presentationReleased'];
+        if (value is! bool) {
+          throw FormatException('CertificateChallengePresentationList.presentationReleased is required');
+        }
+        return value;
+      })(),
+      items: (() {
+        final list = _sdkworkAsList(json['items']);
+        if (list == null) {
+          throw FormatException('CertificateChallengePresentationList.items is required');
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : CertificateChallengePresentationResponse.fromJson(map);
+      })())
+            .whereType<CertificateChallengePresentationResponse>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'presentationMode': presentationMode,
+      'presentationReleased': presentationReleased,
+      'items': items.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class CertificateChallengeReleaseResult {
+  final bool accepted;
+
+  CertificateChallengeReleaseResult({
+    required this.accepted
+  });
+
+  factory CertificateChallengeReleaseResult.fromJson(Map<String, dynamic> json) {
+    return CertificateChallengeReleaseResult(
+      accepted: (() {
+        final value = json['accepted'];
+        if (value is! bool) {
+          throw FormatException('CertificateChallengeReleaseResult.accepted is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'accepted': accepted,
+    };
+  }
+}
+
+class CertificateArchiveRetryResult {
+  final bool accepted;
+  final String archiveStatus;
+
+  CertificateArchiveRetryResult({
+    required this.accepted,
+    required this.archiveStatus
+  });
+
+  factory CertificateArchiveRetryResult.fromJson(Map<String, dynamic> json) {
+    return CertificateArchiveRetryResult(
+      accepted: (() {
+        final value = json['accepted'];
+        if (value is! bool) {
+          throw FormatException('CertificateArchiveRetryResult.accepted is required');
+        }
+        return value;
+      })(),
+      archiveStatus: (() {
+        final value = json['archiveStatus']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateArchiveRetryResult.archiveStatus is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'accepted': accepted,
+      'archiveStatus': archiveStatus,
+    };
+  }
+}
+
 class CertificateResponse {
   final String id;
   final String certName;
@@ -4642,6 +4825,7 @@ class CertificateResponse {
   final String caProfile;
   final String certificateScope;
   final String validationMethod;
+  final String presentationMode;
   final String? providerAccountId;
   final String preferredKeyAlgorithm;
   final List<String> identifiers;
@@ -4658,6 +4842,9 @@ class CertificateResponse {
   final String? validityPhase;
   final String? lastRenewalAt;
   final int renewalFailureCount;
+  final String archiveStatus;
+  final String? archiveSpaceId;
+  final String? archiveFolderNodeId;
   final String createdAt;
   final String updatedAt;
   final String version;
@@ -4669,6 +4856,7 @@ class CertificateResponse {
     required this.caProfile,
     required this.certificateScope,
     required this.validationMethod,
+    required this.presentationMode,
     this.providerAccountId,
     required this.preferredKeyAlgorithm,
     required this.identifiers,
@@ -4685,6 +4873,9 @@ class CertificateResponse {
     this.validityPhase,
     this.lastRenewalAt,
     required this.renewalFailureCount,
+    required this.archiveStatus,
+    this.archiveSpaceId,
+    this.archiveFolderNodeId,
     required this.createdAt,
     required this.updatedAt,
     required this.version
@@ -4731,6 +4922,13 @@ class CertificateResponse {
         final value = json['validationMethod']?.toString();
         if (value == null) {
           throw FormatException('CertificateResponse.validationMethod is required');
+        }
+        return value;
+      })(),
+      presentationMode: (() {
+        final value = json['presentationMode']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateResponse.presentationMode is required');
         }
         return value;
       })(),
@@ -4795,6 +4993,15 @@ class CertificateResponse {
         }
         return value;
       })(),
+      archiveStatus: (() {
+        final value = json['archiveStatus']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateResponse.archiveStatus is required');
+        }
+        return value;
+      })(),
+      archiveSpaceId: json['archiveSpaceId']?.toString(),
+      archiveFolderNodeId: json['archiveFolderNodeId']?.toString(),
       createdAt: (() {
         final value = json['createdAt']?.toString();
         if (value == null) {
@@ -4827,6 +5034,7 @@ class CertificateResponse {
       'caProfile': caProfile,
       'certificateScope': certificateScope,
       'validationMethod': validationMethod,
+      'presentationMode': presentationMode,
       'providerAccountId': providerAccountId,
       'preferredKeyAlgorithm': preferredKeyAlgorithm,
       'identifiers': identifiers.map((item) => item).toList(),
@@ -4843,6 +5051,9 @@ class CertificateResponse {
       'validityPhase': validityPhase,
       'lastRenewalAt': lastRenewalAt,
       'renewalFailureCount': renewalFailureCount,
+      'archiveStatus': archiveStatus,
+      'archiveSpaceId': archiveSpaceId,
+      'archiveFolderNodeId': archiveFolderNodeId,
       'createdAt': createdAt,
       'updatedAt': updatedAt,
       'version': version,
@@ -11630,6 +11841,190 @@ class CertificatesRenewalsListResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('CertificatesRenewalsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class CertificatesRefreshResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  CertificatesRefreshResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory CertificatesRefreshResponse.fromJson(Map<String, dynamic> json) {
+    return CertificatesRefreshResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('CertificatesRefreshResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('CertificatesRefreshResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('CertificatesRefreshResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class CertificatesChallengesListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  CertificatesChallengesListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory CertificatesChallengesListResponse.fromJson(Map<String, dynamic> json) {
+    return CertificatesChallengesListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('CertificatesChallengesListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('CertificatesChallengesListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('CertificatesChallengesListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class CertificatesChallengeVerifyResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  CertificatesChallengeVerifyResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory CertificatesChallengeVerifyResponse.fromJson(Map<String, dynamic> json) {
+    return CertificatesChallengeVerifyResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('CertificatesChallengeVerifyResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('CertificatesChallengeVerifyResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('CertificatesChallengeVerifyResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class CertificatesArchiveRetryResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  CertificatesArchiveRetryResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory CertificatesArchiveRetryResponse.fromJson(Map<String, dynamic> json) {
+    return CertificatesArchiveRetryResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('CertificatesArchiveRetryResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('CertificatesArchiveRetryResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('CertificatesArchiveRetryResponse.traceId is required');
         }
         return value;
       })()

@@ -6,6 +6,8 @@ export interface CertificateResponse {
   certificateScope: 'SINGLE_DOMAIN' | 'WILDCARD';
   /** The resolved method the challenge orchestrator must present. A `WILDCARD` certificate always reports `DNS_01`. */
   validationMethod: 'AUTO' | 'HTTP_01' | 'DNS_01';
+  /** Who presents this certificate's challenge responses. `MANUAL` means the order is parked until an operator publishes the TXT records and releases it through `certificates.challenge.verify`; `MANAGED` means the platform drives the whole issuance. Reported per certificate because both modes look identical in `status`, and only this field says whether the operator has work to do. Always present: rows written before the switch read as `MANAGED`, which is what they were. */
+  presentationMode: 'MANAGED' | 'MANUAL';
   /** The cloud account pinned to present this certificate's DNS-01 challenges, absent when the certificate defers to its zone or to the deployment-level provider configuration. */
   providerAccountId?: string;
   preferredKeyAlgorithm: 'RSA' | 'ECDSA';
@@ -29,6 +31,12 @@ export interface CertificateResponse {
   lastRenewalAt?: string;
   /** Consecutive failed renewal attempts, reset to zero by a success. Exposed because the retry backoff hides repetition from the schedule: without it a certificate failing every day is indistinguishable from one that has never been tried. */
   renewalFailureCount: number;
+  /** Whether this certificate's issued material has been archived to Drive. `NONE` means never issued and never attempted (the default, so a row written before the archive feature existed reads honestly); `PENDING` and `STORING` are queued and uploading; `ARCHIVED` means the material is in Drive and `archiveSpaceId`/`archiveFolderNodeId` name where; `FAILED` is the state `certificates.archive.retry` exists for; and `SKIPPED` means archiving is switched off on this deployment, which is a security-adjacent setting and must not read as a failure. */
+  archiveStatus: 'NONE' | 'PENDING' | 'STORING' | 'ARCHIVED' | 'FAILED' | 'SKIPPED';
+  /** Drive space holding the archived certificate material. An opaque string, not a numeric id. Present only once the archive row names one. */
+  archiveSpaceId?: string;
+  /** Drive folder node holding the archived certificate material. An opaque string, not a numeric id. */
+  archiveFolderNodeId?: string;
   createdAt: string;
   updatedAt: string;
   version: string;

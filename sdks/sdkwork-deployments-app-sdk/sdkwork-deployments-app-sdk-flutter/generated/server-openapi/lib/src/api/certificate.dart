@@ -81,6 +81,54 @@ class CertificateApi {
       return map == null ? null : CertificatesRenewalsListResponse.fromJson(map);
     })();
   }
+
+  /// 重新读取证书当前状态
+  Future<CertificatesRefreshResponse?> certificatesRefresh(String certificateId) async {
+    final response = await _client.post(ApiPaths.appPath('/certificates/${serializePathParameter(certificateId, const PathParameterSpec('certificateId', 'simple', false))}/refresh'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : CertificatesRefreshResponse.fromJson(map);
+    })();
+  }
+
+  /// 获取证书当前的 DNS-01 展示指令
+  Future<CertificatesChallengesListResponse?> certificatesChallengesList(String certificateId) async {
+    final response = await _client.get(ApiPaths.appPath('/certificates/${serializePathParameter(certificateId, const PathParameterSpec('certificateId', 'simple', false))}/challenges'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : CertificatesChallengesListResponse.fromJson(map);
+    })();
+  }
+
+  /// 放行人工 DNS-01 校验
+  Future<CertificatesChallengeVerifyResponse?> certificatesChallengeVerify(String certificateId, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final response = await _client.post(ApiPaths.appPath('/certificates/${serializePathParameter(certificateId, const PathParameterSpec('certificateId', 'simple', false))}/challenge/verify'), headers: requestHeaders);
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : CertificatesChallengeVerifyResponse.fromJson(map);
+    })();
+  }
+
+  /// 重试将证书档案归档到 Drive
+  Future<CertificatesArchiveRetryResponse?> certificatesArchiveRetry(String certificateId, String idempotencyKey) async {
+    final requestHeaders = buildRequestHeaders(
+      <String, HeaderParameterSpec>{
+        'Idempotency-Key': HeaderParameterSpec(idempotencyKey, 'simple', false, null),
+      },
+      <String, HeaderParameterSpec>{},
+    );
+    final response = await _client.post(ApiPaths.appPath('/certificates/${serializePathParameter(certificateId, const PathParameterSpec('certificateId', 'simple', false))}/archive/retry'), headers: requestHeaders);
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : CertificatesArchiveRetryResponse.fromJson(map);
+    })();
+  }
 }
 
 class PathParameterSpec {
