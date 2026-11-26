@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-deploy-certificate-archive-port",
+    "displayName": "SDKWork Deploy Certificate Archive Port",
+    "version": "0.1.0",
+    "type": "rust-crate",
+    "root": "crates/sdkwork-deploy-certificate-archive-port",
+    "domain": "deploy",
+    "capability": "certificate-archive",
+    "surface": "backend-provider",
+    "languages": ["rust"],
+    "generated": false,
+    "manifests": ["Cargo.toml", "specs/component.spec.json"]
+  },
+  "canonicalSpecs": [
+    {"file": "CODE_STYLE_SPEC.md", "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md", "purpose": "Authored provider adapter and pure-rule module boundaries."},
+    {"file": "NAMING_SPEC.md", "path": "../../../sdkwork-specs/NAMING_SPEC.md", "purpose": "Crate, module and configuration naming."},
+    {"file": "RUST_CODE_SPEC.md", "path": "../../../sdkwork-specs/RUST_CODE_SPEC.md", "purpose": "Typed errors, no unwrap in library paths, bounded external awaits, bounded retries."},
+    {"file": "CONFIG_SPEC.md", "path": "../../../sdkwork-specs/CONFIG_SPEC.md", "purpose": "Typed bounded runtime configuration and startup validation."},
+    {"file": "SECURITY_SPEC.md", "path": "../../../sdkwork-specs/SECURITY_SPEC.md", "purpose": "Private key material never leaves the sealed custody store."},
+    {"file": "TEST_SPEC.md", "path": "../../../sdkwork-specs/TEST_SPEC.md", "purpose": "Pure-rule unit coverage: layout, manifest, retry ladder, selection."}
+  ],
+  "contracts": {
+    "layerRole": "backend-provider",
+    "publicExports": ["."],
+    "providedPorts": [
+      {"name": "certificateArchiveStore", "export": "."}
+    ],
+    "requiredPorts": [
+      {"name": "driveWorkspaceService", "export": ".", "provider": "sdkwork-drive-workspace-service"},
+      {"name": "driveObjectStoreRuntime", "export": ".", "provider": "sdkwork-drive-object-runtime"}
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": [],
+    "dependencyApiExports": [],
+    "dependencyApiSurfaces": [],
+    "events": [],
+    "configKeys": [
+      "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE",
+      "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_BUNDLE",
+      "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_SPACE_NAME",
+      "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_MAX_ATTEMPTS",
+      "SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE_ATTEMPT_TIMEOUT_MILLIS"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "cargo test -p sdkwork-deploy-certificate-archive-port"
+    ]
+  }
+}
