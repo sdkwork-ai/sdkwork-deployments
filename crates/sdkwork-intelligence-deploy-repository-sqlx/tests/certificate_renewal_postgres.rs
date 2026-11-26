@@ -505,8 +505,17 @@ async fn a_short_lived_certificate_is_not_claimed_the_moment_it_is_issued() {
 
     // And it does become due once a third of its life has passed, so the floor
     // defers renewal rather than suppressing it.
+    //
+    // Swept past the jitter ceiling, not at the due instant. The sweep subtracts
+    // `renewal_jitter_seconds(uuid, lead)` from its own notion of "now", and for a
+    // 30-day lead that ceiling is a full 3 days (`MAXIMUM_RENEWAL_JITTER_SECONDS`).
+    // The due instant here is only ~2.33 days out, so sweeping at day 3 leaves a
+    // 16-hour margin against a 3-day delay: whether the claim landed depended on
+    // the random certificate uuid, and this test failed 3 runs in 6 for exactly
+    // that reason. Day 7 clears the ceiling under any uuid while still sitting
+    // inside the 7-day life.
     let claims = repository
-        .claim_due_certificate_renewals("worker-a", 50, 300, &days_from_now(&pool, 3).await)
+        .claim_due_certificate_renewals("worker-a", 50, 300, &days_from_now(&pool, 7).await)
         .await
         .expect("claim later");
     assert_eq!(claims.len(), 1, "due after a third of its 7-day life");
