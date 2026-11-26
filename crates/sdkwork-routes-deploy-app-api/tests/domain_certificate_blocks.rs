@@ -45,6 +45,15 @@ fn block_paths() -> Vec<(HttpMethod, &'static str)> {
         (HttpMethod::Delete, paths::CERTIFICATE),
         (HttpMethod::Post, paths::CERTIFICATE_RENEW),
         (HttpMethod::Get, paths::CERTIFICATE_RENEWALS),
+        // Manual DNS-01 presentation: the console reads the TXT instructions the
+        // order parked on and then releases them for CA validation, so both are
+        // certificate-block routes and belong in the same inventory.
+        (HttpMethod::Get, paths::CERTIFICATE_CHALLENGES),
+        (HttpMethod::Post, paths::CERTIFICATE_CHALLENGE_VERIFY),
+        // The Drive archive read-back and its retry command travel with the
+        // certificate they describe.
+        (HttpMethod::Post, paths::CERTIFICATE_REFRESH),
+        (HttpMethod::Post, paths::CERTIFICATE_ARCHIVE_RETRY),
         // The cloud account surface belongs to this block: it is what the zone
         // and certificate forms open when they need to bind a DNS provider
         // account, so it is mounted and inventoried with the same filter.
