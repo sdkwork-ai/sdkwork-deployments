@@ -130,3 +130,7 @@ temp/
 !.env.cloud.staging
 !.env.cloud.demo
 !.env.cloud.production
+
+# Local flaky-test probe script; it hardcodes one machine's checkout path and
+# test database URL, so it never ships with the repository.
+/.flaky-probe.sh
