@@ -15,6 +15,9 @@ tokio.workspace = true
 tracing.workspace = true
 sdkwork-database-id.workspace = true
 sdkwork-deploy-certificate-material.workspace = true
+# The certificate archive switch and its in-process Drive store: boot-time
+# configuration validation, so a bad value fails startup.
+sdkwork-deploy-certificate-archive-port.workspace = true
 sdkwork-deploy-cloud-account-port.workspace = true
 sdkwork-deploy-core.workspace = true
 sdkwork-deploy-contract.workspace = true

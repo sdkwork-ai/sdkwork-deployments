@@ -67,6 +67,8 @@ pub const CERTIFICATE_CHALLENGES: &str = "/app/v3/api/certificates/{certificateI
 pub const CERTIFICATE_CHALLENGE_VERIFY: &str =
     "/app/v3/api/certificates/{certificateId}/challenge/verify";
 pub const CERTIFICATE_RENEWALS: &str = "/app/v3/api/certificates/{certificateId}/renewals";
+pub const CERTIFICATE_ARCHIVE_RETRY: &str =
+    "/app/v3/api/certificates/{certificateId}/archive/retry";
 pub const UPLOAD_SESSIONS: &str = "/app/v3/api/upload_sessions";
 pub const UPLOAD_SESSION: &str = "/app/v3/api/upload_sessions/{uploadSessionId}";
 pub const UPLOAD_SESSION_COMPLETE: &str = "/app/v3/api/upload_sessions/{uploadSessionId}/complete";

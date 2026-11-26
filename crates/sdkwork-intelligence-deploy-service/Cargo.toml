@@ -13,6 +13,10 @@ sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-feed.workspace = true
 sdkwork-deploy-core.workspace = true
 sdkwork-deploy-certificate-material.workspace = true
+# Certificate archive: the layout, manifest, retry ladder and bundled store the
+# orchestration in `src/certificate_archive.rs` drives. A port crate so the
+# service carries no `sdkwork_drive_*` dependency of its own.
+sdkwork-deploy-certificate-archive-port.workspace = true
 sdkwork-deploy-cloud-account-port.workspace = true
 sdkwork-deploy-content-provider-port.workspace = true
 sdkwork-deploy-drive-port.workspace = true

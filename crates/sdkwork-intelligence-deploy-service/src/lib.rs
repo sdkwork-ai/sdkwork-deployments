@@ -8,6 +8,7 @@ pub mod app_resource_links;
 pub mod app_source_specs;
 pub mod app_sources;
 pub mod backend;
+pub mod certificate_archive;
 pub mod certificate_caa;
 pub mod certificate_dns;
 pub mod certificate_dns_account;
@@ -198,6 +199,25 @@ pub struct DeployService {
     /// one of the CA's failed-validation allowances.
     pub(crate) certificate_presentation_inspector:
         Option<Arc<dyn crate::certificate_presentation::CertificatePresentationInspectorPort>>,
+    /// Durable home for issued certificate material, in sdkwork-drive.
+    ///
+    /// `None` is a deployment with archiving switched off
+    /// (`SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE=off`, which is the default). That is
+    /// not a failure: every version's archive row is written `SKIPPED`, which says
+    /// "nobody asked for this" instead of an error an operator would chase. The
+    /// store is a port of its own rather than a reuse of `drive`: archiving has no
+    /// per-request actor, writes into a dedicated `certificate` space, and must be
+    /// switchable without changing how package uploads work.
+    pub(crate) certificate_archive_store:
+        Option<Arc<dyn sdkwork_deploy_certificate_archive_port::CertificateArchiveStore>>,
+    /// How many attempts an archive row gets, and the ladder between them.
+    pub(crate) certificate_archive_retry:
+        sdkwork_deploy_certificate_archive_port::ArchiveRetryPolicy,
+    /// Ceiling for the attempt made inside an issuance, in milliseconds.
+    ///
+    /// A number rather than a `Duration` so the struct stays `Send + Sync` cheaply
+    /// and the value is exactly what the environment handed over.
+    pub(crate) certificate_archive_attempt_timeout_millis: u64,
     /// The cloud account center, as Deploy consumes it.
     ///
     /// The default reports that no account center is reachable rather than an
@@ -250,6 +270,11 @@ impl DeployService {
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             certificate_presentation_inspector: None,
+            certificate_archive_store: None,
+            certificate_archive_retry:
+                sdkwork_deploy_certificate_archive_port::ArchiveRetryPolicy::default(),
+            certificate_archive_attempt_timeout_millis:
+                sdkwork_deploy_certificate_archive_port::selection::DEFAULT_ATTEMPT_TIMEOUT_MILLIS,
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
             identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
             identity_lifecycle: Arc::new(UnconfiguredInstallationLifecyclePort),
@@ -298,6 +323,11 @@ impl DeployService {
             certificate_issuer: None,
             certificate_dns01: Arc::new(UnconfiguredCertificateDns01Presenter),
             certificate_presentation_inspector: None,
+            certificate_archive_store: None,
+            certificate_archive_retry:
+                sdkwork_deploy_certificate_archive_port::ArchiveRetryPolicy::default(),
+            certificate_archive_attempt_timeout_millis:
+                sdkwork_deploy_certificate_archive_port::selection::DEFAULT_ATTEMPT_TIMEOUT_MILLIS,
             cloud_accounts: Arc::new(DeployCloudAccountPortAdapter::Unconfigured),
             identity_provisioning: Arc::new(UnconfiguredIdentityProvisioningPort),
             identity_lifecycle: Arc::new(UnconfiguredInstallationLifecyclePort),
@@ -418,6 +448,28 @@ impl DeployService {
         port: Arc<dyn CertificateDns01PresenterPort>,
     ) -> Self {
         self.certificate_dns01 = port;
+        self
+    }
+
+    /// Installs the Drive store issued certificate material is archived to.
+    ///
+    /// Optional by design. Without it, every stored version gets an archive row in
+    /// `SKIPPED` — the deployment genuinely does not archive, and reporting that as
+    /// a failure would send an operator to debug a Drive nobody configured.
+    ///
+    /// The retry ladder and the inline attempt ceiling travel with the store
+    /// because they are only meaningful when something can be archived; both are
+    /// validated by the caller (the selection loader), so a bad value fails
+    /// startup rather than the first issuance.
+    pub fn with_certificate_archive_store(
+        mut self,
+        store: Arc<dyn sdkwork_deploy_certificate_archive_port::CertificateArchiveStore>,
+        retry: sdkwork_deploy_certificate_archive_port::ArchiveRetryPolicy,
+        attempt_timeout_millis: u64,
+    ) -> Self {
+        self.certificate_archive_store = Some(store);
+        self.certificate_archive_retry = retry;
+        self.certificate_archive_attempt_timeout_millis = attempt_timeout_millis;
         self
     }
 

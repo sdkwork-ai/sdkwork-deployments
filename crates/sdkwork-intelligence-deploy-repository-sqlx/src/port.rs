@@ -536,6 +536,65 @@ impl DeployRepositoryPort for DeployRepository {
         .await
     }
 
+    async fn claim_due_certificate_archive(
+        &self,
+        now: &str,
+        exclude_version_id: Option<&str>,
+    ) -> DeployServiceResult<Option<sdkwork_deploy_contract::CertificateArchiveClaim>> {
+        self.claim_due_certificate_archive_repo(now, exclude_version_id)
+            .await
+    }
+
+    async fn mark_certificate_archive_archived(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+        outcome: &sdkwork_deploy_contract::CertificateArchiveOutcome,
+    ) -> DeployServiceResult<bool> {
+        self.mark_certificate_archive_archived_repo(tenant_id, certificate_version_uuid, outcome)
+            .await
+    }
+
+    async fn record_certificate_archive_failure(
+        &self,
+        tenant_id: i64,
+        archive_row_id: i64,
+        error_code: &str,
+        attempt_count: i32,
+        next_attempt_at: Option<&str>,
+        status: sdkwork_deploy_contract::CertificateArchiveStatus,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateArchiveStatus> {
+        self.record_certificate_archive_failure_repo(
+            tenant_id,
+            archive_row_id,
+            error_code,
+            attempt_count,
+            next_attempt_at,
+            status,
+        )
+        .await
+    }
+
+    async fn retry_certificate_archive(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        now: &str,
+    ) -> DeployServiceResult<bool> {
+        self.retry_certificate_archive_repo(tenant_id, certificate_id, now)
+            .await
+    }
+
+    async fn skip_certificate_archive(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+        reason_code: &str,
+    ) -> DeployServiceResult<()> {
+        self.skip_certificate_archive_repo(tenant_id, certificate_version_uuid, reason_code)
+            .await
+    }
+
     async fn record_challenge_presentation(
         &self,
         tenant_id: i64,

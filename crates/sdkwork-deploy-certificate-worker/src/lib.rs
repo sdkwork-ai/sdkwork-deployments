@@ -50,6 +50,13 @@ const MAXIMUM_LEASE_SECONDS: i64 = 1_800;
 const DEFAULT_ACME_OPERATION_TIMEOUT_MS: u64 = 180_000;
 const MAXIMUM_ACME_OPERATION_TIMEOUT_MS: u64 = 600_000;
 
+/// Ceiling for one archive attempt made by the drain.
+///
+/// The configured value lives in the service host (it also bounds the attempt made
+/// inline during issuance); this is only the fallback the worker uses when it has
+/// to make an attempt of its own, and it matches the design's 30 s bound.
+const ARCHIVE_ATTEMPT_SECONDS: u64 = 30;
+
 /// Bounded configuration for the issuance loop.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CertificateIssuanceWorkerConfig {
@@ -211,17 +218,26 @@ impl CertificateIssuanceWorker {
     where
         F: Future<Output = ()>,
     {
-        // Refuse to run without an engine. Claiming is what charges an attempt and
-        // takes a lease, so a worker that ticked anyway would take the whole backlog
-        // and fail it — a missing configuration destroying certificate requests.
-        // Exiting quietly is right here: the deployment simply does not issue, and
-        // an orchestrator must not restart-loop over it.
-        if !self.service.certificate_issuance_configured() {
+        // Refuse to claim *orders* without an engine. Claiming is what charges an
+        // attempt and takes a lease, so a worker that claimed anyway would take the
+        // whole backlog and fail it — a missing configuration destroying certificate
+        // requests.
+        //
+        // It does not exit, though, when archiving is configured: the archive drain
+        // retries versions that were already issued and stored, and a deployment
+        // that turned issuance off (or never had an engine) still owes those rows
+        // their retries. Exiting would strand every `PENDING` archive row forever
+        // while the certificate read model said "archiving".
+        let issuance_enabled = self.service.certificate_issuance_configured();
+        let archive_enabled = self.service.certificate_archive_configured();
+        if !issuance_enabled {
             tracing::warn!(
                 "no ACME engine is configured (SDKWORK_DEPLOY_CERTIFICATE_ISSUANCE); the \
-                 certificate issuance worker has nothing to run and will not claim any order"
+                 certificate issuance worker will not claim any order"
             );
-            return;
+            if !archive_enabled {
+                return;
+            }
         }
         let mut ticker = interval(self.config.poll_interval);
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -237,28 +253,70 @@ impl CertificateIssuanceWorker {
                 }
                 _ = ticker.tick() => {}
             }
-            match self.run_once().await {
-                // Silence when there is nothing to do: this loop runs for days
-                // between renewals, and a line every tick would bury the ticks
-                // that mattered.
-                Ok(result) if !result.is_idle() => {
-                    tracing::info!(
-                        worker_id = %self.config.worker_id,
-                        claimed = result.claimed,
-                        stored = result.stored,
-                        failed = result.failed,
-                        abandoned = result.abandoned,
-                        "certificate issuance batch completed"
-                    );
+            if issuance_enabled {
+                match self.run_once().await {
+                    // Silence when there is nothing to do: this loop runs for days
+                    // between renewals, and a line every tick would bury the ticks
+                    // that mattered.
+                    Ok(result) if !result.is_idle() => {
+                        tracing::info!(
+                            worker_id = %self.config.worker_id,
+                            claimed = result.claimed,
+                            stored = result.stored,
+                            failed = result.failed,
+                            abandoned = result.abandoned,
+                            "certificate issuance batch completed"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            worker_id = %self.config.worker_id,
+                            error = %error,
+                            "certificate issuance batch failed"
+                        );
+                    }
                 }
-                Ok(_) => {}
-                Err(error) => {
-                    tracing::warn!(
-                        worker_id = %self.config.worker_id,
-                        error = %error,
-                        "certificate issuance batch failed"
-                    );
-                }
+            }
+            if archive_enabled {
+                // The archive drain runs on the same tick but as its own pass, after
+                // issuance. Two reasons it is not folded into the batch above: an
+                // issuance failure must not stop archive retries (they are the fallback
+                // for exactly the versions an earlier issuance did store), and a slow
+                // archive must not delay the next issuance claim.
+                //
+                // This is what makes the persisted retry ladder real. The inline
+                // attempt covers the happy path; everything it left behind — a
+                // timeout, a Drive outage, a process that died between the version
+                // commit and its attempt — is picked up here, bounded by
+                // `next_attempt_at`.
+                self.drain_archive().await;
+            }
+        }
+    }
+
+    /// Drains one due certificate archive row, logging only when it changed
+    /// something.
+    async fn drain_archive(&self) {
+        match self
+            .service
+            .drain_due_certificate_archive(Duration::from_secs(ARCHIVE_ATTEMPT_SECONDS))
+            .await
+        {
+            Ok(attempt) if !attempt.is_quiet() => {
+                tracing::info!(
+                    worker_id = %self.config.worker_id,
+                    outcome = ?attempt,
+                    "certificate archive pass completed"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(
+                    worker_id = %self.config.worker_id,
+                    error = %error,
+                    "certificate archive pass failed"
+                );
             }
         }
     }

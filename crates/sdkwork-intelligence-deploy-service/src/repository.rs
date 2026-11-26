@@ -734,7 +734,107 @@ pub trait DeployRepositoryPort:
         window_end: &str,
         checked_at: &str,
     ) -> DeployServiceResult<()> {
-        let _ = (tenant_id, certificate_id, window_start, window_end, checked_at);
+        let _ = (
+            tenant_id,
+            certificate_id,
+            window_start,
+            window_end,
+            checked_at,
+        );
+        Ok(())
+    }
+
+    /// Claims one due archive row and marks it `STORING`.
+    ///
+    /// The archive row is the outbox the version transaction wrote, and claiming it
+    /// is what makes two workers — the one finishing an issuance and the one
+    /// draining the backlog — unable to upload the same version at once. The claim
+    /// is a conditional update on the row's own status and schedule, so a row that
+    /// another worker holds, or one whose backoff has not elapsed, is not handed
+    /// out. Returns `None` when there is nothing due.
+    ///
+    /// Defaulted to `None` so a repository double that never archives keeps
+    /// compiling; a deployment without an archive store never calls it.
+    async fn claim_due_certificate_archive(
+        &self,
+        now: &str,
+        exclude_version_id: Option<&str>,
+    ) -> DeployServiceResult<Option<sdkwork_deploy_contract::CertificateArchiveClaim>> {
+        let _ = (now, exclude_version_id);
+        Ok(None)
+    }
+
+    /// Marks one archive row `ARCHIVED` and records where the files landed.
+    ///
+    /// Fenced on `STORING` so a worker that lost the row cannot overwrite another
+    /// worker's result. Returns whether this call moved the row.
+    async fn mark_certificate_archive_archived(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+        outcome: &sdkwork_deploy_contract::CertificateArchiveOutcome,
+    ) -> DeployServiceResult<bool> {
+        let _ = (tenant_id, certificate_version_uuid, outcome);
+        Ok(false)
+    }
+
+    /// Records a failed archive attempt: another attempt with a backoff, or
+    /// `FAILED` once the budget is spent.
+    ///
+    /// Addressed by the archive row's internal id, which the claim returned: the
+    /// claim is the moment this worker took the row, and only the holder may write
+    /// the outcome. Fenced on `STORING` for the same reason as the success path.
+    /// Returns the status the row now holds.
+    async fn record_certificate_archive_failure(
+        &self,
+        tenant_id: i64,
+        archive_row_id: i64,
+        error_code: &str,
+        attempt_count: i32,
+        next_attempt_at: Option<&str>,
+        status: sdkwork_deploy_contract::CertificateArchiveStatus,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateArchiveStatus> {
+        let _ = (
+            tenant_id,
+            archive_row_id,
+            error_code,
+            attempt_count,
+            next_attempt_at,
+            status,
+        );
+        Ok(status)
+    }
+
+    /// Re-arms the archive of a certificate's served version after an operator's
+    /// explicit retry.
+    ///
+    /// Clears the backoff and the failure, but does not touch `attempt_count`:
+    /// the count is how many times this control plane tried, and resetting it
+    /// would misreport that history. Returns `true` when a row was re-armed, and
+    /// `false` when there was nothing to retry — already archived, or archiving is
+    /// switched off — which is a retry-safe answer rather than an error.
+    async fn retry_certificate_archive(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        now: &str,
+    ) -> DeployServiceResult<bool> {
+        let _ = (tenant_id, certificate_id, now);
+        Ok(false)
+    }
+
+    /// Marks the archive row of one version `SKIPPED`.
+    ///
+    /// What a deployment with archiving switched off records instead of a
+    /// `PENDING` row it will never attempt. Fenced on a non-final status so a row
+    /// that another process already archived is left alone.
+    async fn skip_certificate_archive(
+        &self,
+        tenant_id: i64,
+        certificate_version_id: &str,
+        reason_code: &str,
+    ) -> DeployServiceResult<()> {
+        let _ = (tenant_id, certificate_version_id, reason_code);
         Ok(())
     }
 

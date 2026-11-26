@@ -4,6 +4,9 @@ use std::sync::Arc;
 
 use sdkwork_database_id::{NodeLease, SnowflakeIdGenerator, SnowflakeNodeAllocator};
 use sdkwork_database_sqlx::DatabasePool;
+use sdkwork_deploy_certificate_archive_port::{
+    certificate_archive_config_from_env, certificate_archive_store_from_selection,
+};
 use sdkwork_deploy_certificate_material::{
     FileKeyProvider, MaterialKeyProvider, TrustAnchorBundle,
 };
@@ -498,13 +501,44 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     // assertion alone.
     match certificate_presentation::HickoryPresentationInspector::from_system_config() {
         Ok(inspector) => {
-            service = service
-                .with_certificate_presentation_inspector(std::sync::Arc::new(inspector));
+            service =
+                service.with_certificate_presentation_inspector(std::sync::Arc::new(inspector));
         }
         Err(error) => {
             tracing::warn!(
                 "DNS presentation inspector unavailable; manual DNS-01 releases will not be \
                  self-checked: {error}"
+            );
+        }
+    }
+
+    // Archiving issued certificate material into sdkwork-drive is its own switch,
+    // not a consequence of having an in-process Drive: writing a tenant's
+    // certificates into a space is a product decision, and the design fixes the
+    // default as off (SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE unset = off). Off is not a
+    // failure: the service records every version's archive row as SKIPPED, which is
+    // the honest report. A misconfigured value — an unknown mode, an unsupported
+    // bundle policy, an attempt ceiling outside its bounds — fails the boot here
+    // rather than at the first issuance.
+    let archive_config = certificate_archive_config_from_env()?;
+    match certificate_archive_store_from_selection(&drive_pool, &archive_config.selection)? {
+        Some(store) => {
+            tracing::info!(
+                mode = ?archive_config.selection,
+                max_attempts = archive_config.retry.max_attempts,
+                attempt_timeout_millis = archive_config.attempt_timeout_millis,
+                "issued certificate material is archived into sdkwork-drive"
+            );
+            service = service.with_certificate_archive_store(
+                store,
+                archive_config.retry,
+                archive_config.attempt_timeout_millis,
+            );
+        }
+        None => {
+            tracing::info!(
+                "certificate archiving is switched off (SDKWORK_DEPLOY_CERTIFICATE_ARCHIVE); \
+                 stored versions report archive status SKIPPED"
             );
         }
     }

@@ -141,6 +141,10 @@ pub fn build_certificate_management_router() -> Router<AppState> {
             post(verify_certificate_challenge),
         )
         .route(paths::CERTIFICATE_RENEWALS, get(list_certificate_renewals))
+        .route(
+            paths::CERTIFICATE_ARCHIVE_RETRY,
+            post(retry_certificate_archive),
+        )
         .layer(axum::middleware::from_fn(
             sdkwork_routes_deploy_common::pagination::validate_pagination_query,
         ))
@@ -1125,6 +1129,36 @@ async fn verify_certificate_challenge(
             let item = state
                 .api
                 .verify_certificate_challenge(&context, &certificate_id)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+/// Re-arms the Drive archive of one certificate's served version.
+///
+/// An idempotent command: `Idempotency-Key` is required for the same reason every
+/// other command here requires it — a retried request must not produce a second
+/// effect — and the header is not inspected further because re-arming is itself
+/// idempotent (the handler answers `accepted: false` when there is nothing to
+/// retry). No request body: which certificate is the only input, and where its
+/// material belongs is decided by the control plane, not by the caller.
+async fn retry_certificate_archive(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    headers: HeaderMap,
+    Path(certificate_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            required_header(&headers, "idempotency-key")?;
+            let item = state
+                .api
+                .retry_certificate_archive(&context, &certificate_id)
                 .await?;
             ok_json(envelope::resource(item))
         }

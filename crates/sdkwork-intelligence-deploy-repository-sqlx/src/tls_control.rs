@@ -9,6 +9,7 @@ use sdkwork_deploy_certificate_material::{
 };
 use sdkwork_deploy_contract::{
     next_order_transition, AcmeAccountPage, AcmeAccountResponse,
+    CertificateArchiveClaim, CertificateArchiveOutcome, CertificateArchiveStatus,
     CertificateChallengePresentationList, CertificateChallengePresentationResponse,
     CertificateChallengePage, CertificateChallengeResponse, CertificateOrderPage,
     CertificateOrderResponse, CertificateScope, CreateAcmeAccountRequest, DeployServiceError,
@@ -139,7 +140,7 @@ impl DeployRepository {
         let certificate_row = sqlx::query(
             "SELECT c.id, c.uuid, c.renewal_status,
                     COALESCE(c.current_version_id, 0) AS current_version_id,
-                    c.certificate_scope, c.validation_method
+                    c.certificate_scope, c.validation_method, c.presentation_mode
              FROM deploy_certificate c
              WHERE c.tenant_id = $1 AND c.uuid = $2 AND c.status <> 'REVOKED' AND c.deleted_at IS NULL",
         )
@@ -169,6 +170,14 @@ impl DeployRepository {
         let scope = CertificateScope::parse(&scope_raw).ok_or_else(|| {
             DeployServiceError::Internal(format!("unknown certificate scope {scope_raw}"))
         })?;
+        // Who presents the challenges is a property of the certificate, copied onto the
+        // order here because the worker's claim query filters on it: a `MANUAL` order
+        // parks after its records are prepared and is only resumed once an operator
+        // releases it. A row written before the presentation switch reads back as the
+        // column default (`MANAGED`), which is what those issuances were.
+        let presentation_mode: String = certificate_row
+            .try_get("presentation_mode")
+            .unwrap_or_else(|_| "MANAGED".to_owned());
         let method_raw: String = certificate_row
             .try_get("validation_method")
             .map_err(|error| {
@@ -262,9 +271,9 @@ impl DeployRepository {
         let inserted = sqlx::query(
             "INSERT INTO deploy_certificate_order
                 (id, uuid, tenant_id, certificate_id, acme_account_id, requested_version_no,
-                 request_sha256, idempotency_key, status, attempt_count, deadline_at,
-                 created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'REQUESTED', 0,
+                 request_sha256, idempotency_key, presentation_mode, status, attempt_count,
+                 deadline_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $11, 'REQUESTED', 0,
                      CAST($9 AS TIMESTAMPTZ), CAST($10 AS TIMESTAMPTZ), CAST($10 AS TIMESTAMPTZ))
              ON CONFLICT (tenant_id, idempotency_key) DO NOTHING",
         )
@@ -278,6 +287,7 @@ impl DeployRepository {
         .bind(idempotency_key)
         .bind(&deadline)
         .bind(&now)
+        .bind(&presentation_mode)
         .execute(&mut *transaction)
         .await
         .map_err(|error| store_error("insert deploy_certificate_order", error))?;
@@ -936,7 +946,8 @@ impl DeployRepository {
                     ch.presentation_record_name,
                     ch.presentation_record_value,
                     ch.presentation_expires_at,
-                    ch.status
+                    ch.status,
+                    c.presentation_mode AS certificate_presentation_mode
                FROM deploy_certificate_order o
                JOIN deploy_certificate c ON c.id = o.certificate_id
                LEFT JOIN deploy_certificate_challenge ch ON ch.order_id = o.id
@@ -956,6 +967,19 @@ impl DeployRepository {
         .map_err(|error| store_error("list deploy_certificate presentations", error))?;
 
         let mut list = CertificateChallengePresentationList::default();
+        if rows.is_empty() {
+            // No manual order yet — either the certificate is managed, or its
+            // manual order has not been prepared. Answering the certificate's own
+            // choice is what lets the console tell "nothing to publish, this is
+            // managed" from "manual, but the records are not ready yet", instead
+            // of reporting a managed default for both and asking the operator to
+            // wait for records that will never appear.
+            list.presentation_mode = self
+                .certificate_presentation_mode_repo(tenant_id, certificate_id)
+                .await?
+                .unwrap_or_else(|| "MANAGED".to_owned());
+            return Ok(list);
+        }
         for row in rows {
             list.presentation_mode = row
                 .try_get("presentation_mode")
@@ -982,6 +1006,28 @@ impl DeployRepository {
                 });
         }
         Ok(list)
+    }
+
+    /// The presentation mode recorded on a certificate.
+    ///
+    /// `None` when the certificate does not exist for this tenant, so the caller
+    /// can tell "this tenant has no such certificate" apart from "the certificate
+    /// exists and is managed".
+    async fn certificate_presentation_mode_repo(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<Option<String>> {
+        let row = sqlx::query(
+            "SELECT presentation_mode FROM deploy_certificate
+              WHERE tenant_id = $1 AND uuid = $2 AND deleted_at IS NULL",
+        )
+        .bind(tenant_id)
+        .bind(certificate_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read deploy_certificate presentation mode", error))?;
+        Ok(row.and_then(|row| row.try_get::<String, _>("presentation_mode").ok()))
     }
 
     /// Releases the parked manual order of one certificate.
@@ -1247,6 +1293,283 @@ impl DeployRepository {
             .map_err(|error| store_error("commit certificate version storage", error))?;
         self.retrieve_certificate_order_internal_repo(tenant_id, &order_uuid)
             .await
+    }
+
+    /// Claims one due archive row and marks it `STORING`.
+    ///
+    /// `FOR UPDATE SKIP LOCKED` is what lets several workers drain the same table
+    /// without blocking each other: each takes a role it can act on, and the
+    /// others move on instead of queueing behind it. The row is selected with the
+    /// widest due predicate the index supports (`PENDING`, `STORING` — a row left
+    /// claimed by a worker that died — and `FAILED`, which the console's retry
+    /// moves back), and the update is fenced on the exact status that was read, so
+    /// a row that changed between select and update is not stolen.
+    ///
+    /// `exclude_version_id` is how the inline attempt avoids racing its own drain:
+    /// the worker that just wrote the row is about to handle it, and its sibling
+    /// tick should leave that one row alone.
+    pub(super) async fn claim_due_certificate_archive_repo(
+        &self,
+        now: &str,
+        exclude_version_id: Option<&str>,
+    ) -> DeployServiceResult<Option<CertificateArchiveClaim>> {
+        let row = sqlx::query(
+            "WITH candidate AS (
+                 SELECT a.id, a.status
+                   FROM deploy_certificate_archive a
+                  WHERE a.status IN ('PENDING', 'STORING', 'FAILED')
+                    AND (a.next_attempt_at IS NULL
+                         OR a.next_attempt_at <= CAST($1 AS TIMESTAMPTZ))
+                    AND ($2::VARCHAR(36) IS NULL
+                         OR a.uuid <> $2)
+                  ORDER BY a.next_attempt_at NULLS FIRST, a.id
+                  LIMIT 1
+                    FOR UPDATE OF a SKIP LOCKED
+             )
+             UPDATE deploy_certificate_archive a
+                SET status = 'STORING', updated_at = NOW(), version = a.version + 1
+               FROM candidate
+              WHERE a.id = candidate.id
+                AND a.status = candidate.status
+             RETURNING a.id, a.tenant_id, a.certificate_id, a.certificate_version_id,
+                       a.bundle_kind, a.attempt_count",
+        )
+        .bind(now)
+        .bind(exclude_version_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("claim deploy_certificate_archive", error))?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        // The claim names only internal ids; the upload needs the certificate's
+        // and version's public identity plus the version's facts, so they are read
+        // here rather than by the caller in a second round trip that could observe
+        // a superseded version.
+        let details = sqlx::query(
+            "SELECT c.uuid AS certificate_uuid, c.cert_name, c.ca_profile,
+                    v.uuid AS certificate_version_uuid, v.version_no,
+                    v.issuer, v.subject, v.key_algorithm, v.not_before, v.not_after,
+                    v.serial_sha256, v.fingerprint_sha256, v.spki_sha256, v.chain_sha256,
+                    o.uuid AS order_uuid,
+                    COALESCE((
+                        SELECT jsonb_agg(ci.hostname_ascii ORDER BY ci.position)
+                          FROM deploy_certificate_identifier ci
+                         WHERE ci.certificate_id = c.id
+                    ), '[]'::jsonb) AS identifiers
+               FROM deploy_certificate c
+               JOIN deploy_certificate_version v ON v.id = $2
+               LEFT JOIN deploy_certificate_order o ON o.id = v.source_order_id
+              WHERE c.id = $1",
+        )
+        .bind(row.try_get::<i64, _>("certificate_id").unwrap_or_default())
+        .bind(
+            row.try_get::<i64, _>("certificate_version_id")
+                .unwrap_or_default(),
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| store_error("read certificate archive claim details", error))?;
+        let Some(details) = details else {
+            // The claim refers to a version that no longer exists. Nothing can be
+            // archived, so the row is settled as failed rather than left claimed.
+            self.record_certificate_archive_failure_repo(
+                row.try_get::<i64, _>("tenant_id").unwrap_or_default(),
+                row.try_get::<i64, _>("id").unwrap_or_default(),
+                "CERTIFICATE_ARCHIVE_VERSION_MISSING",
+                1,
+                None,
+                CertificateArchiveStatus::Failed,
+            )
+            .await?;
+            return Ok(None);
+        };
+        let identifiers = serde_json::from_value::<Vec<String>>(
+            details
+                .try_get("identifiers")
+                .unwrap_or(serde_json::Value::Array(Vec::new())),
+        )
+        .unwrap_or_default();
+        Ok(Some(CertificateArchiveClaim {
+            archive_row_id: row.try_get("id").unwrap_or_default(),
+            tenant_id: row.try_get("tenant_id").unwrap_or_default(),
+            certificate_id: row.try_get::<i64, _>("certificate_id").unwrap_or_default().to_string(),
+            certificate_uuid: details.try_get("certificate_uuid").unwrap_or_default(),
+            certificate_version_id: row
+                .try_get::<i64, _>("certificate_version_id")
+                .unwrap_or_default()
+                .to_string(),
+            certificate_version_uuid: details
+                .try_get("certificate_version_uuid")
+                .unwrap_or_default(),
+            bundle_kind: row.try_get("bundle_kind").unwrap_or_default(),
+            cert_name: details.try_get("cert_name").unwrap_or_default(),
+            ca_profile: details.try_get("ca_profile").unwrap_or_default(),
+            version_no: details.try_get("version_no").unwrap_or_default(),
+            issuer: details.try_get("issuer").unwrap_or_default(),
+            subject: details.try_get("subject").unwrap_or_default(),
+            key_algorithm: details.try_get("key_algorithm").unwrap_or_default(),
+            serial_sha256: details.try_get("serial_sha256").unwrap_or_default(),
+            fingerprint_sha256: details.try_get("fingerprint_sha256").unwrap_or_default(),
+            spki_sha256: details.try_get("spki_sha256").unwrap_or_default(),
+            chain_sha256: details.try_get("chain_sha256").unwrap_or_default(),
+            not_before: required_datetime(&details, "not_before")?,
+            not_after: required_datetime(&details, "not_after")?,
+            order_uuid: details.try_get("order_uuid").unwrap_or_default(),
+            identifiers,
+            attempt_count: row.try_get("attempt_count").unwrap_or(0),
+        }))
+    }
+
+    /// Marks one archive row `ARCHIVED` and records where the files landed.
+    ///
+    /// Fenced on `STORING`: a worker whose claim expired must not overwrite the
+    /// result of the worker that took the row after it.
+    pub(super) async fn mark_certificate_archive_archived_repo(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+        outcome: &CertificateArchiveOutcome,
+    ) -> DeployServiceResult<bool> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_archive a
+                SET status = 'ARCHIVED',
+                    drive_space_id = $3,
+                    drive_folder_node_id = $4,
+                    drive_manifest_node_id = $5,
+                    manifest_sha256 = $6,
+                    next_attempt_at = NULL,
+                    last_error_code = NULL,
+                    updated_at = NOW(),
+                    version = a.version + 1
+               FROM deploy_certificate_version v
+              WHERE v.id = a.certificate_version_id
+                AND v.uuid = $2
+                AND a.tenant_id = $1
+                AND a.status = 'STORING'",
+        )
+        .bind(tenant_id)
+        .bind(certificate_version_uuid)
+        .bind(&outcome.space_id)
+        .bind(&outcome.certificate_folder_node_id)
+        .bind(&outcome.manifest_node_id)
+        .bind(&outcome.manifest_sha256)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("record archived deploy_certificate_archive", error))?;
+        // The version folder is part of the Drive location an operator opens; the
+        // table keeps the certificate folder on `drive_folder_node_id` and the
+        // manifest node separately, so the version folder is not a column of its
+        // own. It travels in the outcome for the log line and for the response
+        // shape that a follow-up will expose.
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Records a failed archive attempt on the row the caller holds.
+    pub(super) async fn record_certificate_archive_failure_repo(
+        &self,
+        tenant_id: i64,
+        archive_row_id: i64,
+        error_code: &str,
+        attempt_count: i32,
+        next_attempt_at: Option<&str>,
+        status: CertificateArchiveStatus,
+    ) -> DeployServiceResult<CertificateArchiveStatus> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_archive
+                SET status = $3,
+                    attempt_count = $4,
+                    next_attempt_at = CAST($5 AS TIMESTAMPTZ),
+                    last_error_code = $6,
+                    updated_at = NOW(),
+                    version = version + 1
+              WHERE id = $1 AND tenant_id = $2 AND status = 'STORING'",
+        )
+        .bind(archive_row_id)
+        .bind(tenant_id)
+        .bind(status.as_str())
+        .bind(attempt_count)
+        .bind(next_attempt_at)
+        .bind(error_code)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("record deploy_certificate_archive failure", error))?;
+        if result.rows_affected() == 0 {
+            return Err(DeployServiceError::conflict(
+                "certificate archive row is no longer held by this worker",
+            ));
+        }
+        Ok(status)
+    }
+
+    /// Re-arms the archive of a certificate's served version.
+    ///
+    /// Clears the backoff and the recorded error without touching
+    /// `attempt_count`: the count is how many attempts this control plane made,
+    /// and resetting it would misreport that history. `ARCHIVED` and `SKIPPED`
+    /// rows are left alone — there is nothing to retry — which is what makes the
+    /// command idempotent.
+    pub(super) async fn retry_certificate_archive_repo(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+        now: &str,
+    ) -> DeployServiceResult<bool> {
+        let result = sqlx::query(
+            "UPDATE deploy_certificate_archive a
+                SET status = 'PENDING',
+                    next_attempt_at = NULL,
+                    last_error_code = NULL,
+                    updated_at = NOW(),
+                    version = a.version + 1
+               FROM deploy_certificate c
+              WHERE c.id = a.certificate_id
+                AND c.tenant_id = $1
+                AND c.uuid = $2
+                AND c.deleted_at IS NULL
+                AND a.certificate_version_id = c.current_version_id
+                AND a.status IN ('PENDING', 'STORING', 'FAILED')
+                AND a.updated_at <= CAST($3 AS TIMESTAMPTZ)",
+        )
+        .bind(tenant_id)
+        .bind(certificate_id)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("retry deploy_certificate_archive", error))?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Marks the archive row of one version `SKIPPED`.
+    ///
+    /// Fenced on a non-final status so a row another process already archived — or
+    /// already skipped — is left as it is.
+    pub(super) async fn skip_certificate_archive_repo(
+        &self,
+        tenant_id: i64,
+        certificate_version_uuid: &str,
+        reason_code: &str,
+    ) -> DeployServiceResult<()> {
+        sqlx::query(
+            "UPDATE deploy_certificate_archive a
+                SET status = 'SKIPPED',
+                    last_error_code = $3,
+                    next_attempt_at = NULL,
+                    updated_at = NOW(),
+                    version = a.version + 1
+               FROM deploy_certificate_version v
+              WHERE v.id = a.certificate_version_id
+                AND v.uuid = $2
+                AND a.tenant_id = $1
+                AND a.status IN ('PENDING', 'STORING')",
+        )
+        .bind(tenant_id)
+        .bind(certificate_version_uuid)
+        .bind(reason_code)
+        .execute(&self.pool)
+        .await
+        .map_err(|error| store_error("skip deploy_certificate_archive", error))?;
+        Ok(())
     }
 
     /// Reads the sealed files of one certificate version, in bundle order.
