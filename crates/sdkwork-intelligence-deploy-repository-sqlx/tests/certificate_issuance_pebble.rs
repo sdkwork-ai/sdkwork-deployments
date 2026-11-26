@@ -218,6 +218,9 @@ async fn create_certificate(
             &CreateCertificateRequest {
                 cert_name: cert_name.to_owned(),
                 domain_ids,
+                // Claim ids and named hostnames are the two mutually exclusive
+                // ways to state the identifier set; this suite uses claim ids.
+                requested_identifiers: Vec::new(),
                 ca_profile: "LETS_ENCRYPT_STAGING".to_owned(),
                 certificate_scope: scope,
                 validation_method: method,
@@ -281,6 +284,9 @@ fn console_request(
     CreateCertificateRequest {
         cert_name: E2E_HOSTNAME.to_owned(),
         domain_ids,
+        // Claim ids and named hostnames are the two mutually exclusive ways to
+        // state the identifier set; this suite uses claim ids.
+        requested_identifiers: Vec::new(),
         ca_profile: "LETS_ENCRYPT_STAGING".to_owned(),
         certificate_scope: scope,
         validation_method: method,

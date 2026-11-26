@@ -109,6 +109,7 @@ async fn create_certificate(repository: &DeployRepository, tenant_id: i64) -> (S
             &CreateCertificateRequest {
                 cert_name: "api.sdkwork.dev".to_owned(),
                 domain_ids: vec!["domain-1".to_owned()],
+                requested_identifiers: Vec::new(),
                 ca_profile: "LETS_ENCRYPT_PRODUCTION".to_owned(),
                 certificate_scope: CertificateScope::SingleDomain,
                 validation_method: ValidationMethod::Auto,

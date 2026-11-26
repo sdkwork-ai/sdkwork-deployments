@@ -115,6 +115,9 @@ async fn create_certificate(
             &CreateCertificateRequest {
                 cert_name: "api.sdkwork.dev".to_owned(),
                 domain_ids: vec!["domain-renewal".to_owned()],
+                // This suite selects identifiers by claim id; naming hostnames
+                // directly is the mutually exclusive alternative.
+                requested_identifiers: Vec::new(),
                 ca_profile: "LETS_ENCRYPT_STAGING".to_owned(),
                 certificate_scope: CertificateScope::SingleDomain,
                 validation_method: ValidationMethod::Auto,
@@ -683,6 +686,9 @@ fn console_create_request() -> CreateCertificateRequest {
     CreateCertificateRequest {
         cert_name: "api.sdkwork.dev".to_owned(),
         domain_ids: vec!["domain-renewal".to_owned()],
+        // This suite selects identifiers by claim id; naming hostnames directly
+        // is the mutually exclusive alternative.
+        requested_identifiers: Vec::new(),
         ca_profile: "LETS_ENCRYPT_STAGING".to_owned(),
         certificate_scope: CertificateScope::SingleDomain,
         validation_method: ValidationMethod::Auto,
