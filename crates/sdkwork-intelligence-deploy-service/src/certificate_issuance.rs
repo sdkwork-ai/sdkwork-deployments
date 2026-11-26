@@ -829,7 +829,7 @@ impl DeployService {
             )
             .await?;
         self.record_ari_window(claim, issued).await;
-        // Archiving is best effort by contract (¡ì4.6.4): the version is stored and
+        // Archiving is best effort by contract (Â§4.6.4): the version is stored and
         // the order is `VERSION_STORED` before this runs, and nothing it returns can
         // change either. The row it reads was written in the version's own
         // transaction, so a crash between the commit and this line leaves a
@@ -837,7 +837,7 @@ impl DeployService {
         // archive intent.
         //
         // A deployment with no archive store marks the row `SKIPPED` here, which is
-        // the honest report for "switched off" ¡ª the alternative, leaving it
+        // the honest report for "switched off" â€” the alternative, leaving it
         // `PENDING` forever, would show every certificate as perpetually archiving.
         if self.certificate_archive_configured() {
             let attempt = self
