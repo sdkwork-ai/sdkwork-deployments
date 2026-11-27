@@ -154,9 +154,19 @@ impl IamChannelCapabilityClient {
             return Err(DeployServiceError::validation("capability is required"));
         }
         let bearer = self.auth.bearer_token().await?;
+        // identity:service deploy-publisher — the bearer comes from the declared
+        // `ChannelCapabilityAuth` seam (a deployment service credential for
+        // publishing a site), not from an end-user request. The publishing
+        // command originates from a deploy job, so there is no caller pair.
+        // APP_SDK_INTEGRATION_SPEC.md §5.2.2: the IAM backend is another SDKWork
+        // surface; resolve it through the shared registry component with the
+        // configured base URL as the degradation tier.
+        let base = sdkwork_utils_rust::service_base_url::registry_base_url_or(
+            "sdkwork-iam",
+            &self.base_url,
+        );
         let url = format!(
-            "{base}/backend/v3/api/iam/oauth/resource_authorizations/{authorization_id}/capability_invocations",
-            base = self.base_url
+            "{base}/backend/v3/api/iam/oauth/resource_authorizations/{authorization_id}/capability_invocations"
         );
         let body = json!({
             "capability": capability,

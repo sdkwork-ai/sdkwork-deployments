@@ -19,6 +19,11 @@
 //! - Authentication is the deployment's dedicated backend bootstrap token, carried
 //!   in the request body (`authToken`) exactly like the provisioning route; there
 //!   is no end-user request whose dual tokens could be borrowed.
+//!
+//! identity:service deployment-bootstrap — the paragraph above is the reviewable
+//! justification: this port exists to disable an installation on behalf of the
+//! deployment itself, and the IAM route is a `bootstrap_body` route that accepts
+//! only that dedicated token. There is no caller identity to propagate.
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
