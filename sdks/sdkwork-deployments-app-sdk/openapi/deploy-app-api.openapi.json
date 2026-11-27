@@ -2409,6 +2409,97 @@
         "x-sdkwork-permission": "deploy.certificates.write"
       }
     },
+    "/app/v3/api/certificates/{certificateId}/artifact": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/CertificateIdParam"
+        }
+      ],
+      "get": {
+        "operationId": "certificates.artifacts.retrieve",
+        "summary": "下载证书公开材料 ZIP",
+        "description": "返回当前生效版本的公开证书材料 ZIP（叶证书、中间链、完整链、根证书和元数据）， 不包含私钥。内容以 base64 承载，响应禁止 HTTP 缓存。",
+        "tags": [
+          "certificate"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/CertificateArtifactResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在或尚无已签发版本",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [],
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.certificates.read"
+      }
+    },
     "/app/v3/api/certificates/{certificateId}/renew": {
       "parameters": [
         {
@@ -15307,7 +15398,7 @@
               "maxLength": 253,
               "format": "hostname"
             },
-            "description": "直接以 FQDN 指定证书要覆盖的主机名，即操作者在自由输入框中键入的域名，而不是预先选中的声明 id。 每个提交的主机名先按契约自身的规范化规则处理（小写、去掉尾部点、只允许单个前导通配符标签）， 再解析为本租户中 ACTIVE 且 VERIFIED、且其所属 DNS 区域对本调用者可见的声明； 任一主机名不是本租户的已验证声明时，请求以校验错误拒绝，并在消息中点名该主机名。 所有权校验与 `domainIds` 完全相同，变化的只是入参形式。与 `domainIds` 互斥。"
+            "description": "直接以 FQDN 指定证书要覆盖的主机名，即操作者在自由输入框中键入的域名，而不是预先选中的声明 id。 每个提交的主机名先按契约自身的规范化规则处理（小写、去掉尾部点、只允许单个前导通配符标签）。 `MANAGED` 模式下，每个主机名必须解析为本租户中 ACTIVE 且 VERIFIED、且其所属 DNS 区域对本调用者可见的声明； `MANUAL` + `DNS_01` 模式下，DNS-01 TXT 验证本身就是所有权证明，因此允许尚未预验证的主机名。 手动模式会为缺失的主机名创建 PENDING 声明；若同名主机名或所属命名空间已被其他租户或本租户的私有区域占用，请求仍被拒绝。 通配符范围追加的 apex 使用同一规则。与 `domainIds` 互斥。"
           },
           "certificateScope": {
             "type": "string",
@@ -15326,7 +15417,7 @@
               "DNS_01"
             ],
             "default": "AUTO",
-            "description": "Operator preference. `AUTO` resolves to HTTP_01 for a `SINGLE_DOMAIN` scope and always to DNS_01 for `WILDCARD`. `HTTP_01` is rejected for a `WILDCARD` scope."
+            "description": "Operator preference. `AUTO` resolves to HTTP_01 for a managed `SINGLE_DOMAIN` request and to DNS_01 for `WILDCARD` or `MANUAL`. `HTTP_01` is rejected for a `WILDCARD` or `MANUAL` request."
           },
           "challengePresentation": {
             "type": "string",
@@ -15569,6 +15660,46 @@
               "SKIPPED"
             ],
             "description": "The archive state as of this call, so the caller learns the outcome without a second read. `ARCHIVED` on an `accepted: false` answer means the archive was already done; `SKIPPED` means this deployment does not archive at all."
+          }
+        }
+      },
+      "CertificateArtifactResponse": {
+        "type": "object",
+        "description": "当前生效证书版本的公开材料 ZIP。私钥不在响应模型中，也不能写入归档。",
+        "required": [
+          "fileName",
+          "mediaType",
+          "sizeBytes",
+          "sha256",
+          "contentBase64"
+        ],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "description": "下载时建议使用的 ZIP 文件名。"
+          },
+          "mediaType": {
+            "type": "string",
+            "enum": [
+              "application/zip"
+            ]
+          },
+          "sizeBytes": {
+            "type": "string",
+            "format": "int64",
+            "pattern": "^-?[0-9]+$",
+            "x-sdkwork-int64-string": true,
+            "description": "ZIP 字节数。"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "ZIP 内容的 SHA-256 小写十六进制摘要。"
+          },
+          "contentBase64": {
+            "type": "string",
+            "format": "byte",
+            "description": "有界 ZIP 字节的标准 base64 编码；绝不包含 privkey.pem。"
           }
         }
       },

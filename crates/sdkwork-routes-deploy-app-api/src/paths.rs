@@ -58,6 +58,8 @@ pub const APP_DOMAINS: &str = "/app/v3/api/apps/{appId}/domains";
 pub const APP_HEALTH_CHECKS: &str = "/app/v3/api/apps/{appId}/health_checks";
 pub const CERTIFICATES: &str = "/app/v3/api/certificates";
 pub const CERTIFICATE: &str = "/app/v3/api/certificates/{certificateId}";
+/// Public-only ZIP download of the certificate's currently served version.
+pub const CERTIFICATE_ARTIFACT: &str = "/app/v3/api/certificates/{certificateId}/artifact";
 pub const CERTIFICATE_RENEW: &str = "/app/v3/api/certificates/{certificateId}/renew";
 /// Explicit "re-read current state" command. Does not request a new version.
 pub const CERTIFICATE_REFRESH: &str = "/app/v3/api/certificates/{certificateId}/refresh";

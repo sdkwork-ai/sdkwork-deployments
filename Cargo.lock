@@ -4665,12 +4665,14 @@ name = "sdkwork-intelligence-deploy-service"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "idna",
  "psl",
  "rcgen",
  "reqwest",
  "sdkwork-database-id",
+ "sdkwork-deploy-archive",
  "sdkwork-deploy-certificate-archive-port",
  "sdkwork-deploy-certificate-material",
  "sdkwork-deploy-cloud-account-port",

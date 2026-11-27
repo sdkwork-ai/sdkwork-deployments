@@ -9,6 +9,8 @@ edition.workspace = true
 workspace = true
 [dependencies]
 async-trait.workspace = true
+base64.workspace = true
+sdkwork-deploy-archive.workspace = true
 sdkwork-deploy-contract.workspace = true
 sdkwork-deploy-feed.workspace = true
 sdkwork-deploy-core.workspace = true

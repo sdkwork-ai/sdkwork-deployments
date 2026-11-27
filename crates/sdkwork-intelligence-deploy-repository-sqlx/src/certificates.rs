@@ -1,12 +1,12 @@
 use std::collections::{BTreeSet, HashMap};
 
 use sdkwork_deploy_contract::{
-    plan_certificate_identifiers, resolve_certificate_identifier_source, resolve_validation_method,
-    CertificateArchiveStatus, CertificateIdentifierSource, CertificatePage, CertificatePlanError,
-    CertificateRenewalInProgress, CertificateResponse, CertificateScope, ChallengePresentation,
-    CreateCertificateRequest, DeployServiceError, DeployServiceResult, ValidationMethod,
-    CERTIFICATE_RENEWAL_STATUS_PLANNED, CERTIFICATE_SOURCE_MANAGED, CERTIFICATE_STATUS_REVOKED,
-    MAX_CERTIFICATE_IDENTIFIERS,
+    plan_certificate_identifiers, resolve_certificate_identifier_source, resolve_presentation,
+    resolve_validation_method, CertificateArchiveStatus, CertificateIdentifierSource,
+    CertificatePage, CertificatePlanError, CertificateRenewalInProgress, CertificateResponse,
+    CertificateScope, ChallengeAvailability, ChallengePresentation, CreateCertificateRequest,
+    DeployServiceError, DeployServiceResult, ValidationMethod, CERTIFICATE_RENEWAL_STATUS_PLANNED,
+    CERTIFICATE_SOURCE_MANAGED, CERTIFICATE_STATUS_REVOKED, MAX_CERTIFICATE_IDENTIFIERS,
 };
 use sqlx::{postgres::PgRow, AssertSqlSafe, Row};
 
@@ -188,49 +188,27 @@ impl DeployRepository {
                 .await;
         }
 
-        // Two ways to name the identifier set, one gate behind both.
-        //
-        // `domainIds` names claims by id; `requestedIdentifiers` names the same
-        // claims by their FQDN, which is what an operator typing into a free-form
-        // hostname field produces. Which channel was used changes only *how* the
-        // claims are looked up — never *whether* they are looked up: both resolve
-        // through the same ACTIVE + VERIFIED + zone-owner predicate below, so a
-        // submitted hostname that is not a verified claim of this tenant, or that
-        // belongs to a private zone this caller cannot reach, is refused exactly
-        // as an unusable domain id would be.
-        let (identifier_source, _) = resolve_certificate_identifier_source(
+        let validation_method = resolve_creation_validation_method(request)?;
+        let allow_unverified_manual_claims = validation_method == ValidationMethod::Dns01
+            && request.challenge_presentation == ChallengePresentation::Manual;
+
+        // `domainIds` keeps the established ACTIVE + VERIFIED + zone-owner gate.
+        // Free-form `requestedIdentifiers` may use the same gate, except for a
+        // MANUAL DNS-01 order: there the ACME TXT proof itself establishes
+        // control, so requiring a separate pre-verification would make the manual
+        // flow impossible for a domain that is not in the inventory yet.
+        let (identifier_source, requested_identifiers) = resolve_certificate_identifier_source(
             &request.domain_ids,
             &request.requested_identifiers,
         )
         .map_err(map_certificate_plan_error)?;
-        let requested_domains = match identifier_source {
+        let requested_hostnames = match identifier_source {
             CertificateIdentifierSource::DomainIds => {
                 let domain_ids = request
                     .domain_ids
                     .iter()
                     .map(String::as_str)
                     .collect::<Vec<_>>();
-                // The gate is the tenant *and* the zone's owner, not the tenant alone.
-                //
-                // A tenant-scoped check is not enough: the same tenant also holds the
-                // platform's own `app.<suffix>` zones, whose hostnames the deployment
-                // verifies for app publishing. Those rows are `VERIFIED` + `ACTIVE`, so a
-                // tenant-only predicate accepts them, and any member of the tenant could
-                // then order a certificate covering platform infrastructure — the edge's
-                // own names. The zone is the unit of ownership (`deploy_dns_zone.user_id`),
-                // so it is the unit the gate has to speak in.
-                //
-                // "Reachable" is the same rule the domain inventory states, spelled the
-                // same way (`zone_owner_gate`): a zone is reachable when it is the
-                // caller's own, or when it is tenant-level (`user_id IS NULL`) and
-                // therefore shared with every member. It is deliberately *not* "the
-                // caller is the platform": no such caller exists here, and denying
-                // tenant-level zones outright would hide the platform zones the
-                // inventory documents as visible to everyone.
-                //
-                // `$3 IS NULL` (an unauthenticated actor) keeps the pre-existing
-                // tenant-wide behaviour rather than silently denying every request, since
-                // this path is also reached by internal callers that carry no user.
                 let rows = sqlx::query(
                     "SELECT d.id, d.hostname_ascii
                      FROM deploy_domain d
@@ -253,130 +231,120 @@ impl DeployRepository {
                          current tenant",
                     ));
                 }
-                rows
+                rows.iter()
+                    .map(|row| row.try_get::<String, _>("hostname_ascii"))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| {
+                        DeployServiceError::Internal(format!("map certificate hostname: {error}"))
+                    })?
             }
             CertificateIdentifierSource::RequestedIdentifiers => {
-                // Canonicalized before the lookup so `WWW.Example.COM.` finds the
-                // stored `www.example.com`, and so a name that is merely a
-                // different spelling of another submitted name is caught as a
-                // duplicate rather than looked up twice.
-                let (_, requested_hostnames) = resolve_certificate_identifier_source(
-                    &request.domain_ids,
-                    &request.requested_identifiers,
-                )
-                .map_err(map_certificate_plan_error)?;
-                let requested_hostnames = requested_hostnames.unwrap_or_default();
-                let hostnames = requested_hostnames
-                    .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>();
-                let rows = sqlx::query(
-                    "SELECT d.id, d.hostname_ascii
-                     FROM deploy_domain d
-                     JOIN deploy_dns_zone z ON z.id = d.zone_id
-                     WHERE d.tenant_id = $1 AND d.hostname_ascii = ANY($2)
-                       AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
-                       AND d.deleted_at IS NULL
-                       AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
-                     FOR SHARE OF d",
-                )
-                .bind(tenant_id)
-                .bind(&hostnames)
-                .bind(actor_id)
-                .fetch_all(&mut *transaction)
-                .await
-                .map_err(|error| {
-                    store_error("resolve requested certificate hostname identifiers", error)
-                })?;
-                // Name the offending hostname. Unlike a `domainId` failure — where
-                // the caller supplied opaque ids and the message must not confirm
-                // which ones exist — the operator typed these names themselves, so
-                // echoing the one that failed tells them what to fix without
-                // revealing anything they did not just send. Hostnames are also
-                // public by construction: the certificate would have printed them.
-                let resolved = rows
-                    .iter()
-                    .filter_map(|row| {
-                        row.try_get::<String, _>("hostname_ascii")
-                            .ok()
-                            .map(|hostname| (hostname, row))
-                    })
-                    .collect::<HashMap<String, &PgRow>>();
-                if let Some(missing) = requested_hostnames
-                    .iter()
-                    .find(|hostname| !resolved.contains_key(*hostname))
-                {
-                    return Err(DeployServiceError::validation(format!(
-                        "requestedIdentifiers contains a hostname that is not an active verified \
-                         hostname of this tenant: {missing}"
-                    )));
+                let requested_hostnames = requested_identifiers.unwrap_or_default();
+                if allow_unverified_manual_claims {
+                    requested_hostnames
+                } else {
+                    let hostnames = requested_hostnames
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>();
+                    let rows = sqlx::query(
+                        "SELECT d.id, d.hostname_ascii
+                         FROM deploy_domain d
+                         JOIN deploy_dns_zone z ON z.id = d.zone_id
+                         WHERE d.tenant_id = $1 AND d.hostname_ascii = ANY($2)
+                           AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
+                           AND d.deleted_at IS NULL
+                           AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
+                         FOR SHARE OF d",
+                    )
+                    .bind(tenant_id)
+                    .bind(&hostnames)
+                    .bind(actor_id)
+                    .fetch_all(&mut *transaction)
+                    .await
+                    .map_err(|error| {
+                        store_error("resolve requested certificate hostname identifiers", error)
+                    })?;
+                    let resolved = rows
+                        .iter()
+                        .filter_map(|row| {
+                            row.try_get::<String, _>("hostname_ascii")
+                                .ok()
+                                .map(|hostname| (hostname, row))
+                        })
+                        .collect::<HashMap<String, &PgRow>>();
+                    if let Some(missing) = requested_hostnames
+                        .iter()
+                        .find(|hostname| !resolved.contains_key(*hostname))
+                    {
+                        return Err(DeployServiceError::validation(format!(
+                            "requestedIdentifiers contains a hostname that is not an active verified \
+                             hostname of this tenant: {missing}"
+                        )));
+                    }
+                    requested_hostnames
                 }
-                rows
             }
         };
-        let requested_hostnames = requested_domains
-            .iter()
-            .map(|row| row.try_get::<String, _>("hostname_ascii"))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| {
-                DeployServiceError::Internal(format!("map certificate hostname: {error}"))
-            })?;
 
-        // Scope rules (apex completion, wildcard depth, challenge legality) are
-        // pure and live in the contract crate; this layer only supplies the
-        // claims the caller selected.
         let planned_identifiers =
             plan_certificate_identifiers(request.certificate_scope, &requested_hostnames)
                 .map_err(map_certificate_plan_error)?;
-        let validation_method =
-            resolve_validation_method(request.certificate_scope, request.validation_method)
-                .map_err(map_certificate_plan_error)?;
-
-        // A wildcard scope adds the apex, which the caller did not select, so the
-        // planned set is resolved against `deploy_domain` a second time rather
-        // than reusing `requested_domains`. The added apex must already be an
-        // active verified claim of this tenant — and, for the same reason the
-        // caller's own selection is zone-gated, of a zone this caller can reach.
-        // Resolving it tenant-wide would have let a wildcard pull in an apex from
-        // someone else's private zone, which is the caller's own selection rule
-        // bypassed by a side door.
         let planned_hostnames = planned_identifiers
             .iter()
             .map(|identifier| identifier.hostname.clone())
             .collect::<Vec<_>>();
-        let planned_claims = sqlx::query(
-            "SELECT d.id, d.hostname_ascii
-             FROM deploy_domain d
-             JOIN deploy_dns_zone z ON z.id = d.zone_id
-             WHERE d.tenant_id = $1 AND d.hostname_ascii = ANY($2)
-               AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
-               AND d.deleted_at IS NULL
-               AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
-             FOR SHARE OF d",
-        )
-        .bind(tenant_id)
-        .bind(&planned_hostnames)
-        .bind(actor_id)
-        .fetch_all(&mut *transaction)
-        .await
-        .map_err(|error| store_error("resolve planned certificate identifiers", error))?;
-        let mut claim_by_hostname = HashMap::with_capacity(planned_claims.len());
-        for claim in &planned_claims {
-            let hostname: String = claim.try_get("hostname_ascii").map_err(|error| {
-                DeployServiceError::Internal(format!("map planned certificate hostname: {error}"))
-            })?;
-            let domain_id: i64 = claim.try_get("id").map_err(|error| {
-                DeployServiceError::Internal(format!("map planned certificate domain id: {error}"))
-            })?;
-            claim_by_hostname.insert(hostname, domain_id);
-        }
-        for identifier in &planned_identifiers {
-            if !claim_by_hostname.contains_key(&identifier.hostname) {
-                return Err(map_certificate_plan_error(
-                    CertificatePlanError::WildcardApexMissing,
-                ));
+        let claim_by_hostname = if allow_unverified_manual_claims
+            && identifier_source == CertificateIdentifierSource::RequestedIdentifiers
+        {
+            self.resolve_or_provision_manual_certificate_claims(
+                &mut *transaction,
+                tenant_id,
+                organization_id,
+                actor_id,
+                &planned_hostnames,
+            )
+            .await?
+        } else {
+            let planned_claims = sqlx::query(
+                "SELECT d.id, d.hostname_ascii
+                 FROM deploy_domain d
+                 JOIN deploy_dns_zone z ON z.id = d.zone_id
+                 WHERE d.tenant_id = $1 AND d.hostname_ascii = ANY($2)
+                   AND d.verification_status = 'VERIFIED' AND d.status = 'ACTIVE'
+                   AND d.deleted_at IS NULL
+                   AND ($3::BIGINT IS NULL OR z.user_id IS NULL OR z.user_id = $3)
+                 FOR SHARE OF d",
+            )
+            .bind(tenant_id)
+            .bind(&planned_hostnames)
+            .bind(actor_id)
+            .fetch_all(&mut *transaction)
+            .await
+            .map_err(|error| store_error("resolve planned certificate identifiers", error))?;
+            let mut claim_by_hostname = HashMap::with_capacity(planned_claims.len());
+            for claim in &planned_claims {
+                let hostname: String = claim.try_get("hostname_ascii").map_err(|error| {
+                    DeployServiceError::Internal(format!(
+                        "map planned certificate hostname: {error}"
+                    ))
+                })?;
+                let domain_id: i64 = claim.try_get("id").map_err(|error| {
+                    DeployServiceError::Internal(format!(
+                        "map planned certificate domain id: {error}"
+                    ))
+                })?;
+                claim_by_hostname.insert(hostname, domain_id);
             }
-        }
+            for identifier in &planned_identifiers {
+                if !claim_by_hostname.contains_key(&identifier.hostname) {
+                    return Err(map_certificate_plan_error(
+                        CertificatePlanError::WildcardApexMissing,
+                    ));
+                }
+            }
+            claim_by_hostname
+        };
 
         let certificate_id = next_id(self.id_generator())?;
         let certificate_uuid = new_uuid();
@@ -449,6 +417,177 @@ impl DeployRepository {
             .map_err(|error| store_error("commit deploy_certificate", error))?;
         self.retrieve_certificate_repo(tenant_id, &certificate_uuid)
             .await
+    }
+
+    async fn resolve_or_provision_manual_certificate_claims(
+        &self,
+        connection: &mut sqlx::PgConnection,
+        tenant_id: i64,
+        organization_id: Option<i64>,
+        actor_id: Option<i64>,
+        hostnames: &[String],
+    ) -> DeployServiceResult<HashMap<String, i64>> {
+        let existing = sqlx::query(
+            "SELECT d.id, d.hostname_ascii, d.tenant_id, z.user_id
+             FROM deploy_domain d
+             JOIN deploy_dns_zone z ON z.id = d.zone_id
+             WHERE d.hostname_ascii = ANY($1) AND d.deleted_at IS NULL
+             FOR UPDATE OF d",
+        )
+        .bind(hostnames)
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|error| store_error("resolve manual certificate hostname claims", error))?;
+        let mut claims = HashMap::with_capacity(existing.len());
+        for row in existing {
+            let hostname: String = row.try_get("hostname_ascii").map_err(|error| {
+                DeployServiceError::Internal(format!("map manual certificate hostname: {error}"))
+            })?;
+            let owner_tenant_id: i64 = row.try_get("tenant_id").map_err(|error| {
+                DeployServiceError::Internal(format!("map manual certificate tenant: {error}"))
+            })?;
+            let owner_user_id: Option<i64> = row.try_get("user_id").map_err(|error| {
+                DeployServiceError::Internal(format!("map manual certificate zone owner: {error}"))
+            })?;
+            if owner_tenant_id != tenant_id
+                || !(actor_id.is_none() || owner_user_id.is_none() || owner_user_id == actor_id)
+            {
+                return Err(DeployServiceError::validation(format!(
+                    "requestedIdentifiers contains a hostname that is not available for manual \
+                     DNS-01: {hostname}"
+                )));
+            }
+            let domain_id: i64 = row.try_get("id").map_err(|error| {
+                DeployServiceError::Internal(format!("map manual certificate domain id: {error}"))
+            })?;
+            claims.insert(hostname, domain_id);
+        }
+
+        for hostname in hostnames {
+            if claims.contains_key(hostname) {
+                continue;
+            }
+            let lookup_name = hostname.strip_prefix("*.").unwrap_or(hostname);
+            let zone = sqlx::query(
+                "SELECT id, tenant_id, user_id
+                 FROM deploy_dns_zone
+                 WHERE deleted_at IS NULL
+                   AND ($1 = apex_hostname OR $1 LIKE '%.' || apex_hostname)
+                 ORDER BY LENGTH(apex_hostname) DESC
+                 LIMIT 1
+                 FOR UPDATE",
+            )
+            .bind(lookup_name)
+            .fetch_optional(&mut *connection)
+            .await
+            .map_err(|error| store_error("resolve manual certificate DNS zone", error))?;
+            let zone_id: i64 = if let Some(zone) = zone {
+                let owner_tenant_id: i64 = zone.try_get("tenant_id").map_err(|error| {
+                    DeployServiceError::Internal(format!("map manual DNS zone tenant: {error}"))
+                })?;
+                let owner_user_id: Option<i64> = zone.try_get("user_id").map_err(|error| {
+                    DeployServiceError::Internal(format!("map manual DNS zone owner: {error}"))
+                })?;
+                if owner_tenant_id != tenant_id
+                    || !(actor_id.is_none() || owner_user_id.is_none() || owner_user_id == actor_id)
+                {
+                    return Err(DeployServiceError::validation(format!(
+                        "requestedIdentifiers contains a hostname in a DNS zone that is not \
+                         available to this caller: {hostname}"
+                    )));
+                }
+                zone.try_get("id").map_err(|error| {
+                    DeployServiceError::Internal(format!("map manual DNS zone id: {error}"))
+                })?
+            } else {
+                let apex = certificate_zone_apex(lookup_name);
+                let apex_taken = sqlx::query(
+                    "SELECT EXISTS (
+                        SELECT 1 FROM deploy_domain
+                        WHERE hostname_ascii = $1 AND deleted_at IS NULL
+                     )",
+                )
+                .bind(&apex)
+                .fetch_one(&mut *connection)
+                .await
+                .map_err(|error| store_error("check manual certificate zone apex", error))?
+                .try_get::<bool, _>(0)
+                .map_err(|error| {
+                    DeployServiceError::Internal(format!(
+                        "map manual certificate zone apex: {error}"
+                    ))
+                })?;
+                if apex_taken {
+                    return Err(DeployServiceError::conflict(format!(
+                        "domain zone apex {apex} is already registered"
+                    )));
+                }
+                let zone_id = next_id(self.id_generator())?;
+                let organization_id = organization_id.unwrap_or_default();
+                sqlx::query(
+                    "INSERT INTO deploy_dns_zone (
+                        id, uuid, tenant_id, organization_id, apex_hostname, display_name,
+                        status, user_id, created_by, updated_by
+                     ) VALUES ($1, $2, $3, $4, $5, $5, 'ACTIVE', $6, $6, $6)",
+                )
+                .bind(zone_id)
+                .bind(new_uuid())
+                .bind(tenant_id)
+                .bind(organization_id)
+                .bind(&apex)
+                .bind(actor_id)
+                .execute(&mut *connection)
+                .await
+                .map_err(|error| store_error("insert manual certificate DNS zone", error))?;
+                let apex_domain_id = next_id(self.id_generator())?;
+                sqlx::query(
+                    "INSERT INTO deploy_domain (
+                        id, uuid, tenant_id, organization_id, zone_id, hostname_ascii,
+                        hostname_type, verification_status, status, created_by, updated_by
+                     ) VALUES ($1, $2, $3, $4, $5, $6, 'EXACT', 'PENDING', 'ACTIVE', $7, $7)",
+                )
+                .bind(apex_domain_id)
+                .bind(new_uuid())
+                .bind(tenant_id)
+                .bind(organization_id)
+                .bind(zone_id)
+                .bind(&apex)
+                .bind(actor_id)
+                .execute(&mut *connection)
+                .await
+                .map_err(|error| store_error("insert manual certificate zone apex", error))?;
+                claims.insert(apex, apex_domain_id);
+                zone_id
+            };
+
+            if !claims.contains_key(hostname) {
+                let domain_id = next_id(self.id_generator())?;
+                let hostname_type = if hostname.starts_with("*.") {
+                    "WILDCARD"
+                } else {
+                    "EXACT"
+                };
+                sqlx::query(
+                    "INSERT INTO deploy_domain (
+                        id, uuid, tenant_id, organization_id, zone_id, hostname_ascii,
+                        hostname_type, verification_status, status, created_by, updated_by
+                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING', 'ACTIVE', $8, $8)",
+                )
+                .bind(domain_id)
+                .bind(new_uuid())
+                .bind(tenant_id)
+                .bind(organization_id.unwrap_or_default())
+                .bind(zone_id)
+                .bind(hostname)
+                .bind(hostname_type)
+                .bind(actor_id)
+                .execute(&mut *connection)
+                .await
+                .map_err(|error| store_error("insert manual certificate hostname", error))?;
+                claims.insert(hostname.clone(), domain_id);
+            }
+        }
+        Ok(claims)
     }
 
     pub(super) async fn delete_certificate_repo(
@@ -647,6 +786,35 @@ fn map_certificate_plan_error(error: CertificatePlanError) -> DeployServiceError
     DeployServiceError::validation(format!("{}: {}", error.code(), error.message()))
 }
 
+fn certificate_zone_apex(hostname: &str) -> String {
+    let mut labels = hostname.split('.');
+    let _first = labels.next();
+    let remainder = labels.collect::<Vec<_>>();
+    if remainder.len() >= 2 {
+        remainder.join(".")
+    } else {
+        hostname.to_owned()
+    }
+}
+
+fn resolve_creation_validation_method(
+    request: &CreateCertificateRequest,
+) -> DeployServiceResult<ValidationMethod> {
+    if request.challenge_presentation == ChallengePresentation::Manual {
+        resolve_presentation(
+            request.certificate_scope,
+            request.validation_method,
+            request.challenge_presentation,
+            ChallengeAvailability::default(),
+        )
+        .map(|plan| plan.method)
+        .map_err(map_certificate_plan_error)
+    } else {
+        resolve_validation_method(request.certificate_scope, request.validation_method)
+            .map_err(map_certificate_plan_error)
+    }
+}
+
 /// Decodes a certificate scope column that the baseline constrains to
 /// `SINGLE_DOMAIN` / `WILDCARD`.
 fn decode_certificate_scope(raw: &str) -> Result<CertificateScope, sqlx::Error> {
@@ -817,7 +985,13 @@ fn map_certificate_row(row: &PgRow) -> Result<CertificateResponse, sqlx::Error> 
 
 #[cfg(test)]
 mod tests {
-    use super::{DeployRepository, RenewalEligibility};
+    use super::{
+        certificate_zone_apex, resolve_creation_validation_method, DeployRepository,
+        RenewalEligibility,
+    };
+    use sdkwork_deploy_contract::{
+        ChallengePresentation, CreateCertificateRequest, ValidationMethod,
+    };
 
     fn eligibility(source: &str, status: &str, renewal_status: &str) -> RenewalEligibility {
         DeployRepository::renewal_eligibility(source, status, renewal_status)
@@ -872,5 +1046,34 @@ mod tests {
             eligibility("MANAGED", "ACTIVE", "NONE"),
             RenewalEligibility::Allowed
         );
+    }
+
+    #[test]
+    fn manual_auto_validation_is_persisted_as_dns01() {
+        let request = CreateCertificateRequest {
+            challenge_presentation: ChallengePresentation::Manual,
+            validation_method: ValidationMethod::Auto,
+            ..CreateCertificateRequest::default()
+        };
+        assert_eq!(
+            resolve_creation_validation_method(&request).expect("manual AUTO is DNS-01"),
+            ValidationMethod::Dns01
+        );
+    }
+
+    #[test]
+    fn managed_scope_validation_keeps_its_existing_resolution() {
+        let request = CreateCertificateRequest::default();
+        assert_eq!(
+            resolve_creation_validation_method(&request).expect("managed AUTO is valid"),
+            ValidationMethod::Http01
+        );
+    }
+
+    #[test]
+    fn manual_certificate_zone_apex_uses_the_parent_namespace() {
+        assert_eq!(certificate_zone_apex("example.com"), "example.com");
+        assert_eq!(certificate_zone_apex("api.example.com"), "example.com");
+        assert_eq!(certificate_zone_apex("a.b.example.com"), "b.example.com");
     }
 }

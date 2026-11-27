@@ -1,7 +1,9 @@
 mod common;
 
 use sdkwork_database_id::SnowflakeIdGenerator;
-use sdkwork_deploy_contract::{CertificateScope, CreateCertificateRequest, ValidationMethod};
+use sdkwork_deploy_contract::{
+    CertificateScope, ChallengePresentation, CreateCertificateRequest, ValidationMethod,
+};
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
 use sdkwork_intelligence_deploy_service::DeployRepositoryPort;
 
@@ -146,6 +148,130 @@ fn scoped_request(
         provider_account_id: None,
         challenge_presentation: Default::default(),
     }
+}
+
+fn requested_request(
+    cert_name: &str,
+    requested_identifiers: &[&str],
+    certificate_scope: CertificateScope,
+    challenge_presentation: ChallengePresentation,
+) -> CreateCertificateRequest {
+    CreateCertificateRequest {
+        cert_name: cert_name.to_owned(),
+        domain_ids: Vec::new(),
+        requested_identifiers: requested_identifiers
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        ca_profile: "LETS_ENCRYPT_STAGING".to_owned(),
+        certificate_scope,
+        validation_method: ValidationMethod::Dns01,
+        preferred_key_algorithm: "ECDSA".to_owned(),
+        auto_renew: true,
+        renew_before_days: sdkwork_deploy_core::CERTIFICATE_DEFAULT_RENEW_BEFORE_DAYS,
+        provider_account_id: None,
+        challenge_presentation,
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn manual_dns01_provisions_arbitrary_hostnames_as_pending_claims() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool.clone(),
+        SnowflakeIdGenerator::new(5).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let request = requested_request(
+        "Arbitrary wildcard",
+        &["*.new-example.com"],
+        CertificateScope::Wildcard,
+        ChallengePresentation::Manual,
+    );
+
+    let certificate = repository
+        .create_certificate(
+            7,
+            Some(9),
+            Some(11),
+            "certificate-arbitrary-manual",
+            &request,
+        )
+        .await
+        .expect("manual DNS-01 accepts an arbitrary domain");
+    assert_eq!(
+        certificate.identifiers,
+        vec!["*.new-example.com".to_owned(), "new-example.com".to_owned()]
+    );
+    let pending_claims: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM deploy_domain
+         WHERE hostname_ascii = ANY($1)
+           AND verification_status = 'PENDING' AND status = 'ACTIVE'",
+    )
+    .bind(vec!["*.new-example.com", "new-example.com"])
+    .fetch_one(&pool)
+    .await
+    .expect("count provisioned manual claims");
+    assert_eq!(pending_claims, 2);
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn managed_dns01_still_rejects_arbitrary_hostnames() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(5).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let request = requested_request(
+        "Arbitrary managed",
+        &["managed-new-example.com"],
+        CertificateScope::SingleDomain,
+        ChallengePresentation::Managed,
+    );
+    assert!(repository
+        .create_certificate(
+            7,
+            Some(9),
+            Some(11),
+            "certificate-arbitrary-managed",
+            &request
+        )
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn manual_dns01_does_not_reuse_another_tenants_namespace() {
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(5).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let first = requested_request(
+        "First tenant",
+        &["shared-new-example.com"],
+        CertificateScope::SingleDomain,
+        ChallengePresentation::Manual,
+    );
+    repository
+        .create_certificate(7, Some(9), Some(11), "certificate-first-tenant", &first)
+        .await
+        .expect("first tenant provisions the namespace");
+    let second = requested_request(
+        "Second tenant",
+        &["shared-new-example.com"],
+        CertificateScope::SingleDomain,
+        ChallengePresentation::Manual,
+    );
+    assert!(repository
+        .create_certificate(8, Some(9), Some(11), "certificate-second-tenant", &second)
+        .await
+        .is_err());
 }
 
 #[tokio::test]

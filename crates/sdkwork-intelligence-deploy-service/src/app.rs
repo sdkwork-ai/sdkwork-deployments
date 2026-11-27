@@ -77,15 +77,13 @@ impl DeployService {
     /// operator endpoint and the renewal sweep already share. A second order-creation path
     /// would be a quiet way for this one to become the unregulated one.
     ///
-    /// A refusal is logged and swallowed: the certificate is a legitimate accepted intent,
-    /// a missing ACME account is a separate resource the operator can add, and `renew` can
-    /// request the order again once it exists. Failing the request here would make
-    /// certificate creation depend on unrelated setup.
+    /// Errors propagate to the caller: accepting a certificate whose first order
+    /// could not be created would leave it pending with no actionable reason.
     async fn request_first_certificate_order(
         &self,
         tenant_id: i64,
         certificate: &sdkwork_deploy_contract::CertificateResponse,
-    ) {
+    ) -> DeployServiceResult<()> {
         let request = RequestCertificateOrderRequest {
             certificate_id: certificate.id.clone(),
             // Anchored to the certificate, so replaying the creation replays the order
@@ -93,19 +91,13 @@ impl DeployService {
             idempotency_key: format!("initial:{}", certificate.id),
             challenge_type: None,
         };
-        match self.open_certificate_order(tenant_id, &request).await {
-            Ok(order) => tracing::info!(
-                certificate = %certificate.id,
-                order = %order.id,
-                "certificate created and its first order requested"
-            ),
-            Err(error) => tracing::warn!(
-                certificate = %certificate.id,
-                error = %error,
-                "certificate created but its first order could not be requested; \
-                 it stays PENDING and can be requested again by a renewal"
-            ),
-        }
+        let order = self.open_certificate_order(tenant_id, &request).await?;
+        tracing::info!(
+            certificate = %certificate.id,
+            order = %order.id,
+            "certificate created and its first order requested"
+        );
+        Ok(())
     }
 
     fn validate_upload_request(
@@ -1426,7 +1418,7 @@ impl DeployAppApi for DeployService {
         // into work. Without it the row is `PENDING` forever, because no other path
         // advances a certificate that has never been issued.
         self.request_first_certificate_order(tenant_id, &certificate)
-            .await;
+            .await?;
         Ok(certificate)
     }
 
@@ -1454,6 +1446,16 @@ impl DeployAppApi for DeployService {
             .await
     }
 
+    async fn retrieve_certificate_artifact(
+        &self,
+        context: &DeployAppRequestContext,
+        certificate_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CertificateArtifactResponse> {
+        let tenant_id = Self::require_tenant(context)?;
+        self.retrieve_certificate_artifact(tenant_id, certificate_id)
+            .await
+    }
+
     async fn delete_certificate(
         &self,
         context: &DeployAppRequestContext,
@@ -1478,12 +1480,11 @@ impl DeployAppApi for DeployService {
         // A certificate with no version has never been issued, so asking again means
         // "request it", not "replace it": there is no previous version to supersede and
         // no window to move, and recording a renewal would make the ledger describe a
-        // handover that never happened. It is also the retry path for a first order that
-        // a missing ACME account deferred, and asking twice replays the same order
-        // rather than duplicating it.
+        // handover that never happened. It is also the retry path for a first
+        // order that failed after the certificate row was persisted.
         if certificate.current_version_id.is_none() {
             self.request_first_certificate_order(tenant_id, &certificate)
-                .await;
+                .await?;
             return Ok(certificate);
         }
         self.repository

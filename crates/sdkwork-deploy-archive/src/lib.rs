@@ -21,7 +21,8 @@ mod unpack;
 use std::io;
 
 pub use pack::{
-    pack_directory, PackOptions, PackedArchive, PackedEntry, SkippedEntry, SkippedReason,
+    pack_directory, pack_files, PackOptions, PackedArchive, PackedEntry, SkippedEntry,
+    SkippedReason,
 };
 pub use unpack::{unpack_archive, UnpackOptions, UnpackedArchive, UnpackedEntry};
 

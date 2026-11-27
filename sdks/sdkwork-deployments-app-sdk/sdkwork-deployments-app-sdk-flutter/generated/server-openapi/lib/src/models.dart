@@ -4818,6 +4818,72 @@ class CertificateArchiveRetryResult {
   }
 }
 
+class CertificateArtifactResponse {
+  final String fileName;
+  final String mediaType;
+  final String sizeBytes;
+  final String sha256;
+  final String contentBase64;
+
+  CertificateArtifactResponse({
+    required this.fileName,
+    required this.mediaType,
+    required this.sizeBytes,
+    required this.sha256,
+    required this.contentBase64
+  });
+
+  factory CertificateArtifactResponse.fromJson(Map<String, dynamic> json) {
+    return CertificateArtifactResponse(
+      fileName: (() {
+        final value = json['fileName']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateArtifactResponse.fileName is required');
+        }
+        return value;
+      })(),
+      mediaType: (() {
+        final value = json['mediaType']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateArtifactResponse.mediaType is required');
+        }
+        return value;
+      })(),
+      sizeBytes: (() {
+        final value = json['sizeBytes']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateArtifactResponse.sizeBytes is required');
+        }
+        return value;
+      })(),
+      sha256: (() {
+        final value = json['sha256']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateArtifactResponse.sha256 is required');
+        }
+        return value;
+      })(),
+      contentBase64: (() {
+        final value = json['contentBase64']?.toString();
+        if (value == null) {
+          throw FormatException('CertificateArtifactResponse.contentBase64 is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'fileName': fileName,
+      'mediaType': mediaType,
+      'sizeBytes': sizeBytes,
+      'sha256': sha256,
+      'contentBase64': contentBase64,
+    };
+  }
+}
+
 class CertificateResponse {
   final String id;
   final String certName;
@@ -11749,6 +11815,52 @@ class CertificatesRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('CertificatesRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class CertificatesArtifactsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  CertificatesArtifactsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory CertificatesArtifactsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return CertificatesArtifactsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('CertificatesArtifactsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('CertificatesArtifactsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('CertificatesArtifactsRetrieveResponse.traceId is required');
         }
         return value;
       })()

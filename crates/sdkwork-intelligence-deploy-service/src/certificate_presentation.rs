@@ -26,10 +26,8 @@ pub struct PresentationResolverReport {
 /// What a presentation check established.
 ///
 /// The derived `Default` is an empty report: no resolver answered, so nothing is
-/// visible and nothing was checked. That is a real state rather than a
-/// placeholder — it is distinct from [`PresentationReport::unverifiable`], which
-/// names *why* nobody looked — and it is what the release decision treats as "no
-/// evidence against the operator".
+/// visible and nothing was checked. [`PresentationReport::unverifiable`] names
+/// why no lookup succeeded. Neither state permits release.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PresentationReport {
     pub visible: bool,
@@ -74,27 +72,19 @@ pub trait CertificatePresentationInspectorPort: Send + Sync {
 /// Whether a presentation check permits releasing the order to the CA.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PresentationReleaseDecision {
-    /// At least one resolver answered and none contradicted the expected value, or
-    /// nobody could check. The operator's assertion stands.
+    /// The expected TXT value was observed.
     Allowed,
-    /// A resolver actually checked and did not see the value. Releasing now would
-    /// spend one of the CA's failed-validation allowances.
+    /// The value was absent, different, or could not be checked. Releasing would
+    /// claim DNS publication without evidence and may waste a CA validation.
     Blocked,
 }
 
 /// Turns a presentation report into the release decision.
 ///
-/// The distinction that matters is **checked-and-absent** versus
-/// **could-not-check**. Collapsing them would either block manual issuance on a
-/// deployment with no trusted resolver (unusable) or hand the CA a record nobody
-/// can see (a wasted failed validation). Extracted as a pure function so the rule
-/// is table-testable rather than living inline in a database path.
+/// Manual issuance requires positive DNS evidence. Missing records, mismatches,
+/// timeouts, and unavailable resolvers all keep the order parked so the operator
+/// can correct the record or retry after DNS recovers.
 pub fn presentation_release_decision(report: &PresentationReport) -> PresentationReleaseDecision {
-    let answered = report.reports.iter().filter(|entry| entry.error.is_none());
-    if answered.count() == 0 {
-        // Nobody answered: an assertion, not a contradiction.
-        return PresentationReleaseDecision::Allowed;
-    }
     if report.visible {
         PresentationReleaseDecision::Allowed
     } else {
@@ -175,12 +165,18 @@ mod release_decision_tests {
     }
 
     #[test]
-    fn an_unverifiable_check_does_not_block_the_operator() {
-        // No resolver answered: the operator asserted the record exists, and
-        // blocking here would make manual issuance unusable.
+    fn an_unverifiable_check_blocks_the_release() {
         assert_eq!(
             presentation_release_decision(&report(false, &[("1.1.1.1", Some("timeout"))])),
-            PresentationReleaseDecision::Allowed
+            PresentationReleaseDecision::Blocked
+        );
+    }
+
+    #[test]
+    fn an_empty_report_blocks_the_release() {
+        assert_eq!(
+            presentation_release_decision(&PresentationReport::default()),
+            PresentationReleaseDecision::Blocked
         );
     }
 
@@ -250,11 +246,9 @@ mod release_decision_tests {
     }
 
     #[test]
-    fn a_manual_release_is_blocked_exactly_when_a_record_is_checked_and_absent() {
-        // The command's decision, stated once end to end: the operator's release
-        // is refused only on evidence, never on an outage. This is the rule the
-        // app-api `verify` operation answers `409 CERTIFICATE_DNS_RECORD_NOT_VISIBLE`
-        // from.
+    fn a_manual_release_requires_visible_dns_evidence() {
+        // Absence and lookup failures both keep the order parked; only a matching
+        // TXT value permits the app-api `verify` command to release it.
         let cases = [
             // (visible, resolver errors, expected decision)
             (true, vec![None], PresentationReleaseDecision::Allowed),
@@ -262,7 +256,7 @@ mod release_decision_tests {
             (
                 false,
                 vec![Some("timeout")],
-                PresentationReleaseDecision::Allowed,
+                PresentationReleaseDecision::Blocked,
             ),
             (
                 false,

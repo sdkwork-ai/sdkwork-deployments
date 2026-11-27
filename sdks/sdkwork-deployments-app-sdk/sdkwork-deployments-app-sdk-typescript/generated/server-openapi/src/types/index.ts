@@ -77,6 +77,7 @@ export type { CertificateChallengePresentationResponse } from './certificate-cha
 export type { CertificateChallengePresentationList } from './certificate-challenge-presentation-list';
 export type { CertificateChallengeReleaseResult } from './certificate-challenge-release-result';
 export type { CertificateArchiveRetryResult } from './certificate-archive-retry-result';
+export type { CertificateArtifactResponse } from './certificate-artifact-response';
 export type { CertificateResponse } from './certificate-response';
 export type { CreateHealthCheckRequest } from './create-health-check-request';
 export type { HealthCheckResponse } from './health-check-response';
@@ -188,6 +189,7 @@ export type { CloudAccountsCreateResponse201 } from './cloud-accounts-create-res
 export type { CertificatesListResponse } from './certificates-list-response';
 export type { CertificatesCreateResponse201 } from './certificates-create-response201';
 export type { CertificatesRetrieveResponse } from './certificates-retrieve-response';
+export type { CertificatesArtifactsRetrieveResponse } from './certificates-artifacts-retrieve-response';
 export type { CertificatesRenewResponse } from './certificates-renew-response';
 export type { CertificatesRenewalsListResponse } from './certificates-renewals-list-response';
 export type { CertificatesRefreshResponse } from './certificates-refresh-response';

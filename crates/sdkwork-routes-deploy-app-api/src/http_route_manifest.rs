@@ -212,6 +212,13 @@ const HTTP_ROUTES: &[HttpRoute] = &[
     )
     .with_required_permission("deploy.certificates.write"),
     HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/certificates/{certificateId}/artifact",
+        "certificate",
+        "certificates.artifacts.retrieve",
+    )
+    .with_required_permission("deploy.certificates.read"),
+    HttpRoute::dual_token(
         HttpMethod::Post,
         "/app/v3/api/certificates/{certificateId}/renew",
         "certificate",

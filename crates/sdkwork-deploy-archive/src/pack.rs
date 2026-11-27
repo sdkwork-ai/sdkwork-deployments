@@ -240,6 +240,95 @@ pub fn pack_directory(
     })
 }
 
+/// Pack caller-owned file bytes into a deterministic ZIP without consulting the
+/// filesystem or applying source-selection rules.
+///
+/// This is for generated artifacts whose file set is already authorized, such as
+/// a public certificate bundle. The caller remains responsible for excluding
+/// secret material before calling.
+pub fn pack_files(files: &[(&str, &[u8])]) -> Result<PackedArchive, ArchiveError> {
+    let mut candidates = Vec::with_capacity(files.len());
+    for (path, bytes) in files {
+        if path.contains('\\') {
+            return Err(ArchiveError::UnsafePath((*path).to_owned()));
+        }
+        let path = posix_path(Path::new(path))?;
+        if path.is_empty() {
+            return Err(ArchiveError::UnsafePath(String::new()));
+        }
+        if candidates.iter().any(|(existing, _)| existing == &path) {
+            return Err(ArchiveError::AlreadyExists(path));
+        }
+        let depth = path.split('/').count();
+        if depth > DEFAULT_MAX_DEPTH {
+            return Err(ArchiveError::TooDeep {
+                path,
+                actual: depth,
+                limit: DEFAULT_MAX_DEPTH,
+            });
+        }
+        let size = bytes.len() as u64;
+        if size > DEFAULT_MAX_FILE_BYTES {
+            return Err(ArchiveError::FileTooLarge {
+                path,
+                actual: size,
+                limit: DEFAULT_MAX_FILE_BYTES,
+            });
+        }
+        candidates.push((path, *bytes));
+    }
+    candidates.sort_by(|left, right| left.0.cmp(&right.0));
+    if candidates.len() > DEFAULT_MAX_ENTRIES {
+        return Err(ArchiveError::TooManyEntries {
+            actual: candidates.len(),
+            limit: DEFAULT_MAX_ENTRIES,
+        });
+    }
+    let total_bytes = candidates.iter().try_fold(0u64, |total, (_, bytes)| {
+        total
+            .checked_add(bytes.len() as u64)
+            .ok_or(ArchiveError::TotalTooLarge {
+                actual: u64::MAX,
+                limit: DEFAULT_MAX_TOTAL_BYTES,
+            })
+    })?;
+    if total_bytes > DEFAULT_MAX_TOTAL_BYTES {
+        return Err(ArchiveError::TotalTooLarge {
+            actual: total_bytes,
+            limit: DEFAULT_MAX_TOTAL_BYTES,
+        });
+    }
+    if candidates.is_empty() {
+        return Err(ArchiveError::Empty);
+    }
+
+    let timestamp = zip::DateTime::from_date_and_time(1980, 1, 1, 0, 0, 0).unwrap_or_default();
+    let file_options = SimpleFileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .compression_level(Some(6))
+        .last_modified_time(timestamp)
+        .unix_permissions(0o644);
+    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+    let mut entries = Vec::with_capacity(candidates.len());
+    for (path, bytes) in &candidates {
+        writer.start_file(path.as_str(), file_options)?;
+        std::io::copy(&mut std::io::Cursor::new(bytes), &mut writer)?;
+        entries.push(PackedEntry {
+            path: path.clone(),
+            bytes: bytes.len() as u64,
+        });
+    }
+    let bytes = writer.finish()?.into_inner();
+    let checksum_sha256 = sha256_hex(&bytes);
+    Ok(PackedArchive {
+        bytes,
+        entries,
+        total_bytes,
+        checksum_sha256,
+        skipped: Vec::new(),
+    })
+}
+
 /// Build the extra exclude rules as a gitignore rooted at the package root.
 fn build_custom_rules(root: &Path, patterns: &[String]) -> Result<Gitignore, ArchiveError> {
     if patterns.is_empty() {
@@ -309,4 +398,51 @@ fn is_sensitive_source_path(path: &str) -> bool {
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn in_memory_pack_is_sorted_deterministic_and_readable() {
+        let first = pack_files(&[
+            ("fullchain.pem", b"leaf\nintermediate\n"),
+            ("cert.pem", b"leaf\n"),
+        ])
+        .expect("pack");
+        let replay = pack_files(&[
+            ("cert.pem", b"leaf\n"),
+            ("fullchain.pem", b"leaf\nintermediate\n"),
+        ])
+        .expect("replay");
+
+        assert_eq!(first.bytes, replay.bytes);
+        assert_eq!(first.checksum_sha256, replay.checksum_sha256);
+        assert_eq!(first.entries[0].path, "cert.pem");
+        assert_eq!(first.entries[1].path, "fullchain.pem");
+
+        let directory = tempfile::tempdir().expect("tempdir");
+        let unpacked = crate::unpack_archive(&first.bytes, directory.path(), &Default::default())
+            .expect("unpack");
+        assert_eq!(unpacked.entries.len(), 2);
+        assert_eq!(
+            fs::read(directory.path().join("cert.pem")).expect("read"),
+            b"leaf\n"
+        );
+    }
+
+    #[test]
+    fn in_memory_pack_rejects_unsafe_and_duplicate_paths() {
+        for path in ["../cert.pem", "/cert.pem", "dir\\cert.pem"] {
+            assert!(matches!(
+                pack_files(&[(path, b"certificate")]),
+                Err(ArchiveError::UnsafePath(_))
+            ));
+        }
+        assert!(matches!(
+            pack_files(&[("cert.pem", b"one"), ("cert.pem", b"two")]),
+            Err(ArchiveError::AlreadyExists(_))
+        ));
+    }
 }

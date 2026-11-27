@@ -69,8 +69,6 @@ impl CertificatePresentationInspectorPort for HickoryPresentationInspector {
         }
         let visible = error.is_none() && dns_txt_matches(&observed, expected);
         if error.is_some() {
-            // Keep the error on the report: the caller distinguishes "checked and
-            // absent" (block) from "could not check" (let the operator proceed).
             tracing::warn!(record_name, error = %error.as_deref().unwrap_or(""), "manual DNS-01 presentation lookup failed");
         }
         Ok(PresentationReport {

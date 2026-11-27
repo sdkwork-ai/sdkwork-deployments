@@ -17,13 +17,16 @@
 //! job is SQL: it should not be the component that decides whether a private key
 //! is allowed to be written in the clear.
 
+use base64::Engine;
 use chrono::{DateTime, Utc};
+use sdkwork_deploy_archive::{pack_files, PackedArchive};
 use sdkwork_deploy_certificate_material::{
     assemble_with_root_source, CertificateFile, MaterialError, MaterialKeyProvider, MaterialKind,
     SealedCertificateFile, TrustAnchorBundle,
 };
 use sdkwork_deploy_contract::{
-    CertificateMaterialPayload, DeployServiceError, DeployServiceResult,
+    CertificateArtifactResponse, CertificateMaterialPayload, DeployServiceError,
+    DeployServiceResult,
 };
 
 use crate::DeployService;
@@ -212,6 +215,100 @@ impl DeployService {
             )));
         }
         Ok(files)
+    }
+
+    /// Builds the downloadable public bundle of the certificate's served version.
+    pub async fn retrieve_certificate_artifact(
+        &self,
+        tenant_id: i64,
+        certificate_id: &str,
+    ) -> DeployServiceResult<CertificateArtifactResponse> {
+        let certificate = self
+            .repository
+            .retrieve_certificate(tenant_id, certificate_id)
+            .await?;
+        let version_id = certificate.current_version_id.as_deref().ok_or_else(|| {
+            DeployServiceError::not_found(format!(
+                "certificate {certificate_id} has no issued version to download"
+            ))
+        })?;
+        let files = self
+            .open_certificate_material(tenant_id, version_id)
+            .await?;
+        let metadata = serde_json::json!({
+            "schemaVersion": 1,
+            "certificateId": certificate.id,
+            "certificateVersionId": version_id,
+            "identifiers": certificate.identifiers,
+            "issuer": certificate.issuer,
+            "notBefore": certificate.not_before,
+            "notAfter": certificate.not_after,
+        });
+        let packed = public_certificate_archive(&files, &metadata).map_err(|error| {
+            DeployServiceError::Internal(format!("certificate artifact is unavailable: {error}"))
+        })?;
+        let size_bytes = i64::try_from(packed.bytes.len()).map_err(|_| {
+            DeployServiceError::Internal("certificate artifact is too large".to_owned())
+        })?;
+        let artifact_id = safe_artifact_id(&certificate.id);
+        tracing::info!(
+            tenant_id,
+            certificate_id = %certificate.id,
+            certificate_version_uuid = %version_id,
+            size_bytes,
+            sha256 = %packed.checksum_sha256,
+            "prepared public certificate artifact"
+        );
+        Ok(CertificateArtifactResponse {
+            file_name: format!("certificate-{artifact_id}.zip"),
+            media_type: "application/zip".to_owned(),
+            size_bytes,
+            sha256: packed.checksum_sha256,
+            content_base64: base64::engine::general_purpose::STANDARD.encode(&packed.bytes),
+        })
+    }
+}
+
+fn public_certificate_archive(
+    files: &[CertificateFile],
+    metadata: &serde_json::Value,
+) -> Result<PackedArchive, sdkwork_deploy_archive::ArchiveError> {
+    const MAX_PUBLIC_ARTIFACT_BYTES: u64 = 1024 * 1024;
+    let metadata = serde_json::to_vec(metadata).map_err(|error| {
+        sdkwork_deploy_archive::ArchiveError::Io(std::io::Error::other(format!(
+            "serialize certificate metadata: {error}"
+        )))
+    })?;
+    let mut public_files: Vec<(&str, &[u8])> = files
+        .iter()
+        .filter(|file| !file.kind.is_secret())
+        .map(|file| (file.kind.file_name(), file.content.as_slice()))
+        .collect();
+    public_files.push(("certificate.json", metadata.as_slice()));
+    let total_bytes = public_files
+        .iter()
+        .try_fold(0u64, |total, (_, bytes)| {
+            total.checked_add(bytes.len() as u64)
+        })
+        .unwrap_or(u64::MAX);
+    if total_bytes > MAX_PUBLIC_ARTIFACT_BYTES {
+        return Err(sdkwork_deploy_archive::ArchiveError::TotalTooLarge {
+            actual: total_bytes,
+            limit: MAX_PUBLIC_ARTIFACT_BYTES,
+        });
+    }
+    pack_files(&public_files)
+}
+
+fn safe_artifact_id(value: &str) -> String {
+    let safe = value
+        .chars()
+        .take(128)
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'));
+    if safe && !value.is_empty() {
+        value.to_owned()
+    } else {
+        "certificate".to_owned()
     }
 }
 
@@ -436,6 +533,44 @@ mod tests {
             sdkwork_deploy_contract::DeployServiceErrorKind::Internal,
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn public_artifact_archive_never_contains_the_private_key() {
+        let (payload, _) = fixture();
+        let bundle = assemble(
+            payload.certificate_chain_pem.as_bytes(),
+            payload.private_key_pem.as_bytes(),
+            b"",
+            None,
+        )
+        .expect("assemble");
+        let packed = public_certificate_archive(
+            &bundle.into_files(),
+            &serde_json::json!({ "certificateId": "certificate-1" }),
+        )
+        .expect("public archive");
+
+        let names: Vec<&str> = packed
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "cert.pem",
+                "certificate.json",
+                "chain.pem",
+                "fullchain.pem",
+                "root.pem"
+            ]
+        );
+        assert!(!names.contains(&"privkey.pem"));
+        assert!(!packed
+            .bytes
+            .windows(11)
+            .any(|window| window == b"PRIVATE KEY"));
     }
 
     #[test]

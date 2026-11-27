@@ -54,6 +54,15 @@ class CertificateApi {
     await _client.delete(ApiPaths.appPath('/certificates/${serializePathParameter(certificateId, const PathParameterSpec('certificateId', 'simple', false))}'));
   }
 
+  /// 下载证书公开材料 ZIP
+  Future<CertificatesArtifactsRetrieveResponse?> certificatesArtifactsRetrieve(String certificateId) async {
+    final response = await _client.get(ApiPaths.appPath('/certificates/${serializePathParameter(certificateId, const PathParameterSpec('certificateId', 'simple', false))}/artifact'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : CertificatesArtifactsRetrieveResponse.fromJson(map);
+    })();
+  }
+
   /// 计划托管证书续期
   Future<CertificatesRenewResponse?> certificatesRenew(String certificateId, String idempotencyKey) async {
     final requestHeaders = buildRequestHeaders(

@@ -1073,6 +1073,19 @@ pub trait DeployAppApi: Send + Sync {
         ))
     }
 
+    /// Downloads the issued certificate's public PEM bundle as a deterministic ZIP.
+    ///
+    /// Private key material is never part of this response.
+    async fn retrieve_certificate_artifact(
+        &self,
+        _context: &DeployAppRequestContext,
+        _certificate_id: &str,
+    ) -> DeployServiceResult<CertificateArtifactResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "certificate artifact API is not implemented".to_owned(),
+        ))
+    }
+
     async fn delete_certificate(
         &self,
         _context: &DeployAppRequestContext,

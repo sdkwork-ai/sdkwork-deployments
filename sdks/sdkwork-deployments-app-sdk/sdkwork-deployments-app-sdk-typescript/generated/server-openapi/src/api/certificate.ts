@@ -1,7 +1,7 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { CertificateArchiveRetryResult, CertificateChallengePresentationList, CertificateChallengeReleaseResult, CertificateRenewalResponse, CertificateResponse, CreateCertificateRequest, PageInfo } from '../types';
+import type { CertificateArchiveRetryResult, CertificateArtifactResponse, CertificateChallengePresentationList, CertificateChallengeReleaseResult, CertificateRenewalResponse, CertificateResponse, CreateCertificateRequest, PageInfo } from '../types';
 
 
 export interface CertificateArchiveRetryParams {
@@ -80,6 +80,20 @@ export class CertificateRenewalsApi {
   }
 }
 
+export class CertificateArtifactsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** 下载证书公开材料 ZIP */
+  async retrieve(certificateId: string, requestOptions?: ApiRequestOptions): Promise<CertificateArtifactResponse> {
+    return this.client.request<CertificateArtifactResponse>(appApiPath(`/certificates/${serializePathParameter(certificateId, { name: 'certificateId', style: 'simple', explode: false })}/artifact`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
 export interface CertificateListParams {
   page?: number;
   pageSize?: number;
@@ -95,12 +109,14 @@ export interface CertificateRenewParams {
 
 export class CertificateApi {
   private client: HttpClient;
+  public readonly artifacts: CertificateArtifactsApi;
   public readonly renewals: CertificateRenewalsApi;
   public readonly challenges: CertificateChallengesApi;
   public readonly archive: CertificateArchiveApi;
 
   constructor(client: HttpClient) {
     this.client = client;
+    this.artifacts = new CertificateArtifactsApi(client);
     this.renewals = new CertificateRenewalsApi(client);
     this.challenges = new CertificateChallengesApi(client);
     this.archive = new CertificateArchiveApi(client);

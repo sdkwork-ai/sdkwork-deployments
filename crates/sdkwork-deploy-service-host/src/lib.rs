@@ -496,9 +496,9 @@ pub async fn bootstrap_deploy_service_host_with_pool(
     if let Some(issuance) = certificate_issuance_from_env()? {
         service = service.with_certificate_issuance(issuance);
     }
-    // The manual DNS-01 release self-checks the TXT records first when the host
-    // has resolvers it trusts; without this the release is the operator's
-    // assertion alone.
+    // Manual DNS-01 release requires a positive TXT lookup. A host that cannot
+    // build the system inspector cannot provide that evidence, so release fails
+    // closed instead of forwarding an unverified order to the CA.
     match certificate_presentation::HickoryPresentationInspector::from_system_config() {
         Ok(inspector) => {
             service =
@@ -506,8 +506,8 @@ pub async fn bootstrap_deploy_service_host_with_pool(
         }
         Err(error) => {
             tracing::warn!(
-                "DNS presentation inspector unavailable; manual DNS-01 releases will not be \
-                 self-checked: {error}"
+                "DNS presentation inspector unavailable; manual DNS-01 releases will be \
+                 refused until system DNS resolution is available: {error}"
             );
         }
     }

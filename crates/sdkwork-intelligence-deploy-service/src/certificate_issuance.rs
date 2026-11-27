@@ -26,7 +26,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{Duration, SecondsFormat, Utc};
+use chrono::{SecondsFormat, Utc};
 use sdkwork_deploy_contract::{
     CertificateMaterialPayload, CertificateScope, DeployServiceError, DeployServiceResult,
     ValidationMethod, CHALLENGE_TYPE_DNS_01, CHALLENGE_TYPE_HTTP_01, ORDER_ERROR_CONFLICT,
@@ -272,7 +272,7 @@ pub fn resolve_challenge_type(scope: CertificateScope, method: ValidationMethod)
 ///
 /// Capped well below the CA's own order lifetime: an order nobody acted on is
 /// dead weight, and LE counts every rejected attempt against the account.
-const MANUAL_PRESENTATION_TTL_HOURS: i64 = 72;
+const MANUAL_PRESENTATION_TTL_HOURS: i64 = 24;
 
 /// Builds the two-phase request for a manual certificate.
 ///
@@ -319,43 +319,55 @@ impl DeployService {
         tenant_id: i64,
         certificate_id: &str,
     ) -> DeployServiceResult<bool> {
-        // Self-check first: a record the configured resolvers can see is absent
-        // must not be handed to the CA, which would spend one of its
-        // failed-validation allowances. "Unverifiable" (nobody answered, or a
-        // lookup error) does not block: the operator asserted the record exists,
-        // and refusing there would make manual mode unusable on a deployment with
-        // no trusted resolver.
-        if let Some(inspector) = self.certificate_presentation_inspector.as_ref() {
-            let presentations = self
-                .repository
-                .list_certificate_presentations(tenant_id, certificate_id)
+        // Self-check first: absent, mismatched, or unverifiable records must not
+        // be handed to the CA, where they can spend a failed-validation allowance.
+        // The operator can retry after correcting DNS or restoring resolver access.
+        let inspector = self
+            .certificate_presentation_inspector
+            .as_ref()
+            .ok_or_else(|| {
+                DeployServiceError::Internal(
+                    "manual certificate verification requires a DNS presentation inspector"
+                        .to_owned(),
+                )
+            })?;
+        let presentations = self
+            .repository
+            .list_certificate_presentations(tenant_id, certificate_id)
+            .await?;
+        if presentations.items.is_empty() {
+            return Err(DeployServiceError::conflict(
+                "CERTIFICATE_DNS_CHALLENGE_NOT_READY: no TXT records have been prepared".to_owned(),
+            ));
+        }
+        for item in &presentations.items {
+            let (Some(record_name), Some(record_value)) =
+                (item.record_name.as_deref(), item.record_value.as_deref())
+            else {
+                return Err(DeployServiceError::conflict(
+                    "CERTIFICATE_DNS_CHALLENGE_NOT_READY: a TXT presentation is incomplete"
+                        .to_owned(),
+                ));
+            };
+            let report = inspector
+                .inspect_dns_txt(record_name, &[record_value.to_owned()])
                 .await?;
-            for item in &presentations.items {
-                let (Some(record_name), Some(record_value)) =
-                    (item.record_name.as_deref(), item.record_value.as_deref())
-                else {
-                    continue;
-                };
-                let report = inspector
-                    .inspect_dns_txt(record_name, &[record_value.to_owned()])
-                    .await?;
-                if crate::certificate_presentation::presentation_release_decision(&report)
-                    == crate::certificate_presentation::PresentationReleaseDecision::Blocked
-                {
-                    // The detail names who looked and what they saw. Without it the
-                    // operator is told "not visible" while the console's own dig
-                    // (against their resolver, which may be inside a split-horizon
-                    // view the control plane cannot see) shows the record — an
-                    // unfixable disagreement. Resolvers that failed to answer are
-                    // named too, so "nobody could check" is not mistaken for "it is
-                    // absent".
-                    let evidence =
-                        crate::certificate_presentation::describe_presentation_report(&report);
-                    return Err(DeployServiceError::conflict(format!(
-                        "CERTIFICATE_DNS_RECORD_NOT_VISIBLE: {record_name} is not published \
-                         with the expected TXT value ({evidence})"
-                    )));
-                }
+            if crate::certificate_presentation::presentation_release_decision(&report)
+                == crate::certificate_presentation::PresentationReleaseDecision::Blocked
+            {
+                // The detail names who looked and what they saw. Without it the
+                // operator is told "not visible" while the console's own dig
+                // (against their resolver, which may be inside a split-horizon
+                // view the control plane cannot see) shows the record — an
+                // unfixable disagreement. Resolvers that failed to answer are
+                // named too, so "nobody could check" is not mistaken for "it is
+                // absent".
+                let evidence =
+                    crate::certificate_presentation::describe_presentation_report(&report);
+                return Err(DeployServiceError::conflict(format!(
+                    "CERTIFICATE_DNS_RECORD_NOT_VISIBLE: {record_name} could not be verified \
+                     with the expected TXT value ({evidence})"
+                )));
             }
         }
         let ready_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);

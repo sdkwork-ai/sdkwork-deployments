@@ -1,6 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{header, HeaderMap, HeaderValue},
     response::Response,
     routing::{get, post, put},
     Extension, Json, Router,
@@ -129,6 +129,10 @@ pub fn build_certificate_management_router() -> Router<AppState> {
         .route(
             paths::CERTIFICATE,
             get(retrieve_certificate).delete(delete_certificate),
+        )
+        .route(
+            paths::CERTIFICATE_ARTIFACT,
+            get(retrieve_certificate_artifact),
         )
         .route(paths::CERTIFICATE_RENEW, post(renew_certificate))
         .route(paths::CERTIFICATE_REFRESH, post(refresh_certificate))
@@ -1063,6 +1067,33 @@ async fn retrieve_certificate(
         }
         .await,
     )
+}
+
+/// Downloads the public certificate bundle. The response is JSON because the
+/// generated SDK transports the bounded ZIP as base64; `no-store` keeps the
+/// certificate snapshot out of shared HTTP caches.
+async fn retrieve_certificate_artifact(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(certificate_id): Path<String>,
+) -> Response {
+    let mut response = finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .retrieve_certificate_artifact(&context, &certificate_id)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
 async fn delete_certificate(

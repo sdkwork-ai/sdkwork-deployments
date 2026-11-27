@@ -1069,6 +1069,25 @@ pub struct CertificateResponse {
     pub version: String,
 }
 
+/// Public-only certificate bundle prepared for download.
+///
+/// The private key is deliberately absent: HTTP material reads must never turn a
+/// console permission into key-exfiltration capability. `contentBase64` is the
+/// deterministic ZIP bytes, bound to the digest by `sha256`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CertificateArtifactResponse {
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    #[serde(rename = "mediaType")]
+    pub media_type: String,
+    #[serde(rename = "sizeBytes", with = "sdkwork_utils_rust::serde_int64")]
+    pub size_bytes: i64,
+    #[serde(rename = "sha256")]
+    pub sha256: String,
+    #[serde(rename = "contentBase64")]
+    pub content_base64: String,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CertificatePage {
     pub items: Vec<CertificateResponse>,
