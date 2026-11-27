@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "@sdkwork/deployments-pc-admin-app-detail",
+    "displayName": "SDKWork Deployments PC application detail",
+    "version": "0.1.0",
+    "type": "react-package",
+    "root": "sdkwork-deployments/apps/sdkwork-deployments-pc/packages/sdkwork-deployments-pc-admin-app-detail",
+    "domain": "deployment",
+    "capability": "app-detail",
+    "surface": "backend-admin",
+    "languages": ["typescript", "react"],
+    "generated": false,
+    "private": true,
+    "status": "active",
+    "manifests": ["package.json", "specs/component.spec.json"]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component contract and local spec rules."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "MODULE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/MODULE_SPEC.md",
+      "purpose": "Reusable package contract, extension points, and dependency direction."
+    },
+    {
+      "file": "APPLICATION_LAYERED_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APPLICATION_LAYERED_ARCHITECTURE_SPEC.md",
+      "purpose": "Layer roles and cross-module integration rules."
+    },
+    {
+      "file": "APP_PC_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_PC_ARCHITECTURE_SPEC.md",
+      "purpose": "PC package boundaries and host integration."
+    },
+    {
+      "file": "UI_ARCHITECTURE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/UI_ARCHITECTURE_SPEC.md",
+      "purpose": "UI package ownership and SDK boundary."
+    },
+    {
+      "file": "BACKEND_UI_SPEC.md",
+      "path": "../../../../../sdkwork-specs/BACKEND_UI_SPEC.md",
+      "purpose": "Backend-admin package split, internal shape, and SDK rule."
+    },
+    {
+      "file": "FRONTEND_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_SPEC.md",
+      "purpose": "Frontend layering and SDK client injection."
+    },
+    {
+      "file": "FRONTEND_CODE_SPEC.md",
+      "path": "../../../../../sdkwork-specs/FRONTEND_CODE_SPEC.md",
+      "purpose": "React/TypeScript frontend source rules."
+    },
+    {
+      "file": "I18N_SPEC.md",
+      "path": "../../../../../sdkwork-specs/I18N_SPEC.md",
+      "purpose": "Locale fragment layout, negotiation, and fallback."
+    },
+    {
+      "file": "APP_SDK_INTEGRATION_SPEC.md",
+      "path": "../../../../../sdkwork-specs/APP_SDK_INTEGRATION_SPEC.md",
+      "purpose": "SDK integration through injected clients."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification rules."
+    }
+  ],
+  "contracts": {
+    "layerRole": "frontend-feature",
+    "publicExports": ["src/index.ts"],
+    "providedPorts": [
+      {
+        "name": "deployments-application-detail-surface",
+        "export": "src/index.ts"
+      }
+    ],
+    "requiredPorts": [
+      {
+        "name": "deployments-console-core-sdk",
+        "export": "@sdkwork/deployments-pc-console-core/sdk",
+        "provider": "@sdkwork/deployments-pc-console-core"
+      }
+    ],
+    "runtimeEntrypoints": [],
+    "routeManifest": null,
+    "sdkClients": [],
+    "sdkDependencies": ["deployments-app-sdk"],
+    "dependencyApiExports": [],
+    "permissionComposition": {
+      "inheritanceMode": "openapi-with-explicit-ui-hints",
+      "policy": "The surface never decides authorization; it renders what the injected permission port reports and lets the backend enforce every read. A refused read degrades one region with its classified reason.",
+      "permissionCodes": [
+        "deploy.apps.read",
+        "deploy.packages.read",
+        "deploy.releases.read",
+        "deploy.deployments.read",
+        "deploy.usageEvents.read"
+      ]
+    },
+    "events": [],
+    "configKeys": ["AppCenterDataSource", "AppCenterPermissionPort", "AppCenterCapabilityPort"],
+    "permissions": []
+  },
+  "integration": {
+    "authority": "Root SDKWork specs remain authoritative.",
+    "dependencyPolicy": "Consume sibling packages through public exports only. The surface is read-only and console-neutral: it receives its SDK client and commands through declaring ports, so every console that manages deployment applications reuses it unchanged.",
+    "sdkPolicy": "The SDK client is created by the consuming console's runtime and injected as a transport. This package constructs no client, reads no base URL, and attaches no credential; the only client type it names comes from the console core /sdk boundary (FRONTEND_SPEC.md section 1.2).",
+    "extensionPoints": [
+      {
+        "name": "DeploymentApplicationDetailDataSource",
+        "export": "src/index.ts",
+        "purpose": "Fact sheet and delivery read, plus optional metered-consumption read."
+      },
+      {
+        "name": "DeploymentApplicationDetailPermissionPort",
+        "export": "src/index.ts",
+        "purpose": "Which host-owned controls the operator may open."
+      },
+      {
+        "name": "DeploymentApplicationDetailCapabilityPort",
+        "export": "src/index.ts",
+        "purpose": "Open the console-owned commands instead of re-implementing a write."
+      }
+    ]
+  },
+  "verification": {
+    "commands": [
+      "pnpm --dir apps/sdkwork-deployments-pc typecheck",
+      "pnpm --dir apps/sdkwork-deployments-pc test",
+      "node ../sdkwork-specs/tools/check-component-port-bindings.mjs --root .",
+      "node ../sdkwork-specs/tools/check-application-layering.mjs --root ."
+    ]
+  },
+  "metadata": {
+    "managedBy": "hand-authored (deployment application detail surface)",
+    "standardVersion": "2026-11-27"
+  }
+}
