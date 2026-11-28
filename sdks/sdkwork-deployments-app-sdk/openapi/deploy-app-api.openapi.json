@@ -15149,6 +15149,59 @@
           }
         }
       },
+      "DomainZoneFiling": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Root-domain ICP filing information. Every member is optional. Text is trimmed, blank text is stored as NULL, and an empty object clears the filing.",
+        "properties": {
+          "recordNumber": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "ICP filing record number. Blank text is treated as absent.",
+            "example": "ICP-1"
+          },
+          "entityName": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Registered entity name on the ICP filing. Blank text is treated as absent.",
+            "example": "Example Entity"
+          },
+          "websiteName": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Website name on the ICP filing. Blank text is treated as absent.",
+            "example": "Example"
+          },
+          "reviewDate": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "ICP review date in ISO YYYY-MM-DD form. It must be a real calendar date and cannot be in the future.",
+            "example": "2024-01-31"
+          }
+        }
+      },
+      "DomainZonePoliceFiling": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Root-domain public security (police) filing information. Every member is optional. Text is trimmed, blank text is stored as NULL, and an object whose normalized members are all absent clears the filing. Record URLs must be absolute HTTP or HTTPS URLs; no date or future-time validation applies.",
+        "properties": {
+          "recordNumber": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Public security filing record number. Blank text is treated as absent.",
+            "example": "PS-1"
+          },
+          "recordUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://\\S+$",
+            "description": "Absolute HTTP or HTTPS URL of the public security filing record. Blank text is treated as absent.",
+            "example": "https://beian.mps.gov.cn/"
+          }
+        }
+      },
       "UpdateDomainZoneRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -15180,6 +15233,38 @@
               "ACTIVE",
               "PAUSED"
             ]
+          },
+          "filing": {
+            "description": "Whole-object replacement of the root-domain ICP filing. Omit the property to leave it unchanged, send an object to replace all members, or send null to clear the filing.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DomainZoneFiling"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "example": {
+              "recordNumber": "ICP-1",
+              "entityName": "Example Entity",
+              "websiteName": "Example",
+              "reviewDate": "2024-01-31"
+            }
+          },
+          "policeFiling": {
+            "description": "Whole-object replacement of the root-domain public security (police) filing. Omit the property to leave it unchanged, send an object to replace all members, or send null to clear the filing. An object whose normalized members are all absent also clears the filing.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DomainZonePoliceFiling"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "example": {
+              "recordNumber": "PS-1",
+              "recordUrl": "https://beian.mps.gov.cn/"
+            }
           }
         }
       },
@@ -15346,6 +15431,12 @@
           "providerAccountId": {
             "type": "string",
             "description": "The cloud account pinned to serve this zone's DNS-01 challenges, absent when the zone has none and resolves one per issuance."
+          },
+          "filing": {
+            "$ref": "#/components/schemas/DomainZoneFiling"
+          },
+          "policeFiling": {
+            "$ref": "#/components/schemas/DomainZonePoliceFiling"
           },
           "status": {
             "type": "string",

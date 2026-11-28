@@ -3094,19 +3094,79 @@ class CreateDomainZoneRequest {
   }
 }
 
+class DomainZoneFiling {
+  final String? recordNumber;
+  final String? entityName;
+  final String? websiteName;
+  final String? reviewDate;
+
+  DomainZoneFiling({
+    this.recordNumber,
+    this.entityName,
+    this.websiteName,
+    this.reviewDate
+  });
+
+  factory DomainZoneFiling.fromJson(Map<String, dynamic> json) {
+    return DomainZoneFiling(
+      recordNumber: json['recordNumber']?.toString(),
+      entityName: json['entityName']?.toString(),
+      websiteName: json['websiteName']?.toString(),
+      reviewDate: json['reviewDate']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'recordNumber': recordNumber,
+      'entityName': entityName,
+      'websiteName': websiteName,
+      'reviewDate': reviewDate,
+    };
+  }
+}
+
+class DomainZonePoliceFiling {
+  final String? recordNumber;
+  final String? recordUrl;
+
+  DomainZonePoliceFiling({
+    this.recordNumber,
+    this.recordUrl
+  });
+
+  factory DomainZonePoliceFiling.fromJson(Map<String, dynamic> json) {
+    return DomainZonePoliceFiling(
+      recordNumber: json['recordNumber']?.toString(),
+      recordUrl: json['recordUrl']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'recordNumber': recordNumber,
+      'recordUrl': recordUrl,
+    };
+  }
+}
+
 class UpdateDomainZoneRequest {
   final String? displayName;
   final String? dnsProvider;
   final String? providerZoneRef;
   final String? providerAccountId;
   final String? status;
+  final DomainZoneFiling? filing;
+  final DomainZonePoliceFiling? policeFiling;
 
   UpdateDomainZoneRequest({
     this.displayName,
     this.dnsProvider,
     this.providerZoneRef,
     this.providerAccountId,
-    this.status
+    this.status,
+    this.filing,
+    this.policeFiling
   });
 
   factory UpdateDomainZoneRequest.fromJson(Map<String, dynamic> json) {
@@ -3115,7 +3175,15 @@ class UpdateDomainZoneRequest {
       dnsProvider: json['dnsProvider']?.toString(),
       providerZoneRef: json['providerZoneRef']?.toString(),
       providerAccountId: json['providerAccountId']?.toString(),
-      status: json['status']?.toString()
+      status: json['status']?.toString(),
+      filing: (() {
+        final map = _sdkworkAsMap(json['filing']);
+        return map == null ? null : DomainZoneFiling.fromJson(map);
+      })(),
+      policeFiling: (() {
+        final map = _sdkworkAsMap(json['policeFiling']);
+        return map == null ? null : DomainZonePoliceFiling.fromJson(map);
+      })()
     );
   }
 
@@ -3126,6 +3194,8 @@ class UpdateDomainZoneRequest {
       'providerZoneRef': providerZoneRef,
       'providerAccountId': providerAccountId,
       'status': status,
+      'filing': filing?.toJson(),
+      'policeFiling': policeFiling?.toJson(),
     };
   }
 }
@@ -3327,6 +3397,8 @@ class DomainZoneResponse {
   final String? displayName;
   final String? dnsProvider;
   final String? providerAccountId;
+  final DomainZoneFiling? filing;
+  final DomainZonePoliceFiling? policeFiling;
   final String status;
   final String hostnameCount;
   final String verifiedHostnameCount;
@@ -3342,6 +3414,8 @@ class DomainZoneResponse {
     this.displayName,
     this.dnsProvider,
     this.providerAccountId,
+    this.filing,
+    this.policeFiling,
     required this.status,
     required this.hostnameCount,
     required this.verifiedHostnameCount,
@@ -3377,6 +3451,14 @@ class DomainZoneResponse {
       displayName: json['displayName']?.toString(),
       dnsProvider: json['dnsProvider']?.toString(),
       providerAccountId: json['providerAccountId']?.toString(),
+      filing: (() {
+        final map = _sdkworkAsMap(json['filing']);
+        return map == null ? null : DomainZoneFiling.fromJson(map);
+      })(),
+      policeFiling: (() {
+        final map = _sdkworkAsMap(json['policeFiling']);
+        return map == null ? null : DomainZonePoliceFiling.fromJson(map);
+      })(),
       status: (() {
         final value = json['status']?.toString();
         if (value == null) {
@@ -3437,6 +3519,8 @@ class DomainZoneResponse {
       'displayName': displayName,
       'dnsProvider': dnsProvider,
       'providerAccountId': providerAccountId,
+      'filing': filing?.toJson(),
+      'policeFiling': policeFiling?.toJson(),
       'status': status,
       'hostnameCount': hostnameCount,
       'verifiedHostnameCount': verifiedHostnameCount,

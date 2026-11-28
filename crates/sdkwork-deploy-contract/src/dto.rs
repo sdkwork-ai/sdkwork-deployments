@@ -202,6 +202,33 @@ impl std::fmt::Display for ZoneScope {
     }
 }
 
+/// Root-domain ICP filing information. Missing members are omitted on the wire.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomainZoneFiling {
+    #[serde(rename = "recordNumber", skip_serializing_if = "Option::is_none")]
+    pub record_number: Option<String>,
+    #[serde(rename = "entityName", skip_serializing_if = "Option::is_none")]
+    pub entity_name: Option<String>,
+    #[serde(rename = "websiteName", skip_serializing_if = "Option::is_none")]
+    pub website_name: Option<String>,
+    #[serde(rename = "reviewDate", skip_serializing_if = "Option::is_none")]
+    pub review_date: Option<String>,
+}
+
+/// Root-domain public security (police) filing information.
+///
+/// Missing members are omitted on the wire. The service trims text, stores blank
+/// members as absent, and treats an object with no normalized members as a clear.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DomainZonePoliceFiling {
+    /// Public security filing record number.
+    #[serde(rename = "recordNumber", skip_serializing_if = "Option::is_none")]
+    pub record_number: Option<String>,
+    /// Absolute HTTP or HTTPS URL of the public security filing record.
+    #[serde(rename = "recordUrl", skip_serializing_if = "Option::is_none")]
+    pub record_url: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DomainZoneResponse {
     pub id: String,
@@ -223,6 +250,10 @@ pub struct DomainZoneResponse {
     /// provider account center, not to a Deploy-owned row.
     #[serde(rename = "providerAccountId", skip_serializing_if = "Option::is_none")]
     pub provider_account_id: Option<String>,
+    #[serde(rename = "filing", skip_serializing_if = "Option::is_none")]
+    pub filing: Option<DomainZoneFiling>,
+    #[serde(rename = "policeFiling", skip_serializing_if = "Option::is_none")]
+    pub police_filing: Option<DomainZonePoliceFiling>,
     pub status: String,
     #[serde(rename = "hostnameCount")]
     pub hostname_count: i64,
@@ -266,6 +297,28 @@ pub struct CreateDomainZoneRequest {
     pub provider_account_id: Option<String>,
 }
 
+fn deserialize_filing_patch<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<DomainZoneFiling>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Deserialize into a single Option first: deriving the nested shape directly
+    // collapses JSON null and an omitted field to the same outer None.
+    Option::<DomainZoneFiling>::deserialize(deserializer).map(Some)
+}
+
+fn deserialize_police_filing_patch<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<DomainZonePoliceFiling>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Preserve the distinction between JSON null and an omitted property while
+    // retaining a present object, including an initially empty object.
+    Option::<DomainZonePoliceFiling>::deserialize(deserializer).map(Some)
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct UpdateDomainZoneRequest {
     #[serde(rename = "displayName", default)]
@@ -284,6 +337,20 @@ pub struct UpdateDomainZoneRequest {
     pub provider_account_id: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    /// ICP filing PATCH state: omitted = unchanged, null = clear, object = replace.
+    #[serde(
+        rename = "filing",
+        default,
+        deserialize_with = "deserialize_filing_patch"
+    )]
+    pub filing: Option<Option<DomainZoneFiling>>,
+    /// Police filing PATCH state: omitted = unchanged, null = clear, object = replace.
+    #[serde(
+        rename = "policeFiling",
+        default,
+        deserialize_with = "deserialize_police_filing_patch"
+    )]
+    pub police_filing: Option<Option<DomainZonePoliceFiling>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -338,6 +405,103 @@ pub(crate) fn default_page() -> i32 {
 
 pub(crate) fn default_page_size() -> i32 {
     20
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DomainZoneFiling, DomainZonePoliceFiling, DomainZoneResponse, UpdateDomainZoneRequest,
+    };
+
+    #[test]
+    fn filing_patch_distinguishes_omitted_null_and_object() {
+        let omitted: UpdateDomainZoneRequest = serde_json::from_str("{}").expect("omitted filing");
+        assert_eq!(omitted.filing, None);
+
+        let cleared: UpdateDomainZoneRequest =
+            serde_json::from_str(r#"{"filing":null}"#).expect("null filing");
+        assert_eq!(cleared.filing, Some(None));
+
+        let replaced: UpdateDomainZoneRequest = serde_json::from_str(
+            r#"{"filing":{"recordNumber":"ICP-1","reviewDate":"2026-01-31"}}"#,
+        )
+        .expect("object filing");
+        assert_eq!(
+            replaced.filing,
+            Some(Some(DomainZoneFiling {
+                record_number: Some("ICP-1".to_owned()),
+                entity_name: None,
+                website_name: None,
+                review_date: Some("2026-01-31".to_owned()),
+            }))
+        );
+    }
+
+    #[test]
+    fn response_omits_absent_filing_and_serializes_wire_names() {
+        let response = DomainZoneResponse::default();
+        let value = serde_json::to_value(response).expect("serialize zone");
+        assert!(value.get("filing").is_none());
+        assert!(value.get("policeFiling").is_none());
+
+        let filing = DomainZoneFiling {
+            record_number: Some("ICP-1".to_owned()),
+            entity_name: None,
+            website_name: Some("Example".to_owned()),
+            review_date: None,
+        };
+        let value = serde_json::to_value(filing).expect("serialize filing");
+        assert_eq!(value["recordNumber"], "ICP-1");
+        assert_eq!(value["websiteName"], "Example");
+        assert!(value.get("entityName").is_none());
+        assert!(value.get("reviewDate").is_none());
+    }
+
+    #[test]
+    fn police_filing_patch_distinguishes_omitted_null_and_object() {
+        let omitted: UpdateDomainZoneRequest = serde_json::from_str("{}").expect("omitted filing");
+        assert_eq!(omitted.filing, None);
+        assert_eq!(omitted.police_filing, None);
+
+        let cleared: UpdateDomainZoneRequest =
+            serde_json::from_str(r#"{"policeFiling":null}"#).expect("null police filing");
+        assert_eq!(cleared.filing, None);
+        assert_eq!(cleared.police_filing, Some(None));
+
+        let replaced: UpdateDomainZoneRequest = serde_json::from_str(
+            r#"{"policeFiling":{"recordNumber":"PS-1","recordUrl":"https://beian.mps.gov.cn/"}}"#,
+        )
+        .expect("object police filing");
+        assert_eq!(
+            replaced.police_filing,
+            Some(Some(DomainZonePoliceFiling {
+                record_number: Some("PS-1".to_owned()),
+                record_url: Some("https://beian.mps.gov.cn/".to_owned()),
+            }))
+        );
+
+        let empty: UpdateDomainZoneRequest =
+            serde_json::from_str(r#"{"policeFiling":{}}"#).expect("empty police filing");
+        assert_eq!(
+            empty.police_filing,
+            Some(Some(DomainZonePoliceFiling::default()))
+        );
+    }
+
+    #[test]
+    fn police_filing_response_and_object_use_wire_names() {
+        let response = DomainZoneResponse {
+            police_filing: Some(DomainZonePoliceFiling {
+                record_number: Some("PS-1".to_owned()),
+                record_url: None,
+            }),
+            ..Default::default()
+        };
+        let value = serde_json::to_value(response).expect("serialize zone");
+        assert_eq!(value["policeFiling"]["recordNumber"], "PS-1");
+        assert!(value["policeFiling"].get("recordUrl").is_none());
+        assert!(value.get("filing").is_none());
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

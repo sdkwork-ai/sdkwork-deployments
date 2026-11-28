@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS deploy_dns_zone (
     -- FK would make this module's schema depend on another module's table
     -- lifecycle. Liveness is enforced on write by the service layer.
     provider_account_id VARCHAR(128),
+    icp_record_number VARCHAR(64),
+    icp_entity_name   VARCHAR(200),
+    icp_website_name  VARCHAR(200),
+    icp_review_date   DATE,
+    police_record_number VARCHAR(64),
+    police_record_url    VARCHAR(2048),
     status          VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
     -- Owner of the zone, as a user subject.
     --
@@ -68,6 +74,26 @@ CREATE TABLE IF NOT EXISTS deploy_dns_zone (
     CONSTRAINT chk_deploy_dns_zone_provider_account CHECK (
         provider_account_id IS NULL
         OR provider_account_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]{1,127}$'
+    ),
+    CONSTRAINT chk_deploy_dns_zone_icp_record_number CHECK (
+        icp_record_number IS NULL
+        OR (char_length(icp_record_number) BETWEEN 1 AND 64 AND btrim(icp_record_number) <> '')
+    ),
+    CONSTRAINT chk_deploy_dns_zone_icp_entity_name CHECK (
+        icp_entity_name IS NULL
+        OR (char_length(icp_entity_name) BETWEEN 1 AND 200 AND btrim(icp_entity_name) <> '')
+    ),
+    CONSTRAINT chk_deploy_dns_zone_icp_website_name CHECK (
+        icp_website_name IS NULL
+        OR (char_length(icp_website_name) BETWEEN 1 AND 200 AND btrim(icp_website_name) <> '')
+    ),
+    CONSTRAINT chk_deploy_dns_zone_police_record_number CHECK (
+        police_record_number IS NULL
+        OR (char_length(police_record_number) BETWEEN 1 AND 64 AND btrim(police_record_number) <> '')
+    ),
+    CONSTRAINT chk_deploy_dns_zone_police_record_url CHECK (
+        police_record_url IS NULL
+        OR (char_length(police_record_url) BETWEEN 1 AND 2048 AND btrim(police_record_url) <> '')
     )
 );
 

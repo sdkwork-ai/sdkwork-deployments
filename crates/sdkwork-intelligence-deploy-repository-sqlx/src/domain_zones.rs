@@ -1,8 +1,8 @@
 use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainZoneRequest, DeployServiceError, DeployServiceResult,
-    DomainHostnamePage, DomainHostnameResponse, DomainZonePage, DomainZoneResponse,
-    ListDomainZonesQuery, OwnershipReach, UpdateDomainHostnameRequest, UpdateDomainZoneRequest,
-    ZoneProviderAccountFilter, ZoneScope,
+    DomainHostnamePage, DomainHostnameResponse, DomainZoneFiling, DomainZonePage,
+    DomainZonePoliceFiling, DomainZoneResponse, ListDomainZonesQuery, OwnershipReach,
+    UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneProviderAccountFilter, ZoneScope,
 };
 use sdkwork_intelligence_deploy_service::{
     dns_txt_record_name, dns_txt_record_value, dns_txt_relative_name, DomainVerificationChallenge,
@@ -18,6 +18,8 @@ use crate::DeployRepository;
 
 const ZONE_SELECT: &str =
     "z.uuid, z.apex_hostname, z.display_name, z.dns_provider, z.provider_account_id, z.status,
+     z.icp_record_number, z.icp_entity_name, z.icp_website_name, z.icp_review_date::text,
+     z.police_record_number, z.police_record_url,
      z.user_id, z.updated_at, z.version,
      (SELECT COUNT(*) FROM deploy_domain d WHERE d.zone_id = z.id AND d.deleted_at IS NULL) AS hostname_count,
      (SELECT COUNT(*) FROM deploy_domain d WHERE d.zone_id = z.id AND d.verification_status = 'VERIFIED' AND d.deleted_at IS NULL) AS verified_hostname_count,
@@ -397,16 +399,42 @@ impl DeployRepository {
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty());
+        // The outer Option is the PATCH three-state flag. A null filing and an
+        // empty normalized filing both replace the whole object with NULLs.
+        let replace_filing = request.filing.is_some();
+        let filing = match &request.filing {
+            Some(Some(filing)) => filing,
+            _ => &sdkwork_deploy_contract::DomainZoneFiling::default(),
+        };
+        let filing_record_number = filing.record_number.as_deref();
+        let filing_entity_name = filing.entity_name.as_deref();
+        let filing_website_name = filing.website_name.as_deref();
+        let filing_review_date = filing.review_date.as_deref();
+        // Police filing uses the same whole-object replacement semantics, but an
+        // independent flag so changing one filing never overwrites the other.
+        let replace_police_filing = request.police_filing.is_some();
+        let police_filing = match &request.police_filing {
+            Some(Some(filing)) => filing,
+            _ => &DomainZonePoliceFiling::default(),
+        };
+        let police_record_number = police_filing.record_number.as_deref();
+        let police_record_url = police_filing.record_url.as_deref();
         let result = sqlx::query(AssertSqlSafe(format!(
             "UPDATE deploy_dns_zone SET
                 display_name = COALESCE($3, display_name), dns_provider = COALESCE($4, dns_provider),
                 provider_zone_ref = COALESCE($5, provider_zone_ref), status = COALESCE($6, status),
                 provider_account_id = CASE WHEN $8 THEN NULL
                     ELSE COALESCE($9, provider_account_id) END,
+                icp_record_number = CASE WHEN $10 THEN $11 ELSE icp_record_number END,
+                icp_entity_name = CASE WHEN $10 THEN $12 ELSE icp_entity_name END,
+                icp_website_name = CASE WHEN $10 THEN $13 ELSE icp_website_name END,
+                icp_review_date = CASE WHEN $10 THEN $14::date ELSE icp_review_date END,
+                police_record_number = CASE WHEN $15 THEN $16 ELSE police_record_number END,
+                police_record_url = CASE WHEN $15 THEN $17 ELSE police_record_url END,
                 updated_by = $7, updated_at = CURRENT_TIMESTAMP, version = version + 1
              WHERE tenant_id = $1 AND uuid = $2
                AND {} AND deleted_at IS NULL",
-            zone_row_owner_gate(10, owner)
+            zone_row_owner_gate(18, owner)
         )))
         .bind(tenant_id)
         .bind(zone_id)
@@ -417,6 +445,14 @@ impl DeployRepository {
         .bind(owner.actor_id())
         .bind(clear_provider_account)
         .bind(provider_account_id)
+        .bind(replace_filing)
+        .bind(filing_record_number)
+        .bind(filing_entity_name)
+        .bind(filing_website_name)
+        .bind(filing_review_date)
+        .bind(replace_police_filing)
+        .bind(police_record_number)
+        .bind(police_record_url)
         .bind(owner.actor_id())
         .execute(&self.pool)
         .await
@@ -1573,6 +1609,24 @@ fn map_zone_row(row: &PgRow) -> Result<DomainZoneResponse, sqlx::Error> {
     // the tenant-level `app.<suffix>` zones, so the scope is derived from it
     // here rather than being stored twice.
     let user_id: Option<i64> = row.try_get("user_id").ok().flatten();
+    let filing = DomainZoneFiling {
+        record_number: row.try_get("icp_record_number")?,
+        entity_name: row.try_get("icp_entity_name")?,
+        website_name: row.try_get("icp_website_name")?,
+        review_date: row.try_get("icp_review_date")?,
+    };
+    let filing = (filing.record_number.is_some()
+        || filing.entity_name.is_some()
+        || filing.website_name.is_some()
+        || filing.review_date.is_some())
+    .then_some(filing);
+    let police_filing = DomainZonePoliceFiling {
+        record_number: row.try_get("police_record_number")?,
+        record_url: row.try_get("police_record_url")?,
+    };
+    let police_filing = (police_filing.record_number.is_some()
+        || police_filing.record_url.is_some())
+    .then_some(police_filing);
     Ok(DomainZoneResponse {
         id: row.try_get("uuid")?,
         apex_hostname: row.try_get("apex_hostname")?,
@@ -1580,6 +1634,8 @@ fn map_zone_row(row: &PgRow) -> Result<DomainZoneResponse, sqlx::Error> {
         display_name: row.try_get("display_name").ok(),
         dns_provider: row.try_get("dns_provider").ok(),
         provider_account_id: row.try_get("provider_account_id").ok(),
+        filing,
+        police_filing,
         status: row.try_get("status")?,
         hostname_count: row.try_get("hostname_count")?,
         verified_hostname_count: row.try_get("verified_hostname_count")?,

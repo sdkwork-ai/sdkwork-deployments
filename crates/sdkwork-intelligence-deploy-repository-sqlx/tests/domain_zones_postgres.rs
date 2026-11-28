@@ -5,8 +5,9 @@ use std::sync::Arc;
 use sdkwork_database_id::SnowflakeIdGenerator;
 use sdkwork_deploy_contract::{
     CreateDomainHostnameRequest, CreateDomainVerificationFileRequest, CreateDomainZoneRequest,
-    DeployAppApi, DeployAppRequestContext, DeployServiceErrorKind, ListDomainZonesQuery,
-    OwnershipReach, UpdateDomainHostnameRequest, UpdateDomainZoneRequest, ZoneScope,
+    DeployAppApi, DeployAppRequestContext, DeployServiceErrorKind, DomainZoneFiling,
+    DomainZonePoliceFiling, ListDomainZonesQuery, OwnershipReach, UpdateDomainHostnameRequest,
+    UpdateDomainZoneRequest, ZoneScope,
 };
 use sdkwork_deploy_drive_port::{MemoryDeployDrivePort, MemoryDeployVerificationObjectStore};
 use sdkwork_intelligence_deploy_repository_sqlx::DeployRepository;
@@ -45,6 +46,73 @@ async fn postgres_domain_zone_lifecycle_enforces_resource_boundaries() {
         .expect("create root domain zone");
     assert_eq!(zone.apex_hostname, apex);
     assert_eq!(zone.hostname_count, 1);
+    assert!(zone.filing.is_none());
+
+    let filing = DomainZoneFiling {
+        record_number: Some("ICP-1".to_owned()),
+        entity_name: Some("Example Entity".to_owned()),
+        website_name: Some("Example".to_owned()),
+        review_date: Some("2024-01-31".to_owned()),
+    };
+    let filed = repository
+        .update_domain_zone(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &UpdateDomainZoneRequest {
+                filing: Some(Some(filing.clone())),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("save ICP filing");
+    assert_eq!(filed.filing.as_ref(), Some(&filing));
+
+    let omitted = repository
+        .update_domain_zone(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &UpdateDomainZoneRequest {
+                display_name: Some("Production zone".to_owned()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("update without filing");
+    assert_eq!(omitted.filing, filed.filing);
+
+    let replacement = DomainZoneFiling {
+        record_number: Some("ICP-2".to_owned()),
+        ..Default::default()
+    };
+    let replaced = repository
+        .update_domain_zone(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &UpdateDomainZoneRequest {
+                filing: Some(Some(replacement.clone())),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("replace whole ICP filing");
+    assert_eq!(replaced.filing.as_ref(), Some(&replacement));
+
+    let cleared = repository
+        .update_domain_zone(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &zone.id,
+            &UpdateDomainZoneRequest {
+                filing: Some(None),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("clear ICP filing");
+    assert!(cleared.filing.is_none());
 
     let listed = repository
         .list_domain_zones(
@@ -472,6 +540,199 @@ async fn postgres_duplicate_apex_names_the_existing_zone() {
     }
 }
 
+/// Police filing is a whole-object replacement independent of ICP filing, and
+/// both its writes and reads stay inside the owner and tenant boundary.
+#[tokio::test]
+#[ignore = "requires SDKWORK_DATABASE_TEST_POSTGRES_URL"]
+async fn postgres_police_filing_replaces_independently_and_enforces_resource_boundaries() {
+    async fn update(
+        repository: &DeployRepository,
+        tenant_id: i64,
+        actor_id: i64,
+        zone_id: &str,
+        request: &UpdateDomainZoneRequest,
+    ) -> sdkwork_deploy_contract::DomainZoneResponse {
+        repository
+            .update_domain_zone(
+                tenant_id,
+                OwnershipReach::new(Some(actor_id), None, false),
+                zone_id,
+                request,
+            )
+            .await
+            .expect("update domain zone")
+    }
+
+    let pool = common::postgres_pool().await;
+    let repository = DeployRepository::new(
+        pool,
+        SnowflakeIdGenerator::new(4).expect("Snowflake generator"),
+        common::test_secret_key(),
+    );
+    let zone = repository
+        .create_domain_zone(
+            7,
+            Some(9),
+            Some(11),
+            &CreateDomainZoneRequest {
+                apex_hostname: format!(
+                    "police{}.dev",
+                    sdkwork_database_id::uuid_v4().replace('-', "")
+                ),
+                display_name: None,
+                dns_provider: Some("manual".to_owned()),
+                provider_zone_ref: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("create root domain zone");
+    assert!(zone.police_filing.is_none());
+
+    let filing = DomainZoneFiling {
+        record_number: Some("ICP-1".to_owned()),
+        entity_name: Some("Example Entity".to_owned()),
+        website_name: Some("Example".to_owned()),
+        review_date: Some("2024-01-31".to_owned()),
+    };
+    let police_filing = DomainZonePoliceFiling {
+        record_number: Some("PS-1".to_owned()),
+        record_url: Some("https://beian.mps.gov.cn/records/PS-1".to_owned()),
+    };
+    let saved = update(
+        &repository,
+        7,
+        11,
+        &zone.id,
+        &UpdateDomainZoneRequest {
+            filing: Some(Some(filing.clone())),
+            police_filing: Some(Some(police_filing.clone())),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(saved.filing.as_ref(), Some(&filing));
+    assert_eq!(saved.police_filing.as_ref(), Some(&police_filing));
+
+    let omitted = update(
+        &repository,
+        7,
+        11,
+        &zone.id,
+        &UpdateDomainZoneRequest {
+            display_name: Some("Production zone".to_owned()),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(omitted.filing.as_ref(), saved.filing.as_ref());
+    assert_eq!(omitted.police_filing.as_ref(), saved.police_filing.as_ref());
+
+    let replacement = DomainZonePoliceFiling {
+        record_number: None,
+        record_url: Some("https://beian.mps.gov.cn/records/PS-2".to_owned()),
+    };
+    let replaced = update(
+        &repository,
+        7,
+        11,
+        &zone.id,
+        &UpdateDomainZoneRequest {
+            police_filing: Some(Some(replacement.clone())),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert_eq!(replaced.filing.as_ref(), saved.filing.as_ref());
+    assert_eq!(replaced.police_filing.as_ref(), Some(&replacement));
+    assert!(replaced
+        .police_filing
+        .as_ref()
+        .is_some_and(|filing| filing.record_number.is_none()));
+
+    let intruder_filing = DomainZonePoliceFiling {
+        record_number: Some("INTRUDER".to_owned()),
+        record_url: Some("https://example.com/intruder".to_owned()),
+    };
+    for (tenant_id, actor_id) in [(7, 12), (8, 11)] {
+        let error = repository
+            .update_domain_zone(
+                tenant_id,
+                OwnershipReach::new(Some(actor_id), None, false),
+                &zone.id,
+                &UpdateDomainZoneRequest {
+                    police_filing: Some(Some(intruder_filing.clone())),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect_err("a different owner or tenant must not update police filing");
+        assert_eq!(error.kind(), DeployServiceErrorKind::NotFound);
+    }
+    let owner_read = repository
+        .retrieve_domain_zone(7, OwnershipReach::new(Some(11), None, false), &zone.id)
+        .await
+        .expect("owner retrieves the unchanged zone");
+    assert_eq!(owner_read.filing.as_ref(), saved.filing.as_ref());
+    assert_eq!(
+        owner_read.police_filing.as_ref(),
+        replaced.police_filing.as_ref()
+    );
+
+    let listed = repository
+        .list_domain_zones(
+            7,
+            OwnershipReach::new(Some(11), None, false),
+            &ListDomainZonesQuery {
+                page: 1,
+                page_size: 20,
+                status: None,
+                keyword: Some("police".to_owned()),
+                scope: None,
+                provider_account_id: None,
+            },
+        )
+        .await
+        .expect("list root domain zones");
+    let listed_zone = listed
+        .items
+        .iter()
+        .find(|item| item.id == zone.id)
+        .expect("zone appears in list response mapping");
+    assert_eq!(
+        listed_zone.police_filing.as_ref(),
+        replaced.police_filing.as_ref()
+    );
+
+    let cleared = update(
+        &repository,
+        7,
+        11,
+        &zone.id,
+        &UpdateDomainZoneRequest {
+            police_filing: Some(None),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert!(cleared.police_filing.is_none());
+    assert_eq!(cleared.filing.as_ref(), saved.filing.as_ref());
+
+    let emptied = update(
+        &repository,
+        7,
+        11,
+        &zone.id,
+        &UpdateDomainZoneRequest {
+            police_filing: Some(Some(DomainZonePoliceFiling::default())),
+            ..Default::default()
+        },
+    )
+    .await;
+    assert!(emptied.police_filing.is_none());
+    assert_eq!(emptied.filing.as_ref(), saved.filing.as_ref());
+}
+
 /// The console's domain inventory is user-private.
 ///
 /// A zone belongs to the user who created it, so a second user in the same
@@ -620,6 +881,8 @@ async fn postgres_domain_inventory_is_private_to_its_owner() {
                     dns_provider: None,
                     provider_zone_ref: None,
                     provider_account_id: None,
+                    filing: None,
+                    police_filing: None,
                     status: Some("PAUSED".to_owned()),
                 },
             )

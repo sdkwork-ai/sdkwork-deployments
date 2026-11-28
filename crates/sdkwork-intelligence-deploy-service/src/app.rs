@@ -369,6 +369,314 @@ fn normalize_optional_text(
         .transpose()
 }
 
+fn normalize_filing_text(
+    value: Option<String>,
+    maximum_length: usize,
+    field: &str,
+) -> DeployServiceResult<Option<String>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.chars().count() > maximum_length {
+        return Err(DeployServiceError::validation(format!(
+            "{field} must contain at most {maximum_length} characters"
+        )));
+    }
+    Ok(Some(value.to_owned()))
+}
+
+fn normalize_domain_zone_filing(
+    filing: &sdkwork_deploy_contract::DomainZoneFiling,
+) -> DeployServiceResult<Option<sdkwork_deploy_contract::DomainZoneFiling>> {
+    use sdkwork_deploy_contract::DomainZoneFiling;
+
+    let review_date = match filing.review_date.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(value) => {
+            let date = chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|_| {
+                DeployServiceError::validation("filing.reviewDate must be a real ISO date")
+            })?;
+            if date.to_string() != value {
+                return Err(DeployServiceError::validation(
+                    "filing.reviewDate must use YYYY-MM-DD",
+                ));
+            }
+            if date > chrono::Local::now().date_naive() {
+                return Err(DeployServiceError::validation(
+                    "filing.reviewDate must not be in the future",
+                ));
+            }
+            Some(date.to_string())
+        }
+    };
+    let normalized = DomainZoneFiling {
+        record_number: normalize_filing_text(
+            filing.record_number.clone(),
+            64,
+            "filing.recordNumber",
+        )?,
+        entity_name: normalize_filing_text(filing.entity_name.clone(), 200, "filing.entityName")?,
+        website_name: normalize_filing_text(
+            filing.website_name.clone(),
+            200,
+            "filing.websiteName",
+        )?,
+        review_date,
+    };
+    if normalized.record_number.is_none()
+        && normalized.entity_name.is_none()
+        && normalized.website_name.is_none()
+        && normalized.review_date.is_none()
+    {
+        return Ok(None);
+    }
+    Ok(Some(normalized))
+}
+
+fn normalize_domain_zone_police_filing(
+    filing: &sdkwork_deploy_contract::DomainZonePoliceFiling,
+) -> DeployServiceResult<Option<sdkwork_deploy_contract::DomainZonePoliceFiling>> {
+    use sdkwork_deploy_contract::DomainZonePoliceFiling;
+
+    let record_number = normalize_filing_text(
+        filing.record_number.clone(),
+        64,
+        "policeFiling.recordNumber",
+    )?;
+    let record_url =
+        normalize_filing_text(filing.record_url.clone(), 2048, "policeFiling.recordUrl")?;
+    if let Some(value) = record_url.as_deref() {
+        let (scheme, _) = value.split_once("://").ok_or_else(|| {
+            DeployServiceError::validation(
+                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
+            )
+        })?;
+        if (!scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https"))
+            || value.chars().any(char::is_whitespace)
+        {
+            return Err(DeployServiceError::validation(
+                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
+            ));
+        }
+        let parsed = reqwest::Url::parse(value).map_err(|_| {
+            DeployServiceError::validation(
+                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
+            )
+        })?;
+        if parsed.host_str().is_none() {
+            return Err(DeployServiceError::validation(
+                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
+            ));
+        }
+    }
+    let normalized = DomainZonePoliceFiling {
+        record_number,
+        record_url,
+    };
+    if normalized.record_number.is_none() && normalized.record_url.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(normalized))
+}
+
+#[cfg(test)]
+mod domain_zone_filing_tests {
+    use super::normalize_domain_zone_filing;
+    use sdkwork_deploy_contract::{DeployServiceError, DomainZoneFiling};
+
+    #[test]
+    fn filing_is_trimmed_blank_values_clear_and_empty_object_clears() {
+        let filing = DomainZoneFiling {
+            record_number: Some("  ICP-1  ".to_owned()),
+            entity_name: Some("  ".to_owned()),
+            website_name: None,
+            review_date: None,
+        };
+        let normalized = normalize_domain_zone_filing(&filing).expect("valid filing");
+        assert_eq!(
+            normalized
+                .as_ref()
+                .and_then(|value| value.record_number.as_deref()),
+            Some("ICP-1")
+        );
+        assert!(normalized
+            .as_ref()
+            .is_some_and(|value| value.entity_name.is_none()));
+        let empty = normalize_domain_zone_filing(&DomainZoneFiling::default())
+            .expect("empty filing is valid");
+        assert!(empty.is_none());
+    }
+
+    #[test]
+    fn filing_rejects_invalid_lengths_impossible_and_future_dates() {
+        let filing = DomainZoneFiling {
+            record_number: Some("x".repeat(65)),
+            ..Default::default()
+        };
+        assert!(matches!(
+            normalize_domain_zone_filing(&filing),
+            Err(DeployServiceError::Validation(_))
+        ));
+        for date in ["2026-02-30", "2026-1-01", "2999-01-01"] {
+            let filing = DomainZoneFiling {
+                review_date: Some(date.to_owned()),
+                ..Default::default()
+            };
+            assert!(
+                matches!(
+                    normalize_domain_zone_filing(&filing),
+                    Err(DeployServiceError::Validation(_))
+                ),
+                "{date}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod domain_zone_police_filing_tests {
+    use super::normalize_domain_zone_police_filing;
+    use sdkwork_deploy_contract::{DeployServiceError, DomainZonePoliceFiling};
+
+    #[test]
+    fn police_filing_is_trimmed_and_blank_values_clear() {
+        let filing = DomainZonePoliceFiling {
+            record_number: Some("  PS-1  ".to_owned()),
+            record_url: Some("  https://beian.mps.gov.cn/  ".to_owned()),
+        };
+        let normalized = normalize_domain_zone_police_filing(&filing).expect("valid police filing");
+        assert_eq!(
+            normalized
+                .as_ref()
+                .and_then(|value| value.record_number.as_deref()),
+            Some("PS-1")
+        );
+        assert_eq!(
+            normalized
+                .as_ref()
+                .and_then(|value| value.record_url.as_deref()),
+            Some("https://beian.mps.gov.cn/")
+        );
+
+        let blank = DomainZonePoliceFiling {
+            record_number: Some(" \t ".to_owned()),
+            record_url: Some("  ".to_owned()),
+        };
+        assert!(normalize_domain_zone_police_filing(&blank)
+            .expect("blank police filing is valid")
+            .is_none());
+        assert!(
+            normalize_domain_zone_police_filing(&DomainZonePoliceFiling::default())
+                .expect("empty police filing is valid")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn police_filing_enforces_character_length_boundaries() {
+        for length in [64, 65] {
+            let filing = DomainZonePoliceFiling {
+                record_number: Some("警".repeat(length)),
+                ..Default::default()
+            };
+            let normalized = normalize_domain_zone_police_filing(&filing);
+            if length == 64 {
+                assert_eq!(
+                    normalized
+                        .expect("64 characters are valid")
+                        .expect("nonempty police filing")
+                        .record_number
+                        .map(|value| value.chars().count()),
+                    Some(64)
+                );
+            } else {
+                assert!(matches!(normalized, Err(DeployServiceError::Validation(_))));
+            }
+        }
+
+        let prefix = "https://example.com/";
+        for length in [2048, 2049] {
+            let filing = DomainZonePoliceFiling {
+                record_url: Some(format!("{prefix}{}", "a".repeat(length - prefix.len()))),
+                ..Default::default()
+            };
+            let normalized = normalize_domain_zone_police_filing(&filing);
+            if length == 2048 {
+                assert_eq!(
+                    normalized
+                        .expect("2048 characters are valid")
+                        .expect("nonempty police filing")
+                        .record_url
+                        .map(|value| value.chars().count()),
+                    Some(2048)
+                );
+            } else {
+                assert!(matches!(normalized, Err(DeployServiceError::Validation(_))));
+            }
+        }
+    }
+
+    #[test]
+    fn police_filing_accepts_only_absolute_http_urls() {
+        for value in [
+            "http://example.com/record",
+            "https://example.com/record?id=1#status",
+            "HTTPS://example.com/record",
+        ] {
+            let filing = DomainZonePoliceFiling {
+                record_url: Some(value.to_owned()),
+                ..Default::default()
+            };
+            assert_eq!(
+                normalize_domain_zone_police_filing(&filing)
+                    .expect("absolute HTTP URL is valid")
+                    .and_then(|value| value.record_url),
+                Some(value.to_owned()),
+                "{value}"
+            );
+        }
+        for value in [
+            "/relative/record",
+            "example.com/record",
+            "http:example.com/record",
+            "https:///record",
+            "ftp://example.com/record",
+            "https://",
+            "https://exa mple.com/record",
+            "https://example.com/%zz",
+        ] {
+            let filing = DomainZonePoliceFiling {
+                record_url: Some(value.to_owned()),
+                ..Default::default()
+            };
+            assert!(
+                matches!(
+                    normalize_domain_zone_police_filing(&filing),
+                    Err(DeployServiceError::Validation(_))
+                ),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn police_filing_is_independent_of_dates() {
+        let filing = DomainZonePoliceFiling {
+            record_number: Some("PS-2999".to_owned()),
+            record_url: Some("https://beian.mps.gov.cn/records/2999-01-01".to_owned()),
+        };
+        let normalized = normalize_domain_zone_police_filing(&filing).expect("future-like values");
+        assert_eq!(
+            normalized.and_then(|value| value.record_url),
+            Some("https://beian.mps.gov.cn/records/2999-01-01".to_owned())
+        );
+    }
+}
+
 fn normalize_relative_hostname(
     relative_name: &str,
     apex_hostname: &str,
@@ -475,6 +783,16 @@ impl DeployAppApi for DeployService {
         request.dns_provider = normalize_optional_text(request.dns_provider, 64, "dnsProvider")?;
         request.provider_zone_ref =
             normalize_optional_text(request.provider_zone_ref, 512, "providerZoneRef")?;
+        request.filing = match request.filing.as_ref() {
+            None => None,
+            Some(None) => Some(None),
+            Some(Some(filing)) => Some(normalize_domain_zone_filing(filing)?),
+        };
+        request.police_filing = match request.police_filing.as_ref() {
+            None => None,
+            Some(None) => Some(None),
+            Some(Some(filing)) => Some(normalize_domain_zone_police_filing(filing)?),
+        };
         // Tri-state: absent leaves the pin, empty clears it, anything else must name
         // an account this caller may bind. The clear marker stays an empty string
         // rather than becoming `None`, which the repository would read as "no change"

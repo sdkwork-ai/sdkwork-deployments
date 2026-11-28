@@ -50,6 +50,8 @@ export type { AppCompositionResponse } from './app-composition-response';
 export type { AppRevisionResponse } from './app-revision-response';
 export type { AppRuntimeAssignmentResponse } from './app-runtime-assignment-response';
 export type { CreateDomainZoneRequest } from './create-domain-zone-request';
+export type { DomainZoneFiling } from './domain-zone-filing';
+export type { DomainZonePoliceFiling } from './domain-zone-police-filing';
 export type { UpdateDomainZoneRequest } from './update-domain-zone-request';
 export type { DomainVerificationFileResponse } from './domain-verification-file-response';
 export type { CreateDomainVerificationFileRequest } from './create-domain-verification-file-request';

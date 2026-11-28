@@ -1,3 +1,6 @@
+import type { DomainZoneFiling } from './domain-zone-filing';
+import type { DomainZonePoliceFiling } from './domain-zone-police-filing';
+
 export interface DomainZoneResponse {
   id: string;
   apexHostname: string;
@@ -7,6 +10,8 @@ export interface DomainZoneResponse {
   dnsProvider?: string;
   /** The cloud account pinned to serve this zone's DNS-01 challenges, absent when the zone has none and resolves one per issuance. */
   providerAccountId?: string;
+  filing?: DomainZoneFiling;
+  policeFiling?: DomainZonePoliceFiling;
   status: 'ACTIVE' | 'PAUSED';
   hostnameCount: string;
   verifiedHostnameCount: string;

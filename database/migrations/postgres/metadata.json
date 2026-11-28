@@ -47,6 +47,24 @@
       "lock": "exclusive (share) on deploy_certificate_archive; index-only rebuild, no table scan",
       "lock_timeout": "2s",
       "statement_timeout": "30s"
+    },
+    "0025_deploy_dns_zone_icp_filing.up.sql": {
+      "engine": "postgres",
+      "reversible": "true",
+      "rollback": "down-migration",
+      "transactional": "true",
+      "lock": "access-exclusive",
+      "lock_timeout": "2s",
+      "statement_timeout": "30s"
+    },
+    "0026_deploy_dns_zone_police_filing.up.sql": {
+      "engine": "postgres",
+      "reversible": "true",
+      "rollback": "down-migration",
+      "transactional": "true",
+      "lock": "access-exclusive",
+      "lock_timeout": "2s",
+      "statement_timeout": "30s"
     }
   }
 }
