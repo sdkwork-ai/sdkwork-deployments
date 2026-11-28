@@ -450,27 +450,29 @@ fn normalize_domain_zone_police_filing(
     let record_url =
         normalize_filing_text(filing.record_url.clone(), 2048, "policeFiling.recordUrl")?;
     if let Some(value) = record_url.as_deref() {
-        let (scheme, _) = value.split_once("://").ok_or_else(|| {
+        let invalid_url = || {
             DeployServiceError::validation(
                 "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
             )
-        })?;
+        };
+        let (scheme, remainder) = value.split_once("://").ok_or_else(invalid_url)?;
+        let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+        let authority = &remainder[..authority_end];
+        let invalid_percent_escape = value.match_indices('%').any(|(index, _)| {
+            let bytes = value[index + 1..].as_bytes();
+            bytes.len() < 2 || !bytes[..2].iter().all(|byte| byte.is_ascii_hexdigit())
+        });
         if (!scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https"))
-            || value.chars().any(char::is_whitespace)
+            || authority.is_empty()
+            || authority.starts_with('\\')
+            || invalid_percent_escape
+            || value.chars().any(char::is_control)
         {
-            return Err(DeployServiceError::validation(
-                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
-            ));
+            return Err(invalid_url());
         }
-        let parsed = reqwest::Url::parse(value).map_err(|_| {
-            DeployServiceError::validation(
-                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
-            )
-        })?;
+        let parsed = reqwest::Url::parse(value).map_err(|_| invalid_url())?;
         if parsed.host_str().is_none() {
-            return Err(DeployServiceError::validation(
-                "policeFiling.recordUrl must be an absolute HTTP or HTTPS URL",
-            ));
+            return Err(invalid_url());
         }
     }
     let normalized = DomainZonePoliceFiling {
