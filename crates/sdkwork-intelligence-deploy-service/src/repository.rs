@@ -339,6 +339,7 @@ pub trait DeployRepositoryPort:
     crate::AppCompositionRepositoryPort
     + crate::AppResourceLinkRepositoryPort
     + crate::AppSourceSpecRepositoryPort
+    + crate::AppCapabilityRepositoryPort
     + Send
     + Sync
 {

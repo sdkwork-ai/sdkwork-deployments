@@ -12106,6 +12106,822 @@
         "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
         "x-sdkwork-request-context": "WebRequestContext"
       }
+    },
+    "/app/v3/api/apps/{appId}/capability": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.capability.retrieve",
+        "summary": "Read an application's capability document",
+        "description": "The six configurable dimensions an application exposes when it is opened as an AI workspace: the working modes (industry System Prompt plus the tools pre-bound to them), the scene capsules above the composer, the model pool selection, the in-app market shelf, the embedded MCP/iframe surfaces, and the localized root texts. The document is a 1:1 projection of the application: an application that has never been configured answers an empty draft document instead of 404.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The capability document, or an empty draft when unconfigured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppCapabilityResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "凭据绑定的应用不是被寻址的应用",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "应用不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
+      },
+      "put": {
+        "operationId": "apps.capability.update",
+        "summary": "Replace an application's capability document",
+        "description": "Replaces the whole document in one transaction. The six dimensions have internal references (a default work mode key, scene-to-asset bindings, the market shelf), so editing them row by row would pass through states that are not merely incomplete but invalid. Omitting a collection empties that dimension. `submitForReview` folds the submission into the same transaction, and `expectedVersion` is the optimistic-concurrency token returned by a previous read.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceAppCapabilityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The stored document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/AppCapabilityResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "文档校验失败（逐字段说明）",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "凭据绑定的应用不是被寻址的应用",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "版本冲突或文档已退役",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/capability/reviews": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.capability.reviews.list",
+        "summary": "List an application's capability reviews",
+        "description": "The review ledger, newest first. Each submission freezes a revision, so the history of rejections survives a later approval.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Restrict the listing to one review state.",
+            "schema": {
+              "$ref": "#/components/schemas/CapabilityReviewStatus"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/CapabilityReviewResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "应用不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
+      }
+    },
+    "/app/v3/api/apps/{appId}/capability/submit": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "apps.capability.submit",
+        "summary": "Submit the current capability document for review",
+        "description": "Freezes the current document into a `REVIEW` revision and opens a review attempt. At most one review may be pending per application; the document must be in `draft`, `approved` or `published`.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitCapabilityReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The opened review.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/CapabilityReviewResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "应用或能力文档不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "已有待审记录，或当前状态不允许送审",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/capability/reviews/{reviewId}/decision": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "reviewId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "apps.capability.reviews.decision.update",
+        "summary": "Decide a pending capability review",
+        "description": "Approval publishes the revision the reviewer read, not the draft as it looks now. Rejection requires a reason family and returns the document to `draft`. Requires `deploy.appCapabilities.approve`.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideCapabilityReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The decision that was recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/CapabilityReviewResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "缺少 deploy.appCapabilities.approve 权限",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "审核记录不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "审核记录已裁决",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.write"
+      }
+    },
+    "/app/v3/api/apps/{appId}/capability/revisions": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.capability.revisions.list",
+        "summary": "List an application's capability revisions",
+        "description": "The immutable revision list, newest first. A revision stores the canonical JSON document and its SHA-256; identical bytes are never stored twice.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          },
+          {
+            "$ref": "#/components/parameters/PageSizeParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "items",
+                            "pageInfo"
+                          ],
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/CapabilityRevisionResponse"
+                              }
+                            },
+                            "pageInfo": {
+                              "$ref": "#/components/schemas/PageInfo"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "应用不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
+      }
+    },
+    "/app/v3/api/apps/{appId}/capability/revisions/{revisionId}": {
+      "parameters": [
+        {
+          "name": "appId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "revisionId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "apps.capability.revisions.retrieve",
+        "summary": "Read one capability revision including its snapshot",
+        "description": "The exact bytes a review approved, a release published, or an editor saved. Used for rollback, audit and the export/import configuration file.",
+        "tags": [
+          "app"
+        ],
+        "security": [
+          {
+            "AuthToken": [],
+            "AccessToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The revision with its snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SdkWorkApiResponse"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "data"
+                      ],
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "item"
+                          ],
+                          "properties": {
+                            "item": {
+                              "$ref": "#/components/schemas/CapabilityRevisionResponse"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "修订不存在",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        },
+        "x-sdkwork-api-surface": "app-api",
+        "x-sdkwork-owner": "sdkwork-deploy",
+        "x-sdkwork-api-authority": "sdkwork-deploy-app-api",
+        "x-sdkwork-request-context": "WebRequestContext",
+        "x-sdkwork-auth-mode": "dual-token",
+        "x-sdkwork-permission": "deploy.apps.read"
+      }
     }
   },
   "components": {
@@ -19763,6 +20579,683 @@
           },
           "replayed": {
             "type": "boolean"
+          }
+        }
+      },
+      "LocalizedText": {
+        "type": "object",
+        "description": "Locale → text. Keys are BCP 47 tags (`zh-CN`, `en-US`); a bare `zh`/`en` is widened on write. Stored as rows in deploy_app_capability_text, so adding a locale never requires a schema change.",
+        "additionalProperties": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "CapabilityStatus": {
+        "type": "string",
+        "description": "Platform lifecycle vocabulary. `published` requires a published revision and timestamp; editing a published document returns it to `draft` while the published revision stays live.",
+        "enum": [
+          "draft",
+          "pending_review",
+          "approved",
+          "published",
+          "deprecated",
+          "retired"
+        ]
+      },
+      "DistributionScope": {
+        "type": "string",
+        "description": "Who may discover and open the application. `enterprise` means only enterprises holding an active enterprise order (owned by sdkwork-iam).",
+        "enum": [
+          "private",
+          "organization",
+          "tenant",
+          "enterprise",
+          "public"
+        ]
+      },
+      "CapabilityAssetKind": {
+        "type": "string",
+        "enum": [
+          "EXPERT",
+          "EXPERT_TEAM",
+          "SKILL",
+          "CONNECTOR",
+          "CASE"
+        ]
+      },
+      "CapabilityMarketSection": {
+        "type": "string",
+        "enum": [
+          "experts",
+          "skills",
+          "connectors",
+          "featured_scenes",
+          "cases"
+        ]
+      },
+      "CapabilityToolKind": {
+        "type": "string",
+        "enum": [
+          "BUILTIN",
+          "MCP"
+        ]
+      },
+      "CapabilityRowStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled"
+        ]
+      },
+      "CapabilityEmbedKind": {
+        "type": "string",
+        "enum": [
+          "MCP_APP",
+          "IFRAME"
+        ]
+      },
+      "CapabilityEmbedTransport": {
+        "type": "string",
+        "enum": [
+          "stdio",
+          "http",
+          "sse"
+        ]
+      },
+      "CapabilityEmbedAuthMode": {
+        "type": "string",
+        "enum": [
+          "none",
+          "oauth",
+          "api_key"
+        ]
+      },
+      "CapabilityReviewStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "withdrawn"
+        ]
+      },
+      "CapabilityDecisionCode": {
+        "type": "string",
+        "description": "Rejection reason family, so a rejection is actionable.",
+        "enum": [
+          "content_policy",
+          "security",
+          "design",
+          "functional",
+          "other"
+        ]
+      },
+      "CapabilityRootTexts": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "slogan": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "inputPlaceholder": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        }
+      },
+      "WorkModeTool": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/CapabilityToolKind"
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 191
+          },
+          "policy": {
+            "type": "object"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "WorkModeDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "systemPrompt"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "systemPrompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32000
+          },
+          "iconRef": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityRowStatus"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkModeTool"
+            }
+          }
+        }
+      },
+      "SceneAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/CapabilityAssetKind"
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 191
+          },
+          "snapshot": {
+            "type": "object"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SceneDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "promptTemplate"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "subtitle": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "promptTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "iconRef": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "isFeatured": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityRowStatus"
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneAsset"
+            }
+          }
+        }
+      },
+      "ModelBindingDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "providerCode",
+          "modelKey"
+        ],
+        "properties": {
+          "providerCode": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{1,31}$"
+          },
+          "modelKey": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityRowStatus"
+          }
+        }
+      },
+      "MarketAssetDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "section",
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "section": {
+            "$ref": "#/components/schemas/CapabilityMarketSection"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CapabilityAssetKind"
+          },
+          "ref": {
+            "type": "string",
+            "maxLength": 191
+          },
+          "categoryCode": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "isFeatured": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityRowStatus"
+          },
+          "snapshot": {
+            "type": "object"
+          }
+        }
+      },
+      "EmbedDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "kind"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CapabilityEmbedKind"
+          },
+          "serverRef": {
+            "type": "string",
+            "maxLength": 191
+          },
+          "endpointUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "transport": {
+            "$ref": "#/components/schemas/CapabilityEmbedTransport"
+          },
+          "authMode": {
+            "$ref": "#/components/schemas/CapabilityEmbedAuthMode"
+          },
+          "scopes": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityRowStatus"
+          }
+        }
+      },
+      "AppCapabilityResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "appId",
+          "status",
+          "distributionScope",
+          "configSchemaVersion",
+          "version"
+        ],
+        "properties": {
+          "appId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityStatus"
+          },
+          "distributionScope": {
+            "$ref": "#/components/schemas/DistributionScope"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "oauthClientId": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "The IAM OAuth client (`client_id`) that serves this application. A string reference, not a foreign key: the client lives in `iam_application_installation_credential`, whose lifecycle this module does not own."
+          },
+          "defaultWorkModeKey": {
+            "type": "string"
+          },
+          "configSchemaVersion": {
+            "type": "integer"
+          },
+          "currentRevisionId": {
+            "type": "string",
+            "x-sdkwork-int64-string": true
+          },
+          "publishedRevisionId": {
+            "type": "string",
+            "x-sdkwork-int64-string": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "texts": {
+            "$ref": "#/components/schemas/CapabilityRootTexts"
+          },
+          "workModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkModeDefinition"
+            }
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneDefinition"
+            }
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelBindingDefinition"
+            }
+          },
+          "market": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketAssetDefinition"
+            }
+          },
+          "embeds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmbedDefinition"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
+          }
+        }
+      },
+      "ReplaceAppCapabilityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "distributionScope": {
+            "$ref": "#/components/schemas/DistributionScope"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "oauthClientId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "defaultWorkModeKey": {
+            "type": "string"
+          },
+          "texts": {
+            "$ref": "#/components/schemas/CapabilityRootTexts"
+          },
+          "workModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkModeDefinition"
+            }
+          },
+          "scenes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SceneDefinition"
+            }
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelBindingDefinition"
+            }
+          },
+          "market": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketAssetDefinition"
+            }
+          },
+          "embeds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmbedDefinition"
+            }
+          },
+          "expectedVersion": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
+          },
+          "submitForReview": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SubmitCapabilityReviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "DecideCapabilityReviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "decisionCode": {
+            "$ref": "#/components/schemas/CapabilityDecisionCode"
+          },
+          "decisionNote": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "CapabilityReviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "appId",
+          "revisionId",
+          "attemptNo",
+          "status",
+          "submittedBy",
+          "submittedAt",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "appId": {
+            "type": "string"
+          },
+          "revisionId": {
+            "type": "string",
+            "x-sdkwork-int64-string": true
+          },
+          "attemptNo": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CapabilityReviewStatus"
+          },
+          "submittedBy": {
+            "type": "string",
+            "x-sdkwork-int64-string": true
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewerId": {
+            "type": "string",
+            "x-sdkwork-int64-string": true
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decisionCode": {
+            "$ref": "#/components/schemas/CapabilityDecisionCode"
+          },
+          "decisionNote": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "x-sdkwork-int64-string": true
+          }
+        }
+      },
+      "CapabilityRevisionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "appId",
+          "revisionNo",
+          "source",
+          "sha256",
+          "schemaVersion",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "appId": {
+            "type": "string"
+          },
+          "revisionNo": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "REVIEW",
+              "PUBLISH"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "schemaVersion": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": "string",
+            "x-sdkwork-int64-string": true
+          },
+          "snapshot": {
+            "type": "object"
           }
         }
       }

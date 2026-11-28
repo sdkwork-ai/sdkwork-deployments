@@ -10772,6 +10772,1128 @@ class AppUninstallResponse {
   }
 }
 
+class CapabilityRootTexts {
+  final Map<String, String>? slogan;
+  final Map<String, String>? inputPlaceholder;
+  final Map<String, String>? summary;
+
+  CapabilityRootTexts({
+    this.slogan,
+    this.inputPlaceholder,
+    this.summary
+  });
+
+  factory CapabilityRootTexts.fromJson(Map<String, dynamic> json) {
+    return CapabilityRootTexts(
+      slogan: (() {
+        final map = _sdkworkAsMap(json['slogan']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      inputPlaceholder: (() {
+        final map = _sdkworkAsMap(json['inputPlaceholder']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      summary: (() {
+        final map = _sdkworkAsMap(json['summary']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'slogan': slogan?.map((key, item) => MapEntry(key, item)),
+      'inputPlaceholder': inputPlaceholder?.map((key, item) => MapEntry(key, item)),
+      'summary': summary?.map((key, item) => MapEntry(key, item)),
+    };
+  }
+}
+
+class WorkModeTool {
+  final String kind;
+  final String ref;
+  final Map<String, dynamic>? policy;
+  final int? sortOrder;
+
+  WorkModeTool({
+    required this.kind,
+    required this.ref,
+    this.policy,
+    this.sortOrder
+  });
+
+  factory WorkModeTool.fromJson(Map<String, dynamic> json) {
+    return WorkModeTool(
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('WorkModeTool.kind is required');
+        }
+        return value;
+      })(),
+      ref: (() {
+        final value = json['ref']?.toString();
+        if (value == null) {
+          throw FormatException('WorkModeTool.ref is required');
+        }
+        return value;
+      })(),
+      policy: _sdkworkAsMap(json['policy']),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'kind': kind,
+      'ref': ref,
+      'policy': policy,
+      'sortOrder': sortOrder,
+    };
+  }
+}
+
+class WorkModeDefinition {
+  final String key;
+  final Map<String, String>? name;
+  final Map<String, String>? description;
+  final String systemPrompt;
+  final String? iconRef;
+  final int? sortOrder;
+  final bool? isDefault;
+  final String? status;
+  final List<WorkModeTool>? tools;
+
+  WorkModeDefinition({
+    required this.key,
+    this.name,
+    this.description,
+    required this.systemPrompt,
+    this.iconRef,
+    this.sortOrder,
+    this.isDefault,
+    this.status,
+    this.tools
+  });
+
+  factory WorkModeDefinition.fromJson(Map<String, dynamic> json) {
+    return WorkModeDefinition(
+      key: (() {
+        final value = json['key']?.toString();
+        if (value == null) {
+          throw FormatException('WorkModeDefinition.key is required');
+        }
+        return value;
+      })(),
+      name: (() {
+        final map = _sdkworkAsMap(json['name']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      description: (() {
+        final map = _sdkworkAsMap(json['description']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      systemPrompt: (() {
+        final value = json['systemPrompt']?.toString();
+        if (value == null) {
+          throw FormatException('WorkModeDefinition.systemPrompt is required');
+        }
+        return value;
+      })(),
+      iconRef: json['iconRef']?.toString(),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null,
+      isDefault: json['isDefault'] is bool ? json['isDefault'] : null,
+      status: json['status']?.toString(),
+      tools: (() {
+        final list = _sdkworkAsList(json['tools']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : WorkModeTool.fromJson(map);
+      })())
+            .whereType<WorkModeTool>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'key': key,
+      'name': name?.map((key, item) => MapEntry(key, item)),
+      'description': description?.map((key, item) => MapEntry(key, item)),
+      'systemPrompt': systemPrompt,
+      'iconRef': iconRef,
+      'sortOrder': sortOrder,
+      'isDefault': isDefault,
+      'status': status,
+      'tools': tools?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class SceneAsset {
+  final String kind;
+  final String ref;
+  final Map<String, dynamic>? snapshot;
+  final int? sortOrder;
+
+  SceneAsset({
+    required this.kind,
+    required this.ref,
+    this.snapshot,
+    this.sortOrder
+  });
+
+  factory SceneAsset.fromJson(Map<String, dynamic> json) {
+    return SceneAsset(
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('SceneAsset.kind is required');
+        }
+        return value;
+      })(),
+      ref: (() {
+        final value = json['ref']?.toString();
+        if (value == null) {
+          throw FormatException('SceneAsset.ref is required');
+        }
+        return value;
+      })(),
+      snapshot: _sdkworkAsMap(json['snapshot']),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'kind': kind,
+      'ref': ref,
+      'snapshot': snapshot,
+      'sortOrder': sortOrder,
+    };
+  }
+}
+
+class SceneDefinition {
+  final String key;
+  final Map<String, String>? title;
+  final Map<String, String>? subtitle;
+  final String promptTemplate;
+  final String? iconRef;
+  final int? sortOrder;
+  final bool? isFeatured;
+  final String? status;
+  final List<SceneAsset>? assets;
+
+  SceneDefinition({
+    required this.key,
+    this.title,
+    this.subtitle,
+    required this.promptTemplate,
+    this.iconRef,
+    this.sortOrder,
+    this.isFeatured,
+    this.status,
+    this.assets
+  });
+
+  factory SceneDefinition.fromJson(Map<String, dynamic> json) {
+    return SceneDefinition(
+      key: (() {
+        final value = json['key']?.toString();
+        if (value == null) {
+          throw FormatException('SceneDefinition.key is required');
+        }
+        return value;
+      })(),
+      title: (() {
+        final map = _sdkworkAsMap(json['title']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      subtitle: (() {
+        final map = _sdkworkAsMap(json['subtitle']);
+        if (map == null) {
+          return null;
+        }
+        final result = <String, String>{};
+        map.forEach((key, item) {
+          final deserialized = item?.toString();
+          if (deserialized is String) {
+            result[key] = deserialized;
+          }
+        });
+        return result;
+      })(),
+      promptTemplate: (() {
+        final value = json['promptTemplate']?.toString();
+        if (value == null) {
+          throw FormatException('SceneDefinition.promptTemplate is required');
+        }
+        return value;
+      })(),
+      iconRef: json['iconRef']?.toString(),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null,
+      isFeatured: json['isFeatured'] is bool ? json['isFeatured'] : null,
+      status: json['status']?.toString(),
+      assets: (() {
+        final list = _sdkworkAsList(json['assets']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : SceneAsset.fromJson(map);
+      })())
+            .whereType<SceneAsset>()
+            .toList();
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'key': key,
+      'title': title?.map((key, item) => MapEntry(key, item)),
+      'subtitle': subtitle?.map((key, item) => MapEntry(key, item)),
+      'promptTemplate': promptTemplate,
+      'iconRef': iconRef,
+      'sortOrder': sortOrder,
+      'isFeatured': isFeatured,
+      'status': status,
+      'assets': assets?.map((item) => item.toJson()).toList(),
+    };
+  }
+}
+
+class ModelBindingDefinition {
+  final String providerCode;
+  final String modelKey;
+  final int? sortOrder;
+  final bool? isDefault;
+  final String? status;
+
+  ModelBindingDefinition({
+    required this.providerCode,
+    required this.modelKey,
+    this.sortOrder,
+    this.isDefault,
+    this.status
+  });
+
+  factory ModelBindingDefinition.fromJson(Map<String, dynamic> json) {
+    return ModelBindingDefinition(
+      providerCode: (() {
+        final value = json['providerCode']?.toString();
+        if (value == null) {
+          throw FormatException('ModelBindingDefinition.providerCode is required');
+        }
+        return value;
+      })(),
+      modelKey: (() {
+        final value = json['modelKey']?.toString();
+        if (value == null) {
+          throw FormatException('ModelBindingDefinition.modelKey is required');
+        }
+        return value;
+      })(),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null,
+      isDefault: json['isDefault'] is bool ? json['isDefault'] : null,
+      status: json['status']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'providerCode': providerCode,
+      'modelKey': modelKey,
+      'sortOrder': sortOrder,
+      'isDefault': isDefault,
+      'status': status,
+    };
+  }
+}
+
+class MarketAssetDefinition {
+  final String section;
+  final String kind;
+  final String ref;
+  final String? categoryCode;
+  final int? sortOrder;
+  final bool? isFeatured;
+  final String? status;
+  final Map<String, dynamic>? snapshot;
+
+  MarketAssetDefinition({
+    required this.section,
+    required this.kind,
+    required this.ref,
+    this.categoryCode,
+    this.sortOrder,
+    this.isFeatured,
+    this.status,
+    this.snapshot
+  });
+
+  factory MarketAssetDefinition.fromJson(Map<String, dynamic> json) {
+    return MarketAssetDefinition(
+      section: (() {
+        final value = json['section']?.toString();
+        if (value == null) {
+          throw FormatException('MarketAssetDefinition.section is required');
+        }
+        return value;
+      })(),
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('MarketAssetDefinition.kind is required');
+        }
+        return value;
+      })(),
+      ref: (() {
+        final value = json['ref']?.toString();
+        if (value == null) {
+          throw FormatException('MarketAssetDefinition.ref is required');
+        }
+        return value;
+      })(),
+      categoryCode: json['categoryCode']?.toString(),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null,
+      isFeatured: json['isFeatured'] is bool ? json['isFeatured'] : null,
+      status: json['status']?.toString(),
+      snapshot: _sdkworkAsMap(json['snapshot'])
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'section': section,
+      'kind': kind,
+      'ref': ref,
+      'categoryCode': categoryCode,
+      'sortOrder': sortOrder,
+      'isFeatured': isFeatured,
+      'status': status,
+      'snapshot': snapshot,
+    };
+  }
+}
+
+class EmbedDefinition {
+  final String key;
+  final String kind;
+  final String? serverRef;
+  final String? endpointUrl;
+  final String? transport;
+  final String? authMode;
+  final List<String>? scopes;
+  final int? sortOrder;
+  final String? status;
+
+  EmbedDefinition({
+    required this.key,
+    required this.kind,
+    this.serverRef,
+    this.endpointUrl,
+    this.transport,
+    this.authMode,
+    this.scopes,
+    this.sortOrder,
+    this.status
+  });
+
+  factory EmbedDefinition.fromJson(Map<String, dynamic> json) {
+    return EmbedDefinition(
+      key: (() {
+        final value = json['key']?.toString();
+        if (value == null) {
+          throw FormatException('EmbedDefinition.key is required');
+        }
+        return value;
+      })(),
+      kind: (() {
+        final value = json['kind']?.toString();
+        if (value == null) {
+          throw FormatException('EmbedDefinition.kind is required');
+        }
+        return value;
+      })(),
+      serverRef: json['serverRef']?.toString(),
+      endpointUrl: json['endpointUrl']?.toString(),
+      transport: json['transport']?.toString(),
+      authMode: json['authMode']?.toString(),
+      scopes: (() {
+        final list = _sdkworkAsList(json['scopes']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => item?.toString())
+            .whereType<String>()
+            .toList();
+      })(),
+      sortOrder: json['sortOrder'] is int ? json['sortOrder'] : null,
+      status: json['status']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'key': key,
+      'kind': kind,
+      'serverRef': serverRef,
+      'endpointUrl': endpointUrl,
+      'transport': transport,
+      'authMode': authMode,
+      'scopes': scopes?.map((item) => item).toList(),
+      'sortOrder': sortOrder,
+      'status': status,
+    };
+  }
+}
+
+class AppCapabilityResponse {
+  final String appId;
+  final String status;
+  final String distributionScope;
+  final String? avatarUrl;
+  final String? oauthClientId;
+  final String? defaultWorkModeKey;
+  final int configSchemaVersion;
+  final String? currentRevisionId;
+  final String? publishedRevisionId;
+  final String? publishedAt;
+  final CapabilityRootTexts? texts;
+  final List<WorkModeDefinition>? workModes;
+  final List<SceneDefinition>? scenes;
+  final List<ModelBindingDefinition>? models;
+  final List<MarketAssetDefinition>? market;
+  final List<EmbedDefinition>? embeds;
+  final String? createdAt;
+  final String? updatedAt;
+  final String version;
+
+  AppCapabilityResponse({
+    required this.appId,
+    required this.status,
+    required this.distributionScope,
+    this.avatarUrl,
+    this.oauthClientId,
+    this.defaultWorkModeKey,
+    required this.configSchemaVersion,
+    this.currentRevisionId,
+    this.publishedRevisionId,
+    this.publishedAt,
+    this.texts,
+    this.workModes,
+    this.scenes,
+    this.models,
+    this.market,
+    this.embeds,
+    this.createdAt,
+    this.updatedAt,
+    required this.version
+  });
+
+  factory AppCapabilityResponse.fromJson(Map<String, dynamic> json) {
+    return AppCapabilityResponse(
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('AppCapabilityResponse.appId is required');
+        }
+        return value;
+      })(),
+      status: (() {
+        final value = json['status']?.toString();
+        if (value == null) {
+          throw FormatException('AppCapabilityResponse.status is required');
+        }
+        return value;
+      })(),
+      distributionScope: (() {
+        final value = json['distributionScope']?.toString();
+        if (value == null) {
+          throw FormatException('AppCapabilityResponse.distributionScope is required');
+        }
+        return value;
+      })(),
+      avatarUrl: json['avatarUrl']?.toString(),
+      oauthClientId: json['oauthClientId']?.toString(),
+      defaultWorkModeKey: json['defaultWorkModeKey']?.toString(),
+      configSchemaVersion: (() {
+        final value = json['configSchemaVersion'];
+        if (value is! int) {
+          throw FormatException('AppCapabilityResponse.configSchemaVersion is required');
+        }
+        return value;
+      })(),
+      currentRevisionId: json['currentRevisionId']?.toString(),
+      publishedRevisionId: json['publishedRevisionId']?.toString(),
+      publishedAt: json['publishedAt']?.toString(),
+      texts: (() {
+        final map = _sdkworkAsMap(json['texts']);
+        return map == null ? null : CapabilityRootTexts.fromJson(map);
+      })(),
+      workModes: (() {
+        final list = _sdkworkAsList(json['workModes']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : WorkModeDefinition.fromJson(map);
+      })())
+            .whereType<WorkModeDefinition>()
+            .toList();
+      })(),
+      scenes: (() {
+        final list = _sdkworkAsList(json['scenes']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : SceneDefinition.fromJson(map);
+      })())
+            .whereType<SceneDefinition>()
+            .toList();
+      })(),
+      models: (() {
+        final list = _sdkworkAsList(json['models']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : ModelBindingDefinition.fromJson(map);
+      })())
+            .whereType<ModelBindingDefinition>()
+            .toList();
+      })(),
+      market: (() {
+        final list = _sdkworkAsList(json['market']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MarketAssetDefinition.fromJson(map);
+      })())
+            .whereType<MarketAssetDefinition>()
+            .toList();
+      })(),
+      embeds: (() {
+        final list = _sdkworkAsList(json['embeds']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : EmbedDefinition.fromJson(map);
+      })())
+            .whereType<EmbedDefinition>()
+            .toList();
+      })(),
+      createdAt: json['createdAt']?.toString(),
+      updatedAt: json['updatedAt']?.toString(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('AppCapabilityResponse.version is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'appId': appId,
+      'status': status,
+      'distributionScope': distributionScope,
+      'avatarUrl': avatarUrl,
+      'oauthClientId': oauthClientId,
+      'defaultWorkModeKey': defaultWorkModeKey,
+      'configSchemaVersion': configSchemaVersion,
+      'currentRevisionId': currentRevisionId,
+      'publishedRevisionId': publishedRevisionId,
+      'publishedAt': publishedAt,
+      'texts': texts?.toJson(),
+      'workModes': workModes?.map((item) => item.toJson()).toList(),
+      'scenes': scenes?.map((item) => item.toJson()).toList(),
+      'models': models?.map((item) => item.toJson()).toList(),
+      'market': market?.map((item) => item.toJson()).toList(),
+      'embeds': embeds?.map((item) => item.toJson()).toList(),
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'version': version,
+    };
+  }
+}
+
+class ReplaceAppCapabilityRequest {
+  final String? distributionScope;
+  final String? avatarUrl;
+  final String? oauthClientId;
+  final String? defaultWorkModeKey;
+  final CapabilityRootTexts? texts;
+  final List<WorkModeDefinition>? workModes;
+  final List<SceneDefinition>? scenes;
+  final List<ModelBindingDefinition>? models;
+  final List<MarketAssetDefinition>? market;
+  final List<EmbedDefinition>? embeds;
+  final String? expectedVersion;
+  final bool? submitForReview;
+
+  ReplaceAppCapabilityRequest({
+    this.distributionScope,
+    this.avatarUrl,
+    this.oauthClientId,
+    this.defaultWorkModeKey,
+    this.texts,
+    this.workModes,
+    this.scenes,
+    this.models,
+    this.market,
+    this.embeds,
+    this.expectedVersion,
+    this.submitForReview
+  });
+
+  factory ReplaceAppCapabilityRequest.fromJson(Map<String, dynamic> json) {
+    return ReplaceAppCapabilityRequest(
+      distributionScope: json['distributionScope']?.toString(),
+      avatarUrl: json['avatarUrl']?.toString(),
+      oauthClientId: json['oauthClientId']?.toString(),
+      defaultWorkModeKey: json['defaultWorkModeKey']?.toString(),
+      texts: (() {
+        final map = _sdkworkAsMap(json['texts']);
+        return map == null ? null : CapabilityRootTexts.fromJson(map);
+      })(),
+      workModes: (() {
+        final list = _sdkworkAsList(json['workModes']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : WorkModeDefinition.fromJson(map);
+      })())
+            .whereType<WorkModeDefinition>()
+            .toList();
+      })(),
+      scenes: (() {
+        final list = _sdkworkAsList(json['scenes']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : SceneDefinition.fromJson(map);
+      })())
+            .whereType<SceneDefinition>()
+            .toList();
+      })(),
+      models: (() {
+        final list = _sdkworkAsList(json['models']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : ModelBindingDefinition.fromJson(map);
+      })())
+            .whereType<ModelBindingDefinition>()
+            .toList();
+      })(),
+      market: (() {
+        final list = _sdkworkAsList(json['market']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : MarketAssetDefinition.fromJson(map);
+      })())
+            .whereType<MarketAssetDefinition>()
+            .toList();
+      })(),
+      embeds: (() {
+        final list = _sdkworkAsList(json['embeds']);
+        if (list == null) {
+          return null;
+        }
+        return list
+            .map((item) => (() {
+        final map = _sdkworkAsMap(item);
+        return map == null ? null : EmbedDefinition.fromJson(map);
+      })())
+            .whereType<EmbedDefinition>()
+            .toList();
+      })(),
+      expectedVersion: json['expectedVersion']?.toString(),
+      submitForReview: json['submitForReview'] is bool ? json['submitForReview'] : null
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'distributionScope': distributionScope,
+      'avatarUrl': avatarUrl,
+      'oauthClientId': oauthClientId,
+      'defaultWorkModeKey': defaultWorkModeKey,
+      'texts': texts?.toJson(),
+      'workModes': workModes?.map((item) => item.toJson()).toList(),
+      'scenes': scenes?.map((item) => item.toJson()).toList(),
+      'models': models?.map((item) => item.toJson()).toList(),
+      'market': market?.map((item) => item.toJson()).toList(),
+      'embeds': embeds?.map((item) => item.toJson()).toList(),
+      'expectedVersion': expectedVersion,
+      'submitForReview': submitForReview,
+    };
+  }
+}
+
+class SubmitCapabilityReviewRequest {
+  final String? note;
+
+  SubmitCapabilityReviewRequest({
+    this.note
+  });
+
+  factory SubmitCapabilityReviewRequest.fromJson(Map<String, dynamic> json) {
+    return SubmitCapabilityReviewRequest(
+      note: json['note']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'note': note,
+    };
+  }
+}
+
+class DecideCapabilityReviewRequest {
+  final String decision;
+  final String? decisionCode;
+  final String? decisionNote;
+
+  DecideCapabilityReviewRequest({
+    required this.decision,
+    this.decisionCode,
+    this.decisionNote
+  });
+
+  factory DecideCapabilityReviewRequest.fromJson(Map<String, dynamic> json) {
+    return DecideCapabilityReviewRequest(
+      decision: (() {
+        final value = json['decision']?.toString();
+        if (value == null) {
+          throw FormatException('DecideCapabilityReviewRequest.decision is required');
+        }
+        return value;
+      })(),
+      decisionCode: json['decisionCode']?.toString(),
+      decisionNote: json['decisionNote']?.toString()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'decision': decision,
+      'decisionCode': decisionCode,
+      'decisionNote': decisionNote,
+    };
+  }
+}
+
+class CapabilityReviewResponse {
+  final String id;
+  final String appId;
+  final String revisionId;
+  final int attemptNo;
+  final String status;
+  final String submittedBy;
+  final String submittedAt;
+  final String? reviewerId;
+  final String? decidedAt;
+  final String? decisionCode;
+  final String? decisionNote;
+  final String? note;
+  final String version;
+
+  CapabilityReviewResponse({
+    required this.id,
+    required this.appId,
+    required this.revisionId,
+    required this.attemptNo,
+    required this.status,
+    required this.submittedBy,
+    required this.submittedAt,
+    this.reviewerId,
+    this.decidedAt,
+    this.decisionCode,
+    this.decisionNote,
+    this.note,
+    required this.version
+  });
+
+  factory CapabilityReviewResponse.fromJson(Map<String, dynamic> json) {
+    return CapabilityReviewResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.id is required');
+        }
+        return value;
+      })(),
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.appId is required');
+        }
+        return value;
+      })(),
+      revisionId: (() {
+        final value = json['revisionId']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.revisionId is required');
+        }
+        return value;
+      })(),
+      attemptNo: (() {
+        final value = json['attemptNo'];
+        if (value is! int) {
+          throw FormatException('CapabilityReviewResponse.attemptNo is required');
+        }
+        return value;
+      })(),
+      status: (() {
+        final value = json['status']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.status is required');
+        }
+        return value;
+      })(),
+      submittedBy: (() {
+        final value = json['submittedBy']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.submittedBy is required');
+        }
+        return value;
+      })(),
+      submittedAt: (() {
+        final value = json['submittedAt']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.submittedAt is required');
+        }
+        return value;
+      })(),
+      reviewerId: json['reviewerId']?.toString(),
+      decidedAt: json['decidedAt']?.toString(),
+      decisionCode: json['decisionCode']?.toString(),
+      decisionNote: json['decisionNote']?.toString(),
+      note: json['note']?.toString(),
+      version: (() {
+        final value = json['version']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityReviewResponse.version is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'revisionId': revisionId,
+      'attemptNo': attemptNo,
+      'status': status,
+      'submittedBy': submittedBy,
+      'submittedAt': submittedAt,
+      'reviewerId': reviewerId,
+      'decidedAt': decidedAt,
+      'decisionCode': decisionCode,
+      'decisionNote': decisionNote,
+      'note': note,
+      'version': version,
+    };
+  }
+}
+
+class CapabilityRevisionResponse {
+  final String id;
+  final String appId;
+  final int revisionNo;
+  final String source;
+  final String sha256;
+  final int schemaVersion;
+  final String createdAt;
+  final String? createdBy;
+  final Map<String, dynamic>? snapshot;
+
+  CapabilityRevisionResponse({
+    required this.id,
+    required this.appId,
+    required this.revisionNo,
+    required this.source,
+    required this.sha256,
+    required this.schemaVersion,
+    required this.createdAt,
+    this.createdBy,
+    this.snapshot
+  });
+
+  factory CapabilityRevisionResponse.fromJson(Map<String, dynamic> json) {
+    return CapabilityRevisionResponse(
+      id: (() {
+        final value = json['id']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityRevisionResponse.id is required');
+        }
+        return value;
+      })(),
+      appId: (() {
+        final value = json['appId']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityRevisionResponse.appId is required');
+        }
+        return value;
+      })(),
+      revisionNo: (() {
+        final value = json['revisionNo'];
+        if (value is! int) {
+          throw FormatException('CapabilityRevisionResponse.revisionNo is required');
+        }
+        return value;
+      })(),
+      source: (() {
+        final value = json['source']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityRevisionResponse.source is required');
+        }
+        return value;
+      })(),
+      sha256: (() {
+        final value = json['sha256']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityRevisionResponse.sha256 is required');
+        }
+        return value;
+      })(),
+      schemaVersion: (() {
+        final value = json['schemaVersion'];
+        if (value is! int) {
+          throw FormatException('CapabilityRevisionResponse.schemaVersion is required');
+        }
+        return value;
+      })(),
+      createdAt: (() {
+        final value = json['createdAt']?.toString();
+        if (value == null) {
+          throw FormatException('CapabilityRevisionResponse.createdAt is required');
+        }
+        return value;
+      })(),
+      createdBy: json['createdBy']?.toString(),
+      snapshot: _sdkworkAsMap(json['snapshot'])
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'appId': appId,
+      'revisionNo': revisionNo,
+      'source': source,
+      'sha256': sha256,
+      'schemaVersion': schemaVersion,
+      'createdAt': createdAt,
+      'createdBy': createdBy,
+      'snapshot': snapshot,
+    };
+  }
+}
+
 class DomainZonesListResponse {
   final int code;
   final dynamic data;
@@ -16495,6 +17617,328 @@ class DownloadConfigRetrieveResponse {
         final value = json['traceId']?.toString();
         if (value == null) {
           throw FormatException('DownloadConfigRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilityRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilityRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilityRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilityRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilityRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilityRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilityRetrieveResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilityUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilityUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilityUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilityUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilityUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilityUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilityUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilityReviewsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilityReviewsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilityReviewsListResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilityReviewsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilityReviewsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilityReviewsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilityReviewsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilitySubmitResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilitySubmitResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilitySubmitResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilitySubmitResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilitySubmitResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilitySubmitResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilitySubmitResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilityReviewsDecisionUpdateResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilityReviewsDecisionUpdateResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilityReviewsDecisionUpdateResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilityReviewsDecisionUpdateResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilityReviewsDecisionUpdateResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilityReviewsDecisionUpdateResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilityReviewsDecisionUpdateResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilityRevisionsListResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilityRevisionsListResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilityRevisionsListResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilityRevisionsListResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilityRevisionsListResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilityRevisionsListResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilityRevisionsListResponse.traceId is required');
+        }
+        return value;
+      })()
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'data': data,
+      'traceId': traceId,
+    };
+  }
+}
+
+class AppsCapabilityRevisionsRetrieveResponse {
+  final int code;
+  final dynamic data;
+  final String traceId;
+
+  AppsCapabilityRevisionsRetrieveResponse({
+    required this.code,
+    required this.data,
+    required this.traceId
+  });
+
+  factory AppsCapabilityRevisionsRetrieveResponse.fromJson(Map<String, dynamic> json) {
+    return AppsCapabilityRevisionsRetrieveResponse(
+      code: (() {
+        final value = json['code'];
+        if (value is! int) {
+          throw FormatException('AppsCapabilityRevisionsRetrieveResponse.code is required');
+        }
+        return value;
+      })(),
+      data: (() {
+        final map = _sdkworkAsMap(json['data']);
+        if (map == null) {
+          throw FormatException('AppsCapabilityRevisionsRetrieveResponse.data is required');
+        }
+        return map;
+      })(),
+      traceId: (() {
+        final value = json['traceId']?.toString();
+        if (value == null) {
+          throw FormatException('AppsCapabilityRevisionsRetrieveResponse.traceId is required');
         }
         return value;
       })()

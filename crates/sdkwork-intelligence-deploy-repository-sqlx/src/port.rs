@@ -2703,3 +2703,60 @@ impl sdkwork_intelligence_deploy_service::AppResourceLinkRepositoryPort for Depl
         self.delete_app_resource_link_repo(command).await
     }
 }
+
+/// The capability document, its revisions and its review ledger.
+///
+/// A separate impl block for the same reason as the resource-link port: the
+/// aggregate is addressed by `app_uuid` plus a document/review command, not by
+/// the request-level methods `DeployRepositoryPort` groups.
+#[async_trait]
+impl sdkwork_intelligence_deploy_service::AppCapabilityRepositoryPort for DeployRepository {
+    async fn load_app_capability(
+        &self,
+        command: sdkwork_intelligence_deploy_service::LoadAppCapabilityCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppCapabilityResponse> {
+        self.load_app_capability_repo(command).await
+    }
+
+    async fn replace_app_capability(
+        &self,
+        command: sdkwork_intelligence_deploy_service::ReplaceAppCapabilityCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppCapabilityResponse> {
+        self.replace_app_capability_repo(command).await
+    }
+
+    async fn submit_app_capability_review(
+        &self,
+        command: sdkwork_intelligence_deploy_service::SubmitAppCapabilityReviewCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityReviewResponse> {
+        self.submit_app_capability_review_repo(command).await
+    }
+
+    async fn list_app_capability_reviews(
+        &self,
+        command: sdkwork_intelligence_deploy_service::ListAppCapabilityReviewsCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityReviewPage> {
+        self.list_app_capability_reviews_repo(command).await
+    }
+
+    async fn decide_app_capability_review(
+        &self,
+        command: sdkwork_intelligence_deploy_service::DecideAppCapabilityReviewCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityReviewResponse> {
+        self.decide_app_capability_review_repo(command).await
+    }
+
+    async fn list_app_capability_revisions(
+        &self,
+        command: sdkwork_intelligence_deploy_service::ListAppCapabilityRevisionsCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityRevisionPage> {
+        self.list_app_capability_revisions_repo(command).await
+    }
+
+    async fn retrieve_app_capability_revision(
+        &self,
+        command: sdkwork_intelligence_deploy_service::RetrieveAppCapabilityRevisionCommand,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityRevisionResponse> {
+        self.retrieve_app_capability_revision_repo(command).await
+    }
+}

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use crate::app_capability::*;
 use crate::app_composition::{AppCompositionResponse, UpdateAppCompositionRequest};
 use crate::app_delivery::*;
 use crate::app_resource_link::*;
@@ -1038,6 +1039,94 @@ pub trait DeployAppApi: Send + Sync {
     ) -> DeployServiceResult<()> {
         Err(crate::DeployServiceError::Internal(
             "app resource link API is not implemented".to_owned(),
+        ))
+    }
+
+    /// The capability document of one application.
+    ///
+    /// An application that has never been configured returns an empty `draft`
+    /// document rather than `404`: the document is a 1:1 projection of the
+    /// application, and "not configured yet" is a state, not a missing resource.
+    async fn get_app_capability(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+    ) -> DeployServiceResult<AppCapabilityResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Replace the whole capability document.
+    async fn put_app_capability(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &ReplaceAppCapabilityRequest,
+    ) -> DeployServiceResult<AppCapabilityResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Submit the current document for review.
+    async fn submit_app_capability_review(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _request: &SubmitCapabilityReviewRequest,
+    ) -> DeployServiceResult<CapabilityReviewResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability review API is not implemented".to_owned(),
+        ))
+    }
+
+    /// The review ledger of one application.
+    async fn list_app_capability_reviews(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _query: &ListCapabilityReviewsQuery,
+    ) -> DeployServiceResult<CapabilityReviewPage> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability review API is not implemented".to_owned(),
+        ))
+    }
+
+    /// Decide a pending review.
+    async fn decide_app_capability_review(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _review_id: &str,
+        _request: &DecideCapabilityReviewRequest,
+    ) -> DeployServiceResult<CapabilityReviewResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability review API is not implemented".to_owned(),
+        ))
+    }
+
+    /// The revision list of one application.
+    async fn list_app_capability_revisions(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _query: &ListCapabilityRevisionsQuery,
+    ) -> DeployServiceResult<CapabilityRevisionPage> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability revision API is not implemented".to_owned(),
+        ))
+    }
+
+    /// One revision, including its snapshot bytes.
+    async fn get_app_capability_revision(
+        &self,
+        _context: &DeployAppRequestContext,
+        _app_id: &str,
+        _revision_id: &str,
+    ) -> DeployServiceResult<CapabilityRevisionResponse> {
+        Err(crate::DeployServiceError::Internal(
+            "app capability revision API is not implemented".to_owned(),
         ))
     }
 

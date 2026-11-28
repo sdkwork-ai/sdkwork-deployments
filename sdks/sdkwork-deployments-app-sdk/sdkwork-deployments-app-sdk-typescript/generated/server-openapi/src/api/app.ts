@@ -1,8 +1,105 @@
 import { appApiPath } from './paths';
 import type { ApiRequestOptions, HttpClient } from '../http/client';
 
-import type { AppCompositionResponse, AppDomainResponse, AppFactoryReadiness, AppKind, ApplicationScaffoldInstallResponse, ApplicationScaffoldResponse, ApplicationScaffoldSummaryResponse, ApplicationScaffoldVersionResponse, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResourceKind, AppResourceLinkResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, AppUninstallResponse, BindAppSourceSpecSourceRequest, CreateApplicationScaffoldRequest, CreateApplicationScaffoldVersionRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, InstallApplicationScaffoldRequest, PageInfo, PlatformTargetResponse, ScaffoldCategoryResponse, SourceRepositoryResponse, UpdateAppCompositionRequest, UpdateApplicationScaffoldRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpsertAppResourceLinkRequest } from '../types';
+import type { AppCapabilityResponse, AppCompositionResponse, AppDomainResponse, AppFactoryReadiness, AppKind, ApplicationScaffoldInstallResponse, ApplicationScaffoldResponse, ApplicationScaffoldSummaryResponse, ApplicationScaffoldVersionResponse, AppOwnerType, AppPublishEnvironment, AppRemixResponse, AppResourceKind, AppResourceLinkResponse, AppResponse, AppSourceResponse, AppSourceSpecResponse, AppUninstallResponse, BindAppSourceSpecSourceRequest, CapabilityReviewResponse, CapabilityReviewStatus, CapabilityRevisionResponse, CreateApplicationScaffoldRequest, CreateApplicationScaffoldVersionRequest, CreateAppRequest, CreateAppSourceSpecRequest, CreatePlatformTargetRequest, CreateSourceRepositoryRequest, DecideCapabilityReviewRequest, InstallApplicationScaffoldRequest, PageInfo, PlatformTargetResponse, ReplaceAppCapabilityRequest, ScaffoldCategoryResponse, SourceRepositoryResponse, SubmitCapabilityReviewRequest, UpdateAppCompositionRequest, UpdateApplicationScaffoldRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpsertAppResourceLinkRequest } from '../types';
 
+
+export interface AppCapabilityRevisionsListParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export class AppCapabilityRevisionsApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** List an application's capability revisions */
+  async list(appId: string, params?: AppCapabilityRevisionsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: CapabilityRevisionResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: CapabilityRevisionResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability/revisions`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+
+/** Read one capability revision including its snapshot */
+  async retrieve(appId: string, revisionId: string, requestOptions?: ApiRequestOptions): Promise<CapabilityRevisionResponse> {
+    return this.client.request<CapabilityRevisionResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability/revisions/${serializePathParameter(revisionId, { name: 'revisionId', style: 'simple', explode: false })}`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export class AppCapabilityReviewsDecisionApi {
+  private client: HttpClient;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+  }
+
+
+/** Decide a pending capability review */
+  async update(appId: string, reviewId: string, body: DecideCapabilityReviewRequest, requestOptions?: ApiRequestOptions): Promise<CapabilityReviewResponse> {
+    return this.client.request<CapabilityReviewResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability/reviews/${serializePathParameter(reviewId, { name: 'reviewId', style: 'simple', explode: false })}/decision`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+}
+
+export interface AppCapabilityReviewsListParams {
+  status?: CapabilityReviewStatus;
+  page?: number;
+  pageSize?: number;
+}
+
+export class AppCapabilityReviewsApi {
+  private client: HttpClient;
+  public readonly decision: AppCapabilityReviewsDecisionApi;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+    this.decision = new AppCapabilityReviewsDecisionApi(client);
+  }
+
+
+/** List an application's capability reviews */
+  async list(appId: string, params?: AppCapabilityReviewsListParams, requestOptions?: ApiRequestOptions): Promise<{ items: CapabilityReviewResponse[]; pageInfo: PageInfo; }> {
+    const query = buildQueryString([
+      { name: 'status', value: params?.status, style: 'form', explode: true, allowReserved: false },
+      { name: 'page', value: params?.page, style: 'form', explode: true, allowReserved: false },
+      { name: 'page_size', value: params?.pageSize, style: 'form', explode: true, allowReserved: false },
+    ]);
+    return this.client.request<{ items: CapabilityReviewResponse[]; pageInfo: PageInfo; }>(appendQueryString(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability/reviews`), query), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'page' });
+  }
+}
+
+export class AppCapabilityApi {
+  private client: HttpClient;
+  public readonly reviews: AppCapabilityReviewsApi;
+  public readonly revisions: AppCapabilityRevisionsApi;
+
+  constructor(client: HttpClient) {
+    this.client = client;
+    this.reviews = new AppCapabilityReviewsApi(client);
+    this.revisions = new AppCapabilityRevisionsApi(client);
+  }
+
+
+/** Read an application's capability document */
+  async retrieve(appId: string, requestOptions?: ApiRequestOptions): Promise<AppCapabilityResponse> {
+    return this.client.request<AppCapabilityResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'GET' as any, sdkworkUnwrapKind: 'item' });
+  }
+
+/** Replace an application's capability document */
+  async update(appId: string, body: ReplaceAppCapabilityRequest, requestOptions?: ApiRequestOptions): Promise<AppCapabilityResponse> {
+    return this.client.request<AppCapabilityResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'PUT' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+
+/** Submit the current capability document for review */
+  async submit(appId: string, body: SubmitCapabilityReviewRequest, requestOptions?: ApiRequestOptions): Promise<CapabilityReviewResponse> {
+    return this.client.request<CapabilityReviewResponse>(appApiPath(`/apps/${serializePathParameter(appId, { name: 'appId', style: 'simple', explode: false })}/capability/submit`), { ...(requestOptions?.signal !== undefined ? { signal: requestOptions.signal } : {}), ...(requestOptions?.timeout !== undefined ? { timeout: requestOptions.timeout } : {}), method: 'POST' as any, body, contentType: 'application/json', sdkworkUnwrapKind: 'item' });
+  }
+}
 
 export interface AppMarketplaceScaffoldsListParams {
   page?: number;
@@ -524,6 +621,7 @@ export class AppApi {
   public readonly sourceRepositories: AppSourceRepositoriesApi;
   public readonly scaffolds: AppScaffoldsApi;
   public readonly marketplace: AppMarketplaceApi;
+  public readonly capability: AppCapabilityApi;
 
   constructor(client: HttpClient) {
     this.client = client;
@@ -538,6 +636,7 @@ export class AppApi {
     this.sourceRepositories = new AppSourceRepositoriesApi(client);
     this.scaffolds = new AppScaffoldsApi(client);
     this.marketplace = new AppMarketplaceApi(client);
+    this.capability = new AppCapabilityApi(client);
   }
 
 

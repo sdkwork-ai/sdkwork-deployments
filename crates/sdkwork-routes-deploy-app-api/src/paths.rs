@@ -51,6 +51,19 @@ pub const APP_ENV_VARIABLES: &str = "/app/v3/api/apps/{appId}/env_variables";
 /// behind a create), and one binding is retired through its own id.
 pub const APP_RESOURCE_LINKS: &str = "/app/v3/api/apps/{appId}/resource_links";
 pub const APP_RESOURCE_LINK: &str = "/app/v3/api/apps/{appId}/resource_links/{resourceLinkId}";
+
+/// The capability document of one application (six configurable dimensions).
+pub const APP_CAPABILITY: &str = "/app/v3/api/apps/{appId}/capability";
+pub const APP_CAPABILITY_REVIEWS: &str = "/app/v3/api/apps/{appId}/capability/reviews";
+/// `POST` here opens a review: a command with its own verb, so it does not read
+/// as "create a review row" and needs no `Idempotency-Key` (the pending-review
+/// uniqueness already makes a retry a `409`, not a second submission).
+pub const APP_CAPABILITY_SUBMIT: &str = "/app/v3/api/apps/{appId}/capability/submit";
+pub const APP_CAPABILITY_REVIEW_DECISION: &str =
+    "/app/v3/api/apps/{appId}/capability/reviews/{reviewId}/decision";
+pub const APP_CAPABILITY_REVISIONS: &str = "/app/v3/api/apps/{appId}/capability/revisions";
+pub const APP_CAPABILITY_REVISION: &str =
+    "/app/v3/api/apps/{appId}/capability/revisions/{revisionId}";
 /// The app's publishing domains: every default hostname
 /// (`<appDomainLabel>.app[-<env>].<suffix>`) plus the custom hostnames bound
 /// to the app, with each one's binding/verification state.

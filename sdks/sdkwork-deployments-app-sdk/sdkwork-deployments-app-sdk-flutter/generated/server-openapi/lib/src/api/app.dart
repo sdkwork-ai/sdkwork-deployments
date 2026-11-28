@@ -515,6 +515,81 @@ class AppApi {
       return map == null ? null : ScaffoldsVersionsCreateResponse201.fromJson(map);
     })();
   }
+
+  /// Read an application's capability document
+  Future<AppsCapabilityRetrieveResponse?> appsCapabilityRetrieve(String appId) async {
+    final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilityRetrieveResponse.fromJson(map);
+    })();
+  }
+
+  /// Replace an application's capability document
+  Future<AppsCapabilityUpdateResponse?> appsCapabilityUpdate(String appId, ReplaceAppCapabilityRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilityUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// List an application's capability reviews
+  Future<AppsCapabilityReviewsListResponse?> appsCapabilityReviewsList(String appId, [String? status, int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('status', status, 'form', true, false, null),
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability/reviews'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilityReviewsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Submit the current capability document for review
+  Future<AppsCapabilitySubmitResponse?> appsCapabilitySubmit(String appId, SubmitCapabilityReviewRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.post(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability/submit'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilitySubmitResponse.fromJson(map);
+    })();
+  }
+
+  /// Decide a pending capability review
+  Future<AppsCapabilityReviewsDecisionUpdateResponse?> appsCapabilityReviewsDecisionUpdate(String appId, String reviewId, DecideCapabilityReviewRequest body) async {
+    final payload = body.toJson();
+    final response = await _client.put(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability/reviews/${serializePathParameter(reviewId, const PathParameterSpec('reviewId', 'simple', false))}/decision'), body: payload, contentType: 'application/json');
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilityReviewsDecisionUpdateResponse.fromJson(map);
+    })();
+  }
+
+  /// List an application's capability revisions
+  Future<AppsCapabilityRevisionsListResponse?> appsCapabilityRevisionsList(String appId, [int? page, int? pageSize]) async {
+    final query = buildQueryString([
+      QueryParameterSpec('page', page, 'form', true, false, null),
+      QueryParameterSpec('page_size', pageSize, 'form', true, false, null)
+    ]);
+    final response = await _client.get(ApiPaths.appendQueryString(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability/revisions'), query));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilityRevisionsListResponse.fromJson(map);
+    })();
+  }
+
+  /// Read one capability revision including its snapshot
+  Future<AppsCapabilityRevisionsRetrieveResponse?> appsCapabilityRevisionsRetrieve(String appId, String revisionId) async {
+    final response = await _client.get(ApiPaths.appPath('/apps/${serializePathParameter(appId, const PathParameterSpec('appId', 'simple', false))}/capability/revisions/${serializePathParameter(revisionId, const PathParameterSpec('revisionId', 'simple', false))}'));
+    return (() {
+      final map = sdkworkResponseAsMap(response);
+      return map == null ? null : AppsCapabilityRevisionsRetrieveResponse.fromJson(map);
+    })();
+  }
 }
 
 class PathParameterSpec {

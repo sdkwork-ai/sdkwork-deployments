@@ -1,6 +1,7 @@
 use sdkwork_database_id::{NodeLease, SnowflakeIdGenerator};
 use sqlx::PgPool;
 
+mod app_capability;
 mod app_composition;
 mod app_deployments;
 mod app_releases;

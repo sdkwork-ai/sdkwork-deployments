@@ -1375,6 +1375,69 @@ impl DeployAppApi for DeployService {
         DeployService::delete_app_resource_link(self, context, app_id, resource_link_id).await
     }
 
+    async fn get_app_capability(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppCapabilityResponse> {
+        DeployService::get_app_capability(self, context, app_id).await
+    }
+
+    async fn put_app_capability(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::ReplaceAppCapabilityRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::AppCapabilityResponse> {
+        DeployService::put_app_capability(self, context, app_id, request).await
+    }
+
+    async fn submit_app_capability_review(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        request: &sdkwork_deploy_contract::SubmitCapabilityReviewRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityReviewResponse> {
+        DeployService::submit_app_capability_review(self, context, app_id, request).await
+    }
+
+    async fn list_app_capability_reviews(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        query: &sdkwork_deploy_contract::ListCapabilityReviewsQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityReviewPage> {
+        DeployService::list_app_capability_reviews(self, context, app_id, query).await
+    }
+
+    async fn decide_app_capability_review(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        review_id: &str,
+        request: &sdkwork_deploy_contract::DecideCapabilityReviewRequest,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityReviewResponse> {
+        DeployService::decide_app_capability_review(self, context, app_id, review_id, request).await
+    }
+
+    async fn list_app_capability_revisions(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        query: &sdkwork_deploy_contract::ListCapabilityRevisionsQuery,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityRevisionPage> {
+        DeployService::list_app_capability_revisions(self, context, app_id, query).await
+    }
+
+    async fn get_app_capability_revision(
+        &self,
+        context: &DeployAppRequestContext,
+        app_id: &str,
+        revision_id: &str,
+    ) -> DeployServiceResult<sdkwork_deploy_contract::CapabilityRevisionResponse> {
+        DeployService::get_app_capability_revision(self, context, app_id, revision_id).await
+    }
+
     async fn list_certificates(
         &self,
         context: &DeployAppRequestContext,

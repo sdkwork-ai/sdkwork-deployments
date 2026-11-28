@@ -17,12 +17,14 @@ use sdkwork_deploy_contract::{
     CreateAppEnvironmentRequest, CreateAppReleaseRequest, CreateAppRequest,
     CreateAppSourceSpecRequest, CreateBuildRequest, CreateBuildTemplateRequest,
     CreateChannelDirectUploadPlanRequest, CreateChannelReleaseRequest, CreatePlatformTargetRequest,
-    CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DeployAppRequestContext,
-    ListAppResourceLinksQuery, ListAppsQuery, PromoteChannelRequest, PromoteEnvironmentRequest,
-    RegisterPackageRequest, TransitionChannelReleaseRequest, UpdateAppDatabaseProfileRequest,
-    UpdateAppEnvironmentRequest, UpdateAppReleaseStatusRequest, UpdateAppRemixRequest,
-    UpdateAppRequest, UpdateAppSourceRequest, UpdateAppSourceSpecRequest, UpdateBuildStateRequest,
-    UpsertAppResourceLinkRequest, UsageEventQuery,
+    CreateSigningIdentityRequest, CreateSourceRepositoryRequest, DecideCapabilityReviewRequest,
+    DeployAppRequestContext, ListAppResourceLinksQuery, ListAppsQuery, ListCapabilityReviewsQuery,
+    ListCapabilityRevisionsQuery, PromoteChannelRequest, PromoteEnvironmentRequest,
+    RegisterPackageRequest, ReplaceAppCapabilityRequest, SubmitCapabilityReviewRequest,
+    TransitionChannelReleaseRequest, UpdateAppDatabaseProfileRequest, UpdateAppEnvironmentRequest,
+    UpdateAppReleaseStatusRequest, UpdateAppRemixRequest, UpdateAppRequest, UpdateAppSourceRequest,
+    UpdateAppSourceSpecRequest, UpdateBuildStateRequest, UpsertAppResourceLinkRequest,
+    UsageEventQuery,
 };
 use sdkwork_routes_deploy_common::{
     app_kind_filter, envelope, finish_api_json, finish_created_api_json, finish_no_content,
@@ -186,6 +188,186 @@ pub fn build_app_delivery_router() -> Router<AppState> {
             paths::APP_RESOURCE_LINK,
             axum::routing::delete(delete_app_resource_link),
         )
+        .route(
+            paths::APP_CAPABILITY,
+            get(get_app_capability).put(put_app_capability),
+        )
+        .route(
+            paths::APP_CAPABILITY_REVIEWS,
+            get(list_app_capability_reviews),
+        )
+        .route(
+            paths::APP_CAPABILITY_SUBMIT,
+            post(submit_app_capability_review),
+        )
+        .route(
+            paths::APP_CAPABILITY_REVIEW_DECISION,
+            put(decide_app_capability_review),
+        )
+        .route(
+            paths::APP_CAPABILITY_REVISIONS,
+            get(list_app_capability_revisions),
+        )
+        .route(
+            paths::APP_CAPABILITY_REVISION,
+            get(get_app_capability_revision),
+        )
+}
+
+// -- application capability document ---------------------------------------
+
+async fn get_app_capability(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state.api.get_app_capability(&context, &app_id).await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn put_app_capability(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<ReplaceAppCapabilityRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .put_app_capability(&context, &app_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn submit_app_capability_review(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Json(request): Json<SubmitCapabilityReviewRequest>,
+) -> Response {
+    finish_created_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let item = state
+                .api
+                .submit_app_capability_review(&context, &app_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn list_app_capability_reviews(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Query(query): Query<ListCapabilityReviewsQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = state
+                .api
+                .list_app_capability_reviews(&context, &app_id, &query)
+                .await?;
+            ok_json(envelope::app_capability_review_page(page))
+        }
+        .await,
+    )
+}
+
+async fn decide_app_capability_review(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+    Json(request): Json<DecideCapabilityReviewRequest>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let app_id = params.get("appId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
+            })?;
+            let review_id = params.get("reviewId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("reviewId is required")
+            })?;
+            let item = state
+                .api
+                .decide_app_capability_review(&context, &app_id, &review_id, &request)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
+}
+
+async fn list_app_capability_revisions(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(app_id): Path<String>,
+    Query(query): Query<ListCapabilityRevisionsQuery>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let page = state
+                .api
+                .list_app_capability_revisions(&context, &app_id, &query)
+                .await?;
+            ok_json(envelope::app_capability_revision_page(page))
+        }
+        .await,
+    )
+}
+
+async fn get_app_capability_revision(
+    ctx: WebRequestContext,
+    State(state): State<AppState>,
+    context: Option<Extension<DeployAppRequestContext>>,
+    Path(params): Path<HashMap<String, String>>,
+) -> Response {
+    finish_api_json(
+        &ctx,
+        async {
+            let context = require_app_context(context)?;
+            let app_id = params.get("appId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("appId is required")
+            })?;
+            let revision_id = params.get("revisionId").cloned().ok_or_else(|| {
+                sdkwork_deploy_contract::DeployServiceError::validation("revisionId is required")
+            })?;
+            let item = state
+                .api
+                .get_app_capability_revision(&context, &app_id, &revision_id)
+                .await?;
+            ok_json(envelope::resource(item))
+        }
+        .await,
+    )
 }
 
 // -- application account bindings ------------------------------------------

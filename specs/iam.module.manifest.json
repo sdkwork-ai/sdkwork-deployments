@@ -11,6 +11,18 @@
         "description": "Read application lifecycle and availability state"
       },
       {
+        "code": "deploy.appCapabilities.read",
+        "description": "Read an application's capability document (working modes, scenes, models, market shelf, embeds)"
+      },
+      {
+        "code": "deploy.appCapabilities.write",
+        "description": "Replace an application's capability document and submit it for review"
+      },
+      {
+        "code": "deploy.appCapabilities.approve",
+        "description": "Decide a capability review, publishing the revision the reviewer read"
+      },
+      {
         "code": "deploy.artifacts.read",
         "description": "Read deployment package artifacts"
       },

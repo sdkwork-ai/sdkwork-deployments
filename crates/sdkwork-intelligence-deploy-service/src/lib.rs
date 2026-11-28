@@ -1,6 +1,16 @@
 //! Deploy business service orchestrating repository ports and HTTP API traits.
 
 pub mod app;
+pub mod app_capability;
+mod app_capability_document;
+
+pub use app_capability::{
+    AppCapabilityRepositoryPort, DecideAppCapabilityReviewCommand, ListAppCapabilityReviewsCommand,
+    ListAppCapabilityRevisionsCommand, LoadAppCapabilityCommand, ReplaceAppCapabilityCommand,
+    RetrieveAppCapabilityRevisionCommand, SubmitAppCapabilityReviewCommand,
+    DEPLOY_APP_CAPABILITY_APPROVE_PERMISSION,
+};
+pub use app_capability_document::snapshot_from_capability_response;
 pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;

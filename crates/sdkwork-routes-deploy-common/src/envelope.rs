@@ -9,7 +9,8 @@ use sdkwork_deploy_contract::{
     ApplicationScaffoldSummaryPage, ApplicationScaffoldSummaryResponse,
     ApplicationScaffoldVersionPage, ApplicationScaffoldVersionResponse, ArtifactPage,
     ArtifactResponse, AuditLogPage, AuditLogResponse, BuildPage, BuildQueueItemResponse,
-    BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse,
+    BuildQueuePage, BuildResponse, BuildTemplatePage, BuildTemplateResponse, CapabilityReviewPage,
+    CapabilityReviewResponse, CapabilityRevisionPage, CapabilityRevisionResponse,
     CertificateChallengePage, CertificateChallengeResponse, CertificateOrderPage,
     CertificateOrderResponse, CertificatePage, CertificateRenewalPage, CertificateRenewalResponse,
     CertificateResponse, ChannelPage, ChannelResponse, ChannelRolloutPage, ChannelRolloutResponse,
@@ -199,6 +200,20 @@ pub fn env_variable_page(data: EnvVariablePage) -> SdkWorkPageData<EnvVariableRe
 pub fn app_resource_link_page(
     page: AppResourceLinkPage,
 ) -> SdkWorkPageData<AppResourceLinkResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+/// The review ledger of one application, newest first.
+pub fn app_capability_review_page(
+    page: CapabilityReviewPage,
+) -> SdkWorkPageData<CapabilityReviewResponse> {
+    offset_page(page.items, page.page, page.page_size, page.total)
+}
+
+/// The immutable revision list of one application, newest first.
+pub fn app_capability_revision_page(
+    page: CapabilityRevisionPage,
+) -> SdkWorkPageData<CapabilityRevisionResponse> {
     offset_page(page.items, page.page, page.page_size, page.total)
 }
 

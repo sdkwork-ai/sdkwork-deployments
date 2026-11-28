@@ -1,5 +1,6 @@
 //! Deploy service and HTTP port contracts.
 
+pub mod app_capability;
 pub mod app_composition;
 pub mod app_delivery;
 pub mod app_domains;
@@ -18,6 +19,7 @@ pub mod scaffold_market;
 pub mod usage;
 pub mod verification_file_catalog;
 
+pub use app_capability::*;
 pub use app_composition::*;
 pub use app_delivery::*;
 pub use app_domains::{ProvisionAppDomainsResult, ResolvedDeployServer};

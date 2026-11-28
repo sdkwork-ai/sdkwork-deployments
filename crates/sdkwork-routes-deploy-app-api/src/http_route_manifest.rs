@@ -997,6 +997,55 @@ const HTTP_ROUTES: &[HttpRoute] = &[
         "downloads",
         "downloadArtifact.redirect",
     ),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/capability",
+        "app",
+        "apps.capability.retrieve",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/capability",
+        "app",
+        "apps.capability.update",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/capability/reviews",
+        "app",
+        "apps.capability.reviews.list",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Post,
+        "/app/v3/api/apps/{appId}/capability/submit",
+        "app",
+        "apps.capability.submit",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Put,
+        "/app/v3/api/apps/{appId}/capability/reviews/{reviewId}/decision",
+        "app",
+        "apps.capability.reviews.decision.update",
+    )
+    .with_required_permission("deploy.apps.write"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/capability/revisions",
+        "app",
+        "apps.capability.revisions.list",
+    )
+    .with_required_permission("deploy.apps.read"),
+    HttpRoute::dual_token(
+        HttpMethod::Get,
+        "/app/v3/api/apps/{appId}/capability/revisions/{revisionId}",
+        "app",
+        "apps.capability.revisions.retrieve",
+    )
+    .with_required_permission("deploy.apps.read"),
 ];
 
 pub fn app_route_manifest() -> HttpRouteManifest {
